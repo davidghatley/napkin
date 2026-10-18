@@ -2,6 +2,24 @@
 
 Brief: `~/Projects/.kitchen/BRIEF-copy.md` (stage 1). Written 2026-10-18 by the copywriter agent while David was away, so the judgement calls below were made without asking him. Sources read: INTENT.md, README.md, STACK.md, CLAUDE.md, docs/salvage.md, research/ (only a README so far, no notes), fridge/TASTE.md (skimmed) and secret-sauce/README.md.
 
+## Stage 2 edit (2026-10-18)
+
+Edited by the stage 2 editor agent (Claude) against `BRIEF-copy.md` and the orchestrator's decisions. Copy went from 1042 to 883 words (15% cut). The stage 1 notes below are kept as history; where they disagree with this section, this section wins.
+
+| Rubric line | Before (editor's score) | After | Why it moved |
+|---|---|---|---|
+| 5-second test | 4 | 4 | The hero was already the strongest of the five, so it stays. "Components" is still assumed knowledge for the Dive Club reader. |
+| Benefit-first | 4 | 5 | "Design every version at once" became "Change every version at once", which names what the reader gets. Sentences now open on the reader. |
+| Concrete | 5 | 5 | Typed request, 9 versions, radius 8 to 12, Card scene. |
+| Plain | 4 | 4 | "Design tokens" is gone from the FAQ ("shared colours and spacing"). MCP keeps its gloss. |
+| Honest | 4 | 5 | The status note now reads "Planned. Follow along.", matching INTENT's "Not starting now". The demo label matches the other pages. "A few seconds later" (a soft invented time) became "Soon". |
+| Distinct | 4 | 4 | No change. |
+
+Changes:
+1. Status note: "Planned. Follow along." (orchestrator decision, resolves stage 1 judgement call 2 and gap 7). "Not for" now says "You need a tool this year. napkin is planned for later."
+2. "How it fits" uses the canonical one-liners in `~/Projects/.kitchen/one-liners.md`, verbatim. This replaces the stage 1 line about other tools picking up napkin's files, which INTENT doesn't state for any tool except agents.
+3. Cut a colon-then-list reveal in the Paper FAQ and an "X, not Y" in a hero rationale. "Your AI helper" became "Your AI agent" to match the other pages. Trimmed every section. The "Can I try it today?" FAQ moved to the end, as on the other pages.
+
 ## Judgement calls (David to confirm)
 
 1. **CTAs: "Watch it get built" and "Read the plan".** I didn't use "Star on GitHub" because the repo has no remote and CLAUDE.md forbids publishing without approval. "Read the plan" should link to INTENT.md once it is public.
@@ -59,7 +77,7 @@ Brief: `~/Projects/.kitchen/BRIEF-copy.md` (stage 1). Written 2026-10-18 by the 
 - Step 2 now says "napkin's agent connection". MCP is explained only in the FAQ ("a standard plug for agent tools").
 - "AST" became "a structured component format".
 - Added FAQs on the file format, conflicts and open source, for 6 in all.
-- The footer was rewritten in plain words (95 characters).
+- The footer was rewritten in plain words (95 characters). Stage 2 made it "napkin is a planned design canvas..." (117 characters).
 - "Napkin does components well" became "Napkin focuses on components" because nothing has been proved yet.
 - I checked for banned words, em dashes and en dashes and found none. I also checked for "not X, but Y" and colon reveals. The "Not for" bullets state limits outright and don't contrast with a reveal.
 
@@ -92,13 +110,14 @@ Each promise is matched to the INTENT line that supports it. Later stages turn t
 - [ ] **Different from Paper because it focuses on components** → "optimized for components ... where Paper is weak" (#1)
 - [ ] **Won't copy every Figma feature** → "Not a Figma clone with every feature" (is not)
 - [ ] **Not a whiteboard** → "Not a whiteboard" (is not)
-- [ ] **Not usable yet, currently research, a plan and small experiments** → "Not starting now: Phase 4 ... research, spec, and tiny spikes only"
+- [ ] **Planned, not usable yet; currently research, a plan and small experiments** (status note "Planned. Follow along.", FAQ, Not for) → "Not starting now: Phase 4 ... research, spec, and tiny spikes only"
 - [ ] **The file format is undecided** → Open decisions: "Document model (HTML-first vs a component AST)"
 - [ ] **How conflicts are handled is undecided** → no INTENT line. It is stated as an open problem, not a promise.
-- [ ] **Part of an open, modular stack that shares files with the other tools** → STACK.md ("one open, modular agent stack") and INTENT Interface. *Flag: "open" comes from STACK, not INTENT. The licence isn't promised.*
+- [ ] **One of five tools, described with the canonical one-liners** (How it fits) → STACK.md. Background only. (Stage 2 cut the claim that the other tools pick up napkin's files.)
+- [ ] **Open source is the plan; no licence chosen; code not public** (FAQ) → STACK.md ("one open, modular agent stack"). *Flag: "open" comes from STACK, not INTENT.*
 - [ ] **Target demo: the Card gets a compact variant from a typed request while you edit the title, and both land in one file** → proving demo. The scene is an illustration of it.
 
-Total: **19 promises**. 17 trace directly to INTENT, 1 is an interpretation (variant inheritance) and 1 rests on STACK.md ("open"). Both are flagged above.
+Total (after stage 2): **20 promises**. 17 trace directly to INTENT, 1 is an interpretation (variant inheritance) and 2 rest on STACK.md ("open", the set of five). All three are flagged above.
 
 ### Cut for lack of INTENT support
 - "Connect your repo" or importing an existing codebase's components (draft 1). INTENT says nothing about importing.
