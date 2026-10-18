@@ -48,6 +48,7 @@ test('person on the canvas and agent over MCP edit the Card together', { timeout
       const card = document.querySelector('#stage [data-node="card"]'), title = document.querySelector('#stage [data-node="title"]');
       return card && title && getComputedStyle(card).paddingTop === '28px' && getComputedStyle(title).fontWeight === '600';
     })()`, 3000);
+    await browser.waitFor(`document.querySelector("#padding").value === "28px" && document.querySelector("#fontWeight").value === "600"`, 2000);
     const rev = await browser.eval('document.querySelector("#revision").textContent');
     log('canvas', `shows padding 28px and title weight 600 (revision ${rev}, settled ${ms} ms after both edits)`);
     const notices = agent.notifications.filter((n) => n.method === 'notifications/napkin/change');

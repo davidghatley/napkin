@@ -6,7 +6,7 @@
 <style>
   :root { --ink: #1f2a44; --paper: #f4efe4; --grid: #e4dccb; --accent: #c8553d; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; color: var(--ink); background: var(--paper); display: grid; grid-template-columns: 1fr 280px; min-height: 100vh; }
+  body { margin: 0; font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; color: var(--ink); background: var(--paper); display: grid; grid-template-columns: 1fr 280px; grid-template-rows: auto 1fr; min-height: 100vh; }
   header { grid-column: 1 / -1; display: flex; gap: 16px; align-items: baseline; padding: 12px 20px; border-bottom: 2px solid var(--ink); background: #fffdf7; }
   header strong { font-family: Georgia, serif; font-size: 18px; }
   #stage { display: grid; place-items: center; padding: 40px; background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 24px 24px; }
