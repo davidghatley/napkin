@@ -39,10 +39,11 @@ export { alive };
 
 // Temp files left behind by a writer that was killed. Only those of dead processes are removed.
 export function cleanStaleTmp(file) {
-  const prefix = `.${basename(file)}.tmp-`;
+  const prefixes = [`.${basename(file)}.tmp-`, `.${basename(file).replace(/\.tsx$/, '.napkin.json')}.tmp-`]; // the component and its sidecar
   let names; try { names = readdirSync(dirname(file)); } catch { return; }
   for (const n of names) {
-    if (!n.startsWith(prefix)) continue;
+    const prefix = prefixes.find((x) => n.startsWith(x));
+    if (!prefix) continue;
     const pid = Number(n.slice(prefix.length).split('-')[0]);
     if (pid !== process.pid && !alive(pid)) { try { unlinkSync(join(dirname(file), n)); } catch { /* raced with another cleaner */ } }
   }

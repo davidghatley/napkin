@@ -58,7 +58,7 @@ export function locate(ast) {
   for (const stmt of ast.program.body) {
     if (stmt.type === 'ImportDeclaration') { parts.imports.push(stmt); continue; }
     const d = stmt.type === 'ExportNamedDeclaration' ? stmt.declaration : stmt;
-    if (d?.type === 'TSInterfaceDeclaration') { if (parts.iface) throw new DialectError(stmt, 'only one props interface'); parts.iface = d; continue; }
+    if (d?.type === 'TSInterfaceDeclaration') { if (parts.iface) throw new DialectError(stmt, 'only one props interface'); parts.iface = d; parts.ifaceStmt = stmt; continue; }
     if (d?.type === 'TSTypeAliasDeclaration') continue;
     const v = declInit(stmt);
     if (v && (v.name === 'base' || v.name === 'variants')) { parts[v.name] = v.init; continue; }
@@ -76,10 +76,11 @@ export function locate(ast) {
   const body = parts.fn.body.body;
   for (const st of body) {
     const v = declInit(st);
-    if (v?.name === 'v') { parts.vObj = v.init; continue; }
+    if (v?.name === 'v') { parts.vObj = v.init; parts.vStmt = st; continue; }
     if (st.type === 'ReturnStatement') { parts.ret = st; continue; }
     throw new DialectError(st, 'the component body may only define `v` and return JSX');
   }
+  if (!parts.vObj) throw new DialectError(parts.fnStmt, 'the component must define `const v = { ... }` (its variant axes)');
   if (!parts.ret) throw new DialectError(parts.fnStmt, 'the component must return JSX');
   let jsx = parts.ret.argument;
   while (jsx?.type === 'ParenthesizedExpression') jsx = jsx.expression;

@@ -4,13 +4,14 @@
 //   node src/server.js --dir <components dir> --port <n>      (no --dir: a temp copy of fixtures/)
 //   node src/server.js --file <one .tsx> --port <n>           (a one-file folder)
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, mkdtempSync, mkdirSync, copyFileSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace, CreateError } from './workspace.js';
 import { acquireLock, LockError } from './lock.js';
+import { createComponentFile } from './store.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -20,7 +21,7 @@ if (args.file) { dir = dirname(resolve(args.file)); only = resolve(args.file); }
 else if (args.dir) dir = resolve(args.dir);
 else { // a throwaway copy of the fixtures, so playing with the canvas never edits the repo
   dir = mkdtempSync(join(tmpdir(), 'napkin-fixtures-'));
-  for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) copyFileSync(join(ROOT, 'fixtures', d, f), join(dir, f));
+  for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) createComponentFile(join(dir, f), readFileSync(join(ROOT, 'fixtures', d, f), 'utf8'));
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}`); process.exit(1); }

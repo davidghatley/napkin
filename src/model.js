@@ -287,7 +287,7 @@ export function applyEdits(doc, edits) {
         if (e.prop === null) {
           if (!node.textProp) throw new EditError(i, `"${e.id}" is not bound to a setting`);
           const p = propOf(next, node.textProp);
-          node.text = typeof p?.default === 'string' ? p.default : '';
+          if (typeof p?.default === 'string' && p.default !== '') node.text = p.default; // an empty default is no text: the file can't tell them apart
           delete node.textProp;
           break;
         }

@@ -14,8 +14,14 @@ const IDENT = /^[A-Za-z_$][\w$]*$/;
 // the quote its strings use, so a double-quoted file stays double-quoted.
 let Q = "'";
 
-// Literals carry their raw text so quotes come out the way we want (single in code, double in JSX).
-function str(value, quote = Q) {
+// The quote prettier picks for a string: the file's quote, unless the string holds more of it than of the other one.
+const quoteFor = (value) => {
+  const other = Q === "'" ? '"' : "'";
+  return value.split(Q).length > value.split(other).length ? other : Q;
+};
+// Literals carry their raw text so quotes come out the way we want (the file's quote in code, double in JSX).
+function str(value, quote) {
+  quote ??= quoteFor(value);
   const lit = b.stringLiteral(value);
   const body = JSON.stringify(value).slice(1, -1).replace(/\\"/g, '"');
   lit.extra = { rawValue: value, raw: quote === "'" ? `'${body.replace(/'/g, "\\'")}'` : `"${body.replace(/"/g, '\\"')}"` };
@@ -53,65 +59,114 @@ function syncNested(obj, before, after, depth) {
 }
 const baseMap = (doc) => Object.fromEntries([...index(doc).byId.values()].map((n) => [n.id, n.style]));
 
-// --- props: interface, destructured params, and the `v` object ---
-// The interface and `v` go through recast (`v` as raw text: an Identifier whose name is the source, so it stays on
-// one line). The parameter list is printed by paramsSplice below. The store re-reads the file after every write,
-// so raw nodes never linger.
-const raw = (code) => b.identifier(code);
-function typeText(p) {
+// --- props: the interface, the destructured parameter list, and `const v` ---
+// All three are text splices made after recast has printed the style objects (see writeComponent): recast prints them
+// in its own layout, and these have to look the way prettier writes them. Members, parameters and the `v` object that
+// did not change keep their text.
+function typeText(p, indent, unit, eol, name) {
   if (p.type === 'string') return 'string';
   if (p.type === 'boolean') return 'boolean';
-  return p.options.map((o) => `${Q}${o}${Q}`).join(' | ');
+  const opts = p.options.map((o) => `${Q}${o}${Q}`);
+  const one = opts.join(' | ');
+  if (`${indent}${name}?: ${one};`.length <= 80) return one;
+  return `${eol}${opts.map((o) => `${indent}${unit}| ${o}`).join(eol)}`; // prettier's layout for a union that does not fit
 }
-const litText = (v) => (typeof v === 'string' ? `${Q}${v.replace(/\\/g, '\\\\').split(Q).join(`\\${Q}`)}${Q}` : String(v));
-function syncProps(ast, parts, before, after) {
+const litText = (v) => { if (typeof v !== 'string') return String(v); const q = quoteFor(v); return `${q}${v.replace(/\\/g, '\\\\').split(q).join(`\\${q}`)}${q}`; };
+const lineStart = (text, at) => text.lastIndexOf('\n', at - 1) + 1;
+const lineEnd = (text, at) => { const i = text.indexOf('\n', at); return i < 0 ? text.length : i + 1; };
+
+// --- the interface ---
+function ifaceSplices(text, parts, before, after, st) {
+  const iface = parts.iface;
+  if (!iface || same(before.props.map((p) => [p.name, p.type, p.options]), after.props.map((p) => [p.name, p.type, p.options]))) return [];
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const outer = lineIndent(text, parts.ifaceStmt.start), indent = outer + st.unit;
+  const member = (p) => `${indent}${p.name}?: ${typeText(p, indent, st.unit, eol, p.name)};`;
+  const body = iface.body;
+  const members = body.body;
+  if (!after.props.length) return members.length ? [{ start: body.start, end: body.end, text: '{}' }] : [];
+  if (!members.length || !/^\s*\}$/.test(text.slice(lineStart(text, body.end - 1), body.end))) {
+    return [{ start: body.start, end: body.end, text: `{${eol}${after.props.map(member).join(eol)}${eol}${outer}}` }];
+  }
   const was = new Map(before.props.map((p) => [p.name, p]));
+  const now = new Map(after.props.map((p) => [p.name, p]));
+  const out = [];
+  for (const m of members) {
+    const name = keyName(m.key), p = now.get(name), old = was.get(name);
+    if (!p) out.push({ start: lineStart(text, m.start), end: lineEnd(text, m.end), text: '' });
+    else if (old && (old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
+  }
+  const have = new Set(members.map((m) => keyName(m.key)));
+  const added = after.props.filter((p) => !have.has(p.name));
+  if (added.length) { const at = lineStart(text, body.end - 1); out.push({ start: at, end: at, text: added.map((p) => member(p) + eol).join('') }); }
+  return out;
+}
+
+// --- the destructured parameter list, printed so it hugs the braces the way prettier writes it:
+//   export function Name({ a, b = 1 }: NameProps) {          when the whole signature fits in 80 columns
+//   export function Name({\n  a,\n  b = 1,\n}: NameProps) {   when it does not (one prop per line)
+// If only a default changed the file's own layout is kept. Props whose name and default did not change keep their text.
+function paramsSplice(text, parts, before, after, st) {
+  const names = (doc) => doc.props.map((p) => [p.name, p.default]);
+  if (same(names(before), names(after))) return null;
   const fn = parts.fn;
-  if (parts.iface) {
-    const members = new Map(parts.iface.body.body.map((m) => [keyName(m.key), m]));
-    const kept = after.props.map((p) => {
-      const m = members.get(p.name), old = was.get(p.name);
-      if (m && old && old.type === p.type && same(old.options, p.options)) return m;
-      const sig = b.tsPropertySignature(key(p.name), b.tsTypeAnnotation(b.tsTypeReference(raw(typeText(p)))));
-      sig.optional = true;
-      return sig;
-    });
-    parts.iface.body = b.tsInterfaceBody(kept); // reprint the body so every member gets its ';'
-  }
-  const axesBefore = before.props.filter((p) => p.type === 'enum').map((p) => p.name);
-  const axesAfter = after.props.filter((p) => p.type === 'enum').map((p) => p.name);
-  if (axesBefore.join() !== axesAfter.join() || !parts.vObj) {
-    const obj = raw(axesAfter.length ? `{ ${axesAfter.join(', ')} }` : '{}');
-    if (parts.vObj) {
-      const st = fn.body.body.find((x) => x.type === 'VariableDeclaration' && x.declarations[0].id.name === 'v');
-      st.declarations[0].init = obj;
-    } else {
-      fn.body.body.unshift(b.variableDeclaration('const', [b.variableDeclarator(b.identifier('v'), obj)]));
-    }
-  }
+  const param = fn.params[0] || null;
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const was = new Map(before.props.map((p) => [p.name, p]));
+  const old = new Map((param?.properties || []).map((pr) => [keyName(pr.key), text.slice(pr.start, pr.end)]));
+  const iface = param?.typeAnnotation ? text.slice(param.typeAnnotation.typeAnnotation.start, param.typeAnnotation.typeAnnotation.end) : (parts.iface?.id.name || `${fn.id.name}Props`);
+  const items = after.props.map((p) => {
+    const w = was.get(p.name);
+    if (w && w.default === p.default && old.has(p.name)) return old.get(p.name);
+    return p.default === undefined ? p.name : `${p.name} = ${litText(p.default)}`;
+  });
+  const flat = items.length ? `{ ${items.join(', ')} }: ${iface}` : `{}: ${iface}`;
+  const sameNames = same(before.props.map((p) => p.name), after.props.map((p) => p.name));
+  const wasMulti = param ? /\n/.test(text.slice(param.start, param.end)) : false;
+  const fits = `export function ${fn.id.name}(${flat}) {`.length <= 80;
+  const multi = items.length > 0 && (sameNames ? wasMulti : !fits);
+  const indent = lineIndent(text, parts.fnStmt.start);
+  const out = multi ? `{${eol}${items.map((x) => `${indent}${st.unit}${x},${eol}`).join('')}${indent}}: ${iface}` : flat;
+  return param ? { start: param.start, end: param.end, text: out } : { start: fn.id.end + 1, end: fn.id.end + 1, text: out };
+}
+
+// --- `const v = { axis, axis };` lists the variant axes in prop order ---
+function vSplice(text, parts, before, after, st) {
+  const axes = (doc) => doc.props.filter((p) => p.type === 'enum').map((p) => p.name);
+  if (same(axes(before), axes(after)) && parts.vObj) return null;
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const names = axes(after);
+  const indent = lineIndent(text, parts.vStmt.start);
+  const flat = names.length ? `{ ${names.join(', ')} }` : '{}';
+  const out = `${indent}const v = ${flat};`.length <= 80 ? flat : `{${eol}${names.map((n) => `${indent}${st.unit}${n},${eol}`).join('')}${indent}}`;
+  return { start: parts.vObj.start, end: parts.vObj.end, text: out };
 }
 
 // --- JSX ---
-// The element tree is printed by us, not by recast (recast re-indents moved nodes badly). The unchanged subtrees keep
-// their own text, shifted to the new depth; only the elements that changed are printed fresh, one per line:
-//   <tag data-n="id" style={s('id', v)}>text</tag>        a leaf
-//   <tag data-n="id" style={s('id', v)} />                 an empty element
-// and an element with children gets its opening tag, its children one level deeper, and its closing tag.
+// The element tree is printed by us, not by recast (recast re-indents moved nodes badly). Unchanged subtrees keep their
+// own text, shifted to the new depth; only elements that changed are printed fresh, laid out as prettier lays them out:
+//   <tag data-n="id" style={s('id', v)} />                 an empty element (one line when it fits in 80 columns)
+//   <tag data-n="id" style={s('id', v)}>                    an element with text or children: prettier always puts the
+//     text or the children on their own lines when a tag has two or more attributes (and these always have two)
+//   </tag>
+// A tag that does not fit in 80 columns puts one attribute per line.
 const attrText = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 const attrValue = (s) => (s.includes('"') && !s.includes("'") ? `'${s.replace(/&/g, '&amp;')}'` : `"${attrText(s)}"`);
-function openText(node, selfClose) {
-  let t = `<${node.tag} data-n="${node.id}" style={s('${node.id}', v)}`;
-  for (const k of ['src', 'alt']) if (node.attrs?.[k] !== undefined) t += ` ${k}=${attrValue(node.attrs[k])}`;
-  return t + (selfClose ? ' />' : '>');
-}
-function textText(node) {
+const attrsOf = (node) => {
+  const a = [`data-n="${node.id}"`, `style={s(${Q}${node.id}${Q}, v)}`];
+  for (const k of ['src', 'alt']) if (node.attrs?.[k] !== undefined) a.push(`${k}=${attrValue(node.attrs[k])}`);
+  return a;
+};
+// Text as it appears between the tags; '' when there is none. Long text goes in {'...'} so no line wrapping is needed.
+function textText(node, room) {
   if (node.textProp) return `{${node.textProp}}`;
   if (node.text === undefined || node.text === '') return '';
-  if (/^[^{}<>&]+$/.test(node.text) && node.text === node.text.trim()) return node.text;
+  if (/^[^{}<>&]+$/.test(node.text) && node.text === node.text.trim() && node.text.length <= room) return node.text;
   return `{${litText(node.text)}}`;
 }
 const shape = (n) => ({ id: n.id, tag: n.tag, text: n.text, textProp: n.textProp, attrs: n.attrs, children: n.children.map(shape) });
-const hasContent = (n) => n.children.length > 0 || textText(n) !== '';
+const hasContent = (n) => n.children.length > 0 || textText(n, 1000) !== '';
+const WIDTH = 80;
 
 // Elements of a parsed JSX tree by data-n id (babel nodes, with start/end offsets into the text they came from).
 function elementsById(jsx) {
@@ -125,35 +180,54 @@ function elementsById(jsx) {
 }
 const lineIndent = (text, at) => { const ls = text.lastIndexOf('\n', at - 1) + 1; const pre = text.slice(ls, at); return /^[ \t]*$/.test(pre) ? pre : ''; };
 
-// Rebuild the JSX element text of `parts.jsx` (found in `text`) so it matches `after`; returns the new text.
-function rewriteJsx(text, jsx, before, after, unit) {
+// Print the element tree of `after` (the unchanged parts taken from `text`, where the root element is `jsx`), starting at
+// `indent`. Returns the lines joined with `eol`; the first line has no indent.
+function printJsx(text, jsx, before, after, st, indent) {
   const els = elementsById(jsx);
   const A = index(before).byId;
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  const rootIndent = lineIndent(text, jsx.start);
+  const unit = st.unit;
   const unchanged = (n) => A.has(n.id) && same(shape(A.get(n.id)), shape(n));
-  // The text of an element that did not change, moved to `indent`.
-  const reuse = (n, indent) => {
+  const reuse = (n, to) => {
     const el = els.get(n.id);
     const old = lineIndent(text, el.start);
-    const lines = text.slice(el.start, el.end).split(/\r?\n/);
-    return lines.map((l, i) => (i === 0 ? l : l.startsWith(old) ? indent + l.slice(old.length) : l)).join(eol);
+    return text.slice(el.start, el.end).split(/\r?\n/).map((l, i) => (i === 0 ? l : l.startsWith(old) ? to + l.slice(old.length) : l)).join(eol);
   };
-  const print = (n, indent) => {
-    if (unchanged(n)) return reuse(n, indent);
-    const el = els.get(n.id);
-    const old = A.get(n.id);
+  // The opening tag: on one line if `<tag attrs>` (plus `tail`) fits, else one attribute per line.
+  const open = (n, at, selfClose, tail = '') => {
+    const attrs = attrsOf(n);
+    const line = `<${n.tag} ${attrs.join(' ')}${selfClose ? ' />' : '>'}${tail}`;
+    if (at.length + line.length <= WIDTH) return { text: line, broken: false };
+    return { text: [`<${n.tag}`, ...attrs.map((a) => at + unit + a), at + (selfClose ? '/>' : '>')].join(eol), broken: true };
+  };
+  const print = (n, at) => {
+    if (unchanged(n)) return reuse(n, at);
     const content = hasContent(n);
-    // keep the original opening tag (and how it was laid out) when only its content changed
-    const sameOpen = el && old && old.tag === n.tag && same(old.attrs, n.attrs) && hasContent(old) === content;
-    const open = sameOpen ? text.slice(el.openingElement.start, el.openingElement.end) : openText(n, !content);
-    if (!content) return open;
+    const el = els.get(n.id), old = A.get(n.id);
+    // keep the original opening tag (and how it was laid out) when only the content changed and it is on one line
+    const sameOpen = el && old && old.tag === n.tag && same(old.attrs, n.attrs) && hasContent(old) === content && (content || el.openingElement.selfClosing) && !/\n/.test(text.slice(el.openingElement.start, el.openingElement.end));
+    if (!content) return sameOpen ? text.slice(el.openingElement.start, el.openingElement.end) : open(n, at, true).text;
     const close = `</${n.tag}>`;
-    if (!n.children.length) return `${open}${textText(n)}${close}`;
-    const inner = indent + unit;
-    return [open, ...n.children.map((c) => inner + print(c, inner)), indent + close].join(eol);
+    if (!n.children.length) {
+      // prettier puts the text of an element with two or more attributes on its own line; an element that was written
+      // on one line by hand stays on one line, so editing its text is a one-line diff
+      const handLine = sameOpen && old.children.length === 0 && !/\n/.test(text.slice(el.start, el.end));
+      if (handLine) return `${text.slice(el.openingElement.start, el.openingElement.end)}${textText(n, 1000)}${close}`;
+      return [sameOpen ? text.slice(el.openingElement.start, el.openingElement.end) : open(n, at, false).text, at + unit + textText(n, 0), at + close].join(eol);
+    }
+    const o = sameOpen ? { text: text.slice(el.openingElement.start, el.openingElement.end) } : open(n, at, false);
+    return [o.text, ...n.children.map((c) => at + unit + print(c, at + unit)), at + close].join(eol);
   };
-  return print(after.root, rootIndent);
+  return print(after.root, indent);
+}
+
+// The whole `return ...;` statement: `return <x />;` when a single line fits, else `return (` + the tree + `);`.
+function returnText(text, parts, before, after, st) {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const ind = lineIndent(text, parts.ret.start);
+  const tree = printJsx(text, parts.jsx, before, after, st, ind + st.unit);
+  const single = `return ${tree};`;
+  return !tree.includes('\n') && ind.length + single.length <= WIDTH ? single : `return (${eol}${ind}${st.unit}${tree}${eol}${ind});`;
 }
 
 // recast separates reprinted multi-line object entries with blank lines. The dialect has none, so
@@ -187,42 +261,12 @@ function detectStyle(text) {
   };
 }
 
-// The destructured parameter list, printed by us so it hugs the braces the way prettier writes it:
-//   export function Name({ a, b = 1 }: NameProps) {          when the whole signature fits in 80 columns
-//   export function Name({\n  a,\n  b = 1,\n}: NameProps) {   when it does not (one prop per line)
-// If only a default changed the file's own layout is kept. Props whose name and default did not change keep their text.
-// Returns { start, end, text } for the text it replaces, or null when the list does not change.
-function paramsSplice(text, parts, before, after, st) {
-  const names = (doc) => doc.props.map((p) => [p.name, p.default]);
-  if (same(names(before), names(after))) return null;
-  const fn = parts.fn;
-  const param = fn.params[0] || null;
-  const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  const was = new Map(before.props.map((p) => [p.name, p]));
-  const old = new Map((param?.properties || []).map((pr) => [keyName(pr.key), text.slice(pr.start, pr.end)]));
-  const iface = param?.typeAnnotation ? text.slice(param.typeAnnotation.typeAnnotation.start, param.typeAnnotation.typeAnnotation.end) : (parts.iface?.id.name || `${fn.id.name}Props`);
-  const items = after.props.map((p) => {
-    const w = was.get(p.name);
-    if (w && w.default === p.default && old.has(p.name)) return old.get(p.name);
-    return p.default === undefined ? p.name : `${p.name} = ${litText(p.default)}`;
-  });
-  const flat = items.length ? `{ ${items.join(', ')} }: ${iface}` : `{}: ${iface}`;
-  const sameNames = same(before.props.map((p) => p.name), after.props.map((p) => p.name));
-  const wasMulti = param ? /\n/.test(text.slice(param.start, param.end)) : false;
-  const fits = `export function ${fn.id.name}(${flat}) {`.length <= 80;
-  const multi = items.length > 0 && (sameNames ? wasMulti : !fits);
-  const indent = lineIndent(text, parts.fnStmt.start);
-  const out = multi ? `{${eol}${items.map((x) => `${indent}${st.unit}${x},${eol}`).join('')}${indent}}: ${iface}` : flat;
-  return param ? { start: param.start, end: param.end, text: out } : { start: fn.id.end + 1, end: fn.id.end + 1, text: out };
-}
-
 // Patch `ast` (from readComponent, parsed from `original`) from model `before` to model `after`; returns the new text.
 export function writeComponent(ast, before, after, original) {
   if (same(before, after)) return original; // nothing to change: the bytes stay exactly as they were
   const st = detectStyle(original);
   Q = st.quote;
   const parts = locate(ast);
-  if (!same(before.props, after.props)) syncProps(ast, parts, before, after);
   const bb = baseMap(before), ba = baseMap(after);
   if (!same(bb, ba)) {
     // Only entries that exist in the file or have styles: an unstyled node without a base entry
@@ -238,18 +282,17 @@ export function writeComponent(ast, before, after, original) {
     syncNested(parts.variants, before.variants, after.variants, 2);
   }
   let out = recast.print(ast, { ...PRINT, ...st.recast }).code;
-  // The pieces recast does not print well are spliced in by offset, last one first so earlier offsets stay valid:
-  // the parameter list and the element tree (and an empty interface body, which prettier writes as `{}`).
+  // The pieces recast does not print the way we want are spliced in by offset, last one first so earlier offsets stay valid:
+  // the interface, the parameter list, `const v`, and the `return` with its element tree.
   const jsxChanged = !same(shape(before.root), shape(after.root));
   const propsChanged = !same(before.props, after.props);
   if (jsxChanged || propsChanged) {
     const p2 = locate(babelParse(out, { sourceType: 'module', plugins: ['typescript', 'jsx'] }));
     const splices = [];
-    if (jsxChanged) splices.push({ start: p2.jsx.start, end: p2.jsx.end, text: rewriteJsx(out, p2.jsx, before, after, st.unit) });
+    if (jsxChanged) splices.push({ start: p2.ret.start, end: p2.ret.end, text: returnText(out, p2, before, after, st) });
     if (propsChanged) {
-      const ps = paramsSplice(out, p2, before, after, st);
-      if (ps) splices.push(ps);
-      if (!after.props.length && p2.iface && /\{\s+\}$/.test(out.slice(p2.iface.body.start, p2.iface.body.end))) splices.push({ start: p2.iface.body.start, end: p2.iface.body.end, text: '{}' });
+      splices.push(...ifaceSplices(out, p2, before, after, st));
+      for (const sp of [paramsSplice(out, p2, before, after, st), vSplice(out, p2, before, after, st)]) if (sp) splices.push(sp);
     }
     for (const sp of splices.sort((x, y) => y.start - x.start)) out = out.slice(0, sp.start) + sp.text + out.slice(sp.end);
   }
@@ -261,10 +304,11 @@ export function newComponentSource(name, rootTag = 'div') {
   if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(`component name "${name}" must be PascalCase`);
   return `import type { CSSProperties } from 'react';
 
-export interface ${name}Props {
-}
+export interface ${name}Props {}
 
-const base: Record<string, CSSProperties> = {
+type Styles = Record<string, CSSProperties>;
+
+const base: Styles = {
   root: {
     display: 'flex',
     flexDirection: 'column',
@@ -273,8 +317,7 @@ const base: Record<string, CSSProperties> = {
   },
 };
 
-const variants: Record<string, Record<string, Record<string, CSSProperties>>> = {
-};
+const variants: Record<string, Record<string, Styles>> = {};
 
 function s(node: string, v: Record<string, string>): CSSProperties {
   const out: CSSProperties = { ...base[node] };
@@ -284,9 +327,7 @@ function s(node: string, v: Record<string, string>): CSSProperties {
 
 export function ${name}({}: ${name}Props) {
   const v = {};
-  return (
-    <${rootTag} data-n="root" style={s('root', v)} />
-  );
+  return <${rootTag} data-n="root" style={s('root', v)} />;
 }
 `;
 }

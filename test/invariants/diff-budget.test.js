@@ -94,7 +94,8 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
       const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
       assert.equal(res.ok, true, `${JSON.stringify(r.edit)}: ${res.error}`);
       const m = measure(git, rel);
-      const b = budget(r.edit, doc, res.doc, signatureLines(srcBefore), signatureLines((await store.read()).source));
+      const srcAfter = (await store.read()).source;
+      const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(srcBefore), sigAfter: signatureLines(srcAfter), textBefore: srcBefore, textAfter: srcAfter });
       const stat = (per[r.edit.op + (r.edit.variant ? '+variant' : '')] ??= { n: 0, maxAdd: 0, maxDel: 0, budgetAdd: 0, budgetDel: 0 });
       stat.n++; stat.maxAdd = Math.max(stat.maxAdd, m.file.add); stat.maxDel = Math.max(stat.maxDel, m.file.del);
       stat.budgetAdd = Math.max(stat.budgetAdd, b.add); stat.budgetDel = Math.max(stat.budgetDel, b.del);
@@ -131,7 +132,8 @@ test(`INV-03: budgets also hold on hand-formatted files (${Math.min(OPS, 120)} o
         const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
         assert.equal(res.ok, true, `${rel} ${JSON.stringify(r.edit)}: ${res.error}`);
         const m = measure(git, rel);
-        const b = budget(r.edit, doc, res.doc, signatureLines(source), signatureLines((await store.read()).source));
+        const srcAfter = (await store.read()).source;
+        const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(source), sigAfter: signatureLines(srcAfter), textBefore: source, textAfter: srcAfter });
         if (m.file.add > b.add || m.file.del > b.del) over.push({ rel, edit: r.edit, got: m.file, budget: b });
         done++; ops++;
       }
