@@ -19,6 +19,8 @@ import { TAGS, VOID } from '../../src/model.js';
 import { fixture, tempRepo } from '../helpers/harness.js';
 import { rng, nextValidEdit } from '../helpers/fuzz.js';
 import { typecheck } from '../helpers/tsc.js';
+import { ESLint } from 'eslint';
+import { ROOT } from '../helpers/harness.js';
 
 const pretty = (t) => prettier.format(t, { parser: 'typescript', singleQuote: true });
 
@@ -56,6 +58,16 @@ test('FMT-03: new components are prettier-clean for every root tag, and stay cle
   // tsc --strict over everything napkin produced, plus the two hand-written fixtures
   const all = [...files, fixture('Button'), fixture('Card')];
   const tsc = typecheck(all);
+  // eslint (flat config in eslint.config.js: the React rules and the hooks rules) over the same files; the texts are linted
+  // under a virtual path inside the repo so the config applies. A bad file shows the rules are on.
+  const eslint = new ESLint({ cwd: ROOT });
+  const lint = async (name, text) => (await eslint.lintText(text, { filePath: join(ROOT, '.lint', name) }))[0].messages;
+  let lintFindings = 0, linted = 0;
+  for (const f of all) { linted++; const m = await lint(f.split('/').pop(), readFileSync(f, 'utf8')); lintFindings += m.length; if (m.length) console.log(f, m.map((x) => `${x.ruleId}: ${x.message}`)); }
+  const bad = await lint('Bad.tsx', "import { useState } from 'react';\nexport function Bad({ on }: { on: boolean }) {\n  if (on) { useState(0); }\n  return <ul>{[1, 2].map((n) => <li>{n}</li>)}</ul>;\n}\n");
+  assert.ok(bad.some((x) => x.ruleId === 'react-hooks/rules-of-hooks') && bad.some((x) => x.ruleId === 'react/jsx-key'), 'the lint rules are on');
+  console.log(`FMT-03: eslint ${ESLint.version} (react, react-hooks) over ${linted} files: ${lintFindings} findings`);
+  assert.equal(lintFindings, 0);
   console.log(`FMT-03: tsc --strict over ${all.length} files: ${tsc.ok ? '0 errors' : tsc.output}`);
   assert.equal(tsc.ok, true, tsc.output);
 });
