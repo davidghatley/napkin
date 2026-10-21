@@ -98,7 +98,7 @@ export function initTools(ctx) {
   async function createComponent(name) {
     name = String(name).trim();
     if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) return { ok: false, error: `"${name}" is not a component name: use PascalCase, like Card` };
-    const res = await fetch('/api/components', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
+    const res = await ctx.fetch('/api/components', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) });
     const r = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
     if (!res.ok || !r.ok) return { ok: false, error: r.error || `server answered ${res.status}` };
     for (let i = 0; i < 200 && !ctx.state.components.get(r.id)?.doc; i++) await sleep(25);

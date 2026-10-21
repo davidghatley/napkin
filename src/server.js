@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
+import { acquireLock, LockError } from './lock.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,6 +25,8 @@ else { // a throwaway copy of the fixtures, so playing with the canvas never edi
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}`); process.exit(1); }
+let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
+try { lock = acquireLock(dir); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
 const ws = await openWorkspace(dir, { only });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
@@ -37,9 +40,9 @@ ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
-ws.events.on('added', async ({ component }) => {
+ws.events.on('added', async ({ component, by, summary }) => {
   const e = ws.find(component);
-  if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)) });
+  if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)), ...(by && { by, summary }) });
 });
 
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
@@ -99,7 +102,8 @@ const server = createServer(async (req, res) => {
     // Components, edits, proposals, history, search, render, guide (src/api.js).
     if (path.startsWith('/api/')) {
       let body = ''; if (req.method !== 'GET' && req.method !== 'HEAD') for await (const chunk of req) body += chunk;
-      const r = await api.handle({ method: req.method, path, query: url.searchParams, body });
+      const token = /^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1];
+      const r = await api.handle({ method: req.method, path, query: url.searchParams, body, token });
       if (r?.png) { res.writeHead(r.status, { 'content-type': 'image/png', 'cache-control': 'no-store', 'x-napkin-render-ms': r.ms.toFixed(1) }); return res.end(r.png); }
       if (r) return json(res, r.status, r.json);
     }
@@ -110,5 +114,5 @@ const server = createServer(async (req, res) => {
 server.listen(Number(args.port), '127.0.0.1', () => {
   console.log(`napkin canvas: http://127.0.0.1:${server.address().port}/`);
 });
-const stop = () => { for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => process.exit(0)); };
+const stop = () => { for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);

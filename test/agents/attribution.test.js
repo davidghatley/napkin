@@ -7,11 +7,12 @@ import { join } from 'node:path';
 import { openStore } from '../../src/store.js';
 import { connectCanvas } from '../../src/canvas-client.js';
 import { tempRepo, startServer, startMcp, waitFor, fixture } from '../helpers/harness.js';
-import { http, evidence } from '../helpers/agents.js';
+import { http, evidence, session } from '../helpers/agents.js';
 
 test('AGT-05: every revision is attributed (david, agent names, file) and the history endpoint lists them', async () => {
   const { compDir, fileOf } = tempRepo();
   const server = await startServer(compDir);
+  const T = await session(server.url, 'david');
   const mcp = await startMcp(server.url, { NAPKIN_AGENT: 'scout' });
   const david = await connectCanvas(server.url, { by: 'david' });
   try {
@@ -20,13 +21,15 @@ test('AGT-05: every revision is attributed (david, agent names, file) and the hi
     let rev = (await david.sendEdits(c.component, c.revision, set('title.fontWeight', 500))).revision;
     const a = await mcp.call('apply_edits', { component: 'Card', baseRevision: rev, edits: set('title.color', 'red') });
     rev = a.data.revision;
-    // an HTTP client that names nobody still gets an attribution
-    assert.equal((await http(server.url, '/api/components/Card/edits', { method: 'POST', body: { baseRevision: rev, edits: set('body.fontSize', 14) } })).status, 200);
+    // an HTTP client gets a name from its session; an anonymous one is refused (no "unknown" revisions)
+    assert.equal((await http(server.url, '/api/components/Card/edits', { method: 'POST', body: { baseRevision: rev, by: 'david', edits: set('body.fontSize', 14) } })).status, 401);
+    const api = await session(server.url, 'api-client');
+    assert.equal((await http(server.url, '/api/components/Card/edits', { method: 'POST', token: api, body: { baseRevision: rev, by: 'someone-else', edits: set('body.fontSize', 14) } })).status, 200);
     // a hand edit (external write) is "file"
     writeFileSync(fileOf('Card'), readFileSync(fileOf('Card'), 'utf8').replace('fontSize: 14', 'fontSize: 15'));
     await waitFor(async () => (await http(server.url, '/api/components/Card/history')).json.history.length >= 5, 4000);
     const h = (await http(server.url, '/api/components/Card/history')).json.history;
-    assert.deepEqual(h.map((x) => x.by), ['file', 'unknown', 'scout', 'david', 'file']);
+    assert.deepEqual(h.map((x) => x.by), ['file', 'api-client', 'scout', 'david', 'file']);
     assert.ok(h.every((x) => typeof x.by === 'string' && x.by && x.summary && x.at > 0 && Array.isArray(x.keys)), 'every revision has by, summary, time and keys');
     assert.match(h[3].summary, /title\.fontWeight = 500/);
     assert.deepEqual(h.map((x) => x.revision), [5, 4, 3, 2, 1]);
@@ -58,6 +61,7 @@ test('AGT-05 in the store: no revision is ever unattributed, whatever the caller
 test('AGT-09: every apply reaches SSE listeners within 200 ms with by, component and summary', async () => {
   const { compDir } = tempRepo();
   const server = await startServer(compDir);
+  const T = await session(server.url, 'david'), S = await session(server.url, 'scout');
   const watcher = await connectCanvas(server.url, { by: 'david' });
   const frames = []; watcher.onChange((f) => { if (f.type === 'change') frames.push({ ...f, seen: performance.now() }); });
   try {
@@ -65,7 +69,7 @@ test('AGT-09: every apply reaches SSE listeners within 200 ms with by, component
     let rev = watcher.state('Card').revision;
     for (let i = 0; i < 20; i++) {
       const t0 = performance.now();
-      const r = await http(server.url, '/api/components/Card/edits', { method: 'POST', body: { baseRevision: rev, by: i % 2 ? 'scout' : 'david', edits: [{ op: 'set', path: 'title.fontWeight', value: 100 + i }] } });
+      const r = await http(server.url, '/api/components/Card/edits', { method: 'POST', token: i % 2 ? S : T, body: { baseRevision: rev, edits: [{ op: 'set', path: 'title.fontWeight', value: 100 + i }] } });
       assert.equal(r.status, 200); rev = r.json.revision;
       const f = (await waitFor(() => frames.find((x) => x.revision === rev), 1000, 2)).value;
       lags.push(f.seen - t0);
@@ -99,6 +103,12 @@ test('AGT-10: a same-property clash error carries both values (theirs that lande
     // an unknown base revision still answers with the current one
     const r5 = await store.apply({ baseRevision: 9999, by: 'scout', edits: [{ op: 'set', path: 'root.gap', value: 1 }] });
     assert.match(r5.error, /^stale revision/); assert.equal(typeof r5.currentRevision, 'number');
+    // ...and it is not empty: every key of yours that changed since the oldest kept revision is listed, with who and the current value
+    assert.equal(r5.stale[0].key, 'root.gap'); assert.ok(r5.stale[0].by && r5.stale[0].revision > 1);
+    assert.equal(r5.oldestRevision, 1); assert.ok(r5.changedKeys.includes('root.gap') && r5.changedKeys.includes('root.padding@size=sm'));
+    // an unknown base on a key nobody touched: stale is empty but changedKeys still says what moved
+    const r6 = await store.apply({ baseRevision: 'nope', by: 'scout', edits: [{ op: 'set', path: 'root.display', value: 'grid' }] });
+    assert.deepEqual(r6.stale, []); assert.ok(r6.changedKeys.length > 0);
   } finally { await store.close(); }
 });
 
@@ -126,13 +136,14 @@ test('AGT-06: 100 races, each recovered with exactly one retry built from the st
     // The same loop over HTTP and MCP for a few races, and a concurrent one: two agents racing the same key.
     const { compDir } = tempRepo();
     const server = await startServer(compDir);
+  const T = await session(server.url, 'david');
     const mcp = await startMcp(server.url, { NAPKIN_AGENT: 'scout' });
     let overMcp = 0;
     try {
       for (let i = 0; i < 10; i++) {
         const rev = (await mcp.call('read_component', { component: 'Card' })).data.revision;
         const c = (await http(server.url, '/api/components/Card')).json;
-        await http(server.url, '/api/components/Card/edits', { method: 'POST', body: { baseRevision: c.revision, by: 'david', edits: [{ op: 'set', path: 'title.fontWeight', value: 200 + i }] } });
+        await http(server.url, '/api/components/Card/edits', { method: 'POST', token: T, body: { baseRevision: c.revision, by: 'david', edits: [{ op: 'set', path: 'title.fontWeight', value: 200 + i }] } });
         const a = await mcp.call('apply_edits', { component: 'Card', baseRevision: rev, edits: [{ op: 'set', path: 'title.fontWeight', value: 700 }] });
         assert.equal(a.isError, true);
         const b = await mcp.call('apply_edits', { component: 'Card', baseRevision: a.data.currentRevision, edits: [{ op: 'set', path: 'title.fontWeight', value: 700 }] });

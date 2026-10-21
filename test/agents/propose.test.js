@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { connectCanvas } from '../../src/canvas-client.js';
 import { tempRepo, startServer, startMcp, waitFor } from '../helpers/harness.js';
-import { sha, http } from '../helpers/agents.js';
+import { sha, http, session } from '../helpers/agents.js';
 
 const EDIT = (v) => [{ op: 'set', path: 'title.fontWeight', value: v }];
 
@@ -13,6 +13,7 @@ test('propose: held in memory, listed over HTTP, announced over SSE; reject leav
   const { compDir, fileOf } = tempRepo();
   const card = fileOf('Card');
   const server = await startServer(compDir);
+  const T = await session(server.url, 'david');
   const mcp = await startMcp(server.url, { NAPKIN_AGENT: 'scout' });
   const watcher = await connectCanvas(server.url, { by: 'david' });
   const frames = []; watcher.onChange((f) => { if (f.type.startsWith('proposal')) frames.push(f); });
@@ -36,13 +37,13 @@ test('propose: held in memory, listed over HTTP, announced over SSE; reject leav
     assert.equal(frames.find((f) => f.type === 'proposal').proposal.id, id);
     assert.equal(frames.find((f) => f.type === 'proposal').component, list[0].component);
 
-    const rej = await http(server.url, `/api/proposals/${id}/reject`, { method: 'POST', body: { by: 'david' } });
+    const rej = await http(server.url, `/api/proposals/${id}/reject`, { method: 'POST', token: T, body: { by: 'david' } });
     assert.equal(rej.status, 200);
     assert.equal(sha(card), before, 'reject leaves the sha unchanged');
     assert.equal((await http(server.url, '/api/proposals')).json.length, 0);
     const done = (await waitFor(() => frames.find((f) => f.type === 'proposal-resolved'))).value;
     assert.deepEqual([done.id, done.status], [id, 'rejected']);
-    assert.equal((await http(server.url, `/api/proposals/${id}/accept`, { method: 'POST', body: {} })).status, 404, 'a resolved proposal is gone');
+    assert.equal((await http(server.url, `/api/proposals/${id}/accept`, { method: 'POST', token: T, body: {} })).status, 404, 'a resolved proposal is gone');
     assert.equal((await http(server.url, '/api/components/Card/history')).json.history[0].by, 'file', 'no revision was made');
   } finally { watcher.close(); mcp.stop(); await server.stop(); }
 });
@@ -50,6 +51,7 @@ test('propose: held in memory, listed over HTTP, announced over SSE; reject leav
 test('accept lands through store.apply, attributed to the agent; the same file bytes as a direct apply', async () => {
   const { compDir, fileOf } = tempRepo();
   const server = await startServer(compDir);
+  const T = await session(server.url, 'david');
   const mcp = await startMcp(server.url, { NAPKIN_AGENT: 'scout' });
   const watcher = await connectCanvas(server.url, { by: 'david' });
   const frames = []; watcher.onChange((f) => frames.push(f));
@@ -57,7 +59,7 @@ test('accept lands through store.apply, attributed to the agent; the same file b
     const rev = (await mcp.call('read_component', { component: 'Card' })).data.revision;
     const r = await mcp.call('apply_edits', { component: 'Card', baseRevision: rev, edits: EDIT(900), propose: true });
     const expected = (await http(server.url, '/api/proposals')).json[0].source;
-    const acc = await http(server.url, `/api/proposals/${r.data.proposal.id}/accept`, { method: 'POST', body: { by: 'david' } });
+    const acc = await http(server.url, `/api/proposals/${r.data.proposal.id}/accept`, { method: 'POST', token: T, body: { by: 'david' } });
     assert.equal(acc.status, 200, JSON.stringify(acc.json));
     assert.equal(readFileSync(fileOf('Card'), 'utf8'), expected, 'what was proposed is what lands');
     const hist = (await http(server.url, '/api/components/Card/history')).json.history;
@@ -71,6 +73,7 @@ test('accept lands through store.apply, attributed to the agent; the same file b
 test('a stale accept is refused with the changed keys; the file keeps the other writer; the proposal can still be rejected', async () => {
   const { compDir, fileOf } = tempRepo();
   const server = await startServer(compDir);
+  const T = await session(server.url, 'david');
   const mcp = await startMcp(server.url, { NAPKIN_AGENT: 'scout' });
   const person = await connectCanvas(server.url, { by: 'david' });
   try {
@@ -79,25 +82,26 @@ test('a stale accept is refused with the changed keys; the file keeps the other 
     const c = person.state('Card');
     assert.equal((await person.sendEdits(c.component, c.revision, EDIT(300))).ok, true);
     const after = sha(fileOf('Card'));
-    const acc = await http(server.url, `/api/proposals/${r.data.proposal.id}/accept`, { method: 'POST', body: {} });
+    const acc = await http(server.url, `/api/proposals/${r.data.proposal.id}/accept`, { method: 'POST', token: T, body: {} });
     assert.equal(acc.status, 409);
     assert.match(acc.json.error, /^stale revision/);
     assert.equal(acc.json.stale[0].key, 'title.fontWeight');
     assert.equal(acc.json.stale[0].value, 300); assert.equal(acc.json.stale[0].yours, 900); assert.equal(acc.json.stale[0].by, 'david');
     assert.equal(sha(fileOf('Card')), after, 'a refused accept writes nothing');
     assert.equal((await http(server.url, '/api/proposals')).json.length, 1, 'still listed');
-    assert.equal((await http(server.url, `/api/proposals/${r.data.proposal.id}/reject`, { method: 'POST', body: {} })).status, 200);
+    assert.equal((await http(server.url, `/api/proposals/${r.data.proposal.id}/reject`, { method: 'POST', token: T, body: {} })).status, 200);
     // edits on other properties do not make a proposal stale
     const r2 = await mcp.call('apply_edits', { component: 'Card', baseRevision: (await mcp.call('read_component', { component: 'Card' })).data.revision, edits: [{ op: 'set', path: 'title.color', value: 'red' }], propose: true });
     const c2 = person.state('Card');
     await person.sendEdits(c2.component, c2.revision, [{ op: 'set', path: 'body.fontSize', value: 13 }]);
-    assert.equal((await http(server.url, `/api/proposals/${r2.data.proposal.id}/accept`, { method: 'POST', body: {} })).status, 200);
+    assert.equal((await http(server.url, `/api/proposals/${r2.data.proposal.id}/accept`, { method: 'POST', token: T, body: {} })).status, 200);
   } finally { person.close(); mcp.stop(); await server.stop(); }
 });
 
 test('an invalid proposal is refused like an invalid edit and not held; dryRun wins over propose', async () => {
   const { compDir } = tempRepo();
   const server = await startServer(compDir);
+  const T = await session(server.url, 'david');
   const mcp = await startMcp(server.url, { NAPKIN_AGENT: 'scout' });
   try {
     const rev = (await mcp.call('read_component', { component: 'Card' })).data.revision;
@@ -115,6 +119,7 @@ test('AGT-11 permissions: read refuses writes, propose turns every apply into a 
   writeFileSync(join(dir, 'napkin.json'), JSON.stringify({ agents: { looker: 'read', suggester: 'propose', builder: 'write', odd: 'banana' } }));
   const card = fileOf('Card');
   const server = await startServer(compDir);
+  const T = await session(server.url, 'david');
   const as = (name) => startMcp(server.url, { NAPKIN_AGENT: name });
   const [looker, suggester, builder, stranger, odd] = await Promise.all(['looker', 'suggester', 'builder', 'stranger', 'odd'].map(as));
   try {

@@ -6,10 +6,14 @@ import { join } from 'node:path';
 import { ROOT } from './harness.js';
 
 export const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-export const http = async (base, path, { method = 'GET', body } = {}) => {
-  const r = await fetch(new URL(path.replace(/^\//, ''), base), { method, ...(body !== undefined && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
+// token: a bearer token (see session()); without one the server treats the call as anonymous (reads only).
+export const http = async (base, path, { method = 'GET', body, token } = {}) => {
+  const headers = { ...(body !== undefined && { 'content-type': 'application/json' }), ...(token && { authorization: `Bearer ${token}` }) };
+  const r = await fetch(new URL(path.replace(/^\//, ''), base), { method, headers, ...(body !== undefined && { body: JSON.stringify(body) }) });
   return { status: r.status, json: await r.json() };
 };
+// A session token for a name: the server, not the request body, decides who is calling.
+export const session = async (base, as, token) => (await http(base, '/api/session', { method: 'POST', body: { as, token } })).json.token;
 // Recorded evidence (docs/evidence/<ID>.txt) is only written when EVIDENCE=1, so plain test runs leave git clean.
 export function evidence(id, text) {
   if (!process.env.EVIDENCE) return;

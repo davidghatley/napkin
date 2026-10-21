@@ -7,12 +7,14 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { connectCanvas } from './canvas-client.js';
 import { GUIDE } from './guide.js';
+import { editItemSchema } from './mcp-schema.js';
 
 const BASE = process.env.NAPKIN_URL || 'http://127.0.0.1:4810/';
 const AGENT = process.env.NAPKIN_AGENT || 'agent';
 const send = (msg) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...msg }) + '\n');
 
-const editSchema = { type: 'object', description: '{op:"set",path:"<nodeId>.<cssProp|text|@src|@alt>",value,variant?:{axis:value}} | {op:"insert",parent,index,node} | {op:"delete",id} | {op:"move",id,parent,index} | {op:"addProp"|"removeProp"|"setDefault"|"bindText"|"addVariant"|"removeVariant",...}. Read the napkin://guide resource for examples.' };
+const NO_GUIDE = !!process.env.NAPKIN_NO_GUIDE; // eval control arm: the same tools with the teaching text removed
+const editSchema = editItemSchema(NO_GUIDE);
 const comp = { type: 'string', description: 'component name or id' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required });
 const TOOLS = [
@@ -44,18 +46,21 @@ const notice = (ch) => {
   send({ method: 'notifications/napkin/change', params: n });
 };
 
+class Unreachable extends Error {}
 async function makeRemote() {
-  const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) });
+  const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) }).catch((e) => { throw new Unreachable(e.message); });
   if (!probe.ok) throw new Error(`napkin server answered ${probe.status}`);
-  const live = await connectCanvas(BASE, { by: 'agent' });
+  const live = await connectCanvas(BASE, { by: 'agent', identify: false });
   live.onChange((ch) => { if (ch.type === 'change' && !ch.mine && ch.origin !== origin) notice(ch); });
   const base = live.origin;
+  const sess = await (await fetch(new URL('api/session', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: AGENT, token: process.env.NAPKIN_TOKEN }) })).json();
+  if (!sess.ok) throw new Error(`napkin refused this agent a session: ${sess.error}`);
   return {
     mode: 'server', origin: base,
     async call({ method, path, query, body }) {
       const url = new URL(path.replace(/^\//, ''), BASE);
       if (query) url.search = query.toString();
-      const r = await fetch(url, { method, ...(body !== undefined && { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
+      const r = await fetch(url, { method, headers: { authorization: `Bearer ${sess.token}`, ...(body !== undefined && { 'content-type': 'application/json' }) }, ...(body !== undefined && { body: JSON.stringify(body) }) });
       if ((r.headers.get('content-type') || '').startsWith('image/')) return { status: r.status, png: Buffer.from(await r.arrayBuffer()), ms: Number(r.headers.get('x-napkin-render-ms')) };
       return { status: r.status, json: await r.json() };
     },
@@ -71,20 +76,23 @@ async function makeLocal() {
   const { createApi } = await import('./api.js');
   const lock = acquireLock(dir);
   const ws = await openWorkspace(dir);
-  const api = createApi(ws, { dir });
+  const api = createApi(ws, { dir, canPropose: false }); // nobody is watching a canvas, so nobody could review a proposal
+  const sess = api.session(AGENT, process.env.NAPKIN_TOKEN);
+  if (sess.status !== 200) throw new Error(sess.json.error);
+  const token = sess.json.token;
   ws.events.on('change', (c) => { if (c.origin !== origin) notice({ ...c, component: c.component }); });
   const stop = async () => { await api.close(); await ws.close(); lock.release(); process.exit(0); };
   process.on('SIGTERM', stop); process.on('SIGINT', stop);
   process.stdin.on('end', stop);
   return {
     mode: 'local', origin, dir,
-    async call({ method, path, query, body }) { return (await api.handle({ method, path, query: query || new URLSearchParams(), body })) ?? { status: 404, json: { ok: false, error: 'not found' } }; },
+    async call({ method, path, query, body }) { return (await api.handle({ method, path, query: query || new URLSearchParams(), body, token })) ?? { status: 404, json: { ok: false, error: 'not found' } }; },
     async presence() {},
   };
 }
 
 let backendP = null;
-const backend = () => (backendP ??= makeRemote().catch((e) => { if (process.env.NAPKIN_NO_FALLBACK) throw e; return makeLocal(); }).catch((e) => { backendP = null; throw e; }));
+const backend = () => (backendP ??= makeRemote().catch((e) => { if (process.env.NAPKIN_NO_FALLBACK || !(e instanceof Unreachable)) throw e; return makeLocal(); }).catch((e) => { backendP = null; throw e; }));
 
 // Presence (F16): say what this agent is editing while it works; clear it after a quiet moment.
 const quiet = new Map();
@@ -138,7 +146,7 @@ async function callTool(name, a = {}) {
   throw new Error(`unknown tool ${name}`);
 }
 
-const INSTRUCTIONS = `napkin edits real React components. This text is also served as the napkin://guide resource and the napkin_guide prompt.\n\n${GUIDE}`;
+const INSTRUCTIONS = NO_GUIDE ? 'napkin edits React components. Use the tools.' : `napkin edits real React components. This text is also served as the napkin://guide resource and the napkin_guide prompt.\n\n${GUIDE}`;
 const PROMPT = { name: 'napkin_guide', description: 'How to edit napkin components: the dialect, edit ops with examples, propose mode and stale handling.' };
 
 createInterface({ input: process.stdin }).on('line', async (line) => {
@@ -152,12 +160,12 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
   }
   if (method === 'ping') return send({ id, result: {} });
   if (method === 'tools/list') return send({ id, result: { tools: TOOLS } });
-  if (method === 'resources/list') return send({ id, result: { resources: [{ uri: 'napkin://guide', name: 'napkin guide', description: PROMPT.description, mimeType: 'text/markdown' }] } });
+  if (method === 'resources/list') return send({ id, result: { resources: NO_GUIDE ? [] : [{ uri: 'napkin://guide', name: 'napkin guide', description: PROMPT.description, mimeType: 'text/markdown' }] } });
   if (method === 'resources/read') {
     if (params?.uri !== 'napkin://guide') return send({ id, error: { code: -32002, message: `no such resource: ${params?.uri}` } });
     return send({ id, result: { contents: [{ uri: 'napkin://guide', mimeType: 'text/markdown', text: GUIDE }] } });
   }
-  if (method === 'prompts/list') return send({ id, result: { prompts: [PROMPT] } });
+  if (method === 'prompts/list') return send({ id, result: { prompts: NO_GUIDE ? [] : [PROMPT] } });
   if (method === 'prompts/get') {
     if (params?.name !== PROMPT.name) return send({ id, error: { code: -32602, message: `no such prompt: ${params?.name}` } });
     return send({ id, result: { description: PROMPT.description, messages: [{ role: 'user', content: { type: 'text', text: GUIDE } }] } });

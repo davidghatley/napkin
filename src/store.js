@@ -3,8 +3,9 @@
 // Every writer (canvas, agent, file) goes through apply(), which is serialised by a promise
 // queue, so there are no lock files. External writes (git restore, an editor) are picked up
 // by a directory watcher and become a new revision with by "file".
-import { readFileSync, writeFileSync, renameSync, watch } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { readFileSync, watch } from 'node:fs';
+import { basename, dirname } from 'node:path';
+import { writeComponent } from './commit.js';
 import { EventEmitter } from 'node:events';
 import { codecFor } from './codecs.js';
 import { summarize } from './summary.js';
@@ -15,7 +16,8 @@ const reason = (e) => (e.loc?.line && !/^line \d+/.test(e.message) ? `line ${e.l
 
 const HISTORY = 500; // revisions remembered for rebasing; older bases are "stale revision"
 
-export async function openStore(file) {
+// start: { revision, by, summary } seeds the first history entry (create and rename record themselves there).
+export async function openStore(file, start = {}) {
   const codec = codecFor(file);
   const { applyEdits, touched, conflicts, diffKeys, EditError } = codec;
   const events = new EventEmitter();
@@ -23,8 +25,8 @@ export async function openStore(file) {
   // A file napkin can't read fully opens read-only, with the reason (decision 0003, INV-06).
   let doc = null, state = null, readOnly = null;
   try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = reason(e); }
-  let revision = 1;
-  const history = [{ revision, keys: new Set(), by: 'file', summary: 'opened', at: Date.now() }];
+  let revision = start.revision ?? 1;
+  const history = [{ revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now() }];
   let queue = Promise.resolve();
   let broken = null; // the error of a hand edit the last good doc could not absorb (F22), else null
   const problem = (error) => { broken = error; events.emit('problem', { error }); };
@@ -38,16 +40,14 @@ export async function openStore(file) {
     events.emit('change', { revision, by, edits, origin, doc, summary, at });
   };
 
-  const writeFile = (t) => {
-    const tmp = join(dirname(file), `.${basename(file)}.tmp-${process.pid}`);
-    writeFileSync(tmp, t); renameSync(tmp, file); text = t;
-  };
+  const writeFile = (t) => { writeComponent(file, t); text = t; };
 
   // dryRun: validate and produce the would-be file without writing or committing (F19).
   function applyNow({ baseRevision, edits, by = 'unknown', origin, dryRun = false }) {
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
+    const safeTouched = (e) => { try { return touched(e); } catch { return new Set(); } };
     const base = history.find((h) => h.revision === baseRevision);
-    if (!base) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})`, currentRevision: revision, stale: [] };
+    if (!base) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})`, currentRevision: revision, stale: staleEntries({ doc, edits, keys: safeTouched(edits), history, baseRevision: 0 }), oldestRevision: history[0].revision, changedKeys: [...new Set(history.slice(1).flatMap((h) => [...h.keys]))].slice(0, 200) };
     let keys;
     try { keys = touched(edits); } catch { return { ok: false, error: 'invalid edit #0: edits must be an array' }; }
     for (const h of history) {

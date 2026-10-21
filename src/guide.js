@@ -39,7 +39,8 @@ Numbers stay numbers (fontSize: 20); strings are CSS text ("14px 28px").
 If something you touch changed after your baseRevision, apply_edits fails with "stale revision" and a "stale" list:
 [{ key, value (what it holds now), yours (what you tried), revision, by }] and currentRevision.
 Look at the list, decide whether your edit still makes sense, then retry once with baseRevision = currentRevision. Edits to different properties never conflict, even on an old revision.
+If your baseRevision is too old to remember (or unknown), the error still lists your keys that changed since (stale), plus changedKeys (everything that moved since oldestRevision): read the component again and rebase.
 
 ## Propose mode
-apply_edits with propose: true (or an agent configured as "propose" in napkin.json) does not write. The edits are validated like a dry run and held as a proposal; the person accepts or rejects it on the canvas. You get { proposed: true, proposal: { id } }. An agent configured as "read" can only read and dry-run.
+apply_edits with propose: true (or an agent configured as "propose" in napkin.json) does not write. The edits are validated like a dry run and held as a proposal; the person accepts or rejects it on the canvas. You get { proposed: true, proposal: { id } }. An agent configured as "read" can only read and dry-run. Propose mode needs the napkin canvas to be running (that is where a person reviews); without it the call is refused, so apply directly if you are allowed to.
 `;
