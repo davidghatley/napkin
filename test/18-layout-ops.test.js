@@ -81,3 +81,20 @@ test('bad wrap, unwrap, duplicate and paste are refused with a reason', () => {
   bad({ op: 'paste', parent: 'title', tree: { id: 'a', tag: 'div', style: {} } }, /cannot hold elements/);
   bad({ op: 'paste', parent: 'card', tree: { id: 'a', tag: 'blink', style: {} } }, /not supported/);
 });
+
+test('undo and redo (the history lane) reverse wrap, unwrap, duplicate and paste byte for byte', async () => {
+  const { store, text, fileOf } = await setup(['Card', 'Button']);
+  const other = readComponent(readFileSync(fileOf('Button'), 'utf8')).doc.root;
+  const original = text();
+  const steps = [
+    [{ op: 'wrap', ids: ['title', 'body'], id: 'group', style: { display: 'flex' } }],
+    [{ op: 'duplicate', id: 'group' }],
+    [{ op: 'paste', parent: 'card', tree: other }],
+    [{ op: 'unwrap', id: 'group' }],
+  ];
+  const seen = [original];
+  for (const edits of steps) { const { revision } = await store.read(); const r = await store.apply({ baseRevision: revision, edits, by: 'u' }); assert.equal(r.ok, true, r.error); seen.push(text()); }
+  for (let i = steps.length - 1; i >= 0; i--) { const r = await store.undo('u'); assert.equal(r.ok, true, `undo step ${i}: ${r.error}`); assert.equal(text(), seen[i], `after undoing step ${i}`); }
+  for (let i = 0; i < steps.length; i++) { const r = await store.redo('u'); assert.equal(r.ok, true, `redo step ${i}: ${r.error}`); assert.equal(text(), seen[i + 1], `after redoing step ${i}`); }
+  await store.close();
+});
