@@ -33,6 +33,18 @@ const FIT3 = [
   ['whitespace between inline elements inside a flex parent does not render, so it is dropped', '<div style="display:flex"><span>a</span> <span>b</span></div>', (t) => assert.equal(t[0].children.length, 2)],
   ['whitespace between a block and an inline element collapses away', '<div><div style="display:block">a</div> <span>b</span></div>', (t) => assert.equal(t[0].children.length, 2)],
 ];
+const FIT4 = [
+  ['a space inside an inline element is kept (trailing)', '<div><span>Hello </span><span>world</span></div>', (t) => { assert.equal(t[0].children[0].text, 'Hello '); assert.equal(t[0].children[1].text, 'world'); }],
+  ['a space inside an inline element is kept (leading)', '<div><span>Hello</span><span> world</span></div>', (t) => assert.equal(t[0].children[1].text, ' world')],
+  ['in a, strong, em and li too, under block, inline-block, grid and display:none parents', '<div style="display:grid"><a>x </a><strong> y</strong><em>z </em></div><div style="display:inline-block"><span>a </span><span>b</span></div><ul style="display:none"><li>a </li><li> b</li></ul>', (t) => { assert.equal(t[0].children[0].text, 'x '); assert.equal(t[0].children[1].text, ' y'); assert.equal(t[1].children[0].text, 'a '); assert.equal(t[2].children[1].text, 'b', 'li is block-level: an edge space is never drawn'); }],
+  ['runs of white space collapse to one space, edges keep one', '<span>  a \n\t b  </span>', (t) => assert.equal(t[0].text, ' a b ')],
+  ['a span that holds only a space keeps it', '<div><span>a</span><span> </span><span>b</span></div>', (t) => assert.equal(t[0].children[1].text, ' ')],
+  ['an empty block with only white space stays an empty frame', '<div style="padding:4px">\n  </div>', (t) => { assert.equal(t[0].text, undefined); assert.equal(t[0].children.length, 0); }],
+  ['< inside a quoted attribute or url()', '<div style="background:url(\'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22></svg>\')">x</div><img alt="a < b" src="x.png">', (t) => { assert.match(t[0].style.background, /<svg/); assert.equal(t[1].attrs.alt, 'a < b'); }],
+  ['legacy references without a semicolon (HTML spec)', '<p>&copy 2024 &amp;x &ampx &lt3 Fish &chips &notit; &#169 &copy=2</p>', (t) => assert.equal(t[0].text, '\u00a9 2024 &x &x <3 Fish &chips \u00acit; \u00a9 \u00a9=2')],
+  ['unitless numbers that are valid', '<svg-less style="stroke-width:2">x</svg-less>'.replace(/svg-less/g, 'span'), (t) => assert.equal(t[0].style.strokeWidth, 2)],
+  ['line-clamp', '<p style="line-clamp:3;stroke-dasharray:4 2">x</p>', (t) => assert.equal(t[0].style.lineClamp, 3)],
+];
 const REFUSE2 = [
   ['important with a space', '<p style="color:red ! important">x</p>', /important/],
   ['important after a comment', '<p style="color:red /* why */ !important">x</p>', /important/],
@@ -56,12 +68,17 @@ const REFUSE = [
   ['a custom property', '<p style="color: var(--x); --x: red">x</p>', /custom property/],
   ['a unitless length (browsers ignore it)', '<div style="width:100; padding:0 10">x</div>', /width.*unit|unit.*width/i],
   ['a unitless font size', '<span style="font-size:14">x</span>', /font-size|fontSize/],
-  ['an entity that does not exist', '<p>a &notanentity; b</p>', /&notanentity;/],
-  ['a stray ampersand', '<p>Fish &chips</p>', /&/],
   ['preserved white space', '<span style="white-space:pre">a   b</span>', /white-space/],
   ['a backtick in the text', '<p>run `npm test`</p>', /backtick/],
   ['a table', '<table><tr><td>1</td></tr></table>', /<table>/],
 ];
+test('round 3 exactness: white space inside inline elements, quoted <, legacy references', () => {
+  for (const [name, html, check] of FIT4) { const r = htmlToNodes(html); assert.equal(r.ok, true, `${name}: ${r.reason}`); check(r.trees); }
+});
+test('round 3: an attribute value keeps a legacy reference literal before = or a letter (HTML spec)', () => {
+  const r = htmlToNodes('<img src="a.png?x=1&copy=2&ampx=3&amp=4" alt="&copy 5">');
+  assert.deepEqual(r.trees[0].attrs, { src: 'a.png?x=1&copy=2&ampx=3&amp=4', alt: '\u00a9 5' });
+});
 test('round 2 exactness: HTML5 references, windows-1252 numerics, nbsp text, HTML parsing rules, data URIs', () => {
   for (const [name, html, check] of FIT3) { const r = htmlToNodes(html); assert.equal(r.ok, true, `${name}: ${r.reason}`); check(r.trees); }
   for (const [name, html, re] of REFUSE2) { const r = htmlToNodes(html); assert.equal(r.ok, false, name); assert.match(r.reason, re, name); }
@@ -106,5 +123,17 @@ test('a value with ; inside url() or quotes survives the model, the writer and t
   assert.equal(back.style.fontFamily, "'a;b', serif");
   const bad = await store.apply({ baseRevision: ok.revision, by: 't', edits: [{ op: 'set', path: 'card.color', value: 'red; background: url(x)' }] });
   assert.equal(bad.ok, false, 'a ; outside quotes and parentheses is still refused');
+  await store.close();
+});
+
+test('a space inside an inline element survives the writer and the reader', async () => {
+  const { tempRepo } = await import('../helpers/harness.js');
+  const { openStore } = await import('../../src/store.js');
+  const r = tempRepo(['Card']), store = await openStore(r.file), { revision } = await store.read();
+  const tree = htmlToNodes('<div><span>Hello </span><span> world</span><span> </span></div>').trees[0];
+  const ok = await store.apply({ baseRevision: revision, by: 't', edits: [{ op: 'paste', parent: 'card', tree }] });
+  assert.equal(ok.ok, true, ok.error);
+  const back = readComponent(readFileSync(r.file, 'utf8')).doc.root.children.at(-1).children.map((c) => c.text);
+  assert.deepEqual(back, ['Hello ', ' world', ' ']);
   await store.close();
 });

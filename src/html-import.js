@@ -4,26 +4,33 @@
 // non-void tags, first duplicate attribute wins, bogus comments, character references) they are followed, or the snippet is refused if unsure.
 // Pure (no DOM), so the same code runs in the page and in the tests.
 import { TAGS, VOID, unsafeCssValue } from './model.js';
-import { ENTITIES } from './html-entities.js';
+import { ENTITIES, LEGACY } from './html-entities.js';
 
 const VOID_HTML = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
 // HTML5: numeric references 0x80..0x9F are windows-1252 characters
 const CP1252 = [0x20ac, 0x81, 0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160, 0x2039, 0x0152, 0x8d, 0x017d, 0x8f, 0x90, 0x2018, 0x2019, 0x201c, 0x201d, 0x2022, 0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0x9d, 0x017e, 0x0178];
-const REF = /&(#x[0-9a-f]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/gi;
+const cp = (n) => {
+  if (n >= 0x80 && n <= 0x9f) n = CP1252[n - 0x80];
+  if (!(n > 0 && n <= 0x10ffff) || (n >= 0xd800 && n <= 0xdfff)) no(`&#${n}; is not a valid character`);
+  return String.fromCodePoint(n);
+};
 class Refuse extends Error {}
 const no = (why) => { throw new Refuse(why); };
-// Character references: decoded once; one that does not exist, or a bare "&", is refused instead of left as literal text.
-function decode(t) {
-  if (/&(?![#a-zA-Z0-9]+;)(?=[#a-zA-Z])/.test(t.replace(REF, ''))) no('the text has an "&" that is not a complete character reference (write &amp;)');
-  return t.replace(REF, (m, e) => {
-    if (e[0] === '#') {
-      let cp = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
-      if (cp >= 0x80 && cp <= 0x9f) cp = CP1252[cp - 0x80];
-      if (!(cp > 0 && cp <= 0x10ffff) || (cp >= 0xd800 && cp <= 0xdfff)) no(`&${e}; is not a valid character`);
-      return String.fromCodePoint(cp);
+// Character references the way the HTML spec reads them. Numeric ones (with or without ";") and ";" names decode. The legacy names
+// (&copy, &amp, &lt ...) also decode without ";", by longest prefix (&notit; is "\u00ac" + "it;"), except in an attribute value when a
+// letter, digit or "=" follows. Anything else stays literal text, exactly as a browser shows it ("Fish &chips").
+function decode(t, inAttr = false) {
+  return t.replace(/&(?:#([xX][0-9a-fA-F]+|\d+);?|([a-zA-Z][a-zA-Z0-9]*)(;?))/g, (m, num, name, semi, off) => {
+    if (num !== undefined) return cp(num[0] === 'x' || num[0] === 'X' ? parseInt(num.slice(1), 16) : Number(num));
+    if (semi && Object.hasOwn(ENTITIES, name)) return ENTITIES[name];
+    for (let n = Math.min(name.length, 6); n > 0; n--) {
+      const head = name.slice(0, n);
+      if (!LEGACY.has(head)) continue;
+      const next = n < name.length ? name[n] : t[off + m.length] ?? '';
+      if (inAttr && /[=a-zA-Z0-9]/.test(next)) return m; // in an attribute, before a letter, digit or "=": literal
+      return ENTITIES[head] + m.slice(1 + n);
     }
-    if (!Object.hasOwn(ENTITIES, e)) no(`&${e}; is not a character reference (HTML knows no such name)`);
-    return ENTITIES[e];
+    return m;
   });
 }
 const NOT_WS = /[^ \t\r\n\f]/; // HTML white space: a non-breaking space is NOT white space
@@ -31,6 +38,7 @@ const NOT_WS = /[^ \t\r\n\f]/; // HTML white space: a non-breaking space is NOT 
 // Elements whose opening tag closes an open <p> (so "<p>a<div>" is two siblings in HTML, which napkin will not guess at)
 const CLOSES_P = new Set(['article', 'div', 'footer', 'h1', 'h2', 'h3', 'h4', 'header', 'nav', 'p', 'section', 'ul']);
 
+const RAW = new Set(['style', 'script', 'title', 'textarea', 'svg', 'math', 'template', 'noscript', 'iframe', 'object']);
 function tokenize(html) {
   const root = { tag: '#root', attrs: {}, kids: [] }, stack = [root];
   const re = /<!--[\s\S]*?-->|<![^>]*>|<\?[^>]*>|<\/([a-zA-Z][\w-]*)\s*>|<([a-zA-Z][\w-]*)((?:\s+[^\s"'>\/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'>]+))?)*)\s*(\/?)>|([^<]+|<)/gi;
@@ -45,10 +53,11 @@ function tokenize(html) {
       stack.pop();
     } else if (m[2]) {
       const tag = m[2].toLowerCase(), attrs = {};
-      for (const a of m[3].matchAll(/([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g)) { const k = a[1].toLowerCase(); if (!(k in attrs)) attrs[k] = decode(a[2] ?? a[3] ?? a[4] ?? ''); } // the first duplicate wins
+      for (const a of m[3].matchAll(/([^\s"'>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g)) { const k = a[1].toLowerCase(); if (!(k in attrs)) attrs[k] = decode(a[2] ?? a[3] ?? a[4] ?? '', true); } // the first duplicate wins
       if (tag === 'p' && stack.some((x) => x.tag === 'p')) no('a <p> is opened inside a <p>; HTML would close the first one, so napkin will not guess');
       if (CLOSES_P.has(tag) && top.tag === 'p') no(`a <${tag}> is opened inside a <p>; HTML would close the paragraph first, so napkin will not guess`);
       if ((tag === 'li' && top.tag === 'li') || (tag === 'a' && stack.some((x) => x.tag === 'a')) || (tag === 'button' && stack.some((x) => x.tag === 'button'))) no(`a <${tag}> inside a <${tag}> is re-parsed by HTML; close the first one`);
+      if (RAW.has(tag)) no(`<${tag}> is not an element napkin can write`); // its content is not HTML, so stop before reading it as HTML
       const el = { tag, attrs, kids: [] };
       top.kids.push(el);
       if (!VOID_HTML.has(tag)) stack.push(el); // "<div/>" does not close a div in HTML
@@ -59,7 +68,7 @@ function tokenize(html) {
 }
 
 // Properties whose bare numbers are valid CSS. Everywhere else a bare number (width:100) is invalid, ignored by browsers, and so refused.
-const UNITLESS = new Set(['opacity', 'fontWeight', 'lineHeight', 'zIndex', 'flex', 'flexGrow', 'flexShrink', 'order', 'aspectRatio', 'zoom', 'gridArea', 'gridColumn', 'gridRow', 'gridColumnStart', 'gridColumnEnd', 'gridRowStart', 'gridRowEnd', 'font', 'columnCount', 'columns', 'orphans', 'widows', 'tabSize', 'scale', 'fillOpacity', 'strokeOpacity', 'animationIterationCount']);
+const UNITLESS = new Set(['opacity', 'fontWeight', 'lineHeight', 'zIndex', 'flex', 'flexGrow', 'flexShrink', 'order', 'aspectRatio', 'zoom', 'gridArea', 'gridColumn', 'gridRow', 'gridColumnStart', 'gridColumnEnd', 'gridRowStart', 'gridRowEnd', 'font', 'columnCount', 'columns', 'orphans', 'widows', 'tabSize', 'scale', 'fillOpacity', 'strokeOpacity', 'floodOpacity', 'stopOpacity', 'strokeWidth', 'strokeMiterlimit', 'strokeDashoffset', 'strokeDasharray', 'lineClamp', 'maxLines', 'fontSizeAdjust', 'counterIncrement', 'counterReset', 'counterSet', 'animationIterationCount']);
 const bareTokens = (v) => { const out = []; let d = 0, cur = ''; for (const ch of v) { if (ch === '(') d++; if (ch === ')') d--; if (d === 0 && /[\s,/]/.test(ch)) { if (cur) out.push(cur); cur = ''; } else cur += ch; } if (cur) out.push(cur); return out.filter((x) => /^[+-]?(\d+\.?\d*|\.\d+)$/.test(x) && Number(x) !== 0); };
 const camel = (p) => p.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 // Split on ";" outside parentheses and quotes (url(data:image/png;base64,...) and 'a;b' stay whole); comments are dropped.
@@ -122,10 +131,14 @@ function convert(el) {
   const texts = el.kids.filter((k) => typeof k === 'string' && NOT_WS.test(k));
   if (texts.length && elements.length) no(`<${tag}> mixes text with other elements; put the text in its own <span>`);
   if (texts.length) {
-    const text = decode(texts.join('')).replace(/[ \t\r\n\f]+/g, ' ').replace(/^ | $/g, '');
+    // runs of HTML white space become one space; a space at either end is KEPT (it renders next to an inline sibling: "Hello " + "world")
+    let text = decode(el.kids.filter((k) => typeof k === 'string').join('')).replace(/[ \t\r\n\f]+/g, ' ');
+    if (!INLINE.has(tag) || /^(block|flex|grid|list-item|table)/.test(String(node.style.display ?? ''))) text = text.replace(/^ | $/g, ''); // at the edge of a block a space is never drawn
     if (text.length > 500) no('a text is longer than 500 characters');
     if (text.includes('`')) no('the text has a backtick, which the dialect cannot hold in a text');
     node.text = text;
+  } else if (!elements.length && el.kids.some((k) => typeof k === 'string' && k.length) && INLINE.has(tag) && !/^(block|flex|grid|list-item|table)/.test(String(node.style.display ?? ''))) {
+    node.text = ' '; // an inline element with only a space renders that space between its neighbours
   } else {
     const conv = new Map(elements.map((e) => [e, convert(e)]));
     node.children = elements.map((e) => conv.get(e));
@@ -156,8 +169,6 @@ function unwrap(kids) {
 // html -> { ok: true, trees: [node] } | { ok: false, reason }. A node is { id, tag, style, text?, attrs?, children }, ready for the `paste` op.
 export function htmlToNodes(html) {
   try {
-    const bad = /<(style|script|title|link|base|template|noscript|svg|math|textarea|iframe|object|embed|form|input|select|table)[\s>/]/i.exec(String(html));
-    if (bad) no(`<${bad[1].toLowerCase()}> is not an element napkin can write`);
     const kids = unwrap(tokenize(String(html)).kids);
     const els = kids.filter((k) => typeof k !== 'string');
     if (kids.some((k) => typeof k === 'string' && NOT_WS.test(k))) no('there is text outside any element; wrap it in a <span> or <p>');

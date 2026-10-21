@@ -238,3 +238,9 @@ body[data-gesture="move"] #stage, body[data-gesture="reorder"] #stage { cursor: 
 #panel .amwrap.row .axisarrow svg { width: 60px; height: 8px; }
 #panel .amwrap.column .axisarrow { width: 10px; margin: 0; display: flex; align-items: center; justify-content: center; }
 #panel .amwrap.column .axisarrow svg { width: 8px; height: 60px; }
+
+/* very dark colours stay visible in dark chrome: a light ring instead of a dark one */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) #panel .swatch, :root:not([data-theme="light"]) #cpop .cp-s { box-shadow: 0 0 0 1px rgba(255, 255, 255, .45); }
+}
+:root[data-theme="dark"] #panel .swatch, :root[data-theme="dark"] #cpop .cp-s { box-shadow: 0 0 0 1px rgba(255, 255, 255, .45); }

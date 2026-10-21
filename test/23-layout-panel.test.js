@@ -102,3 +102,18 @@ test('the panel at default width: no truncated labels, clear hierarchy, quiet in
     });
   } finally { await L.close(); }
 });
+
+test('FEEL-02: a very dark swatch keeps a visible outline in dark chrome', { timeout: 60000 }, async () => {
+  const D = tsx('Dark', { id: 'root', tag: 'div', style: { width: 80, height: 40, background: '#222222', border: '2px solid rgba(0, 0, 0, 0.1)' } });
+  const L = await lab({ Dark: D }, { theme: 'dark' });
+  try {
+    await L.select('Dark', 'root');
+    const r = JSON.parse(await L.q(`JSON.stringify((() => { const s = getComputedStyle(document.querySelector('#panel .swatch')); const bg = getComputedStyle(document.querySelector('#inspector')).backgroundColor; return { shadow: s.boxShadow, bg }; })())`));
+    const ring = r.shadow.match(/rgba?\(([^)]*)\)/)[1].split(',').map(Number), bg = r.bg.match(/\d+/g).slice(0, 3).map(Number);
+    const a = ring[3] ?? 1, eff = [0, 1, 2].map((i) => ring[i] * a + bg[i] * (1 - a));
+    const lum = (c) => { const [R, G, B] = c.map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * R + 0.7152 * G + 0.0722 * B; };
+    const ratio = (x, y) => (Math.max(lum(x), lum(y)) + 0.05) / (Math.min(lum(x), lum(y)) + 0.05);
+    assert.ok(ratio(eff, bg) >= 3, `outline against the panel ${ratio(eff, bg).toFixed(2)}:1 (${r.shadow})`);
+    assert.ok(ratio(eff, [34, 34, 34]) >= 3, 'and against a #222 fill');
+  } finally { await L.close(); }
+});
