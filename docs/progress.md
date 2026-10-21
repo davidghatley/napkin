@@ -17,22 +17,22 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | CAN-01 | CAN | canvas | pass | r1 pass: drift 1e-11 px | test/12-canvas-nav.test.js | d57d328 |
 | CAN-02 | CAN | canvas | pass | r2 pass: atomic sidecar, identity | test/16-canvas-endpoint.test.js | d57d328 |
 | CAN-03 | CAN | canvas | pass | r1 pass: p95 0.8 ms; flight 282 ms | test/13-canvas-frames.test.js | d57d328 |
-| CAN-04 | CAN | layout | critic-pass | r4 Sonnet tie; Codex order-dependent (flips when swapped) = tie | test/17-canvas-round2.test.js | a121864 |
+| CAN-04 | CAN | layout | pass | r4 Sonnet tie; Codex order-dependent (flips when swapped) = tie | test/17-canvas-round2.test.js | a4a87dd |
 | CAN-05 | CAN | canvas | pass | r1 pass: 1 revision per multi-edit | test/13-canvas-frames.test.js | d57d328 |
 | CAN-06 | CAN | canvas | pass | r1 blind WIN vs Figma; r2 far-zoom strip 11 px | test/17-canvas-round2.test.js | d57d328 |
 | CAN-07 | CAN | canvas | pass | r1 pass: exact at 5/30/100% | test/13-canvas-frames.test.js | d57d328 |
 | CAN-08 | CAN | canvas | pass | r1 pass | test/13-canvas-frames.test.js | d57d328 |
-| LAY-01 | LAY | layout | critic-pass | r2 pass: matrix with axis arrow | test/22-*.test.js | 6c45f49 |
-| LAY-02 | LAY | layout | critic-pass | r1 pass 12/12 (critic's own cases) | test/20-*.test.js | a121864 |
-| LAY-03 | LAY | layout | critic-pass | r1 pass (gridArea, 1 line) | test/21-*.test.js | a121864 |
-| LAY-04 | LAY | layout | critic-pass | r1 pass 8/8; pins change several inset lines in 1 revision (lead ruling) | test/20-*.test.js | a121864 |
-| LAY-05 | LAY | layout | critic-pass | r1 pass: 1 rev/gesture, p95 16.7-16.8 ms | docs/evidence/LAY-05.txt | a121864 |
-| LAY-06 | LAY | layout | critic-fail | r2: grid not quantized above 100% zoom; ruling: grid quantizes | test/canvas/snap.test.js | 6c45f49 |
-| LAY-07 | LAY | layout | critic-pass | r2 pass: no truncation | test/23-layout-panel.test.js | 6c45f49 |
-| LAY-08 | LAY | layout | critic-pass | r2 pass; bug: colour edit rewrites alpha (fixing) | test/22-*.test.js | 6c45f49 |
-| LAY-09 | LAY | layout | critic-pass | r1 pass: pasted subtree byte-identical render | test/18-*.test.js | a121864 |
-| LAY-10 | LAY | layout | critic-fail | r2 fail: 10 approximations in a 42-snippet corpus | test/canvas/paste-html.test.js | 6c45f49 |
-| LAY-11 | LAY | layout | critic-pass | r1 pass: sidecar only, sha unchanged | test/21-*.test.js | a121864 |
+| LAY-01 | LAY | layout | pass | r2 pass: matrix with axis arrow | test/22-*.test.js | a4a87dd |
+| LAY-02 | LAY | layout | pass | r1 pass 12/12 (critic's own cases) | test/20-*.test.js | a4a87dd |
+| LAY-03 | LAY | layout | pass | r1 pass (gridArea, 1 line) | test/21-*.test.js | a4a87dd |
+| LAY-04 | LAY | layout | pass | r1 pass 8/8; pins change several inset lines in 1 revision (lead ruling) | test/20-*.test.js | a4a87dd |
+| LAY-05 | LAY | layout | pass | r1 pass: 1 rev/gesture, p95 16.7-16.8 ms | docs/evidence/LAY-05.txt | a4a87dd |
+| LAY-06 | LAY | layout | pass | r3 pass: grid quantizes at 7 zooms, 84 drags | test/canvas/snap.test.js | a4a87dd |
+| LAY-07 | LAY | layout | pass | r2 pass: no truncation | test/23-layout-panel.test.js | a4a87dd |
+| LAY-08 | LAY | layout | pass | r2 pass; bug: colour edit rewrites alpha (fixing) | test/22-*.test.js | a4a87dd |
+| LAY-09 | LAY | layout | pass | r1 pass: pasted subtree byte-identical render | test/18-*.test.js | a4a87dd |
+| LAY-10 | LAY | layout | critic | r4 merged; narrow re-critic running | test/canvas/paste-html.test.js | a4a87dd |
+| LAY-11 | LAY | layout | pass | r1 pass: sidecar only, sha unchanged | test/21-*.test.js | a4a87dd |
 | CMP-01 | CMP | components | open |  |  |  |
 | CMP-02 | CMP | components | open |  |  |  |
 | CMP-03 | CMP | components | open |  |  |  |
@@ -103,7 +103,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | REL-04 | REL | engine | building |  |  |  |
 | REL-05 | REL | engine | building |  |  |  |
 | FEEL-01 | FEEL | canvas | building |  |  |  |
-| FEEL-02 | FEEL | layout | critic-fail | r5 Sonnet PASS (tie+); Codex Figma better both orders; ask David | test/23-layout-panel.test.js | 6c45f49 |
+| FEEL-02 | FEEL | layout | needs-david | 6 rounds: Sonnet tie; Codex prefers Figma help imagery in both orders | test/23-layout-panel.test.js | a4a87dd |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
 | FEEL-05 | FEEL | canvas | building |  |  |  |
