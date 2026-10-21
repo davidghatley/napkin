@@ -54,7 +54,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | OPN-04 | OPN | open | pass | r2 0/61 editable; address in 223 ms on 3674 files | docs/evidence/OPN-04.txt | ec22ab6 |
 | AGT-01 | AGT | agents | pass | r2 pass: 10 tools, oneOf schema | test/mcp/schema.test.js | ed6ea70 |
 | AGT-02 | AGT | agents | pass | r2 pass: p95 82 ms; 8-way p95 335 ms | docs/evidence/AGT-02.txt | ed6ea70 |
-| AGT-03 | AGT | agents | building |  |  |  |
+| AGT-03 | AGT | agents-ui | building |  |  |  |
 | AGT-04 | AGT | agents | pass | r2 pass (server/MCP); canvas UI later | test/agents/propose.test.js | ed6ea70 |
 | AGT-05 | AGT | agents | pass | r3 pass; follow-ups: git attribution, approver in history | test/agents/identity.test.js | ed6ea70 |
 | AGT-06 | AGT | agents | pass | r2 pass 100/100 | docs/evidence/AGT-06.txt | ed6ea70 |
