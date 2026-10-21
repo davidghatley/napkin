@@ -80,6 +80,9 @@ export function touched(edits) {
       case 'delete': keys.add(`node:${e.id}`); break;
       case 'rename': keys.add(`node:${e.id}`); keys.add(`node:${e.to}`); break;
       case 'move': keys.add(`node:${e.id}`); keys.add(`children:${e.parent}`); break;
+      case 'duplicate': case 'paste': keys.add(`children:${e.op === 'paste' ? e.parent : `of:${e.id}`}`); break;
+      case 'wrap': for (const id of e.ids || []) keys.add(`node:${id}`); keys.add(`node:${e.id}`); keys.add(`children:of:${e.ids?.[0]}`); break;
+      case 'unwrap': keys.add(`node:${e.id}`); keys.add(`children:of:${e.id}`); break;
       case 'addProp': case 'removeProp': case 'setDefault': keys.add(`prop:${e.name}`); break;
       case 'bindText': keys.add(`${e.id}.text`); if (e.prop) keys.add(`prop:${e.prop}`); break;
       case 'addVariant': case 'removeVariant': keys.add(`prop:${e.axis}`); break;
@@ -156,6 +159,36 @@ function removeOverrides(doc, ids) {
   for (const vals of Object.values(doc.variants)) for (const nodes of Object.values(vals)) for (const id of ids) delete nodes[id];
 }
 const subtreeIds = (node) => [node.id, ...(node.children || []).flatMap(subtreeIds)];
+
+
+// --- LAY-09: wrap, unwrap, duplicate, paste. Fresh ids: the wanted id when free, else the stem plus the lowest free number >= 2. ---
+function freshId(taken, wanted) {
+  const stem = String(wanted).replace(/\d+$/, '') || 'node';
+  if (!taken.has(wanted) && NODE_ID.test(wanted)) { taken.add(wanted); return wanted; }
+  for (let n = 2; ; n++) if (!taken.has(`${stem}${n}`)) { taken.add(`${stem}${n}`); return `${stem}${n}`; }
+}
+// A deep copy of a subtree with fresh ids; `map` collects old -> new so variant overrides can follow.
+function cloneTree(node, taken, map) {
+  const id = freshId(taken, node.id);
+  map.set(node.id, id);
+  const out = { id, tag: node.tag, style: { ...(node.style || {}) }, children: [] };
+  if (node.text !== undefined) out.text = node.text;
+  if (node.textProp) out.textProp = node.textProp;
+  if (node.attrs) out.attrs = { ...node.attrs };
+  out.children = (node.children || []).map((c) => cloneTree(c, taken, map));
+  return out;
+}
+// Validates a pasted tree the way `insert` validates a node, recursively.
+function checkTree(i, n, depth = 0) {
+  if (!n || typeof n.id !== 'string' || typeof n.tag !== 'string') throw new EditError(i, 'node needs id and tag');
+  if (!TAGS.has(n.tag)) throw new EditError(i, `tag "${n.tag}" is not supported`);
+  if (depth > 40) throw new EditError(i, 'tree is too deep');
+  for (const [k, v] of Object.entries(n.style || {})) { if (!CSS_PROP.test(k)) throw new EditError(i, `bad property "${k}"`); checkValue(i, `${n.id}.${k}`, v); }
+  if (n.text !== undefined) { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); }
+  for (const [k, v] of Object.entries(n.attrs || {})) { if (!ATTRS.includes(k)) throw new EditError(i, `unknown attribute "${k}"`); checkText(i, v); }
+  if ((n.children || []).length && (n.text !== undefined || VOID.has(n.tag))) throw new EditError(i, `"${n.id}" cannot hold both text and elements`);
+  (n.children || []).forEach((c) => checkTree(i, c, depth + 1));
+}
 
 // Validate a batch and apply it all-or-nothing to a copy of the model.
 export function applyEdits(doc, edits) {
@@ -333,6 +366,65 @@ export function applyEdits(doc, edits) {
         p.options = p.options.filter((o) => o !== e.value);
         if (next.variants[e.axis]) delete next.variants[e.axis][e.value];
         cleanVariants(next);
+        break;
+      }
+      case 'duplicate': {
+        const node = byId.get(e.id), parent = parentOf.get(e.id);
+        if (!node) throw new EditError(i, `no node "${e.id}"`);
+        if (!parent) throw new EditError(i, 'cannot duplicate the root');
+        const map = new Map(), copy = cloneTree(node, new Set(byId.keys()), map);
+        for (const vals of Object.values(next.variants)) for (const nodes of Object.values(vals)) for (const [old, nw] of map) if (nodes[old]) nodes[nw] = { ...nodes[old] };
+        parent.children.splice(parent.children.findIndex((c) => c.id === e.id) + 1, 0, copy);
+        break;
+      }
+      case 'paste': {
+        const parent = byId.get(e.parent);
+        if (!parent) throw new EditError(i, `no parent "${e.parent}"`);
+        if (parent.text !== undefined || parent.textProp || VOID.has(parent.tag)) throw new EditError(i, `"${e.parent}" cannot hold elements`);
+        checkTree(i, e.tree);
+        const map = new Map(), copy = cloneTree(e.tree, new Set(byId.keys()), map);
+        // a text bound to a setting this component lacks becomes plain text (the tree carries the setting's default as `text`)
+        (function unbind(n) { if (n.textProp && propOf(next, n.textProp)?.type !== 'string') { delete n.textProp; n.text = n.text ?? ''; } n.children.forEach(unbind); })(copy);
+        for (const [axis, vals] of Object.entries(e.variants || {})) {
+          const a = propOf(next, axis);
+          if (!a || a.type !== 'enum') continue; // an axis this component lacks: its overrides stay behind
+          for (const [val, nodes] of Object.entries(vals)) {
+            if (!a.options.includes(val) || val === a.default) continue;
+            for (const [old, st] of Object.entries(nodes)) if (map.has(old)) { for (const [k, v] of Object.entries(st)) { if (!CSS_PROP.test(k)) throw new EditError(i, `bad property "${k}"`); checkValue(i, `${old}.${k}`, v); } (((next.variants[axis] ??= {})[val] ??= {})[map.get(old)] = { ...st }); }
+          }
+        }
+        const at = e.index ?? parent.children.length;
+        if (!Number.isInteger(at) || at < 0 || at > parent.children.length) throw new EditError(i, `bad index ${e.index}`);
+        parent.children.splice(at, 0, copy);
+        break;
+      }
+      case 'wrap': {
+        if (!Array.isArray(e.ids) || !e.ids.length) throw new EditError(i, 'wrap needs ids');
+        if (typeof e.id !== 'string' || !NODE_ID.test(e.id)) throw new EditError(i, `bad id "${e.id}" (letters, digits, _; starts lowercase)`);
+        if (byId.has(e.id)) throw new EditError(i, `id "${e.id}" already exists`);
+        const tag = e.tag ?? 'div';
+        if (!TAGS.has(tag) || VOID.has(tag)) throw new EditError(i, `tag "${tag}" is not supported`);
+        const parent = parentOf.get(e.ids[0]);
+        for (const id of e.ids) if (!byId.has(id)) throw new EditError(i, `no node "${id}"`);
+        if (!parent) throw new EditError(i, 'cannot wrap the root');
+        if (e.ids.some((id) => parentOf.get(id) !== parent)) throw new EditError(i, 'wrapped nodes must share one parent');
+        const frame = { id: e.id, tag, style: {}, children: [] };
+        for (const [k, v] of Object.entries(e.style || {})) { if (!CSS_PROP.test(k)) throw new EditError(i, `bad property "${k}"`); checkValue(i, `${e.id}.${k}`, v); frame.style[k] = v; }
+        const members = parent.children.filter((c) => e.ids.includes(c.id)); // keep document order
+        const at = parent.children.indexOf(members[0]);
+        parent.children = parent.children.filter((c) => !e.ids.includes(c.id));
+        frame.children = members;
+        parent.children.splice(at, 0, frame);
+        break;
+      }
+      case 'unwrap': {
+        const node = byId.get(e.id), parent = parentOf.get(e.id);
+        if (!node) throw new EditError(i, `no node "${e.id}"`);
+        if (!parent) throw new EditError(i, 'cannot unwrap the root');
+        if (node.text !== undefined || node.textProp || !node.children.length) throw new EditError(i, `"${e.id}" holds no elements to lift out`);
+        removeOverrides(next, [e.id]); cleanVariants(next);
+        const at = parent.children.indexOf(node);
+        parent.children.splice(at, 1, ...node.children);
         break;
       }
       default:
