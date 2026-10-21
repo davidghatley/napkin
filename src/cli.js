@@ -8,7 +8,7 @@ import { parseArgs } from 'node:util';
 import { spawn } from 'node:child_process';
 import { createComponent, createProjectConfig } from './commit.js';
 import { newComponentSource } from './tsx/write.js';
-import { scanRepository, formatReport } from './scan.js';
+import { starterSource } from './adopt.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export function connection(url) {
@@ -26,7 +26,7 @@ async function main() {
   if (command === 'init') {
     if (existsSync(dir) && readdirSync(dir).length) throw new Error(`${dir} is not empty. Next: choose an empty folder for napkin init, or use napkin open ${JSON.stringify(dir)}.`);
     mkdirSync(join(dir, 'components'), { recursive: true });
-    createComponent(join(dir, 'components/Welcome.tsx'), newComponentSource('Welcome', 'div'));
+    createComponent(join(dir, 'components/Welcome.tsx'), starterSource('Welcome'));
     createProjectConfig(join(dir, 'napkin.json'), JSON.stringify({ components: 'components' }, null, 2) + '\n');
     console.log(`Created ${dir}/napkin.json and components/Welcome.tsx.\nNext: napkin open ${JSON.stringify(dir)}\n${connection(`http://127.0.0.1:${port || 4810}/`)}`);
     return;
@@ -40,15 +40,15 @@ async function main() {
     components = resolve(dir, config.components || 'components');
     if (!existsSync(components)) throw new Error(`${components} does not exist (napkin.json). Next: create the components folder or correct the components path.`);
   }
-  console.log(formatReport(scanRepository(components)));
   if (external && !values['write-sidecars']) console.log('Opening without sidecar writes. Frame positions stay in this session; component edits and accepted adoptions still write the selected TSX file.');
-  const args = [join(ROOT, 'src/server.js'), '--dir', components, '--port', String(port), '--recursive', '--next-port', ...(external && !values['write-sidecars'] ? ['--no-sidecars'] : [])];
+  const args = [join(ROOT, 'src/server.js'), '--dir', components, '--port', String(port), '--recursive', '--next-port', '--stream', ...(external && !values['write-sidecars'] ? ['--no-sidecars'] : [])];
   const child = spawn(process.execPath, args, { stdio: ['inherit', 'pipe', 'inherit'] });
   let printed = false, buffer = '';
   child.stdout.on('data', (b) => {
-    process.stdout.write(b); buffer += b;
+    buffer += b;
     const url = buffer.match(/napkin canvas: (http:\/\/127.0.0.1:\d+\/)/)?.[1];
-    if (url && !printed) { printed = true; console.log(connection(url)); }
+    if (url && !printed) { printed = true; process.stdout.write(String(b) + connection(url) + '\n'); }
+    else process.stdout.write(b);
   });
   for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
   child.on('exit', (code) => { process.exitCode = code || 0; });

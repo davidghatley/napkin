@@ -80,6 +80,7 @@ export function initQuick(ctx) {
     if (item.kind === 'action') { item.run(); return; }
     const c = ctx.state.components.get(item.component);
     if (!c) return;
+    ctx.stage.live(c.component);
     if (!c.doc) { const rect = ctx.stage.componentRect(c.component); if (rect) ctx.view.flyTo(rect, { pad: 96, max: 1.5 }); return; }
     const variant = variantGrid(c.doc)[0];
     if (item.kind === 'component') {

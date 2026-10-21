@@ -7,7 +7,7 @@ export function explainError(error, { file, next } = {}) {
   const context = file && !detail.includes(file) ? ` [${file}]` : '';
   if (at >= 0) return `${detail}${context} ${message.slice(at)}`;
   if (!next) {
-    if (/Unexpected token|SyntaxError|line \d+/.test(message)) next = 'fix the syntax or dialect construct on the named line, then reload the file.';
+    if (/Unexpected token|SyntaxError|syntax error/i.test(message)) next = `fix the syntax error at line ${message.match(/line (\d+)/)?.[1] || 1}, then save; napkin reloads it.`;
     else if (/stale revision/.test(message)) next = 'read_component again, check the changed values, then retry on currentRevision.';
     else if (/napkin.json.*(?:not allowed|agents)|propose-only|configured with a token|reserved/.test(message)) next = 'check the caller name and permissions in napkin.json, then request a permitted action.';
     else if (/read-only|dialect|cannot adopt/.test(message)) next = 'keep this file read-only, or request propose_adoption for a reviewed rewrite.';

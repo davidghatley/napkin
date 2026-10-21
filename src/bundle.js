@@ -11,7 +11,7 @@ import { basename } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // The component is the export named like the file's component, else the default export, else the first function.
-const entry = (file, name) => `
+const entry = (file, name, displayFile = file) => `
 import { createElement, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
@@ -20,12 +20,12 @@ try { M = await import(${JSON.stringify(file)}); } catch (error) { moduleError =
 const usable = (x) => typeof x === 'function' || (x && typeof x === 'object' && x.$$typeof);
 const C = [M[${JSON.stringify(name)}], M.default, ...Object.values(M)].find(usable);
 const loadFailure = moduleError
-  ? ${JSON.stringify(file)} + ': module failed: ' + moduleError.message + '. Next: fix the module initialization or provide its required context, then reload.'
-  : !C ? 'no component exported from ' + ${JSON.stringify(file)} + '. Next: export a named or default React component.' : null;
+  ? ${JSON.stringify(displayFile)} + ': module failed: ' + moduleError.message + '. Next: fix the module initialization or provide its required context, then reload.'
+  : !C ? 'no component exported from ' + ${JSON.stringify(displayFile)} + '. Next: export a named or default React component.' : null;
 class Boundary extends Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
-  render() { return this.state.error ? createElement('div', { className: 'error', role: 'alert', style: { maxWidth: 420, padding: 16, whiteSpace: 'normal' } }, ${JSON.stringify(file)} + ': render failed: ' + this.state.error.message + '. Next: provide the required props or context in this component, then reload.') : this.props.children; }
+  render() { return this.state.error ? createElement('div', { className: 'error', role: 'alert', style: { maxWidth: 420, padding: 16, whiteSpace: 'normal' } }, ${JSON.stringify(displayFile)} + ': render failed: ' + this.state.error.message + '. Next: provide the required props or context in this component, then reload.') : this.props.children; }
 }
 export function mount(el, props = {}) {
   if (loadFailure) {
@@ -47,8 +47,8 @@ const formatError = (e) => {
 
 export function createBundler() {
   const contexts = new Map();
-  const options = (file, name) => ({
-    stdin: { contents: entry(file, name), resolveDir: dirname(file), loader: 'js', sourcefile: 'napkin-canvas-entry.js' },
+  const options = (file, name, displayFile) => ({
+    stdin: { contents: entry(file, name, displayFile), resolveDir: dirname(file), loader: 'js', sourcefile: 'napkin-canvas-entry.js' },
     bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
     jsx: 'automatic', loader: { '.tsx': 'tsx', '.ts': 'ts' },
     // React comes from this repo's node_modules, wherever the component folder lives.
@@ -57,15 +57,15 @@ export function createBundler() {
     logLevel: 'silent', minify: false,
   });
   return {
-    async build(file, name) {
+    async build(file, name, displayFile = basename(file)) {
       const t0 = performance.now();
       try {
         let ctx = contexts.get(file);
-        if (!ctx) { ctx = await esbuild.context(options(file, name)); contexts.set(file, ctx); }
+        if (!ctx) { ctx = await esbuild.context(options(file, name, displayFile)); contexts.set(file, ctx); }
         const r = await ctx.rebuild();
         return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
       } catch (e) {
-        return { ok: false, error: `${file}: ${formatError(e)}. Next: fix the named import, CSS or syntax in this file, then reload.`, ms: performance.now() - t0 };
+        return { ok: false, error: `${displayFile}: ${formatError(e).split(dirname(file) + "/").join("")}. Next: fix the named import, CSS or syntax in this file, then reload.`, ms: performance.now() - t0 };
       }
     },
     async dispose(file) { const c = contexts.get(file); contexts.delete(file); await c?.dispose(); },

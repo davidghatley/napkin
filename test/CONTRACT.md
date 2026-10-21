@@ -139,3 +139,25 @@ The page is now an infinite canvas. What the tests (12-15) and other lanes can r
 - **Onboarding UI:** `public/canvas/empty.js` inserts `#empty-state` only on an empty stage, with N/F/T/I/Ctrl-or-Cmd+K and a New component button. `actions.js` is the shared quick-open / shortcut-sheet registry. `?` opens native modal `dialog#shortcuts`, Escape/button/backdrop close and restore focus. `shortcuts.test.js` inventories all keyboard listeners (including local forms/menus), checks counts and every compared key/code/tool binding against that registry. No extra handlers are permitted without a registry entry and audit update.
 - **Errors:** `explainError` appends a concrete next step without changing `stale revision`, `invalid edit #`, or `read-only:` prefixes. Store failures add the affected file; parse/dialect errors keep their line. Typed constructors and HTTP/MCP boundaries format upstream errors too. `test/onboarding/errors.test.js` inventories every explicit error expression in `src/` and verifies its constructor/return rule and representative runtime failures.
 - **Evidence:** `EVIDENCE=1 node --test test/onboarding/` writes text evidence and CPU Chromium screenshots to `docs/evidence/`. `readme.test.js` extracts only the marked quickstart shell block, clones HEAD into a temp checkout, overlays the uncommitted source/README/package files under review, runs `npm ci` and both README commands (only adding `--port 0`), and measures first render; also parses the MCP snippet and checks local `npx`. `node tools/shadcn-report.js` explicitly fetches a pinned shallow shadcn/ui commit, scans its canonical UI TSX scope and writes `OPN-04.txt`; this network report is not part of `npm test`.
+
+
+## Open lane fix round (2026-10-21)
+
+- `napkin open` prints the listening address before the scan/report completes.
+  SSE `progress { scanned, total, done }` and `added` stream discovery. Snapshots
+  and summaries include repository-relative `path`; duplicate names display it.
+- `openWorkspace(..., { progressive: true })` returns before discovery, exposes
+  `ready` (discovery complete) and `progress()`. Ordinary callers retain eager
+  discovery. `ws.bundle(entry)` is the authority for lazy builds and invalidation;
+  PNG rendering uses it too. Foreign opening still writes zero repository bytes.
+- Large canvases defer offscreen bundles until reveal. A placeholder is measured
+  before placement; after loading it places itself with its real dimensions.
+  Previously placed siblings keep their positions.
+- `.build-error` is a fixed 420×200 card **inside `.frame`** (supersedes its old
+  header location). Its `summary` expands scrollable detail without changing the
+  frame size. Error and refusal paths are repository-relative.
+- `classifySource` includes all detected `constructs: [{ name, line }]` for
+  read-only files. The report counts files blocked by each construct, once per
+  file. Adoption shares the analysis and refuses unsupported behavior explicitly.
+- The guide is served as a resource and prompt; there is no duplicate `napkin`
+  tool. `tools/list` is pinned by `test/mcp/tools.test.js`.

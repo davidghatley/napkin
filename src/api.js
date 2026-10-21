@@ -83,7 +83,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
 
   async function resolve(id, action, by) {
     const p = proposals.get(id);
-    if (!p) return fail(404, 'no such proposal');
+    if (!p) return fail(404, `no such proposal "${id}"`);
     if (action === 'reject') {
       proposals.delete(id);
       broadcast({ type: 'proposal-resolved', id, component: p.component, status: 'rejected', by });
@@ -100,7 +100,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
 
   async function handle({ method, path, query = new URLSearchParams(), body = '', token }) {
     let contextFile;
-    const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error, { file: contextFile }), ...extra });
+    const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error, { file: /body is not JSON/.test(error) ? undefined : /invalid edit|stale revision|read-only:|line \d+:|cannot adopt|build failed|render failed/.test(error) ? contextFile : undefined }), ...extra });
     if (!path.startsWith('/api/') || path === '/api/events' || path === '/api/presence') return null;
     const seg = path.split('/').slice(2).map(decodeURIComponent);
     const msgOf = () => parse(body);
@@ -142,7 +142,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
 
     const e = ws.find(seg[1]);
     if (!e) return fail(404, `component "${seg[1]}" not found`);
-    contextFile = e.file;
+    contextFile = e.path || e.name + '.tsx';
     const sub = seg[2];
 
     if (!sub) {
@@ -164,7 +164,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       const r = await e.store.read();
       if (!r.readOnly) return fail(409, `${e.file} is already editable. Next: use apply_edits.`);
       let converted;
-      try { converted = proposeAdoption(r.source, e.file); } catch (err) { return fail(422, err.message); }
+      try { converted = proposeAdoption(r.source, e.path || e.name + '.tsx'); } catch (err) { return fail(422, err.message); }
       const p = { id: 'prp_' + randomBytes(5).toString('hex'), component: e.id, name: e.name, adoption: true,
         baseRevision: r.revision, currentRevision: r.revision, before: r.source, edits: [], by: caller,
         summary: `adopt ${e.name} into the dialect`, at: Date.now(), ...converted };

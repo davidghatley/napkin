@@ -119,13 +119,13 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
           if (!a) throw new RenderError(`no variant axis "${axis}" (axes: ${(snap.doc ? axes(snap.doc) : []).map((x) => x.name).join(', ') || 'none'})`);
           if (!a.options.includes(value)) throw new RenderError(`axis "${axis}" has no value "${value}" (values: ${a.options.join(', ')})`);
         }
-        const built = await entry.built;
+        const built = await ws.bundle(entry);
         if (!built?.ok) throw new RenderError(`build failed: ${built?.error}`);
         const key = entry.id + ':' + createHash('sha1').update(built.code).digest('hex').slice(0, 12);
         const page = await acquire();
         try { const png = await draw(page, { key, code: built.code, variant }); return { png, ms: performance.now() - t0 }; }
         finally { release(page); }
-      } catch (e) { throw new RenderError(explainError(e.message, { file: entry.file })); }
+      } catch (e) { throw new RenderError(explainError(e.message, { file: entry.path || entry.name + '.tsx' })); }
     },
     async warm() { await getBrowser(); },
     async close() { closed = true; if (browser) { const b = await browser.catch(() => null); await b?.close(); } },

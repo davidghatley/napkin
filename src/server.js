@@ -15,7 +15,7 @@ import { createApi } from './api.js';
 import { createComponent } from './commit.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
 
-const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' } } });
+const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, stream: { type: 'boolean' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 let dir, only;
@@ -29,7 +29,7 @@ else { // a throwaway copy of the fixtures, so playing with the canvas never edi
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run napkin init.`); process.exit(1); }
 let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
 try { lock = acquireWorkspaceLock(dir, { writeSidecars: !args['no-sidecars'] }); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
-const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'] });
+const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'], progressive: args.stream });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
 const broadcast = (obj) => { const f = frame(obj); for (const res of clients) res.write(f); };
@@ -38,6 +38,7 @@ const presence = new Map(); // component -> label
 let agents = 0;
 
 const api = createApi(ws, { broadcast, dir });
+ws.events.on('progress', p => broadcast({ type: 'progress', ...p }));
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
@@ -72,6 +73,8 @@ const server = createServer(async (req, res) => {
 
     if (req.method === 'GET' && path === '/api/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
+      clients.add(res);
+      res.write(frame({ type: 'progress', ...ws.progress() }));
       for (const e of ws.entries()) res.write(frame({ type: 'state', ...(await ws.snapshot(e)) }));
       res.write(frame({ type: 'agents', count: agents }));
       for (const [component, label] of presence) res.write(frame({ type: 'presence', component, label }));
@@ -129,6 +132,7 @@ server.on('error', (e) => {
 });
 server.listen(listenPort, '127.0.0.1', () => {
   console.log(`napkin canvas: http://127.0.0.1:${server.address().port}/`);
+  if (args.stream) ws.ready.then(async () => { if (!server.listening) return; console.log(await ws.report()); });
 });
 const stop = () => { for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);

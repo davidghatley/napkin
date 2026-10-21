@@ -15,6 +15,13 @@ test('ONB-02/03: empty canvas teaches five actions; ? opens the registry sheet, 
     await b.goto(s.url); await b.waitFor('document.body.dataset.ready === "1"');
     const text = await b.eval('document.querySelector("#empty-state").innerText');
     for (const word of ['N', 'F', 'T', 'I', 'Ctrl', 'K']) assert.ok(text.includes(word), word);
+    assert.equal(await b.eval('document.querySelector("#revision").parentElement.hidden'), true);
+    assert.equal(await b.eval('getComputedStyle(document.querySelector("#statusbar .hints")).visibility'), 'hidden');
+    assert.match(await b.eval('document.querySelector("#layers").textContent'), /No layers yet/);
+    assert.match(await b.eval('document.querySelector("#changes").textContent'), /No changes yet/);
+    assert.doesNotMatch(await b.eval('document.querySelector("#panel").textContent'), /Jump|New component|Ctrl|⌘K/);
+    const alignment = await b.eval('({ rail: document.querySelector("#sidebar").getBoundingClientRect().right, toolbar: document.querySelector("#toolbar").getBoundingClientRect().left, search: document.querySelector("#quick-open").getBoundingClientRect().left })');
+    assert.ok(alignment.toolbar >= alignment.rail && alignment.search > alignment.toolbar);
     await shot(b, 'ONB-02-empty');
     await input(b).key( '?', { code: 'Slash', shift: true });
     await b.waitFor('document.querySelector("#shortcuts").open');

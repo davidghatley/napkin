@@ -337,7 +337,7 @@ export function applyEdits(doc, edits) {
         break;
       }
       default:
-        throw new EditError(i, `unknown op "${e.op}"`);
+        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename`);
     }
   });
   return next;

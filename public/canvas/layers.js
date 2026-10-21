@@ -37,7 +37,7 @@ export function initLayers(ctx, el) {
     for (const c of comps) {
       const open = expanded.has(c.component);
       const has = ctx.state.selections.some((s) => s.component === c.component);
-      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1" aria-expanded="${open}" aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--d:0"><span class="twirl" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="licon">${ICON.component}</span><span class="lname">${esc(c.name)}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}</div>`);
+      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1" aria-expanded="${open}" aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--d:0"><span class="twirl" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="licon">${ICON.component}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}</div>`);
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
         const k = `${c.component}|${n.id}`, kids = n.children.length, isFolded = folded.has(k);
@@ -45,7 +45,7 @@ export function initLayers(ctx, el) {
         if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
       })(c.doc.root, 1);
     }
-    el.innerHTML = rows.join('') || '<p class="empty">No components yet. Press N to draw one.</p>';
+    el.innerHTML = rows.join('') || '<p class="empty">No layers yet.</p>';
     if (rows.length) el.setAttribute('role', 'tree'); else el.removeAttribute('role'); // an empty tree is not a tree
     const tab = el.querySelector('.primary') || el.querySelector('.has-sel') || el.querySelector('.lrow');
     if (tab) tab.tabIndex = 0;
@@ -271,5 +271,6 @@ export function initLayers(ctx, el) {
   for (const e of ['render', 'removed', 'added']) ctx.on(e, schedule);
   let seeded = false; // a small repo opens fully expanded, once
   ctx.on('render', () => { if (!seeded && ctx.state.components.size <= 8) { seeded = true; for (const id of ctx.state.components.keys()) expanded.add(id); } });
+  draw();
   return { redraw: draw, expand: (id) => expanded.add(id) };
 }

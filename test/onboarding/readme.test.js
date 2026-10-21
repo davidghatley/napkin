@@ -32,11 +32,13 @@ test('ONB-01/05: README quickstart runs in a clean clone; npm ci to first render
     // Substitute only the test's random port. No other README command is changed.
     proc = spawn('bash', ['-eu', '-c', 'exec ' + commands.at(-1) + ' --port 0'], { cwd: clone, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; proc.stdout.on('data', (b) => output += b); proc.stderr.on('data', (b) => output += b);
-    const { value: url } = await waitFor(() => { if (proc.exitCode !== null) throw new Error(output); return output.match(/napkin canvas: (http:\/\/127.0.0.1:\d+\/)/)?.[1]; }, 15000);
-    const snippet = output.match(/Paste into .mcp.json for Claude Code:\n([\s\S]*)/);
+    const { value: url } = await waitFor(() => { if (proc.exitCode !== null) throw new Error(output); return output.includes('NAPKIN_AGENT') && output.match(/napkin canvas: (http:\/\/127.0.0.1:\d+\/)/)?.[1]; }, 15000);
+    const snippet = output.match(/Paste into .mcp.json for Claude Code:\n(\{[\s\S]*?\n\})/);
     const mcp = JSON.parse(snippet[1]).mcpServers.napkin;
     assert.equal(mcp.command, 'node'); assert.equal(mcp.args[0], join(clone, 'src/mcp.js')); assert.equal(mcp.env.NAPKIN_URL, url); assert.equal(mcp.env.NAPKIN_AGENT, 'claude');
     browser = await launchChromium(); await browser.goto(url); await browser.waitFor('document.body.dataset.ready === "1" && !!document.querySelector(".mount [data-n]")');
+    assert.equal(await browser.eval('document.querySelectorAll(".cell").length'), 3);
+    assert.match(await browser.eval('document.querySelector(".mount").textContent'), /Make something/);
     const ms = performance.now() - started;
     assert.ok(ms <= 60000, `first render ${ms}ms`); t.diagnostic(`npm ci → first render: ${ms.toFixed(0)}ms; npx resolved locally; snippet parsed`);
     if (process.env.EVIDENCE) { mkdirSync(join(ROOT, 'docs/evidence'), { recursive: true }); writeFileSync(join(ROOT, 'docs/evidence/ONB-01-05.txt'), `Command: EVIDENCE=1 node --test test/onboarding/readme.test.js\nREADME commands: ${JSON.stringify(commands)}\nnpm ci to first render: ${ms.toFixed(0)} ms\nLocal npx command and absolute MCP snippet validated.\n`); }

@@ -541,3 +541,36 @@ details.sec { margin-top: 2px; }
 #fontpop button:hover, #fontpop button:focus-visible { background: var(--accent-soft); }
 #fontpop button[aria-selected="true"] { box-shadow: inset 2px 0 0 var(--accent); }
 #fontpop small { font: 10px var(--mono); color: var(--text-3); }
+
+/* Repository previews reserve their full error bounds inside the frame. */
+.cmp .badge:not([hidden]) { display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; white-space:nowrap; }
+.cmp-head { max-width:var(--w); }
+.cmp-title { max-width:100%; overflow:hidden; }
+.cmp-title h3 { overflow:hidden; text-overflow:ellipsis; }
+.frame > .build-error { box-sizing:border-box; width:420px; height:200px; max-height:200px; margin:0; padding:16px; overflow:hidden; white-space:normal; }
+.build-error summary { cursor:pointer; overflow-wrap:anywhere; max-height:70px; overflow:auto; font:12px/1.5 var(--sans); }
+.build-error pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:95px; overflow:auto; margin:10px 0 0; font:11px/1.4 var(--mono); }
+.mount .error { box-sizing:border-box; width:420px; height:200px; max-height:200px; overflow:auto; overflow-wrap:anywhere; }
+.bundle-pending { width:420px; height:200px; padding:20px; box-sizing:border-box; color:var(--text-3); font:12px var(--sans); }
+#scan-progress { position:absolute; z-index:2; top:16px; left:24px; padding:8px 12px; border-radius:8px; background:var(--chrome); color:var(--text-2); }
+#scan-progress:empty { display:none; }
+body[data-empty="1"] #statusbar .hints { visibility:hidden; }
+#changes { position:relative; }
+#changes-placeholder { position:absolute; top:36px; left:14px; margin:0; color:var(--text-3); pointer-events:none; }
+#topbar { display:grid; grid-template-columns:236px minmax(0,1fr) 280px; gap:0; }
+#toolbar { grid-column:2; grid-row:1; margin:0 16px; justify-self:start; min-width:0; }
+#quick-open { grid-column:2; grid-row:1; justify-self:end; margin-right:16px; }
+.brand { grid-column:1; grid-row:1; }
+.top-right { grid-column:3; grid-row:1; gap:8px; padding-left:12px; }
+.top-right .slot { width:140px; }
+
+.meta[hidden] { display:inline-flex; visibility:hidden; }
+
+@media (max-width:1320px) {
+  #toolbar kbd { display:none; }
+  #quick-open { width:154px; }
+}
+#topbar:has(#new-component:not([hidden])) #quick-open { visibility:hidden; }
+.cmp-title h3 { flex-shrink:0; max-width:calc(var(--w) - 96px); }
+.cmp .badge:not([hidden]) { flex-shrink:1; min-width:60px; }
+.frame .build-error, .mount .error { color:#9f2633; }

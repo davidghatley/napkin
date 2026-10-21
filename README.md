@@ -16,6 +16,8 @@ node src/cli.js open ./my-napkin
 ```
 <!-- quickstart:end -->
 
+If npm prints an `allowScripts` warning for esbuild, use `npm rebuild esbuild` if the build cannot start; napkin does not need any new dependency.
+
 Open the printed canvas address in your browser. It starts at **http://127.0.0.1:4810/**,
 or the next free port. The starter `Welcome.tsx` is already on the canvas. Press **N**
 to create another component; **F**, **T**, and **I** draw inside it. Press **?** for
@@ -43,9 +45,13 @@ node src/cli.js open /path/to/your/repo
 
 Without a `napkin.json`, napkin scans every `.tsx` below that folder, skipping
 `node_modules`, `dist`, `build`, and `.git`. The report lists editable files and
-read-only files with a reason and line. Opening, classifying and rendering write
+read-only files with all blocking constructs and their lines. The address prints
+before scanning finishes; components and scan progress stream into the canvas,
+and offscreen previews bundle when brought into view. The pinned shadcn reports
+are in `docs/evidence/OPN-04.txt` (canonical UI) and `OPN-04-full.txt` (all 3,674
+TSX files); `node tools/shadcn-report.js --archive <pinned .tar.gz>` reruns the full census. Opening, classifying and rendering write
 **no files in that repository**. The single-writer lock lives in the OS temporary
-folder. Positions last only for the session; pass `--write-sidecars` to allow
+folder. In foreign repositories, frame positions persist only with `--write-sidecars`. Otherwise positions last only for the session; pass `--write-sidecars` to allow
 `.napkin/lock` and position sidecars in the repository. A `napkin.json` project
 uses its `components` folder (configure another relative path with `"components"`).
 
@@ -60,7 +66,7 @@ and a diff; inspect it through `GET /api/proposals`. Accept or reject it through
 (from `POST /api/session { "as": "you" }`). Reject writes nothing. Accept goes
 through the revision-checked store and the single commit path. A hand edit after
 the proposal makes acceptance stale. Conversion currently supports synchronous,
-no-props named functions containing intrinsic JSX and literal inline style objects;
+named functions with string or boolean literal prop defaults containing intrinsic JSX and literal inline or constant style objects;
 class names, hooks, imports with runtime effects, dynamic children, significant
 text whitespace, and other unsupported behavior are refused with reasons.
 

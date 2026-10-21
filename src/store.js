@@ -11,6 +11,7 @@ import { EventEmitter } from 'node:events';
 import { codecFor } from './codecs.js';
 import { summarize } from './summary.js';
 import { ADOPTION } from './adopt.js';
+import { classifySource } from './scan.js';
 import { staleEntries } from './stale.js';
 
 // Syntax errors from the parser carry loc.line but not "line N:" in the message; dialect errors already do.
@@ -20,7 +21,9 @@ const HISTORY = 500; // revisions remembered for rebasing; older bases are "stal
 
 // start: { revision, by, summary } seeds the first history entry (create and rename record themselves there).
 export async function openStore(file, start = {}) {
-  const reason = (e) => explainError(rawReason(e), { file });
+  const displayFile = start.displayFile || basename(file);
+  let classification;
+  const reason = (e, source = text) => { classification = classifySource(source, displayFile); return classification.reason || explainError(rawReason(e), { file: displayFile }); };
   const codec = codecFor(file);
   const { applyEdits, touched, conflicts, diffKeys, EditError } = codec;
   const events = new EventEmitter();
@@ -32,7 +35,7 @@ export async function openStore(file, start = {}) {
   const history = [{ revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now() }];
   let queue = Promise.resolve();
   let broken = null; // the error of a hand edit the last good doc could not absorb (F22), else null
-  const problem = (error) => { broken = error ? explainError(error, { file }) : null; events.emit('problem', { error: broken && explainError(broken, { file }) }); };
+  const problem = (error) => { broken = error ? explainError(error, { file: displayFile }) : null; events.emit('problem', { error: broken && explainError(broken, { file: displayFile }) }); };
 
   const commit = (next, keys, by, edits, origin) => {
     doc = next; revision += 1;
@@ -51,10 +54,10 @@ export async function openStore(file, start = {}) {
     if (adoption) {
       if (typeof by !== 'string' || !by.trim() || by === 'unknown') return { ok: false, error: 'by is required: every revision names a real caller. Next: supply your session identity.' };
       let diskSource; try { diskSource = readFileSync(file, 'utf8'); } catch { diskSource = null; }
-      if (baseRevision !== revision || diskSource !== adoption.before) return { ok: false, error: `stale revision: ${file} changed after the adoption proposal. Next: reject it and propose_adoption again.`, currentRevision: revision };
-      if (!readOnly) return { ok: false, error: `invalid edit #0: ${file} is already editable. Next: use apply_edits.` };
+      if (baseRevision !== revision || diskSource !== adoption.before) return { ok: false, error: `stale revision: ${displayFile} changed after the adoption proposal. Next: reject it and propose_adoption again.`, currentRevision: revision };
+      if (!readOnly) return { ok: false, error: `invalid edit #0: ${displayFile} is already editable. Next: use apply_edits.` };
       let loaded;
-      try { loaded = codec.load(adoption.source, file, { ...start, writeSidecars: dryRun ? false : start.writeSidecars }); } catch (e) { return { ok: false, error: `invalid edit #0: ${file}: ${reason(e)}. Next: correct the adoption proposal.` }; }
+      try { loaded = codec.load(adoption.source, file, { ...start, writeSidecars: dryRun ? false : start.writeSidecars }); } catch (e) { return { ok: false, error: `invalid edit #0: ${displayFile}: ${reason(e)}. Next: correct the adoption proposal.` }; }
       if (dryRun) return { ok: true, dryRun: true, revision, doc: loaded.doc, source: adoption.source };
       writeFile(adoption.source); state = loaded.state; readOnly = null;
       commit(loaded.doc, new Set(['file']), by, [{ op: 'adoption' }], origin);
@@ -93,8 +96,8 @@ export async function openStore(file, start = {}) {
       let t; try { t = readFileSync(file, 'utf8'); } catch { return; }
       if (t === text) { if (broken) problem(null); return; } // back to the last good text (e.g. git restore)
       let loaded; try { loaded = codec.load(t, file, start); } catch (e) {
-        if (readOnly) { text = t; readOnly = reason(e); revision++; history.push({ revision, keys: new Set(['file']), by: 'file', summary: 'file changed', at: Date.now() }); if (history.length > HISTORY) history.shift(); events.emit('change', { revision, doc: null, by: 'file', summary: 'file changed' }); }
-        else problem(reason(e));
+        if (readOnly) { text = t; readOnly = reason(e, t); revision++; history.push({ revision, keys: new Set(['file']), by: 'file', summary: 'file changed', at: Date.now() }); if (history.length > HISTORY) history.shift(); events.emit('change', { revision, doc: null, by: 'file', summary: 'file changed' }); }
+        else problem(reason(e, t));
         return;
       } // half-written or broken: keep the last good doc
       if (broken) problem(null);
@@ -106,8 +109,8 @@ export async function openStore(file, start = {}) {
 
   return {
     events,
-    async read() { await queue; return { revision, doc, source: text, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
-    apply(req) { const p = queue.then(() => { const r = applyNow(req); if (!r.ok) r.error = explainError(r.error, { file }); return r; }); queue = p.catch(() => {}); return p; },
+    async read() { await queue; return { revision, doc, source: text, classification, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
+    apply(req) { const p = queue.then(() => { const r = applyNow(req); if (!r.ok) r.error = explainError(r.error, { file: displayFile }); return r; }); queue = p.catch(() => {}); return p; },
     // Recent revisions, newest first: [{ revision, by, summary, at, keys }].
     history(limit = 50) { return history.slice(-Math.max(1, limit)).reverse().map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, at: h.at, keys: [...h.keys] })); },
     async close() { watcher.close(); await queue; },

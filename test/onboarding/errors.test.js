@@ -78,9 +78,11 @@ test('ONB-04: real parse, read-only and stale failures name the file and preserv
     assert.match(r.error, /^stale revision:.*Button.tsx.*Next:/);
     const invalid = await store.apply({ baseRevision: 1, by: 'test', edits: [{ op: 'set', path: 'missing.color', value: 'red' }] });
     assert.match(invalid.error, /^invalid edit #0:.*Button.tsx.*Next:/);
+    const unknown = await store.apply({ baseRevision: 1, by: 'test', edits: [{ op: 'madeUp' }] });
+    assert.match(unknown.error, /unknown op.*valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename/);
   } finally { await store.close(); }
   writeFileSync(file, 'export function Button( { broken');
   const broken = await openStore(file);
-  try { assert.match((await broken.read()).readOnly, /line 1:.*Button.tsx.*Next:/); }
+  try { const r = (await broken.read()).readOnly; assert.match(r, /line 1:.*Button.tsx.*Next:/); assert.match(r, /fix the syntax error at line 1, then save; napkin reloads it/); }
   finally { await broken.close(); rmSync(dir, { recursive: true, force: true }); }
 });

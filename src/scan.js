@@ -1,10 +1,11 @@
-// A read-only walk. Symlinks are not followed (they may leave the requested repository).
+// Read-only repository analysis. Never follow symlinks outside the requested tree.
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { explainError } from './errors.js';
+import { parse } from '@babel/parser';
 import { readComponent } from './tsx/read.js';
 
-const SKIP = new Set(['node_modules', 'dist', 'build', '.git', '.napkin']);
+const SKIP = new Set(['node_modules', 'dist', 'build', '.git', '.napkin', '.next']);
 export function componentFiles(dir, { recursive = true } = {}) {
   const files = [];
   function walk(d) {
@@ -16,15 +17,56 @@ export function componentFiles(dir, { recursive = true } = {}) {
   }
   walk(resolve(dir)); return files;
 }
+
+// Collect independently of the dialect reader's first refusal. Each occurrence retains
+// its source line; report totals count files, rather than occurrences in one file.
+export function blockingConstructs(source, { adoption = false } = {}) {
+  let ast;
+  try { ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] }); } catch (error) { return [{ name: 'syntax error', line: error.loc?.line || 1, detail: error.message }]; }
+  const out = [], add = (name, n) => out.push({ name, line: n?.loc?.start?.line || 1 });
+  const body = ast.program.body;
+  const exported = body.find(n => n.type === 'ExportDefaultDeclaration' || n.type === 'ExportNamedDeclaration' && n.declaration?.type === 'FunctionDeclaration');
+  const main = exported?.declaration?.type === 'FunctionDeclaration' ? exported.declaration : body.find(n => n.type === 'FunctionDeclaration' && /^[A-Z]/.test(n.id?.name));
+  const mainBinding = body.flatMap(st => (st.declaration || st).declarations || []).find(d => /^[A-Z]/.test(d.id.name || '') && ['ArrowFunctionExpression', 'FunctionExpression'].includes(d.init?.type));
+  const hasBase = body.some(n => n.type === 'VariableDeclaration' && n.kind === 'const' && n.declarations.some(d => d.id.name === 'base'));
+  const visit = (n, parent) => {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) { n.forEach(x => visit(x, parent)); return; }
+    if (hasBase && n.type === 'FunctionDeclaration' && n.id?.name === 's') return;
+    if (n.type === 'FunctionDeclaration' && n !== main && n.id?.name !== 's') add('extra helper functions', n);
+    if (n.type === 'VariableDeclarator' && n !== mainBinding && ['ArrowFunctionExpression', 'FunctionExpression'].includes(n.init?.type)) add('extra helper functions', n);
+    const callee = n.type === 'CallExpression' ? n.callee : null;
+    const call = callee?.name || callee?.property?.name;
+    if (n.type === 'JSXAttribute' && n.name.name === 'className' || call === 'cn') add('className or cn() styling', n);
+    if (call === 'forwardRef') add('forwardRef', n);
+    if (n.type === 'RestElement' || n.type === 'SpreadElement' || n.type === 'JSXSpreadAttribute') {
+      // The dialect's fixed s() helper contains its own permitted spread.
+      add('rest or spread props', n);
+    }
+    if (/^use[A-Z]/.test(call || '')) add('hooks', n);
+    if (n.type === 'ExportDefaultDeclaration') add('default export', n);
+    if (n.type === 'ConditionalExpression' || n.type === 'LogicalExpression' && ['&&', '||', '??'].includes(n.operator)) add('conditional rendering', n);
+    if (call === 'map') add('map', n);
+    if (n.type === 'ImportDeclaration' && /\.module\.(css|scss|sass|less)$/.test(n.source.value)) add('CSS modules', n);
+    if (['createContext', 'useContext'].includes(call) || n.type === 'JSXMemberExpression' && ['Provider', 'Consumer'].includes(n.property.name)) add('context', n);
+    for (const [key, value] of Object.entries(n)) if (!['loc', 'tokens', 'comments', 'original', 'extra'].includes(key) && value && typeof value === 'object') visit(value, n);
+  };
+  visit(ast);
+  if (!hasBase && !adoption) add('missing const base', exported || main || body[0]);
+  return out.sort((a, b) => a.line - b.line).filter((c, i, all) => !all.slice(0, i).some(x => x.name === c.name && x.line === c.line));
+}
 export function classifySource(source, file) {
-  try { const { doc } = readComponent(source); return { file, editable: true, name: doc.name }; }
+  const constructs = blockingConstructs(source);
+  try { if (constructs.length) throw new Error(explainError('outside the dialect')); const { doc } = readComponent(source); return { file, editable: true, name: doc.name }; }
   catch (e) {
-    const line = e.line || e.loc?.line || 1;
-    return { file, editable: false, line, reason: explainError(e.message, { file }) };
+    const line = constructs[0]?.line || e.line || e.loc?.line || 1;
+    const detail = constructs.length ? constructs.map(c => `line ${c.line}: ${c.name}${c.detail ? ` (${c.detail})` : ''}`).join('; ') : e.message.replace(/\b[A-Z][A-Za-z]*(?:Declaration|Expression|Statement)\b/g, 'unsupported code');
+    return { file, editable: false, line, constructs, reason: explainError(detail, { file, next: constructs[0]?.name === 'syntax error' ? `fix the syntax error at line ${line}, then save; napkin reloads it.` : 'keep this file read-only, or request propose_adoption for a reviewed rewrite.' }) };
   }
 }
 export const scanRepository = (dir) => componentFiles(dir).map((file) => classifySource(readFileSync(file, 'utf8'), relative(resolve(dir), file)));
 export function formatReport(rows) {
-  const editable = rows.filter((r) => r.editable).length;
-  return [`${rows.length} TSX files: ${editable} editable, ${rows.length - editable} read-only`, 'File | Status | Line | Reason', ...rows.map((r) => `${r.file} | ${r.editable ? 'editable' : 'read-only'} | ${r.line || '—'} | ${r.editable ? 'Fits the napkin dialect' : r.reason}`)].join('\n');
+  const editable = rows.filter(r => r.editable).length, counts = new Map();
+  for (const r of rows) for (const name of new Set((r.constructs || []).map(c => c.name))) counts.set(name, (counts.get(name) || 0) + 1);
+  return [`${rows.length} TSX files: ${editable} editable, ${rows.length - editable} read-only`, 'Top blocking constructs (files):', ...[...counts].sort((a,b) => b[1]-a[1]).map(([name,n]) => `${name}: ${n} files`), 'File | Status | Line | Reason', ...rows.map(r => `${r.file} | ${r.editable ? 'editable' : 'read-only'} | ${r.line || '—'} | ${r.editable ? 'Fits the napkin dialect' : r.reason}`)].join('\n');
 }

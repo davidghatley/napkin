@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { scanRepository } from '../../src/scan.js';
 import { openWorkspace } from '../../src/workspace.js';
 import { createApi } from '../../src/api.js';
-import { fixture, startMcp } from '../helpers/harness.js';
+import { fixture, startMcp, waitFor } from '../helpers/harness.js';
 import { http, session, evidence } from '../helpers/agents.js';
 
 import { simple, corpus, hashes, cli } from '../helpers/open.js';
@@ -20,6 +20,7 @@ test('OPN-01: every nested TSX classified, opening and bundling writes zero repo
     for (const r of report.filter((r) => !r.editable)) { assert.ok(r.line >= 1); assert.ok(r.reason.includes(r.file)); }
     const s = await cli(dir);
     try {
+      await waitFor(() => /1 editable.*2 read-only/.test(s.output()));
       assert.match(s.output(), /1 editable.*2 read-only/);
       assert.match(s.output(), /nested\/Greeting.tsx/);
       const list = (await http(s.url, '/api/components')).json;
