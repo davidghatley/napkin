@@ -1,7 +1,8 @@
 // render_component (AGT-02): one warm headless Chromium (CPU) draws a component's own bundle
 // for one variant and returns a PNG of the component's root element. The page is a blank host;
 // bundles are imported from blob URLs, so no web server is needed (works in the MCP fallback too).
-import { spawn } from 'node:child_process';
+import { explainError } from './errors.js';
+import { spawnChromium } from './chromium.js';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,14 +12,14 @@ import { axes } from './model.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // The page rules a component inherits on the canvas (public/canvas/canvas.css): box model and the frame ink colour.
 const HOST_CSS = '* { box-sizing: border-box; } body { color: #1c1f27; }'; // the canvas resets the font on .frame, so a component sees the browser defaults, as in an app
-export class RenderError extends Error {}
+export class RenderError extends Error { constructor(message) { super(explainError(message, { next: "fix the named build or render problem and retry; set CHROMIUM if the browser could not start." })); } }
 
 async function launch() {
   const profile = mkdtempSync(join(tmpdir(), 'napkin-render-'));
-  const proc = spawn(process.env.CHROMIUM || 'chromium', [
+  const proc = spawnChromium([
     '--headless=new', '--disable-gpu', '--use-angle=swiftshader', '--no-first-run', '--no-default-browser-check',
     '--hide-scrollbars', `--user-data-dir=${profile}`, '--remote-debugging-port=0', '--window-size=1600,1200', 'about:blank',
-  ], { stdio: 'ignore' });
+  ]);
   let dead = false; proc.on('exit', () => { dead = true; });
   const portFile = join(profile, 'DevToolsActivePort');
   for (let i = 0; i < 100 && !existsSync(portFile) && !dead; i++) await sleep(100);
@@ -33,9 +34,9 @@ async function launch() {
     let id = 0; const pending = new Map();
     ws.onmessage = (m) => {
       const msg = JSON.parse(m.data);
-      if (msg.id && pending.has(msg.id)) { const { res, rej } = pending.get(msg.id); pending.delete(msg.id); msg.error ? rej(new Error(msg.error.message)) : res(msg.result); }
+      if (msg.id && pending.has(msg.id)) { const { res, rej } = pending.get(msg.id); pending.delete(msg.id); msg.error ? rej(new Error(explainError(msg.error.message))) : res(msg.result); }
     };
-    ws.onclose = () => { dead = true; for (const { rej } of pending.values()) rej(new Error('browser closed')); };
+    ws.onclose = () => { dead = true; for (const { rej } of pending.values()) rej(new Error(explainError('browser closed'))); };
     const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
     await send('Page.enable');
     await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1200, deviceScaleFactor: 1, mobile: false });
@@ -59,7 +60,7 @@ async function launch() {
         const { webSocketDebuggerUrl } = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
         const bws = new WebSocket(webSocketDebuggerUrl);
         await new Promise((res, rej) => { bws.onopen = res; bws.onerror = rej; });
-        const targetId = await new Promise((res, rej) => { bws.onmessage = (m) => { const j = JSON.parse(m.data); j.error ? rej(new Error(j.error.message)) : res(j.result.targetId); }; bws.send(JSON.stringify({ id: 1, method: 'Target.createTarget', params: { url: 'about:blank', newWindow: true, width: 1600, height: 1200 } })); });
+        const targetId = await new Promise((res, rej) => { bws.onmessage = (m) => { const j = JSON.parse(m.data); j.error ? rej(new Error(explainError(j.error.message))) : res(j.result.targetId); }; bws.send(JSON.stringify({ id: 1, method: 'Target.createTarget', params: { url: 'about:blank', newWindow: true, width: 1600, height: 1200 } })); });
         bws.close();
         url = `ws://127.0.0.1:${port}/devtools/page/${targetId}`;
       }
@@ -88,14 +89,18 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
   }
   const release = (page) => { const w = waiters.shift(); if (w) w(page); else idle.push(page); };
 
-  async function draw(page, { key, code, variant }) {
+  // Every cell is drawn as a first paint (the page is blanked and painted empty first), because a repaint over an earlier cell rasterises
+  // rounded corners with slightly different edge pixels than a fresh page does. A fresh app drawing the same cell matches byte for byte (INS-03).
+  const draw = (page, job) => drawOnce(page, job);
+  async function drawOnce(page, { key, code, variant }) {
     if (!page.loaded.has(key)) {
       await page.evaluate(`(async()=>{const u=URL.createObjectURL(new Blob([${JSON.stringify(code)}],{type:'text/javascript'}));window.__mods.set(${JSON.stringify(key)},await import(u));URL.revokeObjectURL(u);return true})()`);
       page.loaded.add(key);
     }
     const box = await page.evaluate(`(async()=>{
       if(window.__un){window.__un();window.__un=null}
-      const el=document.getElementById('m'); el.replaceChildren();
+      document.getElementById('m').replaceChildren(); await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); /* paint an empty page first: every cell is a first paint */
+      const old=document.getElementById('m'); const el=document.createElement('div'); el.id='m'; el.setAttribute('style', old.getAttribute('style')); old.replaceWith(el); /* a new element each time: a clean raster, like a page that has drawn nothing else */
       window.__un=window.__mods.get(${JSON.stringify(key)}).mount(el, ${JSON.stringify(variant)});
       if(document.fonts&&document.fonts.ready) await document.fonts.ready;
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
@@ -111,18 +116,27 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
     // entry: a workspace entry; returns { png, ms }. variant: { axis: value }.
     async render(ws, entry, variant = {}) {
       const t0 = performance.now();
-      const snap = await entry.store.read();
-      if (!snap.doc) throw new RenderError(`cannot render a read-only file (${snap.readOnly})`);
-      for (const [axis, value] of Object.entries(variant)) {
-        const a = axes(snap.doc).find((x) => x.name === axis);
-        if (!a) throw new RenderError(`no variant axis "${axis}" (axes: ${axes(snap.doc).map((x) => x.name).join(', ') || 'none'})`);
-        if (!a.options.includes(value)) throw new RenderError(`axis "${axis}" has no value "${value}" (values: ${a.options.join(', ')})`);
-      }
-      const built = await entry.built;
-      if (!built?.ok) throw new RenderError(`build failed: ${built?.error}`);
-      const key = entry.id + ':' + createHash('sha1').update(built.code).digest('hex').slice(0, 12);
+      try {
+        const snap = await entry.store.read();
+        for (const [axis, value] of Object.entries(variant)) {
+          const a = (snap.doc ? axes(snap.doc) : []).find((x) => x.name === axis);
+          if (!a) throw new RenderError(`no variant axis "${axis}" (axes: ${(snap.doc ? axes(snap.doc) : []).map((x) => x.name).join(', ') || 'none'})`);
+          if (!a.options.includes(value)) throw new RenderError(`axis "${axis}" has no value "${value}" (values: ${a.options.join(', ')})`);
+        }
+        const built = await ws.bundle(entry);
+        if (!built?.ok) throw new RenderError(`build failed: ${built?.error}`);
+        const key = entry.id + ':' + createHash('sha1').update(built.code).digest('hex').slice(0, 12);
+        const page = await acquire();
+        try { const png = await draw(page, { key, code: built.code, variant }); return { png, ms: performance.now() - t0 }; }
+        finally { release(page); }
+      } catch (e) { throw new RenderError(explainError(e.message, { file: entry.path || entry.name + '.tsx' })); }
+    },
+    // Draw an arbitrary bundle (a past revision, or the file at HEAD) for one variant: -> { png, ms }.
+    async renderCode(code, variant = {}) {
+      const t0 = performance.now();
+      const key = 'code:' + createHash('sha1').update(code).digest('hex').slice(0, 16);
       const page = await acquire();
-      try { const png = await draw(page, { key, code: built.code, variant }); return { png, ms: performance.now() - t0 }; }
+      try { const png = await draw(page, { key, code, variant }); return { png, ms: performance.now() - t0 }; }
       finally { release(page); }
     },
     async warm() { await getBrowser(); },

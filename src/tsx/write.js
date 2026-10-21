@@ -3,6 +3,7 @@
 // line endings of their neighbours, and a line that is not part of the change is never reprinted. So a save with no
 // change is byte-identical and one property change is a one-line diff, whatever the file's own formatting.
 import { parse as babelParse } from '@babel/parser';
+import { explainError } from '../errors.js';
 import { locate, literalValue } from './read.js';
 import { index } from '../model.js';
 
@@ -67,10 +68,30 @@ function syncObj(text, obj, bef, aft, d, st) {
     } else if (!same(bef[k], aft[k])) out.push(...syncObj(text, p.value, bef[k], aft[k], d - 1, st));
   }
   if (added.length) {
-    const last = props.at(-1);
-    if (!removed.includes(keyName(last.key)) && !/^[ \t]*,/.test(text.slice(last.end))) out.push({ start: last.end, end: last.end, text: ',' }); // hand-written, no trailing comma
-    const at = lineEnd(text, last.end);
-    out.push({ start: at, end: at, text: (at === text.length && !text.endsWith('\n') ? eol : '') + added.map((k) => emit(k, aft[k], d, memberIndent, unit, eol)).join('') });
+    // a new key goes right after the key before it in the new model's order (the end for an ordinary add), so an undo puts it back where it was
+    const order = Object.keys(aft);
+    const live = props.filter((p) => !removed.includes(keyName(p.key)));
+    const groups = new Map(); // anchor property (or null: the very start) -> lines to insert
+    for (const k of added) {
+      const prev = order.slice(0, order.indexOf(k)).reverse().find((q) => live.some((p) => keyName(p.key) === q) || added.includes(q) && groups.has(`k:${q}`));
+      // a run of new keys stays together after the same anchor
+      const anchor = prev === undefined ? null : (live.find((p) => keyName(p.key) === prev) ?? null);
+      const key = anchor ? `p:${anchor.start}` : prev === undefined ? 'start' : groups.get(`k:${prev}`)?.anchor;
+      const g = groups.get(key) ?? groups.set(key, { anchor, lines: [] }).get(key);
+      g.lines.push(emit(k, aft[k], d, memberIndent, unit, eol));
+      groups.set(`k:${k}`, { anchor: key });
+    }
+    for (const [key, g] of groups) {
+      if (key.startsWith('k:')) continue;
+      if (g.anchor) {
+        if (!removed.includes(keyName(g.anchor.key)) && !/^[ \t]*,/.test(text.slice(g.anchor.end))) out.push({ start: g.anchor.end, end: g.anchor.end, text: ',' }); // hand-written, no trailing comma
+        const at = lineEnd(text, g.anchor.end);
+        out.push({ start: at, end: at, text: (at === text.length && !text.endsWith('\n') ? eol : '') + g.lines.join('') });
+      } else {
+        const at = lineStart(text, live[0] ? live[0].start : props[0].start);
+        out.push({ start: at, end: at, text: g.lines.join('') });
+      }
+    }
   }
   return out;
 }
@@ -192,7 +213,7 @@ function textText(node, room) {
   if (node.textProp) return `{${node.textProp}}`;
   if (node.text === undefined || node.text === '') return '';
   // plain JSX text when it can be (only what JSX needs is escaped); `{'...'}` for text with edge or doubled spaces, or too long for the line
-  const plain = node.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
+  const plain = node.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;').replace(/'/g, '&apos;').replace(/"/g, '&quot;'); // (what react/no-unescaped-entities asks for too)
   if (node.text === node.text.trim() && !/\s{2}/.test(node.text) && plain.length <= room) return plain;
   return `{${litText(node.text)}}`;
 }
@@ -374,7 +395,7 @@ function jsxSplices(text, parts, before, after, st) {
       sp.push({ start: last.end, end: last.end, text: multi ? adds.map((x) => eol + indentOfLine(text, last.start) + x).join('') : ` ${adds.join(' ')}` });
     }
     // a single-line tag that no longer fits in 80 columns is laid out again by the caller
-    if (!/\n/.test(text.slice(oe.start, oe.end))) {
+    if (adds.length && !/\n/.test(text.slice(oe.start, oe.end))) { // (only a new attribute can push a tag past 80 columns; replacing a value keeps the layout, so it stays a one-line diff)
       const grow = sp.reduce((a, x) => a + x.text.length - (x.end - x.start), 0);
       if (indentOfLine(text, oe.start).length + (oe.end - oe.start) + grow > WIDTH && grow > 0) return null;
     }
@@ -513,7 +534,7 @@ export function writeComponent(ast, before, after, original) {
   splices.push(...keySplices(original, parts, renames));
   const afterVariants = unrenameVariants(after.variants, renames);
   if (!same(before.variants, afterVariants)) {
-    if (!parts.variants) throw new Error('component has no variants object');
+    if (!parts.variants) throw new Error(explainError('component has no variants object'));
     splices.push(...syncObj(original, parts.variants, before.variants, afterVariants, 3, st));
   }
   st.renames = renames;
@@ -537,7 +558,7 @@ export function writeComponent(ast, before, after, original) {
 
 // Source for a brand-new component: one root frame, no props.
 export function newComponentSource(name, rootTag = 'div') {
-  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(`component name "${name}" must be PascalCase`);
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(explainError(`component name "${name}" must be PascalCase`));
   return `import type { CSSProperties } from 'react';
 
 export interface ${name}Props {}

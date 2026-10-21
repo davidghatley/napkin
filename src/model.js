@@ -1,3 +1,4 @@
+import { explainError } from './errors.js';
 // The component model (napkin/1, decision 0003) and its one edit path (F02).
 // A model is what napkin reads out of a component .tsx file:
 //   { format: 'napkin/1', name, props, root, variants }
@@ -11,7 +12,7 @@ import { CSS_PROPS, CSS_NUMBER_PROPS } from './css-props.js';
 
 export class EditError extends Error {
   constructor(index, message) {
-    super(`invalid edit #${index}: ${message}`);
+    super(explainError(`invalid edit #${index}: ${message}`, { next: "read the component and /api/guide, correct edit #" + index + ", and retry." }));
     this.index = index;
   }
 }
@@ -167,6 +168,15 @@ function removeOverrides(doc, ids) {
 }
 const subtreeIds = (node) => [node.id, ...(node.children || []).flatMap(subtreeIds)];
 
+// Put prop into a style object; `at` (optional, only used by undo and restore) is where a NEW key goes in the object's order.
+function put(obj, prop, value, at) {
+  if (at === undefined || prop in obj) { obj[prop] = value; return; }
+  const entries = Object.entries(obj);
+  entries.splice(Math.min(at, entries.length), 0, [prop, value]);
+  for (const k of Object.keys(obj)) delete obj[k];
+  for (const [k, v] of entries) obj[k] = v;
+}
+
 // Validate a batch and apply it all-or-nothing to a copy of the model.
 export function applyEdits(doc, edits) {
   if (!Array.isArray(edits) || edits.length === 0) throw new EditError(0, 'edits must be a non-empty array');
@@ -199,6 +209,7 @@ export function applyEdits(doc, edits) {
           break;
         }
         if (!CSS_PROP.test(prop)) throw new EditError(i, `bad property "${prop}"`);
+        if (e.at !== undefined && !(Number.isInteger(e.at) && e.at >= 0)) throw new EditError(i, 'at must be a whole number from 0');
         if (e.value !== null) checkValue(i, e.path, e.value);
         if (e.variant) {
           const entries = Object.entries(e.variant);
@@ -210,11 +221,11 @@ export function applyEdits(doc, edits) {
           if (value === a.default) throw new EditError(i, `"${value}" is the base of ${axis}; set the base style instead`);
           if (e.value === null) { delete next.variants[axis]?.[value]?.[id]?.[prop]; cleanVariants(next); break; }
           ((next.variants[axis] ??= {})[value] ??= {})[id] ??= {};
-          next.variants[axis][value][id][prop] = e.value;
+          put(next.variants[axis][value][id], prop, e.value, e.at);
           break;
         }
         if (e.value === null) { delete node.style[prop]; break; }
-        node.style[prop] = e.value;
+        put(node.style, prop, e.value, e.at);
         break;
       }
       case 'insert': {
@@ -368,7 +379,7 @@ export function applyEdits(doc, edits) {
         break;
       }
       default:
-        throw new EditError(i, `unknown op "${e.op}"`);
+        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename, renameProp, renameVariant`);
     }
   });
   return next;

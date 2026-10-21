@@ -98,7 +98,7 @@ test('a file outside the dialect opens read-only and is never rewritten', async 
   const store = await openStore(file);
   try {
     const r = await store.read();
-    assert.match(r.readOnly, /line \d+: the component body may only define `v` and return JSX/);
+    assert.match(r.readOnly, /line \d+: hooks/);
     const w = await store.apply({ baseRevision: r.revision, by: 'test', edits: [{ op: 'set', path: 'root.gap', value: 1 }] });
     assert.match(w.error, /^read-only: /);
     assert.equal(readFileSync(file, 'utf8'), hand);

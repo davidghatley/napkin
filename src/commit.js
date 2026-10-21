@@ -18,3 +18,6 @@ export function moveComponent(from, to, text) { writeFileAtomic(to, text, { excl
 export function writeSidecar(file, text) { writeFileAtomic(file, text); }
 export function createSidecar(file, text) { writeFileAtomic(file, text, { exclusive: true }); }
 export function removeSidecar(file) { try { unlinkSync(file); } catch {} }
+
+// CLI init creates a project config only after checking an empty destination.
+export function createProjectConfig(file, text) { writeFileAtomic(file, text, { exclusive: true }); }

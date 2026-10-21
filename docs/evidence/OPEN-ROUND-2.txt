@@ -1,0 +1,83 @@
+Open lane — round 2
+AI implementation; blind visual verdicts remain for the critic. No commits made.
+
+ONB-01/05: clean clone + working source overlay, npm ci to first render: 2522 ms in the recorded evidence run (1252 ms in the final full suite). npx and MCP snippet parsed and tested.
+ONB-02: empty-state panel teaches N/F/T/I/Ctrl-or-Cmd+K. Screenshot inspected.
+ONB-03: 20/20 keyboard listeners and every compared key/code/tool binding audited.
+ONB-04: 219 explicit error expressions audited; file context, line, next step and machine prefixes tested.
+OPN-01: 3/3 nested test files classified; all 7 repo files unchanged; zero new paths, including when a competing fallback is refused.
+OPN-02: 7 read-only cases: 2 default-props renders, 5 contained failures (import, CSS, context, module initialization, no export). Focused build errors stay inside the stage.
+OPN-03: MCP proposal/reject/accept, exact original-source stale check, identity/permissions, one store.apply on acceptance, proposer attribution, and byte-identical before/after PNG tested. Converter supports a deliberately small no-props subset and refuses unsupported behavior.
+OPN-04: shadcn/ui ba1503c64472b82256d9de95e2e62c5901a38e8b, canonical new-york-v4/ui: 0/61 editable (0.00%); all classified. First refusals: 47 FunctionDeclaration, 14 VariableDeclaration.
+S1 file/API check: 40/40 opens without writes, 40/40 no-op saves byte-identical; Badge radius changes one line. Full pointer-driven S1 walk not claimed.
+
+Re-run onboarding and refresh evidence: EVIDENCE=1 node --test test/onboarding/
+Re-run pinned coverage: node tools/shadcn-report.js
+Re-run full suite: npm test
+New npm dependencies: none. Package name/bin metadata changed only.
+
+Last npm test summary:
+ℹ tests 163
+ℹ suites 0
+ℹ pass 161
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 2
+ℹ todo 0
+ℹ duration_ms 101537.899925
+
+Changed files (including this manifest):
+README.md
+docs/decisions/0006-open-existing-repositories.md
+docs/evidence/ONB-01-05.txt
+docs/evidence/ONB-02-empty.png
+docs/evidence/ONB-03-shortcuts.png
+docs/evidence/ONB-03.txt
+docs/evidence/ONB-04.txt
+docs/evidence/OPEN-ROUND-2.txt
+docs/evidence/OPN-01.txt
+docs/evidence/OPN-02-context.png
+docs/evidence/OPN-02-css.png
+docs/evidence/OPN-02-default.png
+docs/evidence/OPN-02-missing.png
+docs/evidence/OPN-02-read-only.png
+docs/evidence/OPN-03.txt
+docs/evidence/OPN-04.txt
+docs/evidence/S1-open-40.txt
+package-lock.json
+package.json
+public/canvas/actions.js
+public/canvas/empty.js
+public/canvas/main.js
+public/canvas/nav.js
+public/canvas/quick.js
+public/canvas/readonly.js
+public/canvas/shortcuts.js
+src/adopt.js
+src/api.js
+src/bundle.js
+src/cli.js
+src/codecs.js
+src/commit.js
+src/errors.js
+src/guide.js
+src/lock.js
+src/mcp.js
+src/model.js
+src/render-png.js
+src/scan.js
+src/server.js
+src/store.js
+src/tsx/read.js
+src/tsx/write.js
+src/workspace.js
+test/3-mcp.test.js
+test/CONTRACT.md
+test/helpers/open.js
+test/mcp/tools.test.js
+test/onboarding/errors.test.js
+test/onboarding/open.test.js
+test/onboarding/readme.test.js
+test/onboarding/shortcuts.test.js
+test/onboarding/ui.test.js
+tools/shadcn-report.js

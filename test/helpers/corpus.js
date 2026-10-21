@@ -108,7 +108,7 @@ export const OUT_OF_DIALECT = [
   ['no-base-classname', () => `export function Button({ label }: { label: string }) {
   return <button className="btn">{label}</button>;
 }
-`, 'export function'],
+`, 'className'],
   ['extra-function', swap('function s(', 'function helper() {\n  return 1;\n}\n\nfunction s('), 'helper'],
   ['enum-declaration', swap('const base:', 'enum Mode { A, B }\n\nconst base:'), 'enum Mode'],
   ['props-not-destructured', swap("{ label = 'Button', size = 'md', state = 'default' }: ButtonProps", 'props: ButtonProps'), 'props: ButtonProps'],

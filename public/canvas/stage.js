@@ -25,6 +25,7 @@ export function createStage(ctx, root, world, view) {
   const selectBox = mk('overlay-select'), hoverBox = mk('overlay-hover'), measureBox = mk('overlay-measure');
   const sizeChip = document.createElement('span'); sizeChip.className = 'osize'; selectBox.append(sizeChip); // "128 × 36", in canvas pixels
   const extras = [];
+  let shelf = { x: 0, y: 0, h: 0 };
   let laidOut = false, hoverEl = null, measuring = false;
   const byName = (a, b) => (ctx.state.components.get(a)?.name ?? a).localeCompare(ctx.state.components.get(b)?.name ?? b);
 
@@ -37,7 +38,7 @@ export function createStage(ctx, root, world, view) {
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
   const selectedElement = (sel) => (sel ? cellElement(sel.component, sel.node, sel.variant) : null);
-  const live = (id) => { const sec = sections.get(id); if (sec?.culled) { sec.culled = false; delete sec.el.dataset.cull; } return sec; };
+  const live = (id) => { const sec = sections.get(id); if (sec?.culled) { sec.culled = false; delete sec.el.dataset.cull; } if (sec?.pending) { sec.follow = true; render(id, true).catch(console.error); } return sec; };
 
   // ---------------------------------------------------------------------------------------------- sections
   function section(id) {
@@ -45,7 +46,7 @@ export function createStage(ctx, root, world, view) {
     if (sec) return sec;
     const el = document.createElement('section');
     el.className = 'cmp'; el.dataset.component = id;
-    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="badge" hidden></span><span class="rev"></span></span><span class="axes-strip"></span><p class="problem" role="status"></p><p class="build-error" role="alert"></p></div><div class="frame"></div>';
+    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="badge" hidden></span><span class="rev"></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
     sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false };
     sections.set(id, sec);
     world.append(el);
@@ -56,12 +57,12 @@ export function createStage(ctx, root, world, view) {
 
   function header(id) {
     const c = ctx.state.components.get(id), sec = section(id);
-    sec.el.querySelector('h3').textContent = c.name;
+    sec.el.querySelector('h3').textContent = ctx.title(c);
     sec.el.dataset.name = c.name;
     const ax = c.doc ? axes(c.doc) : [];
     sec.el.querySelector('.axes-strip').textContent = ax.map((a, i) => `${a.name} ×${a.options.length}${i === 0 ? ' →' : i === 1 ? ' ↓' : ''}`).join('  ');
     const badge = sec.el.querySelector('.badge');
-    badge.hidden = !c.readOnly; badge.textContent = c.readOnly ? `read-only: ${c.readOnly}` : '';
+    badge.hidden = !c.readOnly; badge.textContent = c.readOnly ? `read-only: ${c.readOnly}` : ''; badge.title = badge.textContent;
     sec.el.querySelector('.problem').textContent = c.problem ? `file has an error, showing the last good version: ${c.problem}` : '';
   }
 
@@ -100,21 +101,47 @@ export function createStage(ctx, root, world, view) {
     return matrix;
   }
 
-  async function render(id) {
+  const visible = sec => {
+    const { x, y, z } = view.get(), b = view.stageBox(), p = sec.pos;
+    return !p || (p.x * z + x < b.width + 200 && (p.x + sec.size.w) * z + x > -200 && p.y * z + y < b.height + 200 && (p.y + sec.size.h) * z + y > -200);
+  };
+  function errorCard(message) {
+    const card = document.createElement('details'); card.className = 'build-error';
+    const summary = document.createElement('summary'); summary.textContent = message.split('. Next:')[0].slice(0, 180) + ' · Click for details';
+    const detail = document.createElement('pre'); detail.textContent = message;
+    card.append(summary, detail); return card;
+  }
+  function finish(sec, id, revision) {
+    const previous = { ...sec.size }; measure(sec);
+    sec.el.dataset.ready = '1'; sec.el.dataset.revision = revision;
+    const resized = previous.w !== sec.size.w || previous.h !== sec.size.h;
+    const overlaps = sec.pos && [...sections.entries()].some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
+    if (laidOut && (!sec.pos || auto.has(id) && resized && overlaps)) placeNew(id);
+    if (sec.follow) { sec.follow = false; view.flyTo(componentRect(id), { pad: 96, max: Math.max(1, view.get().z) }); }
+    refreshOverlays(); ctx.emit('render', { component: id, revision }); queueCull();
+  }
+  async function render(id, force = false) {
     const c = ctx.state.components.get(id);
     if (!c) return;
     const sec = section(id);
     const token = ++sec.token;
     header(id);
+    if (!force && ctx.state.components.size > CULL_AFTER) {
+      if (!sec.pos) {
+        sec.frame.innerHTML = '<div class="bundle-pending">Preview loads when in view</div>';
+        measure(sec); placeNew(id);
+      }
+      if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
+    }
+    sec.pending = false;
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
     if (token !== sec.token) return; // a newer revision is already on its way
-    const err = sec.el.querySelector('.build-error');
     if (!res.ok) {
-      err.textContent = `build failed: ${(await res.json().catch(() => ({}))).error || res.status}`;
-      sec.el.dataset.ready = '1';
+      sec.unmounts.forEach(u => u()); sec.unmounts = [];
+      sec.frame.replaceChildren(errorCard(`build failed: ${(await res.json().catch(() => ({}))).error || res.status}`));
+      finish(sec, id, c.revision);
       return;
     }
-    err.textContent = '';
     const url = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
     let mod; try { mod = await import(url); } finally { URL.revokeObjectURL(url); }
     if (token !== sec.token) return;
@@ -126,7 +153,7 @@ export function createStage(ctx, root, world, view) {
       const cap = document.createElement('figcaption'); cap.textContent = variantLabel(variant);
       fig.append(mount, cap);
       try { unmounts.push(mod.mount(mount, variant)); }
-      catch (e) { mount.innerHTML = '<div class="error"></div>'; mount.firstChild.textContent = `render failed: ${e.message}`; }
+      catch (e) { mount.replaceChildren(errorCard(`${c.path || c.name + '.tsx'}: render failed: ${e.message}`)); }
       return fig;
     };
     const matrix = buildMatrix(c.doc, cellFor);
@@ -136,8 +163,7 @@ export function createStage(ctx, root, world, view) {
     queueMicrotask(() => old.forEach((u) => u()));
     sec.el.dataset.revision = c.revision; sec.el.dataset.ready = '1';
     sec.el.querySelector('.rev').textContent = `r${String(c.revision).slice(0, 7)}`; // revisions are content hashes; show them short
-    measure(sec);
-    if (laidOut && !sec.pos) placeNew(id);
+    finish(sec, id, c.revision);
     // Keep the selection while its nodes still exist; drop the ones that are gone.
     const sels = ctx.state.selections.filter((s) => !(s.component === id && !(c.doc && index(c.doc).byId.has(s.node))));
     if (sels.length !== ctx.state.selections.length) ctx.selectMany(sels);
@@ -183,6 +209,7 @@ export function createStage(ctx, root, world, view) {
       auto.set(id, { x, y }); moveTo(id, x, y);
       x += w + GAP_X; rowH = Math.max(rowH, h);
     }
+    shelf = { x, y, h: rowH };
     laidOut = true;
     ctx.emit('layout', {});
   }
@@ -190,10 +217,13 @@ export function createStage(ctx, root, world, view) {
   function placeNew(id) {
     if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); return; }
     const me = sections.get(id), others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([, s]) => ({ x: s.pos.x, y: s.pos.y, w: s.size.w, h: s.size.h }));
-    const { w, h } = me.size, hit = (x, y) => others.some((o) => x < o.x + o.w + GAP_X && x + w + GAP_X > o.x && y < o.y + o.h + GAP_Y * 0.6 && y + h + GAP_Y * 0.6 > o.y);
-    let pos = null;
-    for (let y = 0; y < 40000 && !pos; y += 80) for (let x = 0; x + w <= SHELF_W && !pos; x += 80) if (!hit(x, y)) pos = { x, y };
-    pos ||= { x: 0, y: 0 };
+    const { w, h } = me.size;
+    SHELF_W = Math.max(SHELF_W, w);
+    if (shelf.x && shelf.x + w > SHELF_W) shelf = { x: 0, y: shelf.y + shelf.h + GAP_Y, h: 0 };
+    const hit = o => shelf.x < o.x + o.w + GAP_X && shelf.x + w + GAP_X > o.x && shelf.y < o.y + o.h + GAP_Y * 0.6 && shelf.y + h + GAP_Y * 0.6 > o.y;
+    if (others.some(hit)) shelf = { x: 0, y: Math.max(0, ...others.map(o => o.y + o.h)) + GAP_Y, h: 0 };
+    const pos = { x: shelf.x, y: shelf.y };
+    shelf.x += w + GAP_X; shelf.h = Math.max(shelf.h, h);
     auto.set(id, pos); moveTo(id, pos.x, pos.y);
   }
 
@@ -290,6 +320,7 @@ export function createStage(ctx, root, world, view) {
     const x0 = (-x - b.width * m) / z, x1 = (b.width * (1 + m) - x) / z, y0 = (-y - b.height * m) / z, y1 = (b.height * (1 + m) - y) / z;
     const keep = new Set(ctx.state.selections.map((s) => s.component));
     for (const [id, sec] of sections) {
+      if (sec.pending && visible(sec)) render(id, true).catch(console.error);
       if (!sec.pos || !sec.size.w) continue;
       const off = !keep.has(id) && (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 > y1 || sec.pos.y + sec.size.h < y0);
       if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else delete sec.el.dataset.cull; }
@@ -328,7 +359,7 @@ export function createStage(ctx, root, world, view) {
     if (suppressClick && Date.now() - suppressClick < 300) { suppressClick = 0; return; }
     const h = hit(ev.target);
     if (h) ev.preventDefault();
-    if (ev.target.closest?.('.cmp-head')) return; // handled by the frame drag (a click on a title selects the component's root)
+    if (ev.target.closest?.('.cmp-head, .build-error')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
     const sel = { component: h.id, node: h.el.dataset.n, variant: h.variant };
     if (ev.shiftKey || ev.metaKey || ev.ctrlKey) ctx.toggle(sel); else ctx.select(sel);
@@ -384,6 +415,7 @@ export function createStage(ctx, root, world, view) {
     // by the title, or by any empty part of the frame (never by a component's own elements)
     const head = ev.target.closest?.('.cmp-head');
     const body = !head && ctx.state.tool === 'select' && ev.pointerType !== 'touch' && !ev.target.closest('.mount [data-n]') ? ev.target.closest?.('.frame') : null;
+    if (ev.target.closest('details, summary, pre')) return;
     if (!(head || body) || ev.button !== 0 || view.isPanning()) return;
     const id = (head || body).closest('.cmp').dataset.component, sec = sections.get(id);
     if (!sec?.pos) return;
@@ -422,6 +454,7 @@ export function createStage(ctx, root, world, view) {
 
   // Bring a component into view if it is not (a new one, or a quick-open target); never moves a view that already shows it.
   function reveal(id) {
+    live(id);
     const r = componentRect(id), v = view.get(), b = view.stageBox();
     if (!r) return;
     const x0 = r.x * v.z + v.x, y0 = r.y * v.z + v.y, x1 = (r.x + r.w) * v.z + v.x, y1 = (r.y + r.h) * v.z + v.y;

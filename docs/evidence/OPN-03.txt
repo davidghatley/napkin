@@ -1,0 +1,5 @@
+Re-run: EVIDENCE=1 node --test test/onboarding/open.test.js
+MCP propose_adoption -> existing proposal list -> reject: SHA unchanged.
+A second proposal -> Accept: store.apply revision advances and source becomes editable.
+Before/after PNG bytes identical. Unsupported source refuses; external edits cause stale refusal.
+Identity and read/propose/write permissions are tested; acceptance calls store.apply exactly once, attributed to the proposer.

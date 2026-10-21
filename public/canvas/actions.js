@@ -1,0 +1,57 @@
+// One action registry for quick open and the shortcut sheet. `codes` includes browser aliases.
+// Handler coverage is audited in test/onboarding/shortcuts.test.js, including local form controls.
+const refs = (file, ...events) => events.map((e) => `${file}.js:${e}`);
+const action = (id, label, key, codes, handlers, run, hint = 'view') => ({ id, kind: 'action', label, key, codes, handlers, run, hint });
+const key = (k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+export const ACTIONS = [
+  action('fit', 'Fit all', 'Shift+1', ['Digit1', '!', '1'], refs('view', 'keydown'), (c) => c.view.fitAll({ animate: true })),
+  action('fit-selection', 'Fit selection', 'Shift+2', ['Digit2', '@', '2'], refs('view', 'keydown'), (c) => c.view.fitSelection({ animate: true })),
+  action('actual', 'Zoom to 100%', 'Shift+0', ['Digit0', ')', '0'], refs('view', 'keydown'), (c) => c.view.zoomBy(1 / c.view.get().z, undefined, undefined, { animate: true })),
+  action('zoom-in', 'Zoom in', '+ or =', ['+', '=', 'NumpadAdd'], refs('view', 'keydown'), (c) => c.view.zoomBy(1.25)),
+  action('zoom-out', 'Zoom out', '− or _', ['-', '_', 'NumpadSubtract'], refs('view', 'keydown'), (c) => c.view.zoomBy(0.8)),
+  action('pan', 'Pan canvas', 'Space + drag · wheel · middle drag', ['Space'], refs('view', 'keydown', 'keyup')),
+  action('pinch', 'Zoom at cursor', 'Ctrl/Cmd + wheel · pinch', [], []),
+  action('focus', 'Focus selected component', 'Enter', ['Enter'], refs('nav', 'keydown'), (c) => { const s = c.state.selection; if (s) c.nav.focus(s.component, s.node); }),
+  action('leave', 'Leave focus / clear selection', 'Escape', ['Escape'], refs('nav', 'keydown'), (c) => c.nav.unfocus()),
+  action('new', 'New component', 'N', ['N'], refs('tools', 'keydown'), () => key('n'), 'create'),
+  action('frame', 'Frame tool', 'F', ['F'], refs('tools', 'keydown'), (c) => c.tools?.use('frame'), 'draw'),
+  action('text', 'Text tool', 'T', ['T'], refs('tools', 'keydown'), (c) => c.tools?.use('text'), 'draw'),
+  action('image', 'Image slot tool', 'I', ['I'], refs('tools', 'keydown'), (c) => c.tools?.use('image'), 'draw'),
+  action('select', 'Select tool', 'V', ['V'], refs('tools', 'keydown'), (c) => c.tools?.use('select'), 'draw'),
+  action('delete', 'Delete selection', 'Delete / Backspace', ['Delete', 'Backspace'], refs('tools', 'keydown'), () => key('Delete'), 'edit'),
+  action('reorder', 'Reorder selection', 'Alt + ↑ / ↓', ['ArrowUp', 'ArrowDown'], refs('tools', 'keydown')),
+  action('cancel', 'Cancel drawing, new component or text edit', 'Escape', ['Escape'], refs('tools', 'keydown')),
+  action('text-edit', 'Finish text edit', 'Enter', ['Enter'], refs('tools', 'keydown')),
+  action('measure', 'Measure to hovered node', 'Hold Alt', ['Alt'], refs('stage', 'keydown', 'keyup')),
+  action('multi', 'Add / remove selection', 'Shift/Ctrl/Cmd + click · drag marquee', [], []),
+  action('quick', 'Quick open', 'Ctrl/Cmd+K', ['k'], refs('quick', 'keydown'), (c) => c.quick.open()),
+  action('quick-move', 'Quick open: move / go / close', '↑ ↓ · Enter · Escape · Ctrl/Cmd+K · Tab stays in search', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'k'], refs('quick', 'keydown')),
+  action('rename', 'Rename layer', 'F2 · double click', ['F2'], refs('layers', 'keydown')),
+  action('layer-nav', 'Layers: select / expand / collapse / focus', '↑ ↓ ← → · Enter', ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'], refs('layers', 'keydown')),
+  action('layer-menu', 'Layer menu', 'Shift+F10 / Menu key', ['F10', 'ContextMenu'], refs('layers', 'keydown')),
+  action('layer-menu-nav', 'Layer menu: move / close', '↑ ↓ · Escape', ['ArrowUp', 'ArrowDown', 'Escape'], refs('layers', 'keydown')),
+  action('layer-rename', 'Finish / cancel layer rename or reorder', 'Enter / Escape', ['Enter', 'Escape'], refs('layers', 'keydown')),
+  action('number', 'Nudge number field', '↑ ↓ · Shift ×10 · Alt ×0.1', ['ArrowUp', 'ArrowDown'], refs('panel', 'keydown')),
+  action('panel-cancel', 'Cancel field edit or scrub', 'Escape', ['Escape'], refs('panel', 'keydown')),
+  action('font', 'Font menu: move / choose / close', '↑ ↓ · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('panel', 'keydown')),
+  action('native', 'Controls: move focus / activate / expand section', 'Tab · Shift+Tab · Enter · Space', [], refs('panel', 'keydown')),
+  action('undo', 'Undo your last edit', 'Ctrl/Cmd+Z', ['z'], refs('history', 'keydown'), (c) => c.undo(), 'edit'),
+  action('redo', 'Redo', 'Shift+Ctrl/Cmd+Z · Ctrl+Y', ['z', 'y'], refs('history', 'keydown'), (c) => c.redo(), 'edit'),
+  action('preview-exit', 'Leave the history preview', 'Escape', ['Escape'], refs('history', 'keydown')),
+  action('drawer-close', 'Close the drawer', 'Escape (inside it)', ['Escape'], refs('drawer', 'keydown')),
+  action('open-code', 'Open the code strip', 'Status bar: Code', [], [], (c) => c.drawer.open('code')),
+  action('open-history', 'Open history', 'Status bar: History', [], [], (c) => c.drawer.open('history')),
+  action('open-inspect', 'Open inspect', 'Status bar: Inspect', [], [], (c) => c.drawer.open('inspect')),
+  action('open-assets', 'Open assets', 'Status bar: Assets', [], [], (c) => c.drawer.open('assets')),
+  action('open-changes', 'Open changes against git', 'Status bar: Changes', [], [], (c) => c.drawer.open('changes')),
+  action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
+  action('theme', 'Switch light or dark chrome', 'Click the theme button', [], [], () => document.querySelector('#theme-toggle').click(), 'theme'),
+];
+
+// Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
+export const KEYBOARD_HANDLERS = {
+  'drawer.js:keydown': 1, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
+  'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
+  'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
+};
+export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run).map((a) => ({ ...a, run: () => a.run(ctx) }));

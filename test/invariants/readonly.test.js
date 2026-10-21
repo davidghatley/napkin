@@ -31,11 +31,12 @@ test('INV-04: 50 out-of-dialect files: read-only with a line number, every write
       try {
         const r = await store.read();
         assert.match(r.readOnly || '', /^line \d+: /, `${c.name}: reason with a line`);
-        assert.doesNotMatch(r.readOnly, /Declaration|Expression|Statement\b|ObjectProperty|JSX[A-Z]|\bAST\b|\btype\b.*\bnode\b/, `${c.name}: the reason is in plain words: ${r.readOnly}`);
-        const line = Number(r.readOnly.match(/^line (\d+)/)[1]);
+        assert.doesNotMatch(r.readOnly.replace(/\[[^\]]*\]/g, ""), /Declaration|Expression|Statement\b|ObjectProperty|JSX[A-Z]|\bAST\b|\btype\b.*\bnode\b/, `${c.name}: the reason is in plain words: ${r.readOnly}`);
+        // the reason may name several lines ("line 3: forwardRef; line 5: ..."): the offending code must be on one of them
+        const named = [...r.readOnly.matchAll(/line (\d+)/g)].map((m) => Number(m[1]));
         const lines = c.text.split('\n');
-        if (c.token) assert.ok(lines[line - 1]?.includes(c.token), `${c.name}: line ${line} should contain ${JSON.stringify(c.token)} but is ${JSON.stringify(lines[line - 1])}`);
-        else assert.ok(line >= 1 && line <= lines.length + 1, `${c.name}: line ${line} is inside the file`);
+        if (c.token) assert.ok(named.some((n) => lines[n - 1]?.includes(c.token)), `${c.name}: none of lines ${named} contains ${JSON.stringify(c.token)}: ${r.readOnly}`);
+        else assert.ok(named.every((n) => n >= 1 && n <= lines.length + 1), `${c.name}: lines ${named} are inside the file`);
         for (const dryRun of [false, true]) {
           const w = await store.apply({ baseRevision: r.revision, edits: EDIT, by: 'test', dryRun });
           assert.equal(w.ok, false, c.name);
