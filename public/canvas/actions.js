@@ -35,13 +35,17 @@ export const ACTIONS = [
   action('panel-cancel', 'Cancel field edit or scrub', 'Escape', ['Escape'], refs('panel', 'keydown')),
   action('font', 'Font menu: move / choose / close', '↑ ↓ · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('panel', 'keydown')),
   action('native', 'Controls: move focus / activate / expand section', 'Tab · Shift+Tab · Enter · Space', [], refs('panel', 'keydown')),
+  action('duplicate', 'Duplicate selection', 'Ctrl/Cmd+D', ['d'], refs('edit-ops', 'keydown'), (c) => c.ops.duplicate(), 'edit'),
+  action('wrap', 'Wrap in frame · unwrap', 'Ctrl/Cmd+Alt+G · Ctrl/Cmd+Shift+G', ['g'], refs('edit-ops', 'keydown'), (c) => c.ops.wrap(), 'edit'),
+  action('gesture-cancel', 'Cancel a drag on the canvas', 'Escape', ['Escape'], refs('handles', 'keydown')),
+  action('picker', 'Colour picker: move the point or slider / close', '← → ↑ ↓ · Shift ×10 · Escape', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Escape'], refs('colorpop', 'keydown')),
   action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
   action('theme', 'Switch light or dark chrome', 'Click the theme button', [], [], () => document.querySelector('#theme-toggle').click(), 'theme'),
 ];
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
+  'colorpop.js:keydown': 2, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
   'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
   'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
