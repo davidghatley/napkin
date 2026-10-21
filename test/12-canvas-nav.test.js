@@ -154,6 +154,19 @@ test('FEEL-04 nothing jumps when an edit lands elsewhere, and the selection over
       assert.equal(await browser.eval('window.__cls'), 0, 'CLS 0');
     });
 
+    await t.test('changing the selection (variant nodes included) shifts nothing: CLS stays 0', async () => {
+      const ids = await browser.eval(`JSON.stringify({ b: napkin.find('Button').component, c: napkin.find('Card').component, p: napkin.find('Chip').component })`);
+      const { b, c, p } = JSON.parse(ids);
+      const picks = [[b, 'root', { size: 'sm', state: 'hover' }], [b, 'label', { size: 'lg', state: 'default' }], [c, 'title', {}], [c, 'image', {}], [p, 'label', { size: 'xs', tone: 'warn', look: 'solid' }], [b, 'root', { size: 'md', state: 'default' }]];
+      for (const [comp, node, variant] of picks) {
+        await browser.eval(`napkin.select({ component: '${comp}', node: '${node}', variant: ${JSON.stringify(variant)} })`);
+        await sleep(120);
+      }
+      await browser.eval(`napkin.selectMany([{ component: '${c}', node: 'title', variant: {} }, { component: '${c}', node: 'body', variant: {} }])`);
+      await sleep(200);
+      assert.equal(await browser.eval('window.__cls'), 0);
+    });
+
     await t.test('the selection overlay matches its element on every frame while panning and zooming', async () => {
       const c = await centerOf(browser, node('Card', 'title'));
       await io.click(c.x, c.y);

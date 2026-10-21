@@ -38,7 +38,7 @@ test('the design panel reads like a design tool and every control is one small e
       assert.equal(await q(`document.querySelector('label[for=borderRadius]').textContent`), 'Corner radius');
       assert.equal(await q(`document.querySelector('label[for=fontSize]').textContent`), 'Size');
       assert.equal(await q(`document.querySelector('label[for=lineHeight]').textContent`), 'Line height');
-      assert.deepEqual(JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('details.sec > summary')].map((s) => s.textContent))`)).slice(0, 7), ['Layout', 'Size', 'Appearance', 'Fill', 'Stroke', 'Shadow', 'Text']);
+      assert.deepEqual(JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('details.sec > summary')].map((s) => s.textContent))`)).slice(0, 6), ['Layout', 'Size', 'Appearance', 'Fill', 'Stroke', 'Text']);
       const visible = await q(`[...document.querySelectorAll('#panel .flabel:not(.mono)')].map((l) => l.textContent).filter((x) => /[a-z][A-Z]/.test(x)).length`);
       assert.equal(visible, 0, 'no camelCase property names among the design labels');
       assert.equal(await q(`document.querySelector('#borderRadius').closest('.fbox').querySelector('.unit').textContent`), 'px');

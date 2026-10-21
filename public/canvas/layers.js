@@ -8,6 +8,8 @@ const ICON = {
   text: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M2.5 3.5v-1h9v1M7 2.5v9M5.2 11.5h3.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   image: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><rect x="1.8" y="2.3" width="10.4" height="9.4" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="m2.5 10 3-3.2 2.2 2.2 1.4-1.4 2.4 2.4" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>',
   button: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><rect x="1.5" y="4" width="11" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>',
+  eye: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M1.2 7s2-3.800 5.800-3.800S12.800 7 12.800 7 10.800 10.800 7 10.800 1.200 7 1.200 7z" fill="none" stroke="currentColor" stroke-width="1.200"/><circle cx="7" cy="7" r="1.500" fill="none" stroke="currentColor" stroke-width="1.200"/></svg>',
+  eyeoff: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M1.200 7s2-3.800 5.800-3.800S12.800 7 12.800 7 10.800 10.800 7 10.800 1.200 7 1.200 7zM2.500 12l9-10" fill="none" stroke="currentColor" stroke-width="1.200" stroke-linecap="round"/></svg>',
   component: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M7 1.8 12.2 7 7 12.2 1.8 7z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
 };
 const iconFor = (n) => (n.tag === 'img' ? ICON.image : n.tag === 'button' ? ICON.button : n.children.length || !(n.text !== undefined || n.textProp) ? ICON.frame : ICON.text);
@@ -39,7 +41,7 @@ export function initLayers(ctx, el) {
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
         const k = `${c.component}|${n.id}`, kids = n.children.length, isFolded = folded.has(k);
-        rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${anc.has(k) ? ' anc' : ''}" title="${esc(n.id)} · ${esc(n.tag)}${n.textProp ? ' · shows ' + esc(n.textProp) : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--d:${depth}"><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp ? ` · ${esc(n.textProp)}` : ''}</span><button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(n.id)}" title="More">⋯</button></div>`);
+        rows.push(`<div class="lrow lnode${n.style?.visibility === 'hidden' ? ' hidden-node' : ''}${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${anc.has(k) ? ' anc' : ''}" title="${esc(n.id)} · ${esc(n.tag)}${n.textProp ? ' · shows ' + esc(n.textProp) : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--d:${depth}"><span class="lgrip" aria-hidden="true">⠿</span><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp ? ` · ${esc(n.textProp)}` : ''}</span><button type="button" class="leye" tabindex="-1" data-action="eye" aria-pressed="${n.style?.visibility === 'hidden'}" aria-label="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'} ${esc(n.id)}" title="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'}">${n.style?.visibility === 'hidden' ? ICON.eyeoff : ICON.eye}</button><button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(n.id)}" title="More">⋯</button></div>`);
         if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
       })(c.doc.root, 1);
     }
@@ -64,10 +66,16 @@ export function initLayers(ctx, el) {
     const sel = { component: c.component, node, variant: cur?.component === c.component ? cur.variant : baseVariant(c) };
     if (row.dataset.node && (ev?.shiftKey || ev?.metaKey || ev?.ctrlKey)) ctx.toggle(sel); else ctx.select(sel);
   }
-  el.addEventListener('click', (ev) => {
+  el.addEventListener('click', async (ev) => {
     if (suppress) { suppress = false; return; }
     const row = ev.target.closest('.lrow');
     if (!row || ev.target.closest('input')) return;
+    if (ev.target.closest('.leye')) {
+      ev.stopPropagation();
+      const c = ctx.state.components.get(row.dataset.component), n = c?.doc && index(c.doc).byId.get(row.dataset.node);
+      if (n && !c.readOnly) await ctx.sendEdits(c.component, [{ op: 'set', path: `${n.id}.visibility`, value: n.style?.visibility === 'hidden' ? null : 'hidden' }]);
+      return;
+    }
     if (ev.target.closest('.lmore')) { ev.stopPropagation(); pick(row); openMenu(ev.target.closest('.lmore')); return; }
     if (ev.target.closest('.twirl')) {
       if (row.dataset.kind === 'component') { const id = row.dataset.component; expanded.has(id) ? expanded.delete(id) : expanded.add(id); }
@@ -93,7 +101,7 @@ export function initLayers(ctx, el) {
   function openMenu(btn) {
     const row = btn.closest('.lrow'), c = ctx.state.components.get(row.dataset.component);
     const isRoot = c?.doc?.root.id === row.dataset.node, ro = !!c?.readOnly;
-    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${ro ? ' disabled' : ''}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${ro || isRoot ? ' disabled' : ''}>Duplicate</button><button type="button" role="menuitem" data-do="delete"${ro || isRoot ? ' disabled' : ''}>Delete<kbd>⌫</kbd></button>`;
+    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${ro ? ' disabled title="This file is read-only"' : ''}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${ro || isRoot ? ` disabled title="${isRoot ? "The root can't be duplicated" : 'This file is read-only'}"` : ''}>Duplicate${isRoot ? '<small>The root can’t be duplicated</small>' : ''}</button><button type="button" role="menuitem" data-do="delete"${ro || isRoot ? ` disabled title="${isRoot ? "The root can't be deleted" : 'This file is read-only'}"` : ''}>Delete${isRoot ? '<small>The root can’t be deleted</small>' : '<kbd>⌫</kbd>'}</button>`;
     const r = btn.getBoundingClientRect();
     Object.assign(menu.style, { left: `${r.right - 150}px`, top: `${r.bottom + 4}px` });
     menu.dataset.component = row.dataset.component; menu.dataset.node = row.dataset.node;

@@ -24,4 +24,10 @@ The dream (docs/DREAM.md) asks for an infinite canvas with a variant matrix, a l
 ## Round 2 additions
 - Sidecar writes use `src/atomic-write.js` (`writeFileAtomic(path, text)`: temp, fsync, rename), the same name and signature as the files lane's module so they converge at merge. `POST /canvas` refuses null, strings and NaN.
 - Compound panel controls (stroke, shadow, fill alpha, per-side padding, per-corner radius) are several inputs written as one CSS value, so each stays one line in the file. Fill and stroke alpha live in the hex (#rrggbbaa).
-- Layers have no visibility toggle: it would have to write `display:none` over the node's real `display`, which loses information in one line. Row actions are rename, duplicate (one batch of inserts) and delete.
+- Layer visibility is `visibility: hidden` (one line, set or removed; `display` and layout are untouched), not `display:none`, which would overwrite the node's real `display`. Row actions are the eye, rename, duplicate (one batch of inserts) and delete.
+
+## Round 3 additions
+- The canvas position endpoint goes through `src/api.js` (session identity) and `commit.js`'s sidecar writer; it still writes only the sidecar.
+- Components render in browser-default typography (`.frame` resets the font); `src/render-png.js` hosts them the same way, so `render_component` still matches the canvas.
+- Units: a single px value shows as a number with a `px` suffix and is written back in the file's own spelling. `Auto` and `Inherit` have fixed meanings (see CONTRACT).
+- Absent fill, stroke and shadow are chips in one Add row instead of empty sections.

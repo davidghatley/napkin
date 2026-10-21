@@ -220,6 +220,7 @@ export function createStage(ctx, root, world, view) {
   function place(box, target, label, base) {
     if (!target?.isConnected || target.closest('[data-cull]')) { box.style.display = 'none'; return; }
     const r = target.getBoundingClientRect();
+    box.style.setProperty('--w', `${r.width}px`); box.style.setProperty('--h', `${r.height}px`); // children are placed with transforms from these, so a new size never shifts layout
     Object.assign(box.style, { display: 'block', transform: `translate(${r.left - base.left}px, ${r.top - base.top}px)`, width: `${r.width}px`, height: `${r.height}px` });
     if (label !== undefined) box.dataset.label = label;
   }

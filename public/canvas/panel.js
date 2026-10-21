@@ -10,6 +10,8 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 export const variantLabel = (v) => Object.entries(v || {}).map(([k, x]) => `${k}=${x}`).join(' · ') || 'default';
 
 const NUMBER = /^-?\d+(\.\d+)?$/;
+// One unit convention: a single px value shows as the number with a px suffix inside the field; the file keeps its own spelling (see commit).
+const pxless = (v, unit) => (unit === 'px' && /^-?\d*\.?\d+px$/.test(String(v)) ? String(v).slice(0, -2) : String(v));
 const toValue = (raw) => { const t = raw.trim(); return t === '' ? null : NUMBER.test(t) ? Number(t) : t; };
 const UNITLESS = new Set(['opacity', 'fontWeight', 'lineHeight', 'flex', 'flexGrow', 'flexShrink', 'zIndex', 'order']);
 const css = (prop, v) => (typeof v === 'number' && !UNITLESS.has(prop) ? `${v}px` : String(v));
@@ -22,8 +24,8 @@ const F = {
   height: { label: 'Height', unit: 'px', scrub: { step: 1, min: 0 } },
   opacity: { label: 'Opacity', unit: '%', pct: true, scrub: { step: 1, min: 0, max: 100 }, placeholder: '100' },
   borderRadius: { label: 'Corner radius', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
-  color: { label: 'Text color', color: true },
-  fontFamily: { label: 'Font' },
+  color: { label: 'Text color', color: true, placeholder: 'Inherit' },
+  fontFamily: { label: 'Font', placeholder: 'Inherit' },
   fontSize: { label: 'Size', unit: 'px', scrub: { step: 1, min: 1 } },
   lineHeight: { label: 'Line height', scrub: { step: 1, min: 0 }, auto: true, placeholder: 'Auto' },
   letterSpacing: { label: 'Letter spacing', unit: 'px', scrub: { step: 0.1, min: -20, digits: 1 }, placeholder: '0' },
@@ -42,7 +44,8 @@ const ui = {
   errors: {},      // key -> { text, retry?: { component, edits } }
   forms: {},       // key -> true while an inline form is open
   draft: {},       // input id -> unsaved text
-  closed: new Set(), // collapsed sections
+  closed: new Set(), // sections the user collapsed
+  opened: new Set(), // sections the user expanded (overrides a collapsed default)
   advanced: false,
   sides: { pad: false, rad: false }, // per-side padding and per-corner radius expanded
   side: '',        // which border side the Stroke controls edit ('' = all)
@@ -158,6 +161,7 @@ export function renderPanel(ctx) {
   const { byId } = index(doc);
   const nodes = ctx.state.selections.filter((s) => s.component === sel.component).map((s) => byId.get(s.node)).filter(Boolean);
   const multi = nodes.length > 1;
+  const isText = nodes.length === 1 && node.tag !== 'img' && !node.children.length && (node.text !== undefined || !!node.textProp); // a text node: Layout and Size start collapsed
   const resolvedOf = (n) => (t.overriding ? resolveStyle(doc, n.id, sel.variant) : n.style || {});
   // One value for the control, or "mixed" when the selected nodes disagree.
   const val = (prop) => {
@@ -178,11 +182,11 @@ export function renderPanel(ctx) {
   // Numbers are filled wells you can scrub; text is an outlined box. Units show only when the value is a plain number.
   const field = (prop, o = {}) => {
     const f = { ...F[prop], ...o }, { value, mixed } = val(prop);
-    const shown = value === undefined ? '' : f.pct ? String(Math.round(Number(value) * 100)) : String(value);
+    const shown = value === undefined || mixed ? '' : f.pct ? String(Math.round(Number(value) * 100)) : pxless(value, f.unit);
     const unit = f.unit && shown !== '' && NUMBER.test(shown) && !mixed ? `<span class="unit" aria-hidden="true">${f.unit}</span>` : '';
     const labelAttrs = f.scrub ? `class="flabel scrub" data-scrub="${prop}" title="Drag to change"` : 'class="flabel"';
     const sw = f.color ? `<label class="swatch"><input type="color" id="pick-${prop}" data-pick="${prop}" aria-label="Pick ${esc(f.label.toLowerCase())}"${dis}><span class="chipcolor" data-color="${esc(shown)}"></span></label>` : '';
-    const list = prop === 'fontFamily' ? ' list="fontlist"' : '';
+    const list = prop === 'fontFamily' ? ' aria-haspopup="listbox" data-picker="font"' : '';
     return `<div class="f${isOver(prop) ? ' overridden' : ''}"><label ${labelAttrs} for="${prop}">${esc(f.label)}</label>
       <div class="fbox ${f.scrub ? 'num' : 'txt'}${f.color ? ' hascolor' : ''}">${sw}<input id="${prop}" data-field="${prop === 'fontFamily' ? 'family' : 'style'}" data-prop="${prop}" data-step="${f.scrub?.step ?? ''}"${f.scrub ? '' : ' data-text="1"'}${f.pct ? ' data-pct="1"' : ''}${list} autocomplete="off" spellcheck="false" value="${esc(prop === 'fontFamily' ? famName(shown) : shown)}" placeholder="${mixed ? 'Mixed' : f.placeholder ?? ''}"${mixed ? ' data-mixed="1"' : ''}${dis}>${unit}</div>
       <div class="ftags">${o.extra || ''}${tags(prop, f.label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
@@ -198,8 +202,8 @@ export function renderPanel(ctx) {
   const sizeMode = (v) => (v === undefined || v === 'auto' || v === 'fit-content' || v === 'max-content' ? 'hug' : v === '100%' ? 'fill' : typeof v === 'number' || /^-?\d+(\.\d+)?px$/.test(String(v)) ? 'fixed' : 'custom');
   const size = (prop) => {
     const { value, mixed } = val(prop), mode = mixed ? '' : sizeMode(value);
-    const shown = value === undefined ? '' : String(value);
-    const isNum = NUMBER.test(shown) || /^-?\d+(\.\d+)?px$/.test(shown);
+    const shown = value === undefined || mixed ? '' : pxless(value, 'px');
+    const isNum = NUMBER.test(shown);
     const opts = [['hug', 'Hug'], ['fill', 'Fill'], ['fixed', 'Fixed']];
     const name = prop === 'width' ? 'Width' : 'Height';
     return `<div class="f sizerow${isOver(prop) ? ' overridden' : ''}"><label class="flabel scrub" data-scrub="${prop}" for="${prop}" title="Drag to change ${name.toLowerCase()}">${name[0]}<span class="sr">${name.slice(1)}</span></label>
@@ -207,19 +211,24 @@ export function renderPanel(ctx) {
       <div class="fbox num"><input id="${prop}" data-field="style" data-prop="${prop}" data-step="1" autocomplete="off" spellcheck="false" value="${esc(shown)}" placeholder="${mixed ? 'Mixed' : mode === 'fill' ? '100%' : 'Auto'}" aria-label="${name}"${mixed ? ' data-mixed="1"' : ''}${dis}>${isNum && !mixed ? '<span class="unit" aria-hidden="true">px</span>' : ''}</div>
       <div class="ftags">${tags(prop, name)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
-  const section = (id, title, body, { open = true } = {}) => `<details class="sec" data-sec="${id}"${open && !ui.closed.has(id) ? ' open' : ''}><summary>${title}</summary><div class="sbody">${body}</div></details>`;
+  const section = (id, title, body, { open = true } = {}) => `<details class="sec" data-sec="${id}"${(ui.closed.has(id) ? false : ui.opened.has(id) ? true : open) ? ' open' : ''}><summary>${title}</summary><div class="sbody">${body}</div></details>`;
   const has = (prop) => nodes.some((n) => resolvedOf(n)[prop] !== undefined);
-  // A section whose property can be added and removed, like Figma's + and -.
-  const optSection = (id, title, props, present, body, def, always = '') => `<div class="secwrap">${section(id, title, (present ? body : '<p class="hint none">None. Add one with +.</p>') + always)}<button type="button" class="secbtn" id="${present ? 'remove' : 'add'}-${id}" data-action="${present ? 'clear-prop' : 'set-prop'}" data-props="${props.join(',')}" data-def="${esc(def)}" aria-label="${present ? 'Remove' : 'Add'} ${title.toLowerCase()}" title="${present ? 'Remove' : 'Add'} ${title.toLowerCase()}"${dis}>${present ? '−' : '+'}</button></div>`;
-  // A swatch, the hex, an alpha % and an eye in one row. `part` inputs belong to a group written as ONE CSS value.
-  const colorRow = (group, idBase, value, { eye, alphaId } = {}) => {
+  // An optional section (fill, stroke, shadow): present = its own section; absent = a chip in one "Add" row, so empty sections take no room.
+  const addChips = [];
+  const addBtn = (id, label, props, def) => `<button type="button" class="addchip" id="add-${id}" data-action="set-prop" data-props="${props.join(',')}" data-def="${esc(def)}" aria-label="Add ${label.toLowerCase()}" title="Add ${label.toLowerCase()}"${dis}>+ ${label}</button>`;
+  const optSection = (id, title, props, present, body, def, { force = false, always = '' } = {}) => {
+    if (!present && !force) { addChips.push(addBtn(id, title, props, def)); return ''; }
+    return section(id, title, (present ? body : `<div class="none"><span class="hint">None on this side.</span>${addBtn(id, title, props, def)}</div>`) + always);
+  };
+  // swatch | hex | opacity % in ONE field, then the eye and a minus at the row's end (like Figma's fill row).
+  const colorRow = (group, idBase, value, { eye, alphaId, remove } = {}) => {
     const px = parseHex(value);
     const hex = px ? px.rgb : value ?? '';
-    const plain = group === 'fill-plain';
-    return `<div class="crow"><div class="fbox txt hascolor"><label class="swatch"><input type="color" id="pick-${idBase}" data-pick="${idBase}" ${plain ? '' : `data-group="${group}"`} aria-label="Pick colour"${dis}><span class="chipcolor" data-color="${esc(hex)}"></span></label>
-      <input id="${idBase}" ${group === 'fill' ? 'data-field="part" data-group="fill" data-part="c"' : `data-field="part" data-group="${group}" data-part="c"`} data-text="1" autocomplete="off" spellcheck="false" value="${esc(hex)}" aria-label="Colour"${dis}></div>
-      <div class="fbox num"><input id="${alphaId}" data-field="part" data-group="${group}" data-part="a" data-step="1" data-prop="${alphaId}" autocomplete="off" value="${px ? px.a : 100}" aria-label="Opacity"${px ? '' : ' disabled'}${dis}><span class="unit" aria-hidden="true">%</span></div>
-      ${eye ? `<button type="button" class="eye" id="eye-${group}" data-action="toggle-eye" data-group="${group}" aria-pressed="${!eye.off}" aria-label="${eye.off ? 'Show' : 'Hide'} ${group}" title="${eye.off ? 'Show' : 'Hide'}"${dis}>${eye.off ? I.eyeoff : I.eye}</button>` : ''}</div>`;
+    return `<div class="crow"><div class="fbox txt hascolor colorbox"><label class="swatch"><input type="color" id="pick-${idBase}" data-pick="${idBase}" data-group="${group}" aria-label="Pick colour"${dis}><span class="chipcolor" data-color="${esc(hex)}"></span></label>
+      <input id="${idBase}" data-field="part" data-group="${group}" data-part="c" data-text="1" autocomplete="off" spellcheck="false" value="${esc(hex)}" placeholder="None" aria-label="Colour"${dis}>
+      <span class="vdiv" aria-hidden="true"></span><input class="alpha" id="${alphaId}" data-field="part" data-group="${group}" data-part="a" data-step="1" data-prop="${alphaId}" autocomplete="off" value="${px ? px.a : 100}" aria-label="Opacity"${px ? '' : ' disabled'}${dis}><span class="unit" aria-hidden="true">%</span></div>
+      ${eye ? `<button type="button" class="rowbtn" id="eye-${group}" data-action="toggle-eye" data-group="${group}" aria-pressed="${!eye.off}" aria-label="${eye.off ? 'Show' : 'Hide'} ${group}" title="${eye.off ? 'Show' : 'Hide'}"${dis}>${eye.off ? I.eyeoff : I.eye}</button>` : '<span></span>'}
+      ${remove ? `<button type="button" class="rowbtn" id="remove-${remove.id}" data-action="clear-prop" data-props="${remove.props.join(',')}" aria-label="Remove ${group}" title="Remove"${dis}>−</button>` : ''}</div>`;
   };
   const part = (group, id, label, value, o = {}) => `<div class="f"><label class="flabel scrub" data-scrub="${id}" title="Drag to change" for="${id}">${label}</label><div class="fbox num"><input id="${id}" data-field="part" data-group="${group}" data-part="${o.part ?? id}" data-prop="${id}" data-step="${o.step ?? 1}" autocomplete="off" spellcheck="false" value="${esc(value ?? '')}" placeholder="${o.ph ?? '0'}"${dis}>${value !== '' && value !== undefined ? '<span class="unit" aria-hidden="true">px</span>' : ''}</div></div>`;
   const linkBtn = (which, on, label) => `<button type="button" class="linkbtn" id="${which}-sides" data-action="toggle-sides" data-which="${which}" aria-pressed="${on}" aria-label="${label}" title="${label}"${dis}>${I.sides}</button>`;
@@ -245,38 +254,41 @@ export function renderPanel(ctx) {
     + (isFlex ? seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]]) : '')
     + (isFlex ? `<div class="alignrow"><div class="f stackf"><span class="flabel" id="lbl-align">Align</span>${matrix}</div><div class="stack">${field('gap')}${field('padding', { extra: linkBtn('pad', padSides, 'Padding per side') })}</div></div>${err('align')}`
       : (isGrid ? field('gap') : '') + field('padding', { extra: linkBtn('pad', padSides, 'Padding per side') }))
-    + (padSides ? sidesFields('pad', pb, ['Top', 'Right', 'Bottom', 'Left'], ['pad-t', 'pad-r', 'pad-b', 'pad-l'], 'Per-side editing needs px values; use the Padding field.') : ''));
-  const sizeSec = section('size', 'Size', size('width') + size('height'));
+    + (padSides ? sidesFields('pad', pb, ['Top', 'Right', 'Bottom', 'Left'], ['pad-t', 'pad-r', 'pad-b', 'pad-l'], 'Per-side editing needs px values; use the Padding field.') : ''), { open: !isText });
+  const sizeSec = section('size', 'Size', size('width') + size('height'), { open: !isText });
   const look = section('appearance', 'Appearance', field('opacity') + field('borderRadius', { extra: linkBtn('rad', radSides, 'Radius per corner') })
     + (radSides ? sidesFields('rad', rb, ['Top left', 'Top right', 'Bottom right', 'Bottom left'], ['rad-tl', 'rad-tr', 'rad-br', 'rad-bl'], 'Per-corner editing needs px values; use the Corner radius field.') : ''));
   // Fill
   const bgv = val('background');
   const fillOff = bgv.value === 'transparent';
   const fill = optSection('fill', 'Fill', ['background'], has('background'),
-    `<div class="f colorf${isOver('background') ? ' overridden' : ''}">${colorRow('fill', 'background', bgv.mixed ? '' : String(fillOff ? ui.lastFill ?? '#d9d9d9' : bgv.value ?? ''), { eye: { off: fillOff }, alphaId: 'fill-a' })}<div class="ftags">${tags('background', 'Fill')}</div>${err('style-background')}${err('reset-background')}</div>`, '#d9d9d9');
+    `<div class="f colorf${isOver('background') ? ' overridden' : ''}">${colorRow('fill', 'background', bgv.mixed ? '' : String(fillOff ? ui.lastFill ?? '#d9d9d9' : bgv.value ?? ''), { eye: { off: fillOff }, alphaId: 'fill-a', remove: { id: 'fill', props: ['background'] } })}<div class="ftags">${tags('background', 'Fill')}</div>${err('style-background')}${err('reset-background')}</div>`, '#d9d9d9');
   // Stroke (border): colour, opacity, width and style compose ONE css line: border, or one side of it
   const sideProp = 'border' + ui.side;
   const bv = val(sideProp), bp = parseBorder(bv.value);
   const strokeOff = bp?.s === 'none';
   const strokeProps = ui.side ? [sideProp] : ALLBORDERS;
+  const sideIcon = (v) => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/>${{ '': '<rect x="3" y="3" width="10" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/>', Top: '<path d="M3 3h10" stroke="currentColor" stroke-width="2.2"/>', Right: '<path d="M13 3v10" stroke="currentColor" stroke-width="2.2"/>', Bottom: '<path d="M3 13h10" stroke="currentColor" stroke-width="2.2"/>', Left: '<path d="M3 3v10" stroke="currentColor" stroke-width="2.2"/>' }[v]}</svg>`;
+  const strokeSides = `<div class="f"><span class="flabel" id="lbl-side">Sides</span><div class="seg small icons" role="radiogroup" aria-labelledby="lbl-side">${[['', 'All sides'], ['Top', 'Top'], ['Right', 'Right'], ['Bottom', 'Bottom'], ['Left', 'Left']].map(([v, name]) => `<button type="button" role="radio" title="${name}" aria-label="${name}" id="side-${v || 'all'}" aria-checked="${ui.side === v}" data-action="stroke-side" data-side="${v}">${sideIcon(v)}</button>`).join('')}</div></div>`;
   const stroke = optSection('stroke', 'Stroke', strokeProps, strokeProps.some(has),
-    `<div class="f colorf${isOver(sideProp) ? ' overridden' : ''}">${colorRow('stroke', 'stroke-color', bp ? bp.c : '', { eye: { off: strokeOff }, alphaId: 'stroke-a' })}<div class="ftags">${tags(sideProp, 'Stroke')}</div>${err('style-' + sideProp)}${err('reset-' + sideProp)}</div>
+    `<div class="f colorf${isOver(sideProp) ? ' overridden' : ''}">${colorRow('stroke', 'stroke-color', bp ? bp.c : '', { eye: { off: strokeOff }, alphaId: 'stroke-a', remove: { id: 'stroke', props: strokeProps } })}<div class="ftags">${tags(sideProp, 'Stroke')}</div>${err('style-' + sideProp)}${err('reset-' + sideProp)}</div>
      <div class="pair">${part('stroke', 'stroke-w', 'Width', bp ? String(bp.w) : '', { part: 'w', ph: '1' })}<div class="f"><label class="flabel" for="stroke-s">Style</label><div class="fbox sel"><select id="stroke-s" data-field="part" data-group="stroke" data-part="s"${dis}>${['solid', 'dashed', 'dotted', 'none'].map((s) => `<option${bp?.s === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div></div></div>
-`, '1px solid #1f2937', `<div class="f"><span class="flabel" id="lbl-side">Sides</span><div class="seg small" role="radiogroup" aria-labelledby="lbl-side">${[['', 'All', 'All sides'], ['Top', 'T', 'Top'], ['Right', 'R', 'Right'], ['Bottom', 'B', 'Bottom'], ['Left', 'L', 'Left']].map(([v, text, name]) => `<button type="button" role="radio" title="${name}" aria-label="${name}" id="side-${v || 'all'}" aria-checked="${ui.side === v}" data-action="stroke-side" data-side="${v}">${text}</button>`).join('')}</div></div>`);
+`, '1px solid #1f2937', { force: !!ui.side, always: strokeSides });
   // Effects: one drop shadow = x y blur spread colour, ONE css line
   const sv = val('boxShadow'), sp = parseShadow(sv.value);
   const effects = optSection('effects', 'Shadow', ['boxShadow'], has('boxShadow'),
-    sp || sv.value === undefined || sv.mixed ? `<div class="f colorf${isOver('boxShadow') ? ' overridden' : ''}">${colorRow('shadow', 'shadow-color', sp ? sp.c : '', { alphaId: 'shadow-a' })}<div class="ftags">${tags('boxShadow', 'Shadow')}</div>${err('style-boxShadow')}${err('reset-boxShadow')}</div>
+    sp || sv.value === undefined || sv.mixed ? `<div class="f colorf${isOver('boxShadow') ? ' overridden' : ''}">${colorRow('shadow', 'shadow-color', sp ? sp.c : '', { alphaId: 'shadow-a', remove: { id: 'effects', props: ['boxShadow'] } })}<div class="ftags">${tags('boxShadow', 'Shadow')}</div>${err('style-boxShadow')}${err('reset-boxShadow')}</div>
       <div class="pair">${part('shadow', 'shadow-x', 'X', sp ? String(sp.x) : '', { part: 'x' })}${part('shadow', 'shadow-y', 'Y', sp ? String(sp.y) : '', { part: 'y' })}</div>
       <div class="pair">${part('shadow', 'shadow-blur', 'Blur', sp ? String(sp.b) : '', { part: 'b' })}${part('shadow', 'shadow-spread', 'Spread', sp ? String(sp.s) : '', { part: 's' })}</div>`
       : `<p class="hint">This shadow has several layers or an inset; edit it as text.</p><div class="f"><label class="flabel" for="boxShadow">CSS</label><div class="fbox txt"><input id="boxShadow" data-field="style" data-prop="boxShadow" data-text="1" value="${esc(sv.value)}"${dis}></div>${err('style-boxShadow')}</div>`,
     '0px 2px 6px 0px #00000040');
   const wt = val('fontWeight');
-  const fonts = fontNames(ctx);
   const typeSec = section('type', 'Text',
-    `<datalist id="fontlist">${fonts.map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist>` + field('fontFamily', { placeholder: 'Inherit' }) + `<div class="pair">${field('fontSize')}${(() => `<div class="f"><label class="flabel" for="fontWeight">Weight</label><div class="fbox sel"><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined ? '<option value="" selected>Inherit</option>' : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select></div><div class="ftags">${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`)()}</div>`
+    field('fontFamily') + `<div class="pair">${field('fontSize')}${(() => `<div class="f"><label class="flabel" for="fontWeight">Weight</label><div class="fbox sel"><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined ? '<option value="" selected>Inherit</option>' : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select></div><div class="ftags">${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`)()}</div>`
     + `<div class="pair">${field('lineHeight')}${field('letterSpacing')}</div>`
-    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true }) + field('color', { placeholder: 'inherit' }));
+    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true }) + field('color'));
+
+  const addRow = addChips.length ? `<div class="addrow"><span class="flabel">Add</span>${addChips.join('')}</div>` : '';
 
   // ---- Content: text, setting binding, image attributes ----
   let content = '';
@@ -311,7 +323,7 @@ export function renderPanel(ctx) {
   const explain = t.available ? (t.overriding ? `Edits go to ${esc(t.chosen[0])}=${esc(t.chosen[1])} only. Everything else keeps the base value.` : 'Edits go to the base and reach every variant that does not override them.')
     : (Object.keys(sel.variant || {}).length ? 'This cell is all base values, so there is no override to make. Edits go to the base.' : 'This component has no variants yet. Edits go to the base.');
   const scope = `<div class="scope"><div class="scoperow"><label class="flabel" for="scope">Editing</label>
-      <div class="fbox sel"><select id="scope" name="target"${dis}><option value="base"${t.overriding ? '' : ' selected'}>Base</option><option value="variant"${t.overriding ? ' selected' : ''}${t.available ? '' : ' disabled'}>This variant${t.available ? ` (${esc(t.nonBase.map(([a, v]) => a + '=' + v).join(', '))})` : ''}</option></select></div>
+      <div class="fbox sel"><select id="scope" name="target" title="${t.available ? esc('Base, or this variant: ' + t.nonBase.map(([a, v]) => a + '=' + v).join(', ')) : 'Base'}"${dis}><option value="base"${t.overriding ? '' : ' selected'}>Base</option><option value="variant"${t.overriding ? ' selected' : ''}${t.available ? '' : ' disabled'}>This variant${t.available ? ` · ${esc(t.nonBase.map(([a, v]) => a + '=' + v).join(', '))}` : ''}</option></select></div>
       <button type="button" class="infobtn" id="scope-info" data-action="info" aria-expanded="${ui.info}" aria-controls="target-note" aria-label="What does this mean?" title="What does this mean?">i</button></div>
       ${t.overriding && t.nonBase.length > 1 ? `<div class="scoperow"><label class="flabel" for="override-axis">Variant</label><div class="fbox sel"><select id="override-axis">${t.nonBase.map(([a, v]) => `<option value="${esc(a)}"${t.chosen[0] === a ? ' selected' : ''}>${esc(a)}=${esc(v)}</option>`).join('')}</select></div></div>` : ''}
       <p class="hint info" id="target-note"${ui.info ? '' : ' hidden'}>${explain}</p>
@@ -359,7 +371,7 @@ export function renderPanel(ctx) {
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${layout}${sizeSec}${look}${fill}${stroke}${effects}${typeSec}${content}${advanced}
+    ${isText ? typeSec + look + fill + stroke + effects + addRow + layout + sizeSec : layout + sizeSec + look + fill + stroke + effects + addRow + typeSec}${content}${advanced}
     <div class="grouphead">Component</div>${propsUi}${variantsUi}`;
 
   // swatches show the colour the field holds
@@ -449,6 +461,7 @@ function wire(ctx, el) {
     if (!s) return;
     let v = typeof raw === 'string' ? toValue(raw) : raw;
     if (prop === 'opacity' && typeof v === 'number') v = Math.round(v) / 100; // the panel shows percent, the file holds 0..1
+    else if (typeof v === 'number' && F[prop]?.unit === 'px' && /^-?\d*\.?\d+px$/.test(String(curVal(prop)))) v = `${v}px`; // keep '16px' a string, as the file had it
     const edits = styleEdits([[prop, v]]);
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
     await run('style-' + prop, s.component, edits, { clear: [id ?? prop] });
@@ -463,11 +476,16 @@ function wire(ctx, el) {
     }
     if (t.id && t.type !== 'checkbox' && t.type !== 'radio' && t.type !== 'color') ui.draft[t.id] = t.value;
   });
+  // only a person's click or key on a summary counts as a choice; a redraw inserting <details> also fires toggle
+  let userToggle = 0;
+  el.addEventListener('pointerdown', (ev) => { if (ev.target.closest?.('summary')) userToggle = Date.now(); }, true);
+  el.addEventListener('keydown', (ev) => { if (ev.target.matches?.('summary')) userToggle = Date.now(); }, true);
+  el.addEventListener('click', (ev) => { if (ev.target.closest?.('summary')) userToggle = Date.now(); }, true);
   el.addEventListener('toggle', (ev) => {
     const d = ev.target;
-    if (!d.matches?.('details.sec')) return;
+    if (!d.matches?.('details.sec') || Date.now() - userToggle > 500) return;
     const id = d.dataset.sec;
-    if (id === 'advanced') ui.advanced = d.open; else if (d.open) ui.closed.delete(id); else ui.closed.add(id);
+    if (id === 'advanced') ui.advanced = d.open; else if (d.open) { ui.closed.delete(id); ui.opened.add(id); } else { ui.closed.add(id); ui.opened.delete(id); }
   }, true);
 
   el.addEventListener('change', async (ev) => {
@@ -600,6 +618,44 @@ function wire(ctx, el) {
       await run('add-axis', s.component, [edit], { clear: ids, close: ['axis'] });
     }
   });
+
+  // ---- font picker: a popover of family names, each drawn in its own face ----
+  const pop = document.createElement('div');
+  pop.id = 'fontpop'; pop.setAttribute('role', 'listbox'); pop.setAttribute('aria-label', 'Fonts'); pop.hidden = true; document.body.append(pop);
+  let popFor = null;
+  const closeFonts = () => { pop.hidden = true; popFor = null; };
+  function openFonts(input, filter = '') {
+    popFor = input;
+    const q = filter.trim().toLowerCase(), cur = famName(curVal('fontFamily'));
+    const names = fontNames(ctx).filter((n) => !q || n.toLowerCase().includes(q));
+    pop.innerHTML = names.length ? names.map((n) => `<button type="button" role="option" aria-selected="${n === cur}" data-font="${esc(n)}" style="font-family: ${/\s/.test(n) ? `'${esc(n)}'` : esc(n)}, system-ui">${esc(n)}${GENERIC.includes(n) ? '<small>generic</small>' : ''}</button>`).join('') : '<p class="hint">No match. Press Enter to use it as typed.</p>';
+    const r = input.getBoundingClientRect();
+    Object.assign(pop.style, { left: `${r.left}px`, top: `${r.bottom + 4}px`, width: `${Math.max(r.width, 200)}px` });
+    pop.hidden = false;
+  }
+  el.addEventListener('focusin', (ev) => { if (ev.target.dataset?.picker === 'font') openFonts(ev.target); });
+  el.addEventListener('input', (ev) => { if (ev.target.dataset?.picker === 'font') openFonts(ev.target, ev.target.value); });
+  el.addEventListener('keydown', (ev) => {
+    if (ev.target.dataset?.picker !== 'font') return;
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); pop.querySelector('button')?.focus(); }
+    else if (ev.key === 'Escape') { closeFonts(); }
+    else if (ev.key === 'Enter') closeFonts();
+  });
+  pop.addEventListener('keydown', (ev) => {
+    const items = [...pop.querySelectorAll('button')], i = items.indexOf(document.activeElement);
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); items[Math.min(i + 1, items.length - 1)]?.focus(); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); if (i <= 0) popFor?.focus(); else items[i - 1].focus(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); const f = popFor; closeFonts(); f?.focus(); }
+  });
+  pop.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button[data-font]');
+    if (!b || !popFor) return;
+    const inp = popFor; closeFonts();
+    inp.value = b.dataset.font;
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  document.addEventListener('pointerdown', (ev) => { if (!pop.hidden && !ev.target.closest('#fontpop') && ev.target.dataset?.picker !== 'font') closeFonts(); }, true);
+  document.addEventListener('focusin', (ev) => { if (!pop.hidden && !ev.target.closest('#fontpop') && ev.target.dataset?.picker !== 'font') closeFonts(); });
 
   // ---- live preview while scrubbing or picking a colour: only the DOM moves; one edit is sent at the end ----
   let previewed = [];

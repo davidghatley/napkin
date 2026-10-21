@@ -54,7 +54,7 @@ test('person on the canvas and agent over MCP edit the Card together', { timeout
       const card = sec.querySelector('[data-n="card"]'), title = sec.querySelector('[data-n="title"]');
       return card && title && getComputedStyle(card).paddingTop === '28px' && getComputedStyle(title).fontWeight === '600';
     })()`, 3000);
-    await browser.waitFor(`document.querySelector("#padding").value === "28px"`, 2000);
+    await browser.waitFor(`document.querySelector("#padding").value === "28"`, 2000);
     const rev = await browser.eval('document.querySelector(\'section[data-name="Card"]\').dataset.revision');
     assert.equal(await browser.eval('document.querySelector("#overlay-select").style.display'), 'block', 'selection outline survives the re-render');
     log('canvas', `shows padding 28px and title weight 600 (revision ${rev}, settled ${ms} ms after both edits)`);

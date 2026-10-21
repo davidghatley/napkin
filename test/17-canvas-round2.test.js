@@ -115,6 +115,41 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await reset();
     });
 
+    await t.test('one colour field (swatch | hex | %) with the eye and minus after it; swatches have an outline', async () => {
+      assert.equal(await q(`document.querySelector('#background').closest('.colorbox').contains(document.querySelector('#fill-a'))`), true);
+      assert.equal(await q(`!!document.querySelector('#background').closest('.crow').querySelector('#eye-fill') && !!document.querySelector('#remove-fill')`), true);
+      assert.notEqual(await q(`getComputedStyle(document.querySelector('.swatch')).boxShadow`), 'none');
+      assert.equal(await q(`document.querySelector('#side-Top').title`), 'Top');
+      assert.equal(await q(`document.querySelector('#side-all').title`), 'All sides');
+    });
+
+    await t.test('absent fill, stroke and shadow are chips in one Add row, not empty sections', async () => {
+      await select('Card', 'title');
+      assert.equal(await q(`document.querySelectorAll('.addrow .addchip').length`), 3);
+      assert.equal(await q(`!!document.querySelector('[data-sec=fill]')`), false);
+      assert.equal(await q(`[...document.querySelectorAll('details.sec')].slice(0, 1).map((d) => d.dataset.sec)[0]`), 'type', 'a text node starts with Text');
+      assert.equal(await q(`document.querySelector('[data-sec=layout]').open`), false, 'Layout starts collapsed on a text node');
+      await select('Button', 'root', { size: 'md', state: 'default' });
+    });
+
+    await t.test('one unit convention: a px string shows as a number plus px, and keeps its spelling', async () => {
+      await select('Card', 'card');
+      assert.equal(await q(`document.querySelector('#borderRadius').value`), '12');
+      assert.equal(await q(`document.querySelector('#borderRadius').closest('.fbox').querySelector('.unit').textContent`), 'px');
+      const r0 = await rev('Card');
+      await browser.type('#borderRadius', '20');
+      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      assert.equal(getValue(doc('Card'), 'card.borderRadius'), '20px');
+      await reset('Card');
+      await select('Button', 'root', { size: 'md', state: 'default' });
+    });
+
+    await t.test('equal field heights and scrub labels advertise themselves', async () => {
+      const hs = JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('#panel .fbox')].map((e) => Math.round(e.getBoundingClientRect().height)))`));
+      assert.ok(hs.length > 8 && new Set(hs).size === 1, `fbox heights ${[...new Set(hs)]}`);
+      assert.equal(await q(`getComputedStyle(document.querySelector('label[data-scrub=borderRadius]')).cursor`), 'ew-resize');
+    });
+
     await t.test('width and height are one row each, and "Auto" has no unit', async () => {
       assert.equal(await q(`document.querySelector('#width').closest('.sizerow').contains(document.querySelector('#size-width-fixed'))`), true);
       assert.equal(await q(`!!document.querySelector('#width').closest('.fbox').querySelector('.unit')`), false);
@@ -131,7 +166,11 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     await t.test('fonts read as a name, and a picked family keeps the fallback stack', async () => {
       await select('Card', 'card');
       assert.equal(await q(`document.querySelector('#fontFamily').value`), 'Georgia');
-      assert.ok(await q(`document.querySelectorAll('#fontlist option').length > 5`), 'a list of faces to pick from');
+      await q(`document.querySelector('#fontFamily').focus()`);
+      await browser.waitFor(`!document.querySelector('#fontpop').hidden`);
+      assert.ok(await q(`document.querySelectorAll('#fontpop button').length > 5`), 'a list of faces to pick from');
+      assert.match(await q(`document.querySelector('#fontpop button[data-font="Georgia"]').style.fontFamily`), /Georgia/, 'each name is drawn in its own face');
+      await q(`document.querySelector('#fontFamily').blur()`);
       const r0 = await rev('Card');
       await browser.type('#fontFamily', 'Inter Var');
       await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
@@ -156,6 +195,31 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await browser.waitFor(`document.querySelector('#error').textContent !== ''`);
       assert.equal(await q(`document.querySelector('#error').textContent`), 'That id is already used');
       assert.equal(await q(`document.activeElement?.dataset.node`), 'body', 'focus is back on the row');
+    });
+
+    await t.test('layers: the eye hides a node with one visibility line and a hidden node stays marked', async () => {
+      const row = (node) => `document.querySelector('#layers [data-component="' + napkin.find('Card').component + '"][data-node="${node}"]')`;
+      const r0 = await rev('Card');
+      await q(`${row('image')}.querySelector('.leye').click()`);
+      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      assert.equal(getValue(doc('Card'), 'image.visibility'), 'hidden');
+      await browser.waitFor(`${row('image')}.classList.contains('hidden-node') && getComputedStyle(${row('image')}.querySelector('.leye')).display !== 'none'`);
+      assert.equal(await q(`getComputedStyle(document.querySelector('section[data-name="Card"] [data-n="image"]')).visibility`), 'hidden');
+      await q(`${row('image')}.querySelector('.leye').click()`);
+      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 2}`);
+      assert.equal(getValue(doc('Card'), 'image.visibility'), undefined);
+    });
+
+    await t.test('layers: rows are 28 px, the menu says why an item is disabled, the grip shows on hover', async () => {
+      const row = (node) => `document.querySelector('#layers [data-component="' + napkin.find('Card').component + '"][data-node="${node}"]')`;
+      assert.equal(await q(`Math.round(${row('title')}.getBoundingClientRect().height)`), 28);
+      await q(`${row('card')}.querySelector('.lmore').click()`);
+      await browser.waitFor(`!document.querySelector('#lmenu').hidden`);
+      assert.match(await q(`document.querySelector('#lmenu [data-do=delete]').textContent`), /root can.t be deleted/);
+      await io.key('Escape');
+      const c = await centerOf(browser, row('title'));
+      await io.move(c.x, c.y);
+      await browser.waitFor(`getComputedStyle(${row('title')}.querySelector('.lgrip')).display !== 'none'`);
     });
 
     await t.test('layers: the row menu renames, duplicates and deletes', async () => {
