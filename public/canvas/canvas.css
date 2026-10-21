@@ -68,3 +68,18 @@ input:disabled { opacity: .5; }
 #panel .axis h3 { margin: 0; font: 600 13px ui-monospace, monospace; }
 #panel .mono, #panel code { font: 12px ui-monospace, monospace; }
 .field-error { margin: 0; padding: 4px 8px; border-left: 4px solid var(--accent); background: #c8553d1a; font: 12px/1.4 ui-monospace, monospace; color: #8a2d1a; }
+
+/* M4 tools: toolbar, new-component field, rubber band, inline text editor */
+#toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
+#toolbar button { font: 600 13px/1 ui-sans-serif, system-ui, sans-serif; padding: 6px 10px; border: 2px solid var(--ink); border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }
+#toolbar button[aria-pressed="true"] { background: var(--ink); color: #fffdf7; }
+#toolbar button:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+#toolbar kbd { font: 11px ui-monospace, monospace; opacity: .7; margin-left: 4px; }
+#new-component { display: flex; gap: 6px; align-items: center; }
+#new-component[hidden] { display: none; }
+#new-component label { display: flex; align-items: center; gap: 6px; }
+#new-error { color: var(--accent); font: 12px ui-monospace, monospace; }
+body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n], body[data-tool="image"] .mount [data-n] { cursor: crosshair; }
+#draw-rect { position: fixed; z-index: 20; pointer-events: none; border: 1px dashed var(--select); background: #2f6df614; }
+#draw-rect[hidden] { display: none; }
+.text-edit { position: fixed; z-index: 30; padding: 0 4px; border: 2px solid var(--select); border-radius: 2px; background: #fff; }

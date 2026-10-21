@@ -47,7 +47,7 @@ function note(c) {
   const li = document.createElement('li');
   const name = ctx.state.components.get(c.component)?.name ?? c.component;
   li.className = 'by-' + c.by;
-  li.textContent = `${name} r${c.revision} ${c.by}: ` + (c.edits ? c.edits.map((e) => `${e.path ?? e.op} = ${JSON.stringify(e.value)}`).join(', ') : 'file changed on disk');
+  li.textContent = `${name} r${c.revision} ${c.by}: ` + (c.edits ? c.edits.map((e) => e.path ? `${e.path} = ${JSON.stringify(e.value)}` : `${e.op} ${e.node?.id ?? e.id ?? ''}`.trim()).join(', ') : 'file changed on disk');
   $('#log').prepend(li);
 }
 
