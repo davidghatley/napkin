@@ -66,14 +66,12 @@ test('50 renders: p95 < 500 ms, and the pixels match the canvas cell', { timeout
     await browser.goto(server.url);
     await browser.waitFor('document.body.dataset.ready === "1"', 15000);
     const lines = [];
-    // Known canvas bug (public/canvas/canvas.css line 8): `.cmp h3 { font: 600 16px/1 Georgia }` leaks into a component's own <h3>
-    // (Card's title gets line-height 1 here, but 1.4 in any real app). The render shows the component as an app would; neutralise the leak for the compare.
-    await browser.eval(`document.head.insertAdjacentHTML('beforeend', '<style>.cmp .mount h3 { font: inherit; }</style>')`);
+    // (the canvas resets the font on .frame, so components render as in an app; no neutralising style is needed)
     let worst = 0;
     for (const [name, v] of [...variants.map((x) => ['Button', x]), ['Card', {}]]) {
       const sel = `section[data-name="${name}"] figure.cell[data-variant='${JSON.stringify(v)}'] .mount > *`;
       // Line the cell up with the pixel grid (a fractional grid column would blur its edges differently from the render), then clip it.
-      const rect = await browser.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); e.scrollIntoView({block:'center',inline:'center'}); const sec=e.closest('section'); sec.style.marginLeft='0px'; let r=e.getBoundingClientRect(); sec.style.marginLeft=(-(r.left-Math.floor(r.left)))+'px'; sec.style.marginTop=(-(r.top-Math.floor(r.top)))+'px'; r=e.getBoundingClientRect(); return {x:r.left,y:r.top,width:Math.ceil(r.width),height:Math.ceil(r.height),scale:1}})()`);
+      const rect = await browser.eval(`(()=>{const e=document.querySelector(${JSON.stringify(sel)}); napkin.view.set({x:0,y:0,z:1}); const b0=napkin.view.stageBox(), q0=e.getBoundingClientRect(); napkin.view.set({x:Math.round(300-(q0.left-b0.left)),y:Math.round(300-(q0.top-b0.top)),z:1}); /* 100% zoom, cell near the top-left of the stage */ const sec=e.closest('section'); sec.style.marginLeft='0px'; let r=e.getBoundingClientRect(); sec.style.marginLeft=(-(r.left-Math.floor(r.left)))+'px'; sec.style.marginTop=(-(r.top-Math.floor(r.top)))+'px'; r=e.getBoundingClientRect(); return {x:r.left,y:r.top,width:Math.ceil(r.width),height:Math.ceil(r.height),scale:1}})()`);
       const shot = (await browser.send('Page.captureScreenshot', { format: 'png', clip: rect })).data;
       const mine = (await getPng(server.url, name, v)).buf.toString('base64');
       const cmp = await browser.eval(`(async()=>{

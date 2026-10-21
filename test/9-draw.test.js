@@ -114,13 +114,15 @@ test('draw a Card2 from nothing (N, F, T, I), reopen it identically, and render 
       const ib = await box(`${sec('Card2')}.querySelector('[data-n="image1"]')`);
       await mice.click(ib.x + 10, ib.y + 10);
       await browser.waitFor(`!!${sec('Card2')}.querySelector('[data-n="text2"]')`);
+      await browser.waitFor(`!!document.querySelector('.text-edit')`); // the editor opens a moment after the node lands
       await key('Escape'); // cancels the text edit
+      await browser.waitFor(`!document.querySelector('.text-edit')`);
       assert.deepEqual(index(await model()).parentOf.get('text2').children.map((c) => c.id), ['text1', 'image1', 'text2']);
       // Delete the extra one again so the demo Card is clean
       await q(`${sec('Card2')}.querySelector('[data-n="text2"]').click()`);
       await browser.waitFor(`document.querySelector('#sel-node')?.textContent.startsWith('text2')`);
       await key('Delete');
-      await browser.waitFor(`!${sec('Card2')}.querySelector('[data-n="text2"]')`);
+      await browser.waitFor(`!${sec('Card2')}.querySelector('[data-n="text2"]')`).catch(async (e) => { throw new Error(`${e.message}; sel=${await q('JSON.stringify(napkin.state.selections)')} err=${await q("document.querySelector('#error').textContent")} active=${await q('document.activeElement.outerHTML.slice(0,80)')}`); });
       // shift keeps the tool
       assert.equal(await q('document.body.dataset.tool'), 'select');
     });

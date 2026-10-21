@@ -39,6 +39,7 @@ const api = createApi(ws, { broadcast, dir });
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
+ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
 ws.events.on('added', async ({ component, by, summary }) => {
   const e = ws.find(component);
@@ -64,6 +65,7 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
   try {
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
+    if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
 
     if (req.method === 'GET' && path === '/api/events') {

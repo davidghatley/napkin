@@ -18,6 +18,7 @@ test('static: only src/commit.js writes component files; other fs writers in src
   const ALLOWED = {
     'commit.js': 'the commit path',
     'codecs.js': 'sidecar .napkin.json only',
+    'atomic-write.js': 'temp + fsync + rename helper that commit.js uses for sidecars (never a component .tsx)',
     'lock.js': '.napkin/lock files only',
     'render-png.js': "its own Chromium profile in the OS temp dir",
     'server.js': 'seeds a throwaway temp folder from fixtures before the workspace opens',

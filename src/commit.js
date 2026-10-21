@@ -4,6 +4,7 @@
 // and announces as a frame. Nothing else in src/ touches a component .tsx with fs.
 import { writeFileSync, renameSync, unlinkSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+import { writeFileAtomic } from './atomic-write.js';
 
 // Atomic replace of an existing component file (edits, hand-edit-safe).
 export function writeComponent(file, text) {
@@ -17,5 +18,5 @@ export function removeComponent(file) { unlinkSync(file); }
 // Move a component file to a new name, rewriting its text on the way (rename).
 export function moveComponent(from, to, text) { writeFileSync(to, text, { flag: 'wx' }); unlinkSync(from); }
 // Sidecar files (<Name>.napkin.json) travel with their component.
-export function writeSidecar(file, text) { writeFileSync(file, text); }
+export function writeSidecar(file, text) { writeFileAtomic(file, text); } // atomic: a kill mid-write never leaves a truncated sidecar
 export function removeSidecar(file) { try { unlinkSync(file); } catch {} }

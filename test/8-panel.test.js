@@ -17,7 +17,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
   const sec = (name) => `document.querySelector('section[data-name="${name}"]')`;
   const cells = (name) => `[...${sec(name)}.querySelectorAll('.cell')]`;
   const pads = (prop) => q(`Object.fromEntries(${cells('Button')}.map((c) => [c.dataset.variant, getComputedStyle(c.querySelector('[data-n="root"]'))[${JSON.stringify(prop)}]]))`);
-  const click = (sel) => q(`document.querySelector(${JSON.stringify(sel)}).click()`);
+  const click = async (sel) => { await browser.waitFor(`document.querySelector(${JSON.stringify(sel)})`); return q(`document.querySelector(${JSON.stringify(sel)}).click()`); };
   const doc = (name) => readComponent(readFileSync(fileOf(name), 'utf8')).doc;
   const numstat = () => git('diff', '--numstat').trim();
   const selectCell = async (n, i, node) => {
@@ -51,10 +51,10 @@ test('the panel edits base, variants, text settings, props and axes through the 
 
     await t.test('(b) an override in size=sm changes only the sm cells; dot and Reset to base', async () => {
       await selectCell('Button', await cellIndex({ size: 'md', state: 'hover' }), 'root');
-      assert.equal(await q(`document.querySelector('#target-variant').checked`), false);
+      assert.equal(await q(`document.querySelector('#scope').value`), 'base');
       await selectCell('Button', await cellIndex({ size: 'sm', state: 'default' }), 'root');
-      assert.equal(await q(`document.querySelector('#target-base').checked`), true, 'a new variant selection edits the base first');
-      await click('#target-variant');
+      assert.equal(await q(`document.querySelector('#scope').value`), 'base', 'a new variant selection edits the base first');
+      await q(`(() => { const s = document.querySelector('#scope'); s.value = 'variant'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
       await browser.waitFor(`document.querySelector('#sel-target').textContent === 'override size=sm'`);
       assert.equal(await q(`document.querySelector('#padding').value`), '4px 10px', 'shows the resolved value');
       assert.equal(await q(`!!document.querySelector('#dot-padding') && !!document.querySelector('#reset-padding')`), true);
@@ -81,10 +81,10 @@ test('the panel edits base, variants, text settings, props and axes through the 
 
     await t.test('override mode is unavailable on an all-base cell, and a two-axis cell lets you pick the axis', async () => {
       await selectCell('Button', await cellIndex({ size: 'md', state: 'default' }), 'root');
-      assert.equal(await q(`document.querySelector('#target-variant').disabled`), true);
+      assert.equal(await q(`document.querySelector('#scope option[value=variant]').disabled`), true);
       assert.match(await q(`document.querySelector('#target-note').textContent`), /all base values/);
       await selectCell('Button', await cellIndex({ size: 'sm', state: 'hover' }), 'root');
-      await click('#target-variant');
+      await q(`(() => { const s = document.querySelector('#scope'); s.value = 'variant'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
       await browser.waitFor(`document.querySelector('#override-axis')`);
       assert.equal(await q(`document.querySelector('#override-axis').value`), 'size', 'defaults to the first non-base axis');
       await q(`(() => { const s = document.querySelector('#override-axis'); s.value = 'state'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
