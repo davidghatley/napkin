@@ -4,7 +4,7 @@
 //   (dialect nodes if it fits exactly, else refused with the reason), or a line of text.
 //   ctx.ops = { duplicate, wrap, unwrap, copy(event?), paste(clipboardData), hide, last }  (`last` is the result of the latest paste, for tests)
 import { index, VOID } from '/src/model.js';
-import { htmlToNodes } from '/src/html-import.js';
+import { pasteHtml } from './html-paste.js';
 import { isFlex } from '/src/layout.js';
 
 const MIME = 'application/x-napkin+json';
@@ -134,7 +134,7 @@ export function initEditOps(ctx) {
     if (/^\s*<svg[\s>]/i.test(plain)) return pasteImage(t, 'image/svg+xml', new TextEncoder().encode(plain));
     const html = data.getData?.('text/html');
     if (html) {
-      const r = htmlToNodes(html);
+      const r = await pasteHtml(html);
       if (!r.ok) { ops.last = { ok: false, kind: 'html', reason: r.reason }; say(`Not pasted: ${r.reason}`); return null; }
       return insert(t, r.trees, null, 'html');
     }
