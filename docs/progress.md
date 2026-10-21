@@ -48,10 +48,10 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | TOK-03 | TOK | tokens | open |  |  |  |
 | TOK-04 | TOK | tokens | open |  |  |  |
 | TOK-05 | TOK | tokens | open |  |  |  |
-| OPN-01 | OPN | open | critic-pass | r2 pass: real causes + lines; "missing const base" wording | test/onboarding/open.test.js | 5f075b5 |
-| OPN-02 | OPN | open | critic-pass | r2 pass: errors contained, 0 overflow | docs/evidence/OPN-02-missing.png | 5f075b5 |
-| OPN-03 | OPN | open | critic-pass | r2 pass; converter formatting gap | test/onboarding/fix-round.test.js | 5f075b5 |
-| OPN-04 | OPN | open | critic-pass | r2 0/61 editable; address in 223 ms on 3674 files | docs/evidence/OPN-04.txt | 5f075b5 |
+| OPN-01 | OPN | open | pass | r2 pass: real causes + lines; "missing const base" wording | test/onboarding/open.test.js | ec22ab6 |
+| OPN-02 | OPN | open | pass | r2 pass: errors contained, 0 overflow | docs/evidence/OPN-02-missing.png | ec22ab6 |
+| OPN-03 | OPN | open | pass | r2 pass; converter formatting gap | test/onboarding/fix-round.test.js | ec22ab6 |
+| OPN-04 | OPN | open | pass | r2 0/61 editable; address in 223 ms on 3674 files | docs/evidence/OPN-04.txt | ec22ab6 |
 | AGT-01 | AGT | agents | pass | r2 pass: 10 tools, oneOf schema | test/mcp/schema.test.js | ed6ea70 |
 | AGT-02 | AGT | agents | pass | r2 pass: p95 82 ms; 8-way p95 335 ms | docs/evidence/AGT-02.txt | ed6ea70 |
 | AGT-03 | AGT | agents | building |  |  |  |
@@ -92,11 +92,11 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | FMT-05 | FMT | files | critic-pass | r1 pass 2000/2000 | docs/evidence/FMT-05.txt | 93e2d5a |
 | FMT-06 | FMT | files | critic-pass | r1 pass | test/invariants | 93e2d5a |
 | FMT-07 | FMT | files | critic-pass | r1 pass 0 lost | test/invariants/live-edit.test.js | 93e2d5a |
-| ONB-01 | ONB | open | critic-pass | r2 pass: first render 571 ms cold | test/onboarding/readme.test.js | 5f075b5 |
-| ONB-02 | ONB | open | critic-pass | r2 tie vs Paper canvas craft (no Paper empty-state ref) | docs/evidence/ONB-02-empty.png | 5f075b5 |
-| ONB-03 | ONB | open | critic-pass | r1 pass 20/20 handlers | test/onboarding/shortcuts.test.js | 44b9096 |
-| ONB-04 | ONB | open | critic-pass | r1 pass with gaps (syntax-error next step, jargon) | test/onboarding/errors.test.js | 44b9096 |
-| ONB-05 | ONB | open | critic-pass | r1 pass: README as written; MCP snippet connects | test/onboarding/readme.test.js | 44b9096 |
+| ONB-01 | ONB | open | pass | r2 pass: first render 571 ms cold | test/onboarding/readme.test.js | ec22ab6 |
+| ONB-02 | ONB | open | pass | r2 tie vs Paper canvas craft (no Paper empty-state ref) | docs/evidence/ONB-02-empty.png | ec22ab6 |
+| ONB-03 | ONB | open | pass | r1 pass 20/20 handlers | test/onboarding/shortcuts.test.js | ec22ab6 |
+| ONB-04 | ONB | open | pass | r1 pass with gaps (syntax-error next step, jargon) | test/onboarding/errors.test.js | ec22ab6 |
+| ONB-05 | ONB | open | pass | r1 pass: README as written; MCP snippet connects | test/onboarding/readme.test.js | ec22ab6 |
 | REL-01 | REL | files | critic-pass | r1 pass 200/200 | docs/evidence/INV-01-REL-01.txt | 93e2d5a |
 | REL-02 | REL | files | critic-pass | r1 pass; one lock at merge | test/invariants/lock.test.js | 93e2d5a |
 | REL-03 | REL | engine | building |  |  |  |
