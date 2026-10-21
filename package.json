@@ -19,5 +19,8 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "recast": "0.24.0"
+  },
+  "devDependencies": {
+    "axe-core": "4.13.0"
   }
 }

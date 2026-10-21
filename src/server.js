@@ -34,6 +34,7 @@ let agents = 0;
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
+ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
 ws.events.on('added', async ({ component }) => {
   const e = ws.find(component);
@@ -53,6 +54,7 @@ const server = createServer(async (req, res) => {
   const path = url.pathname;
   try {
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
+    if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
 
     if (req.method === 'GET' && path === '/api/events') {
@@ -101,12 +103,18 @@ const server = createServer(async (req, res) => {
       catch (err) { if (err instanceof CreateError) return json(res, err.status, { ok: false, error: err.message }); throw err; }
     }
     if (req.method === 'GET' && path === '/api/components') return json(res, 200, await ws.summary());
-    const m = path.match(/^\/api\/components\/([^/]+)(\/edits)?$/);
+    const m = path.match(/^\/api\/components\/([^/]+)(\/edits|\/canvas)?$/);
     const e = m && ws.find(decodeURIComponent(m[1]));
     if (!e) return json(res, 404, { ok: false, error: 'not found' });
     if (req.method === 'GET' && !m[2]) {
-      const { component, revision, doc, source, readOnly } = await ws.snapshot(e);
-      return json(res, 200, { component, revision, doc, source, ...(readOnly && { readOnly }) });
+      const { component, canvas, revision, doc, source, readOnly } = await ws.snapshot(e);
+      return json(res, 200, { component, canvas, revision, doc, source, ...(readOnly && { readOnly }) });
+    }
+    if (req.method === 'POST' && m[2] === '/canvas') {
+      let body = ''; for await (const chunk of req) body += chunk;
+      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
+      try { return json(res, 200, { ok: true, canvas: ws.setCanvas(e, Number(msg?.x), Number(msg?.y)) }); }
+      catch (err) { if (err instanceof CreateError) return json(res, 400, { ok: false, error: err.message }); throw err; }
     }
     if (req.method === 'POST' && m[2]) {
       let body = ''; for await (const chunk of req) body += chunk;

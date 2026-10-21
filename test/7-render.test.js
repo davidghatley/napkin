@@ -76,9 +76,9 @@ test('the canvas follows the files: grid, live edits, broken edits, branch switc
     });
 
     await t.test('hover outlines, click selects and the panel names component, node and variant', async () => {
-      await q(`${sec('Button')}.querySelectorAll('.cell')[3].querySelector('[data-n="label"]').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+      await q(`[...${sec('Button')}.querySelectorAll('.cell')].find((c) => c.dataset.variant === '{"size":"sm","state":"hover"}').querySelector('[data-n="label"]').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
       assert.equal(await q(`getComputedStyle(document.querySelector('#overlay-hover')).display`), 'block');
-      await q(`${sec('Button')}.querySelectorAll('.cell')[3].querySelector('[data-n="label"]').click()`);
+      await q(`[...${sec('Button')}.querySelectorAll('.cell')].find((c) => c.dataset.variant === '{"size":"sm","state":"hover"}').querySelector('[data-n="label"]').click()`);
       await browser.waitFor(`document.querySelector('#sel-node')?.textContent.startsWith('label')`);
       assert.equal(await q(`document.querySelector('#sel-component').textContent`), 'Button');
       assert.equal(await q(`document.querySelector('#sel-variant').textContent`), 'size=sm · state=hover');

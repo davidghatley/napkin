@@ -18,7 +18,8 @@ export async function connectCanvas(baseUrl, { by = 'canvas' } = {}) {
 
   const res = await fetch(new URL(`api/events?by=${encodeURIComponent(by)}`, baseUrl), { signal: ctrl.signal, headers: { accept: 'text/event-stream' } });
   const apply = (msg) => {
-    if (msg.type === 'state' || msg.type === 'added') comps.set(msg.component, { component: msg.component, name: msg.name, revision: msg.revision, doc: msg.doc, readOnly: msg.readOnly, problem: msg.problem });
+    if (msg.type === 'state' || msg.type === 'added') comps.set(msg.component, { component: msg.component, name: msg.name, canvas: msg.canvas, revision: msg.revision, doc: msg.doc, readOnly: msg.readOnly, problem: msg.problem });
+    else if (msg.type === 'canvas') { const c = comps.get(msg.component); if (c) c.canvas = msg.canvas; }
     else if (msg.type === 'change') { const c = comps.get(msg.component); if (c) Object.assign(c, { revision: msg.revision, doc: msg.doc, name: msg.doc.name, readOnly: undefined }); else comps.set(msg.component, { component: msg.component, name: msg.doc.name, revision: msg.revision, doc: msg.doc }); }
     else if (msg.type === 'problem') { const c = comps.get(msg.component); if (c) c.problem = msg.error || undefined; }
     else if (msg.type === 'removed') comps.delete(msg.component);

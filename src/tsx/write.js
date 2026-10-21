@@ -179,9 +179,42 @@ function dropInsertedBlankLines(original, out) {
   return keep.join('\n');
 }
 
+// A rename (model op `rename`) changes an id in place: same tree shape, different data-n. Finds the
+// old -> new ids by walking both trees together, renames them everywhere in the AST (data-n, s('id', v),
+// base and variants keys) and returns `before` with the new ids, so the rest of the diff sees no change.
+function applyRenames(parts, before, after) {
+  const map = new Map();
+  const was = index(before).byId, now = index(after).byId;
+  (function walk(a, c) {
+    if (a.tag !== c.tag || a.children.length !== c.children.length) return;
+    if (a.id !== c.id && !now.has(a.id) && !was.has(c.id)) map.set(a.id, c.id); // a reorder keeps both ids; a rename drops one and adds one
+    a.children.forEach((x, i) => walk(x, c.children[i]));
+  })(before.root, after.root);
+  if (!map.size) return before;
+  const to = (id) => map.get(id) ?? id;
+  (function el(e) {
+    for (const a of e.openingElement.attributes) {
+      const lit = a.name?.name === 'data-n' ? a.value : a.name?.name === 'style' ? a.value.expression.arguments[0] : null;
+      if (!lit || !map.has(lit.value)) continue;
+      const q = a.name.name === 'data-n' ? '"' : "'";
+      if (q === '"') a.value = raw(`"${to(lit.value)}"`); // verbatim, so the file keeps JSX double quotes
+      else { lit.value = to(lit.value); lit.extra = { rawValue: lit.value, raw: `${q}${lit.value}${q}` }; }
+    }
+    for (const c of e.children) if (c.type === 'JSXElement') el(c);
+  })(parts.jsx);
+  const rekey = (obj) => { for (const p of obj.properties) if (map.has(keyName(p.key))) p.key = key(to(keyName(p.key))); };
+  rekey(parts.base);
+  if (parts.variants) for (const axis of parts.variants.properties) for (const val of axis.value.properties) rekey(val.value);
+  const moved = structuredClone(before);
+  (function ids(n) { n.id = to(n.id); n.children.forEach(ids); })(moved.root);
+  for (const vals of Object.values(moved.variants)) for (const nodes of Object.values(vals)) for (const id of Object.keys(nodes)) if (map.has(id)) { nodes[to(id)] = nodes[id]; delete nodes[id]; }
+  return moved;
+}
+
 // Patch `ast` (from readComponent, parsed from `original`) from model `before` to model `after`; returns the new text.
 export function writeComponent(ast, before, after, original) {
   const parts = locate(ast);
+  before = applyRenames(parts, before, after);
   if (!same(before.props, after.props)) syncProps(ast, parts, before, after);
   const bb = baseMap(before), ba = baseMap(after);
   if (!same(bb, ba)) {

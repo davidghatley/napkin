@@ -9,7 +9,7 @@ import { readdirSync, watch, writeFileSync, existsSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { openStore } from './store.js';
-import { readSidecar } from './codecs.js';
+import { readSidecar, sidecarPath } from './codecs.js';
 import { createBundler } from './bundle.js';
 import { newComponentSource } from './tsx/write.js';
 import { TAGS, VOID } from './model.js';
@@ -85,9 +85,19 @@ export async function openWorkspace(dir, { only } = {}) {
     // What a client needs to draw one component right now.
     async snapshot(e) {
       const r = await e.store.read();
-      return { component: e.id, name: e.name, revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
+      return { component: e.id, name: e.name, canvas: readSidecar(e.file, e.name).canvas ?? { x: 0, y: 0 }, revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
     },
     async bundle(e) { return e.built; },
+    // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
+    setCanvas(e, x, y) {
+      const ok = (n) => Number.isFinite(n) && Math.abs(n) <= 1e6;
+      if (!ok(x) || !ok(y)) throw new CreateError('canvas x and y must be numbers');
+      const side = readSidecar(e.file, e.name);
+      const canvas = { x: Math.round(x), y: Math.round(y) };
+      writeFileSync(sidecarPath(e.file), JSON.stringify({ ...side, canvas }, null, 2) + '\n');
+      events.emit('canvas', { component: e.id, canvas });
+      return canvas;
+    },
     // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
     // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.
     async create(name, rootTag = 'div') {
