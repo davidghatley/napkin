@@ -13,7 +13,9 @@ import { ROOT, tempRepo, startServer, startMcp, sleep } from '../helpers/harness
 
 const SPY = join(ROOT, 'test', 'helpers', 'fs-spy.mjs');
 const readLog = (f) => (existsSync(f) ? readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
-const classify = (e) => (/at (?:Object\.)?applyNow \(file:\/\/.*\/src\/store\.js/.test(e.stack) ? 'apply' : /at createComponentFile \(file:\/\/.*\/src\/store\.js/.test(e.stack) ? 'create' : 'outside');
+// After the merge the only writer is src/commit.js; on this branch it is src/store.js (applyNow, createComponentFile).
+const WRITER = /(?:src\/store\.js|src\/commit\.js)/;
+const classify = (e) => (/at (?:Object\.)?applyNow \(file:\/\/.*\/src\/(?:store|commit)\.js/.test(e.stack) ? 'apply' : /at createComponentFile \(file:\/\/.*\/src\/(?:store|commit)\.js/.test(e.stack) ? 'create' : 'outside');
 
 test('INV-05: .tsx writes by a running server come only from store.apply (and createComponentFile for a new file)', async () => {
   const { compDir, fileOf } = tempRepo(['Card', 'Button']);

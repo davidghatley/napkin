@@ -8,7 +8,7 @@ export function rng(seed) { return () => ((seed = (seed * 1664525 + 1013904223) 
 const PROPS = ['padding', 'gap', 'borderRadius', 'background', 'color', 'fontSize', 'margin', 'width'];
 const VALUES = [0, 4, 8, 12, 16, '1px solid #000', '#2236b0', '50%', 'auto', '8px 16px', -2];
 const TAGS = ['div', 'span', 'img', 'p', 'button', 'small'];
-const KINDS = ['set', 'set', 'set', 'override', 'override', 'insert', 'delete', 'move', 'text', 'bind', 'variant', 'removeVariant', 'attr', 'unset', 'addProp', 'removeProp', 'setDefault', 'insert', 'insert', 'cleartext'];
+const KINDS = ['set', 'set', 'set', 'override', 'override', 'insert', 'delete', 'move', 'text', 'bind', 'variant', 'removeVariant', 'attr', 'unset', 'addProp', 'removeProp', 'setDefault', 'insert', 'insert', 'cleartext', 'renameProp', 'renameVariant'];
 
 export function randomEdit(doc, rand, n) {
   const pick = (a) => a[Math.floor(rand() * a.length)];
@@ -45,6 +45,8 @@ export function randomEdit(doc, rand, n) {
     const p = pick(doc.props);
     if (p) edit = { op: 'setDefault', name: p.name, value: p.type === 'string' ? pick(['Go', 'Save', 'x y']) : p.type === 'boolean' ? rand() < 0.5 : pick(p.options) };
   }
+  if (kind === 'renameProp') { const p = pick(doc.props); if (p) edit = { op: 'renameProp', name: p.name, to: `r${n}` }; }
+  else if (kind === 'renameVariant') { const a = pick(axesNow); const val = a && pick(a.options); if (val) edit = { op: 'renameVariant', axis: a.name, value: val, to: `w${n}` }; }
   return edit ? { kind, edit } : null;
 }
 

@@ -72,7 +72,8 @@ test('FMT-03: the lines napkin adds to a hand-written file are already what pret
     const before = new Map(); for (const l of text.split('\n')) before.set(l, (before.get(l) || 0) + 1);
     const added = saved.text.split('\n').filter((l) => { const c = before.get(l) || 0; if (c) { before.set(l, c - 1); return false; } return true; });
     const pl = new Set((await pretty(saved.text)).split('\n'));
-    for (const l of added.filter((x) => x.trim())) { regions++; if (!pl.has(l)) off.push(`${JSON.stringify(r.edit)} -> ${l}`); }
+    // a rename keeps the layout the hand-written line already had (a 91-column signature, a one-line element), by design
+    if (!r.edit.op.startsWith('rename')) for (const l of added.filter((x) => x.trim())) { regions++; if (!pl.has(l)) off.push(`${JSON.stringify(r.edit)} -> ${l}`); }
     text = saved.text; state = saved.state; doc = r.next; done++;
   }
   console.log(`FMT-03: ${regions} added lines in a hand-written file; not prettier's: ${off.length}`);

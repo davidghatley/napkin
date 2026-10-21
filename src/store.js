@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { codecFor, readSidecar, writeSidecar } from './codecs.js';
 import { writeAtomic, cleanStaleTmp } from './atomic.js';
+import { writeFileAtomic } from './atomic-write.js';
 
 // Syntax errors from the parser carry loc.line but not "line N:" in the message; dialect errors already do.
 // Every reason names a line (INV-04); a file-level problem with no line of its own says line 1.
@@ -91,7 +92,7 @@ export async function openStore(file) {
     try { saved = codec.save(state, doc, next); }
     catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }
     if (dryRun) return { ok: true, dryRun: true, revision, doc: next, source: saved.text };
-    if (saved.text !== text) writeAtomic(file, saved.text); // a batch that changes nothing leaves the file (and its mtime) alone
+    if (saved.text !== text) writeFileAtomic(file, saved.text); // a batch that changes nothing leaves the file (and its mtime) alone
     text = saved.text; state = saved.state;
     commit(next, keys, by, edits, origin);
     return { ok: true, revision, doc };

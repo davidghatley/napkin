@@ -16,6 +16,9 @@ export const variantLines = (doc) => Object.values(doc.variants || {}).reduce((a
 const axes = (doc) => doc.props.filter((p) => p.type === 'enum').map((p) => p.name);
 const pos = (n) => Math.max(n, 0);
 
+// Lines of the text that contain the word (a prop name or a variant value).
+const namingLines = (text, word) => text.split(/\r?\n/).filter((l) => new RegExp(`(^|[^\\w-])${word.replace(/[-]/g, '\\-')}([^\\w-]|$)`).test(l)).length;
+
 // Extra lines a tag takes because its attributes are one per line (it did not fit in 80 columns).
 const extraTag = (text, id) => tagLines(text, id) - 1;
 
@@ -106,6 +109,10 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
       }
       const had = A.get(id).style[prop] !== undefined;
       return { add: pos(dB) + (had && edit.value !== null ? 1 : 0), del: pos(-dB) + (had && edit.value !== null ? 1 : 0) };
+    }
+    case 'renameProp': case 'renameVariant': { // only the lines that name it (and the parameter list, if the new name makes it break or fit on one line)
+      const n = namingLines(ctx.textBefore, edit.name ?? edit.value);
+      return pA === pB ? { add: n, del: n } : { add: n + pA - 1, del: n + pB - 1 };
     }
     case 'setDefault': return pc; // one line, or the whole parameter list when it now fits on one line (or no longer does)
     case 'addProp': return { add: 1 + pc.add, del: pc.del }; // an interface member + the parameter list

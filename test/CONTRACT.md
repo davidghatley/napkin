@@ -1,6 +1,6 @@
 # Contract (what the acceptance tests rely on)
 
-The 18 Oct spike's JSON format, `src/format.js`, `src/edits.js`, `src/render.js` and `fixtures/Card/Card.json` are gone (M2); tests 1-5 now run on the TSX fixtures. The store section below is the commit path from the spike; the server, canvas client, MCP and page are specified in "First build". Revisions are opaque (number or string); tests only compare them for equality.
+The 18 Oct spike's JSON format, `src/format.js`, `src/edits.js`, `src/render.js` and `fixtures/Card/Card.json` are gone (M2); tests 1-5 now run on the TSX fixtures. The store section below is the commit path from the spike; the server, canvas client, MCP and page are specified in "First build". Revisions are opaque (a string; tests only compare them for equality). Today a revision is the first 16 hex digits of the sha256 of the file's bytes (HIS-04), so it survives a server restart.
 
 ## `src/store.js` (F02 + F03 commit path)
 `export async function openStore(file)` resolves to:
@@ -49,3 +49,15 @@ The 18 Oct spike's JSON format, `src/format.js`, `src/edits.js`, `src/render.js`
 ## Drawing (M4, F11 canvas side + F12)
 - `workspace.create(name, rootTag = 'div')` -> `{ id, name }`; throws `CreateError` (`status` 400 for a bad name, 409 when the name exists). `POST /api/components { name, rootTag? }` -> 201 `{ ok: true, id, name }` or `{ ok: false, error }` with that status.
 - `public/canvas/tools.js`: `#toolbar` with `button[data-tool=select|frame|text|image][aria-pressed]` (shortcuts V F T I), `#tool-new` (N) opening `form#new-component` (`input#new-name`, `#new-error`). A click or drag inside a rendered component inserts `frame<N>` / `text<N>` / `image<N>` into the base. Delete removes the selected node, Alt+Up/Down moves it among its siblings. Shortcuts never fire while an input has focus. `body[data-tool]` (also) names the active tool.
+
+## Files lane (round 1): format, durability, one commit path
+- **Revisions are content hashes** (`revisionOf(text)` in `src/store.js`). The same bytes always give the same revision; a batch that changes nothing leaves the file and revision alone. An edit based on a revision that is not in the (in-memory) history is `stale revision`; after a restart only the current revision is known.
+- **Writes** go through `src/atomic.js` (`writeAtomic`; `src/atomic-write.js` exports `writeFileAtomic(path, text)`): temp file in the same folder, fsync, rename, fsync of the folder. `{ exclusive: true }` creates only (link; `EEXIST` if present). Stale temp files of dead PIDs are removed when a store opens.
+- **Component writes happen in two places only**: `applyNow` (via `store.apply`) and `createComponentFile` (new file, exclusive; `workspace.create` and the demo-fixture seeding call it). `test/invariants/one-path.test.js` proves it with an fs spy; after the merge the single writer is `src/commit.js`.
+- **A hand edit is absorbed first**: `store.apply` re-reads the file and takes in an outside change as a `by: "file"` revision before judging the batch (a broken or out-of-dialect file on disk answers `read-only: ... line N ...`). A 400 ms poll backs up the directory watcher.
+- **Read-only reasons always name a line** (`line N: ...`).
+- **`store.moveCanvas(x, y)`** and `POST /api/components/:idOrName/canvas {x, y}` write the sidecar only (also for read-only components); `canvas` events `{ component, canvas }` on the workspace and SSE. The sidecar is written in one canonical form (sorted keys, 2 spaces, trailing newline).
+- **Server lock**: `<folder>/.napkin/server.lock` `{ pid, url }`; a second server exits 1 with a message naming the PID; a lock of a dead PID is taken over. (The agents lane has its own `.napkin/lock`; the merge keeps theirs.)
+- **New ops**: `renameProp {name, to}`, `renameVariant {axis, value, to}`. Empty text is no text. Style edits need a real CSS property name and number values only where `CSSProperties` takes numbers (`src/css-props.js`).
+- **Dialect additions to the checks**: the `s` helper must be exactly the canonical one; `const v` must exist; props may not be renamed in the destructuring; the component must be a plain function.
+- Tests: `test/invariants/*.test.js` (see their headers); env flags `TRIALS`, `REL`, `FUZZ`, `OPS`, `HAND_OPS`, `FMT03`.

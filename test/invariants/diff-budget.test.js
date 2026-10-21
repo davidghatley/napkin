@@ -40,6 +40,10 @@ const TABLE = [
   ['override: a new node block in an existing value', 'Button', [{ op: 'set', path: 'label.color', value: '#fff', variant: { size: 'sm' } }], [3, 0]],
   ['override: a new value block', 'Button', [{ op: 'addVariant', axis: 'size', value: 'xs' }, { op: 'set', path: 'root.gap', value: 2, variant: { size: 'xs' } }], [1 + 5, 1]],
   ['override: remove one of several properties', 'Button', [{ op: 'set', path: 'root.fontSize', value: null, variant: { size: 'sm' } }], [0, 1]],
+  ['rename a prop: the interface member, the parameter, the element that shows it', 'Button', [{ op: 'renameProp', name: 'label', to: 'caption' }], [3, 3]],
+  ['rename a variant axis: member, parameter, `const v`, the variants key', 'Button', [{ op: 'renameProp', name: 'size', to: 'scale' }], [4, 4]],
+  ['rename a variant value (not the base): the union line and the override key', 'Button', [{ op: 'renameVariant', axis: 'size', value: 'sm', to: 'small' }], [2, 2]],
+  ['rename the base value of an axis: the union line and the default', 'Button', [{ op: 'renameVariant', axis: 'size', value: 'md', to: 'medium' }], [2, 2]],
   ['move a node (its JSX line)', 'Card', [{ op: 'move', id: 'body', parent: 'card', index: 0 }], [1, 1]],
 ];
 
