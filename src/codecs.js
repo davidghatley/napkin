@@ -22,15 +22,18 @@ export function readSidecar(file, name) {
 export const tsxCodec = {
   kind: 'napkin/1',
   load(text, file) {
-    const { doc, ast } = readComponent(text);
+    const { doc } = readComponent(text);
     const side = file ? readSidecar(file, doc.name) : { id: `cmp_${doc.name}` };
-    return { doc: { ...doc, id: side.id }, state: { ast, text } };
+    return { doc: { ...doc, id: side.id }, state: { text } };
   },
+  // The writer patches an AST in place, so every save parses its own from the last good text:
+  // a failed or dry-run save can't leave the live state half-patched.
   save(state, before, after) {
     const strip = ({ id, ...rest }) => rest;
-    const text = writeComponent(state.ast, strip(before), strip(after), state.text);
-    const { ast } = readComponent(text); // fresh AST and locations for the next edit
-    return { text, state: { ast, text } };
+    const { ast } = readComponent(state.text);
+    const text = writeComponent(ast, strip(before), strip(after), state.text);
+    readComponent(text); // must still be in the dialect, or the save is refused
+    return { text, state: { text } };
   },
   applyEdits: model.applyEdits,
   touched: model.touched,

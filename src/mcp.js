@@ -12,7 +12,13 @@ const editSchema = { type: 'object', description: '{op:"set",path:"<nodeId>.<css
 const TOOLS = [
   { name: 'list_components', description: 'List the napkin components in this folder: [{ id, name, readOnly? }].', inputSchema: { type: 'object', properties: {} } },
   { name: 'read_component', description: 'Read a component: its document tree, current revision and the TSX source text (readOnly says why a file cannot be edited).', inputSchema: { type: 'object', properties: { component: { type: 'string' } }, required: ['component'] } },
-  { name: 'apply_edits', description: 'Apply a batch of edits, all or nothing, against baseRevision. Fails with "stale revision" if a property you touch changed since; read again and retry.', inputSchema: { type: 'object', properties: { component: { type: 'string' }, baseRevision: {}, edits: { type: 'array', items: editSchema } }, required: ['component', 'baseRevision', 'edits'] } },
+  { name: 'apply_edits', description: 'Apply a batch of edits, all or nothing, against baseRevision. Fails with "stale revision" if a property you touch changed since; read again and retry. dryRun: true validates and returns the would-be TSX source without writing.', inputSchema: { type: 'object', properties: { component: { type: 'string' }, baseRevision: {}, edits: { type: 'array', items: editSchema }, dryRun: { type: 'boolean' } }, required: ['component', 'baseRevision', 'edits'] } },
+  { name: 'add_variant', description: 'Add a value to a variant axis (creating the axis if needed, with base value "default" unless given), optionally with style overrides per node, e.g. { component: "Button", baseRevision, axis: "size", value: "xl", overrides: { root: { padding: "14px 28px" } } }.', inputSchema: { type: 'object', properties: { component: { type: 'string' }, baseRevision: {}, axis: { type: 'string' }, value: { type: 'string' }, base: { type: 'string' }, overrides: { type: 'object' }, dryRun: { type: 'boolean' } }, required: ['component', 'baseRevision', 'axis', 'value'] } },
+];
+
+const variantEdits = (a) => [
+  { op: 'addVariant', axis: a.axis, value: a.value, ...(a.base ? { base: a.base } : {}) },
+  ...Object.entries(a.overrides || {}).flatMap(([node, style]) => Object.entries(style).map(([prop, value]) => ({ op: 'set', path: `${node}.${prop}`, value, variant: { [a.axis]: a.value } }))),
 ];
 
 let live = null; // the SSE subscription, opened lazily so the agent works even if started first
@@ -29,11 +35,12 @@ async function callTool(name, a = {}) {
   const c = encodeURIComponent(a.component ?? '');
   if (name === 'list_components') return api('api/components');
   if (name === 'read_component') return api(`api/components/${c}`);
-  if (name === 'apply_edits') {
+  if (name === 'apply_edits' || name === 'add_variant') {
     const { origin } = await subscribe();
-    const r = await api(`api/components/${c}/edits`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: a.baseRevision, edits: a.edits, by: 'agent', origin }) });
+    const edits = name === 'add_variant' ? variantEdits(a) : a.edits;
+    const r = await api(`api/components/${c}/edits`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: a.baseRevision, edits, by: 'agent', origin, dryRun: !!a.dryRun }) });
     if (!r.ok) throw new Error(r.error);
-    return { revision: r.revision };
+    return r.dryRun ? { dryRun: true, revision: r.revision, source: r.source } : { revision: r.revision };
   }
   throw new Error(`unknown tool ${name}`);
 }
@@ -45,7 +52,7 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
   if (id === undefined) return; // notifications from the client
   if (method === 'initialize') {
     subscribe().catch(() => {});
-    return send({ id, result: { protocolVersion: '2025-06-18', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'napkin', version: '0.1.0-m2' } } });
+    return send({ id, result: { protocolVersion: '2025-06-18', capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'napkin', version: '0.1.0' } } });
   }
   if (method === 'ping') return send({ id, result: {} });
   if (method === 'tools/list') return send({ id, result: { tools: TOOLS } });

@@ -39,7 +39,8 @@ export async function openStore(file) {
     writeFileSync(tmp, t); renameSync(tmp, file); text = t;
   };
 
-  function applyNow({ baseRevision, edits, by = 'unknown', origin }) {
+  // dryRun: validate and produce the would-be file without writing or committing (F19).
+  function applyNow({ baseRevision, edits, by = 'unknown', origin, dryRun = false }) {
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
     const base = history.find((h) => h.revision === baseRevision);
     if (!base) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})` };
@@ -56,6 +57,7 @@ export async function openStore(file) {
     let saved;
     try { saved = codec.save(state, doc, next); }
     catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }
+    if (dryRun) return { ok: true, dryRun: true, revision, doc: next, source: saved.text };
     writeFile(saved.text); state = saved.state;
     commit(next, keys, by, edits, origin);
     return { ok: true, revision, doc };
