@@ -44,6 +44,8 @@ const TABLE = [
   ['rename a variant axis: member, parameter, `const v`, the variants key', 'Button', [{ op: 'renameProp', name: 'size', to: 'scale' }], [4, 4]],
   ['rename a variant value (not the base): the union line and the override key', 'Button', [{ op: 'renameVariant', axis: 'size', value: 'sm', to: 'small' }], [2, 2]],
   ['rename the base value of an axis: the union line and the default', 'Button', [{ op: 'renameVariant', axis: 'size', value: 'md', to: 'medium' }], [2, 2]],
+  ['rename a node id: its element line and its base block key', 'Card', [{ op: 'rename', id: 'title', to: 'heading' }], [2, 2]],
+  ['rename a node id that has overrides: element, base key, override keys', 'Button', [{ op: 'rename', id: 'root', to: 'frame' }], [5, 5]],
   ['move a node (its JSX line)', 'Card', [{ op: 'move', id: 'body', parent: 'card', index: 0 }], [1, 1]],
 ];
 

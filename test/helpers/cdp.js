@@ -29,6 +29,8 @@ export async function launchChromium({ width = 1100, height = 700 } = {}) {
   };
   const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
   await send('Page.enable'); await send('Runtime.enable');
+  // the window size includes browser chrome; pin the page itself to width x height so screenshots and layouts are exact
+  await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   const consoleLines = [];
   listeners.push((m) => { if (m.method === 'Runtime.consoleAPICalled') consoleLines.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); });
   const api = {
@@ -38,6 +40,7 @@ export async function launchChromium({ width = 1100, height = 700 } = {}) {
     async waitFor(expr, timeout = 5000) { const t0 = Date.now(); while (Date.now() - t0 < timeout) { try { if (await api.eval(expr)) return Date.now() - t0; } catch {} await sleep(25); } throw new Error(`timed out waiting for: ${expr}`); },
     // Type into an input like a person: focus, select all, type, then Tab away (fires change).
     async type(selector, text) {
+      await api.waitFor(`!!document.querySelector(${JSON.stringify(selector)})`);
       await api.eval(`(()=>{const e=document.querySelector(${JSON.stringify(selector)}); e.focus(); e.select(); return true})()`);
       await send('Input.insertText', { text });
       await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 });

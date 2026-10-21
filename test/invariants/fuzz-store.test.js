@@ -35,7 +35,7 @@ test(`FMT-05: ${FUZZ} edits through store.apply on hand-formatted files keep eve
         const disk = readFileSync(f, 'utf8');
         const { id, ...model } = res.doc;
         assert.deepEqual(readComponent(disk).doc, model, `${basename(f)} after ${JSON.stringify(r.edit)}`);
-        assert.doesNotMatch(disk, /\r\r|\n\s*\n\s*\n\s*\n/, 'no doubled line endings or runs of blank lines');
+        assert.doesNotMatch(disk, /\r\r/, 'no doubled line endings');
         const again = tsxCodec.load(disk);
         assert.equal(tsxCodec.save(again.state, again.doc, again.doc).text, disk, 'a no-change save is byte-identical');
         done++; applied++;

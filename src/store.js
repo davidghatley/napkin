@@ -28,6 +28,9 @@ const reason = (e) => {
 const HISTORY = 500; // revisions remembered for rebasing; older bases are "stale revision"
 const POLL_MS = 400; // safety net for a missed file-system event; FMT-07 wants a hand edit seen within 1 s
 
+// The answer for every write while the file on disk does not parse (a hand edit in progress): napkin never writes over it.
+export const brokenMessage = (file, why) => `${basename(file)} has a syntax error at ${/^line \d+/.exec(why)?.[0] ?? 'line 1'}; fix it (or undo the hand edit), then retry. napkin won't overwrite your text.`;
+
 export const revisionOf = (text) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
 // start: { by, summary } seeds the first history entry (create and rename record themselves there). (start.revision is
@@ -40,7 +43,8 @@ export async function openStore(file, start = {}) {
   let text = readFileSync(file, 'utf8');
   // A file napkin can't read fully opens read-only, with the reason (decision 0003, INV-06).
   let doc = null, state = null, readOnly = null;
-  try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = reason(e); }
+  let syntaxErr = null; // the reason, while the text on disk does not even parse (a hand edit in progress): nothing may overwrite it
+  try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = reason(e); if (e.loc) syntaxErr = readOnly; }
   let revision = revisionOf(text);
   const history = [{ revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now() }];
   let queue = Promise.resolve();
@@ -59,8 +63,9 @@ export async function openStore(file, start = {}) {
   // Returns an error string when the file on disk can't be absorbed (half-written or outside the dialect).
   function absorbDisk() {
     let t; try { t = readFileSync(file, 'utf8'); } catch { return null; }
-    if (t === text) { if (broken) problem(null); return null; } // back to the last good text (e.g. git restore)
-    let loaded; try { loaded = codec.load(t, file); } catch (e) { const r = reason(e); problem(r); return r; } // keep the last good doc
+    if (t === text) { if (broken) problem(null); return syntaxErr; } // back to the last good text (e.g. git restore)
+    let loaded; try { loaded = codec.load(t, file); } catch (e) { const r = reason(e); problem(r); syntaxErr = e.loc ? r : null; return r; } // keep the last good doc
+    syntaxErr = null;
     if (broken) problem(null);
     const keys = doc ? diffKeys(doc, loaded.doc) : new Set(['file']);
     text = t; state = loaded.state; readOnly = null;
@@ -82,8 +87,8 @@ export async function openStore(file, start = {}) {
   function applyOnce({ baseRevision, edits, by, origin, dryRun = false }) {
     // A hand edit that landed a moment ago must not be overwritten: take it in before judging this batch.
     const disk = absorbDisk();
+    if (disk && !dryRun) return { ok: false, error: brokenMessage(file, disk), problem: disk }; // (a dry run may still check the edit against the last good document)
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
-    if (disk) return { ok: false, error: `read-only: the file on disk is not valid right now (${disk}); fix or restore it, then try again` };
     // every revision names a real caller (AGT-05); a dry run makes none
     if (!dryRun && (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown')) return { ok: false, error: 'by is required: every revision names a real caller' };
     const safeTouched = (e) => { try { return touched(e); } catch { return new Set(); } };
@@ -138,6 +143,8 @@ export async function openStore(file, start = {}) {
     events,
     async read() { await queue; return { revision, doc, source: text, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
     apply(req) { const p = queue.then(() => applyNow(req)); queue = p.catch(() => {}); return p; },
+    // Look at the disk now; resolves null when the file is fine, else the reason it does not parse (file-level writes ask before they touch it).
+    sync() { const p = queue.then(() => absorbDisk()); queue = p.catch(() => {}); return p; },
     moveCanvas(x, y) { const p = queue.then(() => moveCanvas(x, y)); queue = p.catch(() => {}); return p; },
     // Recent revisions, newest first: [{ revision, by, summary, at, keys }].
     history(limit = 50) { return history.slice(-Math.max(1, limit)).reverse().map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, at: h.at, keys: [...h.keys] })); },

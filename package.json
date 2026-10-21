@@ -11,7 +11,8 @@
     "test": "node --test --test-concurrency=1 test/",
     "start": "node src/server.js --port 4810",
     "mcp": "node src/mcp.js",
-    "demo": "DEMO_OUT=docs/demo node --test test/10-demo.test.js"
+    "demo": "DEMO_OUT=docs/demo node --test test/10-demo.test.js",
+    "evidence:canvas": "EVIDENCE_OUT=docs/evidence node --test --test-force-exit test/14-canvas-look.test.js"
   },
   "dependencies": {
     "@babel/parser": "7.29.9",
@@ -28,6 +29,7 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "prettier": "3.9.9",
     "typescript": "6.0.3",
-    "typescript-eslint": "8.71.1"
+    "typescript-eslint": "8.71.1",
+    "axe-core": "4.13.0"
   }
 }

@@ -9,8 +9,8 @@ import { createHash } from 'node:crypto';
 import { axes } from './model.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// The page rules a component inherits on the canvas (public/canvas/canvas.css): box model, and the body font and colour.
-const HOST_CSS = '* { box-sizing: border-box; } body { font: 14px/1.4 ui-sans-serif, system-ui, sans-serif; color: #1f2a44; }';
+// The page rules a component inherits on the canvas (public/canvas/canvas.css): box model and the frame ink colour.
+const HOST_CSS = '* { box-sizing: border-box; } body { color: #1c1f27; }'; // the canvas resets the font on .frame, so a component sees the browser defaults, as in an app
 export class RenderError extends Error {}
 
 async function launch() {

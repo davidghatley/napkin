@@ -210,6 +210,7 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
       const n = namingLines(ctx.textBefore, edit.name ?? edit.value);
       return pA === pB ? { add: n, del: n } : { add: n + pA - 1, del: n + pB - 1 };
     }
+    case 'rename': { const n = namingLines(ctx.textBefore, edit.id); return { add: n, del: n }; } // a node id: every line that names it (data-n, base key, override keys)
     case 'setDefault': return pc; // one line, or the whole parameter list when it now fits on one line (or no longer does)
     case 'addProp': return { add: 1 + pc.add, del: pc.del }; // an interface member + the parameter list
     case 'removeProp': return { add: pc.add, del: 1 + pc.del };

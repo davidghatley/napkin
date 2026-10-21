@@ -365,10 +365,52 @@ function unrenameVariants(variants, renames) {
   return out;
 }
 
+// A node rename (the model's `rename {id, to}`) changes an id in place: the same tree with a different data-n. Found by walking
+// both trees together; a reorder keeps both ids, a rename drops one and adds one.
+function nodeRenames(before, after) {
+  const map = new Map();
+  const was = index(before).byId, now = index(after).byId;
+  (function walk(a, c) {
+    if (a.tag !== c.tag || a.children.length !== c.children.length) return;
+    if (a.id !== c.id && !now.has(a.id) && !was.has(c.id)) map.set(a.id, c.id);
+    a.children.forEach((x, i) => walk(x, c.children[i]));
+  })(before.root, after.root);
+  return map;
+}
+// The text with every renamed id changed where it appears: data-n, s('id', v), and the keys in base and variants. Only
+// those characters change (the quotes the file uses stay).
+function renameIds(text, map) {
+  const parts = locate(babelParse(text, { sourceType: 'module', plugins: ['typescript', 'jsx'] }));
+  const out = [];
+  const lit = (node, to) => out.push({ start: node.start, end: node.end, text: `${text[node.start]}${to}${text[node.start]}` });
+  (function el(e) {
+    for (const a of e.openingElement.attributes) {
+      const l = a.name?.name === 'data-n' ? a.value : a.name?.name === 'style' ? a.value.expression.arguments[0] : null;
+      if (l && map.has(l.value)) lit(l, map.get(l.value));
+    }
+    for (const c of e.children) if (c.type === 'JSXElement') el(c);
+  })(parts.jsx);
+  const rekey = (obj) => { for (const p of obj.properties) if (map.has(keyName(p.key))) out.push({ start: p.key.start, end: p.key.end, text: keySrc(map.get(keyName(p.key))) }); };
+  rekey(parts.base);
+  if (parts.variants) for (const axis of parts.variants.properties) for (const val of axis.value.properties) rekey(val.value);
+  let t = text;
+  for (const sp of out.sort((x, y) => y.start - x.start)) t = t.slice(0, sp.start) + sp.text + t.slice(sp.end);
+  return t;
+}
+function withNodeIds(doc, map) {
+  const moved = structuredClone(doc);
+  const to = (id) => map.get(id) ?? id;
+  (function ids(n) { n.id = to(n.id); n.children.forEach(ids); })(moved.root);
+  for (const vals of Object.values(moved.variants)) for (const nodes of Object.values(vals)) for (const id of Object.keys(nodes)) if (map.has(id)) { nodes[to(id)] = nodes[id]; delete nodes[id]; }
+  return moved;
+}
+
 // Patch the text `original` from model `before` to model `after`; returns the new text. (`ast` is unused: the splices need
 // offsets into the real text, so the file is parsed again here.)
 export function writeComponent(ast, before, after, original) {
   if (same(before, after)) return original; // nothing to change: the bytes stay exactly as they were
+  const renamedIds = nodeRenames(before, after);
+  if (renamedIds.size) return writeComponent(ast, withNodeIds(before, renamedIds), after, renameIds(original, renamedIds)); // ids first, then the rest of the diff
   const st = detectStyle(original);
   Q = st.quote;
   const parts = locate(babelParse(original, { sourceType: 'module', plugins: ['typescript', 'jsx'] }));

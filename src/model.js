@@ -79,6 +79,7 @@ export function touched(edits) {
       case 'set': keys.add(e.variant ? `${e.path}@${Object.entries(e.variant).map(([a, v]) => `${a}=${v}`).join(',')}` : e.path); break;
       case 'insert': keys.add(`children:${e.parent}`); keys.add(`node:${e.node?.id}`); break;
       case 'delete': keys.add(`node:${e.id}`); break;
+      case 'rename': keys.add(`node:${e.id}`); keys.add(`node:${e.to}`); break;
       case 'move': keys.add(`node:${e.id}`); keys.add(`children:${e.parent}`); break;
       case 'addProp': case 'removeProp': case 'setDefault': keys.add(`prop:${e.name}`); break;
       case 'renameProp': keys.add(`prop:${e.name}`); keys.add(`prop:${e.to}`); break;
@@ -253,6 +254,16 @@ export function applyEdits(doc, edits) {
         const at = e.index ?? to.children.length;
         if (!Number.isInteger(at) || at < 0 || at > to.children.length) throw new EditError(i, `bad index ${e.index}`);
         to.children.splice(at, 0, node);
+        break;
+      }
+      case 'rename': {
+        const node = byId.get(e.id);
+        if (!node) throw new EditError(i, `no node "${e.id}"`);
+        if (typeof e.to !== 'string' || !NODE_ID.test(e.to)) throw new EditError(i, `bad id "${e.to}" (letters, digits, _; starts lowercase)`);
+        if (e.to === e.id) break;
+        if (byId.has(e.to)) throw new EditError(i, `id "${e.to}" already exists`);
+        node.id = e.to;
+        for (const vals of Object.values(next.variants)) for (const nodes of Object.values(vals)) if (e.id in nodes) { nodes[e.to] = nodes[e.id]; delete nodes[e.id]; }
         break;
       }
       case 'addProp': {

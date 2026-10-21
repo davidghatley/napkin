@@ -10,7 +10,7 @@
 import { readdirSync, watch, existsSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { openStore } from './store.js';
+import { openStore, brokenMessage } from './store.js';
 import { readSidecar, sidecarPath } from './codecs.js';
 import { createComponent, removeComponent, moveComponent, writeSidecar, removeSidecar } from './commit.js';
 import { readComponent } from './tsx/read.js';
@@ -27,6 +27,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(fn, ms = 4000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(10); } return false; }
 
 // Every file-level commit names a real caller (AGT-05).
+// the saved frame position; reading never creates a sidecar (a deleted component must stay deleted)
+const canvasOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).canvas ?? { x: 0, y: 0 }; } catch { return { x: 0, y: 0 }; } };
 const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown') throw new CreateError('a caller name is required: every commit names who made it'); };
 
 export async function openWorkspace(dir, { only } = {}) {
@@ -105,9 +107,20 @@ export async function openWorkspace(dir, { only } = {}) {
     // What a client needs to draw one component right now.
     async snapshot(e) {
       const r = await e.store.read();
-      return { component: e.id, name: e.name, revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
+      return { component: e.id, name: e.name, canvas: canvasOf(e), revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
     },
     async bundle(e) { return e.built; },
+    // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
+    setCanvas(e, x, y, { by } = {}) {
+      needBy(by);
+      const ok = (n) => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6; // null, strings and NaN are refused, not turned into 0
+      if (!ok(x) || !ok(y)) throw new CreateError('canvas x and y must be numbers');
+      const side = readSidecar(e.file, e.name);
+      const canvas = { x: Math.round(x), y: Math.round(y) };
+      writeSidecar(sidecarPath(e.file), JSON.stringify({ ...side, canvas }, null, 2) + '\n');
+      events.emit('canvas', { component: e.id, canvas });
+      return canvas;
+    },
     // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
     // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.
     async create(name, rootTag = 'div', { by } = {}) {
@@ -133,6 +146,8 @@ export async function openWorkspace(dir, { only } = {}) {
       needBy(by);
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
+      const bad = await e.store.sync(); // a file that does not parse holds someone's hand edit: never delete or replace it
+      if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
       const { id, name, file } = e;
       removals.set(file, { by, summary: `deleted ${name}` });
       removeComponent(file); removeSidecar(sidecarPath(file));
@@ -145,6 +160,8 @@ export async function openWorkspace(dir, { only } = {}) {
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
       if (typeof newName !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(newName)) throw new CreateError(`component name "${newName}" must be PascalCase (letters and digits, starting with a capital)`);
+      const bad = await e.store.sync();
+      if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
       const { readOnly, source, doc, revision } = await e.store.read();
       if (readOnly) throw new CreateError(`read-only: ${readOnly}`, 403);
       const old = doc.name;

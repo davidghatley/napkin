@@ -142,8 +142,8 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
 
     if (!sub) {
       if (method === 'GET') {
-        const { component, revision, doc, source, readOnly } = await ws.snapshot(e);
-        return res(200, { component, revision, doc, source, ...(readOnly && { readOnly }) });
+        const { component, canvas, revision, doc, source, readOnly } = await ws.snapshot(e);
+        return res(200, { component, canvas, revision, doc, source, ...(readOnly && { readOnly }) });
       }
       if (method === 'DELETE') {
         const g = guard('delete_component'); if (g) return g;
@@ -163,11 +163,12 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       const r = await e.store.apply(msg);
       return res(r.ok ? 200 : 409, r);
     }
-    if (sub === 'canvas' && method === 'POST') { // where the component sits on the canvas: the sidecar only, never the .tsx
+    // Where the frame sits on the canvas: the sidecar only, never the .tsx. Same identity rules as every write.
+    if (sub === 'canvas' && method === 'POST') {
       const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
       const g = guard('move_component'); if (g) return g;
-      const r = await e.store.moveCanvas(msg.x, msg.y);
-      return res(r.ok ? 200 : 400, r);
+      try { return res(200, { ok: true, canvas: ws.setCanvas(e, msg.x, msg.y, { by: caller }) }); }
+      catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
     }
     if (sub === 'rename' && method === 'POST') {
       const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
