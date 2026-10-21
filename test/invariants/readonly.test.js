@@ -13,6 +13,8 @@ import { ROOT, startServer, startMcp } from '../helpers/harness.js';
 import { session } from '../helpers/agents.js';
 
 const sha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
+// outside the dialect: "read-only: line N: ..."; a file that does not even parse: "X.tsx has a syntax error at line N; ..."
+const REFUSED = /^(read-only: line \d+: |\S+\.tsx has a syntax error at line \d+; fix it)/;
 const EDIT = [{ op: 'set', path: 'root.gap', value: 3 }];
 
 test('INV-04: 50 out-of-dialect files: read-only with a line number, every write path refuses, bytes unchanged', async (t) => {
@@ -37,7 +39,7 @@ test('INV-04: 50 out-of-dialect files: read-only with a line number, every write
         for (const dryRun of [false, true]) {
           const w = await store.apply({ baseRevision: r.revision, edits: EDIT, by: 'test', dryRun });
           assert.equal(w.ok, false, c.name);
-          assert.match(w.error, /^read-only: line \d+: /, c.name);
+          assert.match(w.error, REFUSED, c.name);
         }
         n++;
       } finally { await store.close(); }
@@ -59,13 +61,13 @@ test('INV-04: 50 out-of-dialect files: read-only with a line number, every write
         const r = await fetch(new URL(`api/components/${stem}/edits`, server.url), { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ baseRevision: 'x', edits: EDIT }) });
         const body = await r.json();
         assert.equal(r.status, 409, c.name);
-        assert.match(body.error, /^read-only: line \d+: /, c.name); http++;
+        assert.match(body.error, REFUSED, c.name); http++;
         const m = await mcp.call('apply_edits', { component: stem, baseRevision: 'x', edits: EDIT });
         assert.equal(m.isError, true, c.name);
-        assert.match(m.text, /^read-only: line \d+: /, c.name); viaMcp++;
+        assert.match(m.text, REFUSED, c.name); viaMcp++;
         const v = await mcp.call('add_variant', { component: stem, baseRevision: 'x', axis: 'size', value: 'xl' });
         assert.equal(v.isError, true, c.name);
-        assert.match(v.text, /^read-only: line \d+: /, c.name); variant++;
+        assert.match(v.text, REFUSED, c.name); variant++;
         const cr = await fetch(new URL('api/components', server.url), { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ name: stem }) });
         assert.equal(cr.status, 409, `${c.name}: create over an existing file`); create++;
       }
