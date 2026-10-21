@@ -1,14 +1,45 @@
-AGT-07 agent eval: 10/10  (bar >= 8/10)
-model: sonnet; only the napkin MCP connected (--strict-mcp-config, --tools "", --allowedTools "mcp__napkin__*"); NO canvas server (in-process fallback, AGT-08); temp copy of fixtures per task
+AGT-07 agent eval, 16 tasks per arm (bar: guided >= 80%, i.e. >= 13/16)
+model: sonnet; ONLY the napkin MCP connected (--strict-mcp-config, --tools "", --allowedTools "mcp__napkin__*"); temp copy of fixtures per task
+tasks 1-10: set style, base colour, add variant, create, rename, insert, delete node, add prop, variant override, change override (in-process fallback, no canvas server)
+tasks 11-16: multi-step edit, stale retry forced mid-run (hand edit lands after the first read), propose mode (real canvas server, agent set to "propose"), move, bindText, removeVariant
+guided arm: guide in MCP instructions + resource + prompt, per-op oneOf edit schemas.  control arm: NAPKIN_NO_GUIDE=1 (no guide, no resource/prompt, bare-object edit schema; tool descriptions unchanged).
 run: AGENT_EVAL=1 EVIDENCE=1 node --test test/agent-eval/   (2026-10-21)
-PASS  set-style           6s  turns 3  $0.017
-PASS  base-color          6s  turns 3  $0.019
-PASS  add-variant         7s  turns 3  $0.019
-PASS  create              7s  turns 4  $0.018
-PASS  rename              4s  turns 2  $0.012
-PASS  insert             10s  turns 3  $0.019
-PASS  delete-node         5s  turns 3  $0.018
-PASS  add-prop            5s  turns 3  $0.019
-PASS  variant-override    7s  turns 3  $0.019
-PASS  change-override     4s  turns 3  $0.019
-total cost: $0.18
+
+guided   16/16 passed (100%)  median turns 3  median time 9s  cost $0.31
+control  16/16 passed (100%)  median turns 7  median time 15.5s  cost $0.51
+
+effect of the guide: pass-rate gap 0 task(s); median turns 3 vs 7; median time 9s vs 15.5s; cost $0.31 vs $0.51 (tool descriptions and schemas in the control arm still teach part of the dialect)
+HONEST NOTE: both arms passed 16/16, so these tasks do not separate the arms on pass rate. The guide's measured effect is speed and cost (about 2.3x fewer turns), not whether Sonnet gets there.
+
+guided   PASS  set-style           7s  turns 3  $0.019
+guided   PASS  base-color         11s  turns 3  $0.019
+guided   PASS  add-variant        14s  turns 3  $0.020
+guided   PASS  create             11s  turns 4  $0.019
+guided   PASS  rename              3s  turns 2  $0.012
+guided   PASS  insert              6s  turns 3  $0.020
+guided   PASS  delete-node         7s  turns 3  $0.019
+guided   PASS  add-prop            6s  turns 3  $0.020
+guided   PASS  variant-override    7s  turns 3  $0.020
+guided   PASS  change-override    13s  turns 3  $0.020
+guided   PASS  multi-step         14s  turns 3  $0.021
+guided   PASS  stale-retry         8s  turns 4  $0.022
+guided   PASS  propose             9s  turns 3  $0.018
+guided   PASS  move               18s  turns 3  $0.019
+guided   PASS  bind-text           9s  turns 3  $0.020
+guided   PASS  remove-variant      9s  turns 3  $0.020
+control  PASS  set-style          23s  turns 8  $0.032
+control  PASS  base-color         15s  turns 12  $0.044
+control  PASS  add-variant         7s  turns 3  $0.012
+control  PASS  create             16s  turns 11  $0.037
+control  PASS  rename              4s  turns 2  $0.005
+control  PASS  insert             21s  turns 7  $0.030
+control  PASS  delete-node         9s  turns 7  $0.026
+control  PASS  add-prop            9s  turns 5  $0.022
+control  PASS  variant-override   20s  turns 11  $0.043
+control  PASS  change-override    30s  turns 20  $0.072
+control  PASS  multi-step         20s  turns 9  $0.047
+control  PASS  stale-retry        41s  turns 9  $0.038
+control  PASS  propose            10s  turns 7  $0.030
+control  PASS  move                9s  turns 5  $0.023
+control  PASS  bind-text          19s  turns 6  $0.030
+control  PASS  remove-variant      8s  turns 4  $0.020
