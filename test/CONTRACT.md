@@ -37,3 +37,21 @@ Tools (results as `content[0].text` JSON, plus `structuredContent`):
 - `apply_edits { component, baseRevision, edits }` -> `{ revision }`, or `isError: true` with the store's error text
 Change notices: whenever the component reaches a new revision made by someone else, send the notification
 `{ "jsonrpc": "2.0", "method": "notifications/napkin/change", "params": { component, revision, by, edits? } }`.
+
+## First build (from 2026-10-20, decision 0003)
+
+- **`src/model.js`** (pure; the canvas page can import it): the napkin/1 model plus `applyEdits`, `touched`, `conflicts`, `diffKeys`, `index`, `resolveStyle(doc, nodeId, variant)`, `variantGrid(doc)`, `getValue`, `EditError`.
+  - **Ops:**
+    - `set {path, value, variant?}`, where `path` is `node.cssProp`, `node.text` or `node.@src` / `node.@alt`; `value: null` removes it; `variant: { axis: value }` writes an override;
+    - `insert`, `delete`, `move`;
+    - `addProp {name, type, options?, default?}`, `removeProp {name}`;
+    - `bindText {id, prop}` ("Make setting"; `prop: null` unbinds);
+    - `addVariant {axis, value, base?}`, `removeVariant {axis, value}`.
+- **`src/tsx/read.js`:** `readComponent(text) -> { doc, ast, parts }`, or throws `DialectError` (`line N: reason`).
+- **`src/tsx/write.js`:**
+  - `writeComponent(ast, before, after, originalText) -> text` touches only what changed;
+  - `newComponentSource(Name)`.
+- **`src/codecs.js`:** `tsxCodec` and `jsonCodec`. The store picks one by file extension. The sidecar `<Name>.napkin.json` holds `{ id, canvas }`.
+- **`store.read()`** adds `readOnly: '<reason>'` for a `.tsx` outside the dialect. `apply` then returns `{ ok: false, error: 'read-only: …' }` and never writes.
+- **Fixtures:** `fixtures/Card/Card.tsx` and `fixtures/Button/Button.tsx` (size md/sm/lg × state default/hover, which is 6 variants).
+- **Tests:** `test/6-tsx-format.test.js` (M1). Tests 1–5 still run the 18 Oct JSON spike until M2 moves the canvas to TSX.

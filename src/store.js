@@ -6,15 +6,18 @@
 import { readFileSync, writeFileSync, renameSync, watch } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { parse, serialize } from './format.js';
-import { applyEdits, touched, conflicts, diffKeys, EditError } from './edits.js';
+import { codecFor } from './codecs.js';
 
 const HISTORY = 500; // revisions remembered for rebasing; older bases are "stale revision"
 
 export async function openStore(file) {
+  const codec = codecFor(file);
+  const { applyEdits, touched, conflicts, diffKeys, EditError } = codec;
   const events = new EventEmitter();
   let text = readFileSync(file, 'utf8');
-  let doc = parse(text);
+  // A file napkin can't read fully opens read-only, with the reason (decision 0003, INV-06).
+  let doc = null, state = null, readOnly = null;
+  try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = e.message; }
   let revision = 1;
   const history = [{ revision, keys: new Set() }];
   let queue = Promise.resolve();
@@ -32,6 +35,7 @@ export async function openStore(file) {
   };
 
   function applyNow({ baseRevision, edits, by = 'unknown', origin }) {
+    if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
     const base = history.find((h) => h.revision === baseRevision);
     if (!base) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})` };
     let keys;
@@ -44,7 +48,10 @@ export async function openStore(file) {
     let next;
     try { next = applyEdits(doc, edits); }
     catch (e) { if (e instanceof EditError) return { ok: false, error: e.message }; throw e; }
-    writeFile(serialize(next));
+    let saved;
+    try { saved = codec.save(state, doc, next); }
+    catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }
+    writeFile(saved.text); state = saved.state;
     commit(next, keys, by, edits, origin);
     return { ok: true, revision, doc };
   }
@@ -55,16 +62,16 @@ export async function openStore(file) {
     queue = queue.then(() => {
       let t; try { t = readFileSync(file, 'utf8'); } catch { return; }
       if (t === text) return;
-      let next; try { next = parse(t); } catch { return; } // half-written or broken: keep the last good doc
-      const keys = diffKeys(doc, next);
-      text = t;
-      commit(next, keys, 'file', undefined, undefined);
+      let loaded; try { loaded = codec.load(t, file); } catch (e) { events.emit('problem', { error: e.message }); return; } // half-written or broken: keep the last good doc
+      const keys = doc ? diffKeys(doc, loaded.doc) : new Set(['file']);
+      text = t; state = loaded.state; readOnly = null;
+      commit(loaded.doc, keys, 'file', undefined, undefined);
     });
   });
 
   return {
     events,
-    async read() { await queue; return { revision, doc }; },
+    async read() { await queue; return readOnly ? { revision, doc, readOnly } : { revision, doc }; },
     apply(req) { const p = queue.then(() => applyNow(req)); queue = p.catch(() => {}); return p; },
     async close() { watcher.close(); await queue; },
   };
