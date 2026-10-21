@@ -8,9 +8,9 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 
 | ID | Area | Lane | Status | Last critic verdict | Evidence | Commit |
 |---|---|---|---|---|---|---|
-| INV-01 | INV | files | critic-pass | r1 pass 100/100 | docs/evidence/INV-01-REL-01.txt | 93e2d5a |
-| INV-02 | INV | files | critic-pass | r1 pass 42/42 | test/invariants/noop.test.js | 93e2d5a |
-| INV-03 | INV | files | critic-fail | r2 fail: edits drop // and JSX comments, blank lines | test/invariants/diff-budget.test.js | 332ca74 |
+| INV-01 | INV | files | critic-fail | r3 fail: wedge after exact restore; 2/150 race loses broken hand save | test/invariants/broken-file.test.js | 1ed39c0 |
+| INV-02 | INV | files | critic-pass | r3 pass on 4 new hand files | test/invariants/noop.test.js | 1ed39c0 |
+| INV-03 | INV | files | critic-fail | r3 fail: set text drops neighbour/attribute comments; seed 99 +1 line | test/invariants/diff-budget.test.js | 1ed39c0 |
 | INV-04 | INV | files | critic-pass | r1 pass 50/50; reasons wording | test/invariants/readonly.test.js | 93e2d5a |
 | INV-05 | INV | files | critic-pass | r1 pass (files branch); converge with commit.js at merge | test/invariants/one-path.test.js | 93e2d5a |
 | INV-06 | INV | files | critic-pass | r1 pass | test/invariants/standalone.test.js | 93e2d5a |
@@ -63,20 +63,20 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | AGT-09 | AGT | agents | pass | r1 pass (data); UI later | test/agents/attribution.test.js | ed6ea70 |
 | AGT-10 | AGT | agents | pass | r1 pass (server); chip UI later | test/agents/attribution.test.js | ed6ea70 |
 | AGT-11 | AGT | agents | pass | r3 pass (0005 amendment) | test/agents/identity.test.js | ed6ea70 |
-| HIS-01 | HIS | history | building |  |  |  |
-| HIS-02 | HIS | history | building |  |  |  |
-| HIS-03 | HIS | history | building |  |  |  |
+| HIS-01 | HIS | history | pass | r2 pass: 5 fast undos; precise conflicts; skip | test/history/undo.test.js | 0494065 |
+| HIS-02 | HIS | history | pass | r1 pass 100/100 | test/history/undo.test.js | 0494065 |
+| HIS-03 | HIS | history | pass | r2 pass: restore confirm names who is overwritten | test/history/ui-history.test.js | 0494065 |
 | HIS-04 | HIS | files | critic-pass | r1 pass: sha256 revisions survive restart | test/invariants/revisions.test.js | 93e2d5a |
-| HIS-05 | HIS | history | building |  |  |  |
-| AST-01 | AST | history | building |  |  |  |
-| AST-02 | AST | history | building |  |  |  |
-| AST-03 | AST | history | building |  |  |  |
-| AST-04 | AST | history | building |  |  |  |
-| INS-01 | INS | history | building |  |  |  |
-| INS-02 | INS | history | building |  |  |  |
-| INS-03 | INS | history | building |  |  |  |
-| INS-04 | INS | history | building |  |  |  |
-| INS-05 | INS | history | building |  |  |  |
+| HIS-05 | HIS | history | pass | r2 pass: stash = git; hand edits = file | test/history/git.test.js | 0494065 |
+| AST-01 | AST | history | pass | r2 pass; new img in single-quote file uses double quotes (minor) | test/history/assets.test.js | 0494065 |
+| AST-02 | AST | history | pass | r1 pass | test/history/assets.test.js | 0494065 |
+| AST-03 | AST | history | pass | r1 pass | test/history/assets.test.js | 0494065 |
+| AST-04 | AST | history | pass | r1 pass | test/history/assets.test.js | 0494065 |
+| INS-01 | INS | history | pass | r1 pass: 5-22 ms | test/history/ui-inspect.test.js | 0494065 |
+| INS-02 | INS | history | pass | r1 pass: 717 rows, 0 differ | test/history/ui-inspect.test.js | 0494065 |
+| INS-03 | INS | history | pass | r2 pass: 100/100 byte-identical | test/history/ui-inspect.test.js | 0494065 |
+| INS-04 | INS | history | pass | r2 Sonnet WIN; Codex napkin better both orders; read-only verified | test/history/docs.test.js | 0494065 |
+| INS-05 | INS | history | pass | r1 pass | test/history/visual-diff.test.js | 0494065 |
 | PRF-01 | PRF | engine | building |  |  |  |
 | PRF-02 | PRF | engine | building |  |  |  |
 | PRF-03 | PRF | engine | building |  |  |  |
@@ -86,7 +86,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-07 | PRF | engine | building |  |  |  |
 | PRF-08 | PRF | engine | building |  |  |  |
 | FMT-01 | FMT | files | critic-pass | r1 pass: cold walk opened editable | docs/dialect.md | 93e2d5a |
-| FMT-02 | FMT | files | critic-fail | r2 fail: same as INV-03 | test/invariants/diff-budget.test.js | 332ca74 |
+| FMT-02 | FMT | files | critic-fail | r3 fail: same as INV-03 | test/invariants/diff-budget.test.js | 1ed39c0 |
 | FMT-03 | FMT | files | critic-pass | r2 pass: prettier+tsc+eslint 0 | test/invariants/format.test.js | 332ca74 |
 | FMT-04 | FMT | files | critic-pass | r1 pass 20/20 | test/invariants/merge.test.js | 93e2d5a |
 | FMT-05 | FMT | files | critic-pass | r1 pass 2000/2000 | docs/evidence/FMT-05.txt | 93e2d5a |
