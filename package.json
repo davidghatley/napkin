@@ -4,11 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "description": "Phase-4 co-editing spike: one Card file edited live by a person on a canvas and an agent over MCP.",
-  "engines": { "node": ">=26" },
+  "engines": {
+    "node": ">=26"
+  },
   "scripts": {
     "test": "node --test --test-concurrency=1 test/",
     "start": "node src/server.js --file fixtures/Card/Card.json --port 4810",
     "mcp": "node src/mcp.js --file fixtures/Card/Card.json",
     "demo": "DEMO_OUT=docs/demo node --test test/5-e2e.test.js"
+  },
+  "dependencies": {
+    "@babel/parser": "7.29.9",
+    "esbuild": "0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recast": "0.24.0"
   }
 }

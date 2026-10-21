@@ -2,7 +2,7 @@
 
 Extracted 2026-10-18 from [docs/guide/](docs/guide/README.md), which turns the final landing copy (`site/copy.md`) into workflows. INTENT.md wins every disagreement. Open questions are in [docs/guide/GAPS.md](docs/guide/GAPS.md).
 
-**Status: napkin is Phase 4 and not starting now.** This table is the spec for later. Only the **Build first** spike at the bottom may be built before David starts Phase 4 (INTENT: "research, spec, and tiny spikes only").
+**Status: Phase 4 started 2026-10-20 (David).** The **First build** list at the bottom is in progress. The **Build first** spike (2026-10-18) is done. File format: React TSX, decision 0003 (G1); variants: base + overrides (G3).
 
 Proving demo (INTENT): *an agent and David edit the same component live on the canvas, and the result is a real, reusable component file.*
 
@@ -25,7 +25,7 @@ Priorities: **P0** the proving demo can't happen without it. **P1** a major bene
 | F11 | `create_component` for agents | start-a-component · T | "Make a napkin Card ..." creates `components/Card.*` and it appears on the canvas. | M | F06, F07 | P1 |
 | F12 | Draw a new component on the canvas (New component, box, text, image slot) | start-a-component · T | Press N, name it Card, draw a box and text: the file exists and reopens identically. | L | F05 | P1 |
 | F13 | Settings (props): "Make setting" on canvas, settings in `read_component` | start-a-component · V | Make the title a setting: it shows in the panel and in `read_component`. | M | F05 | P1 |
-| F14 | Versions grid with a base and per-version overrides, plus Reset to base | change-every-version · V | Change the base radius on a 9-version Button: all 9 update and `git diff` shows one line; an overridden version keeps its value and shows a dot. | L | F05, F13 | P1 (blocked on G3) |
+| F14 | Versions grid with a base and per-version overrides, plus Reset to base | change-every-version · V | Change the base radius on a 9-version Button: all 9 update and `git diff` shows one line; an overridden version keeps its value and shows a dot. | L | F05, F13 | P1 |
 | F15 | Add a version (+ Size, + State, or by agent) | change-every-version · V | "Add an xl size" adds a column to the grid and one block to the file. | M | F14 | P1 |
 | F16 | Presence label showing what the agent is editing | edit-together · T | While the agent works, the canvas shows "agent: editing Card / compact"; it clears when done. | S | F07 | P1 |
 | F17 | Same-property clash rule | edit-together · T | Defined once G2 is answered. | M | F03 | P1 (blocked on G2) |
@@ -51,3 +51,18 @@ Out of the spike on purpose: tokens, versions, drawing tools, `create_component`
 | 3 | F06 | An agent can read and edit through MCP | A scripted MCP client over stdio calls `read_component` then `apply_edits` (set title weight); the file on disk has the new value. |
 | 4 | F07 | Changes flow both ways live | An edit written by the MCP client reaches a connected canvas socket in under 1 second; an edit sent from the canvas socket reaches the MCP client as a change notice with the new revision. |
 | 5 | F04 + F05 | The proving demo, as one end-to-end test | Headless Chromium (CPU) opens the canvas and changes Padding in the panel while the scripted agent sets the title weight to 600. Afterwards the canvas shows both changes and the Card file contains both. Save the screenshot and terminal log to `docs/demo/`. |
+
+## First build (Phase 4, from 2026-10-20)
+
+Plan: approved by David 2026-10-20 (plan artifact "napkin First Build"). Each milestone ends with green tests and a commit.
+
+| M | Features | Done when |
+|---|---|---|
+| M0 | decision 0003, INTENT, this list | written and committed |
+| M1 | F01, F02, F03, F09 on TSX | `.tsx` load+save with no edits is byte-identical; one property change is a one-line diff; out-of-dialect files are read-only; a 200-edit fuzz keeps the file parseable and in the dialect |
+| M2 | F04, F07, F22, F23 | the canvas renders the real component (esbuild + React) for every variant; file changes and `git restore` show without reload |
+| M3 | F05, F13, F14, F15 | change the base on a 3×2 Button: all 6 update, one diff line; an override keeps its value and shows a dot; Reset to base removes it |
+| M4 | F11 (canvas side), F12 | headless Chromium draws a Card from nothing (N, F, T, I) and the file reopens identically |
+| M5 | F06, F11, F16, F19, F21 | the proving demo: David and an agent edit a Button at once (base radius + icon slot / `xl` size), both land, `examples/consumer-app` imports and renders every variant |
+
+Out of this build: tokens panel (F10), opening other repos' components (F18), same-property clash rule beyond `stale revision` (F17), in-app undo (F24), agent permissions (F25), hosting.
