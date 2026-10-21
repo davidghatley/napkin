@@ -40,6 +40,7 @@ ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
 ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
+ws.events.on('preview', (c) => broadcast({ type: 'preview', ...c }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
 ws.events.on('added', async ({ component, by, summary }) => {
   const e = ws.find(component);
@@ -47,7 +48,7 @@ ws.events.on('added', async ({ component, by, summary }) => {
 });
 
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js' };
+const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css' };
 const send = (res, file) => {
   res.writeHead(200, { 'content-type': TYPES[file.split('.').pop()], 'cache-control': 'no-store' });
@@ -66,6 +67,14 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
     if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
+    // Pasted images (LAY-10) live in <components>/assets/ and are served from /assets/<name>.
+    const asset = path.match(/^\/assets\/([\w-]+\.(png|svg|jpe?g|webp|gif))$/);
+    if (req.method === 'GET' && asset) {
+      const f = join(dir, 'assets', asset[1]);
+      if (!existsSync(f)) return json(res, 404, { ok: false, error: 'not found' });
+      res.writeHead(200, { 'content-type': { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[asset[2]], 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox", 'cache-control': 'public, max-age=31536000, immutable' });
+      return res.end(readFileSync(f));
+    }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
 
     if (req.method === 'GET' && path === '/api/events') {

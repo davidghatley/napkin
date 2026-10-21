@@ -4,7 +4,8 @@
 // Writes all go through store.apply (INV-05). Proposals live in memory only and never touch a file.
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
+import { writeAsset } from './commit.js';
 import { CreateError } from './workspace.js';
 import { search } from './ws-ops.js';
 import { createRenderer, RenderError } from './render-png.js';
@@ -123,6 +124,27 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       return fail(405, 'method not allowed');
     }
 
+    // LAY-10: a pasted image. { type: 'image/png' | 'image/svg+xml', data: <base64> } -> { ok, src: 'assets/<hash>.<ext>' }. Content-hash names: the same image is stored once.
+    if (seg[0] === 'assets' && method === 'POST') {
+      const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
+      const g = guard('add_asset'); if (g) return g;
+      let bytes;
+      try { bytes = Buffer.from(String(msg.data ?? ''), 'base64'); } catch { return fail(400, 'data must be base64'); }
+      if (!bytes.length) return fail(400, 'no image data');
+      if (bytes.length > 8 * 1024 * 1024) return fail(413, 'image is larger than 8 MB');
+      let ext;
+      if (msg.type === 'image/png') { if (bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') return fail(415, 'that is not a PNG file'); ext = 'png'; }
+      else if (msg.type === 'image/svg+xml') {
+        const text = bytes.toString('utf8');
+        if (!/<svg[\s>]/i.test(text)) return fail(415, 'that is not an SVG file');
+        if (/<script|\son\w+\s*=|<foreignObject|javascript:/i.test(text)) return fail(415, 'the SVG has a script, an event handler or a foreignObject; napkin will not store it');
+        ext = 'svg';
+      } else return fail(415, 'only image/png and image/svg+xml can be pasted');
+      const name = `${createHash('sha256').update(bytes).digest('hex').slice(0, 16)}.${ext}`;
+      const created = writeAsset(dir, name, bytes);
+      return res(200, { ok: true, src: `assets/${name}`, bytes: bytes.length, created });
+    }
+
     if (seg[0] !== 'components') return null;
 
     if (seg.length === 1) {
@@ -168,6 +190,13 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
       const g = guard('move_component'); if (g) return g;
       try { return res(200, { ok: true, canvas: ws.setCanvas(e, msg.x, msg.y, { by: caller }) }); }
+      catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
+    }
+    // LAY-11: a variant cell's preview width, in the sidecar only. { variant: { size: 'sm' }, width: 320 | null }
+    if (sub === 'preview' && method === 'POST') {
+      const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
+      const g = guard('preview_width'); if (g) return g;
+      try { return res(200, { ok: true, preview: ws.setPreview(e, msg.variant, msg.width, { by: caller }) }); }
       catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
     }
     if (sub === 'rename' && method === 'POST') {
