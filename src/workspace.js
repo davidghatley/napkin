@@ -74,6 +74,7 @@ export async function openWorkspace(dir, { only } = {}) {
     const why = removals.get(e.file); removals.delete(e.file);
     entries.delete(e.id);
     await e.store.close();
+    await e.built?.catch(() => {}); // a build still queued would otherwise open a new esbuild context after the dispose
     await bundler.dispose(e.file);
     note({ kind: 'removed', component: e.id, name: e.name, by: why?.by ?? 'file', summary: why?.summary ?? 'file removed' });
     events.emit('removed', { component: e.id, ...(why && { by: why.by, summary: why.summary }) });

@@ -29,8 +29,10 @@ node examples/consumer-app/build.mjs <components dir> [out]   # a plain React ap
 - Tools: `V` select, `F` frame (drag to size), `T` text, `I` image slot, `N` new component.
 - Delete removes the selected element, and Alt+↑/↓ reorders it.
 
+**History and inspection (history lane):** `⌘Z` / `⇧⌘Z` undo and redo your own edits (never an agent's; refused, naming who, if someone changed the same property after you). The drawer under the canvas has **Code** (live TSX, click a line to select its node), **History** (timeline, scrub to preview, Restore), **Inspect** (computed CSS per cell, with where each value comes from, and Copy usage), **Assets** (images in the repo; drop an image on a node) and **Changes** (a dot on components that differ from git HEAD, line diff, before/after pictures). `node src/docs.js --dir components --out catalog` writes a static catalog. napkin never commits. Details: [CONTRACT](test/CONTRACT.md#history-lane-round-2-his-01-03-his-05-ins-01-05-ast-01-04), [decision 0007](docs/decisions/0007-history-undo-restore-git.md).
+
 A file napkin can't read fully opens read-only with a badge, and napkin never rewrites it.
 
-**Not in this build:** a tokens panel, opening other repos' components, Figma/HTML import, undo inside napkin (use git), hosting. See FEATURES.md.
+**Not in this build:** a tokens panel, opening other repos' components, Figma/HTML import, hosting. See FEATURES.md.
 
 Contract the tests rely on: [test/CONTRACT.md](test/CONTRACT.md). Decisions: [docs/decisions/](docs/decisions/).

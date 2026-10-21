@@ -29,6 +29,7 @@ import { initTools } from './tools.js';
 import { initLayers } from './layers.js';
 import { initQuick } from './quick.js';
 import { initNav } from './nav.js';
+import { initHistoryLane } from './history-lane.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -89,6 +90,7 @@ initTools(ctx);
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
 const nav = initNav(ctx);
+initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 ctx.on('select', () => renderPanel(ctx));
 ctx.on('render', ({ component, revision }) => { $('#revision').textContent = revision; renderPanel(ctx); counts(); });
 
