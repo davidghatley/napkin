@@ -220,8 +220,13 @@ export function initTools(ctx) {
   // --- select-tool niceties ------------------------------------------------------------------------------
   async function deleteSelected() {
     const sel = ctx.state.selection, c = sel && ctx.state.components.get(sel.component);
-    if (!c?.doc || c.readOnly || sel.node === c.doc.root.id) return;
-    await ctx.sendEdits(sel.component, [{ op: 'delete', id: sel.node }]);
+    if (!c?.doc || c.readOnly) return;
+    // every selected node except the root, in one batch (one revision)
+    const { parentOf } = index(c.doc);
+    const all = new Set(ctx.state.selections.filter((s) => s.component === sel.component && s.node !== c.doc.root.id).map((s) => s.node));
+    const under = (id) => { for (let p = parentOf.get(id); p; p = parentOf.get(p.id)) if (all.has(p.id)) return true; return false; };
+    const ids = [...all].filter((id) => !under(id)); // a selected child goes with its selected parent
+    if (ids.length) await ctx.sendEdits(sel.component, ids.map((id) => ({ op: 'delete', id })));
   }
   async function moveSelected(step) {
     const sel = ctx.state.selection, c = sel && ctx.state.components.get(sel.component);

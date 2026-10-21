@@ -23,6 +23,7 @@ export function createStage(ctx, root, world, view) {
   const overlays = root.querySelector('#overlays');
   const mk = (id) => { const o = document.createElement('div'); o.id = id; overlays.append(o); return o; };
   const selectBox = mk('overlay-select'), hoverBox = mk('overlay-hover'), measureBox = mk('overlay-measure');
+  const sizeChip = document.createElement('span'); sizeChip.className = 'osize'; selectBox.append(sizeChip); // "128 × 36", in canvas pixels
   const extras = [];
   let laidOut = false, hoverEl = null, measuring = false;
   const byName = (a, b) => (ctx.state.components.get(a)?.name ?? a).localeCompare(ctx.state.components.get(b)?.name ?? b);
@@ -223,7 +224,9 @@ export function createStage(ctx, root, world, view) {
   function refreshOverlays() {
     const base = overlays.getBoundingClientRect();
     const sels = ctx.state.selections, sel = ctx.state.selection;
-    place(selectBox, selectedElement(sel), sel && `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`, base);
+    const selEl = selectedElement(sel);
+    place(selectBox, selEl, sel && `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`, base);
+    if (selEl?.isConnected && selectBox.style.display === 'block') { const r = selEl.getBoundingClientRect(), z = view.get().z; sizeChip.textContent = `${Math.round(r.width / z)} × ${Math.round(r.height / z)}`; }
     const others = sels.filter((s) => s !== sel);
     while (extras.length < others.length) { const d = document.createElement('div'); d.className = 'overlay-extra'; overlays.append(d); extras.push(d); }
     extras.forEach((d, i) => (others[i] ? place(d, selectedElement(others[i]), undefined, base) : (d.style.display = 'none')));
@@ -309,8 +312,14 @@ export function createStage(ctx, root, world, view) {
   };
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
   root.addEventListener('mousedown', (ev) => { if (ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
-  root.addEventListener('mouseover', (ev) => { const h = hit(ev.target); hoverEl = h?.el ?? null; refreshOverlays(); });
-  root.addEventListener('mouseleave', () => { hoverEl = null; refreshOverlays(); });
+  const setHoverEl = (el, h) => { hoverEl = el; ctx.emit('hover', h ? { component: h.id, node: h.el.dataset.n } : null); refreshOverlays(); };
+  root.addEventListener('mouseover', (ev) => { const h = hit(ev.target); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mouseleave', () => setHoverEl(null, null));
+  // the layers tree hovers a node on the canvas
+  function hoverNode(sel) {
+    hoverEl = sel ? cellElement(sel.component, sel.node, ctx.state.selection?.component === sel.component ? ctx.state.selection.variant : undefined) : null;
+    refreshOverlays();
+  }
   let suppressClick = 0;
   root.addEventListener('click', (ev) => {
     if (suppressClick && Date.now() - suppressClick < 300) { suppressClick = 0; return; }
@@ -418,7 +427,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    reveal, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
+    reveal, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

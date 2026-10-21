@@ -119,6 +119,7 @@ code { font-family: var(--mono); }
 .lcomp { color: var(--text); font-weight: 600; margin-top: 4px; }
 .lcomp .licon { color: var(--accent-text); }
 .lcomp.has-sel .lname { color: var(--accent-text); }
+.lrow.hot:not(.primary) { background: var(--chrome-3); color: var(--text); }
 .lrow.selected { background: var(--accent-soft); color: var(--text); }
 .lrow.selected .licon { color: var(--accent-text); }
 .lrow.primary { background: var(--accent); color: var(--on-accent); }
@@ -203,8 +204,9 @@ body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n],
   background:
     var(--h) 1px 1px / 6px 6px no-repeat, var(--h) calc(100% - 1px) 1px / 6px 6px no-repeat, var(--h) 1px calc(100% - 1px) / 6px 6px no-repeat, var(--h) calc(100% - 1px) calc(100% - 1px) / 6px 6px no-repeat;
 }
-#overlay-select::after { content: attr(data-label); position: absolute; left: -1px; bottom: 100%; margin-bottom: 7px; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: #fff; font: 500 11px/1.3 var(--sans); white-space: nowrap; }
+#overlay-select::after { content: attr(data-label); position: absolute; left: -1px; bottom: 100%; margin-bottom: 7px; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: var(--on-accent); font: 500 11px/1.3 var(--sans); white-space: nowrap; }
 #overlay-select[data-count]:not([data-count="1"]):not([data-count="0"])::after { content: attr(data-label) " +" attr(data-more); }
+#overlay-select .osize { position: absolute; left: 50%; top: 100%; transform: translate(-50%, 8px); padding: 2px 6px; border-radius: 4px; background: var(--accent); color: var(--on-accent); font: 500 10px/1.3 var(--mono); white-space: nowrap; }
 #overlay-measure { position: absolute; inset: 0; pointer-events: none; }
 .m-line { position: absolute; left: 0; top: 0; border: 0 solid var(--measure); }
 .m-x { border-top-width: 1px; }

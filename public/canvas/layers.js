@@ -76,6 +76,17 @@ export function initLayers(ctx, el) {
     else startRename(row);
   });
 
+  // ---- hover: the row and the element light each other up ----
+  el.addEventListener('mouseover', (ev) => {
+    const row = ev.target.closest('.lrow[data-node]');
+    ctx.stage?.hoverNode(row ? { component: row.dataset.component, node: row.dataset.node } : null);
+  });
+  el.addEventListener('mouseleave', () => ctx.stage?.hoverNode(null));
+  ctx.on('hover', (h) => {
+    el.querySelector('.hot')?.classList.remove('hot');
+    if (h) el.querySelector(`.lrow[data-component="${CSS.escape(h.component)}"][data-node="${CSS.escape(h.node)}"]`)?.classList.add('hot');
+  });
+
   // ---- rename ----
   function startRename(row) {
     const c = ctx.state.components.get(row.dataset.component);

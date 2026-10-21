@@ -297,6 +297,20 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       await reload('#Nope/none');
       assert.equal(await q('document.body.dataset.focus'), undefined);
     });
+    await t.test('CAN-05 Delete with several selected is one batch', async () => {
+      await reload(); await sleep(200);
+      await io.key('!', { shift: true, code: 'Digit1' }); await sleep(400);
+      const r0 = await rev('Card');
+      const id = await q(`napkin.find('Card').component`);
+      await q(`napkin.selectMany([{ component: '${id}', node: 'body', variant: {} }, { component: '${id}', node: 'image', variant: {} }, { component: '${id}', node: 'card', variant: {} }])`);
+      await q(`document.activeElement?.blur()`);
+      await io.key('Delete');
+      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await sleep(200);
+      assert.equal(await rev('Card'), r0 + 1, 'one revision for the whole selection');
+      assert.deepEqual((await api(server.url, 'api/components/Card')).doc.root.children.map((x) => x.id), ['heading'], 'body and image are gone, the root stays');
+    });
+
     assert.deepEqual(browser.consoleLines.filter((l) => /error/i.test(l)), [], 'no console errors');
   } finally { await browser.close(); await server.stop(); }
 });
