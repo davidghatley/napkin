@@ -8,20 +8,20 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 
 | ID | Area | Lane | Status | Last critic verdict | Evidence | Commit |
 |---|---|---|---|---|---|---|
-| INV-01 | INV | files | building |  |  |  |
-| INV-02 | INV | files | building |  |  |  |
-| INV-03 | INV | files | building |  |  |  |
-| INV-04 | INV | files | building |  |  |  |
-| INV-05 | INV | files | building |  |  |  |
-| INV-06 | INV | files | building |  |  |  |
-| CAN-01 | CAN | canvas | critic | built r1; critic running | test/12-canvas-nav.test.js | 98f301e |
-| CAN-02 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
-| CAN-03 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
-| CAN-04 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
-| CAN-05 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
-| CAN-06 | CAN | canvas | critic | built r1; critic running | test/14-canvas-look.test.js | 98f301e |
-| CAN-07 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
-| CAN-08 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
+| INV-01 | INV | files | critic-pass | r1 pass 100/100 | docs/evidence/INV-01-REL-01.txt | 93e2d5a |
+| INV-02 | INV | files | critic-pass | r1 pass 42/42 | test/invariants/noop.test.js | 93e2d5a |
+| INV-03 | INV | files | critic-fail | r1 fail: hand-formatted files re-indent neighbours | test/invariants/diff-budget.test.js | 93e2d5a |
+| INV-04 | INV | files | critic-pass | r1 pass 50/50; reasons wording | test/invariants/readonly.test.js | 93e2d5a |
+| INV-05 | INV | files | critic-pass | r1 pass (files branch); converge with commit.js at merge | test/invariants/one-path.test.js | 93e2d5a |
+| INV-06 | INV | files | critic-pass | r1 pass | test/invariants/standalone.test.js | 93e2d5a |
+| CAN-01 | CAN | canvas | pass | r1 pass: drift 1e-11 px | test/12-canvas-nav.test.js | d57d328 |
+| CAN-02 | CAN | canvas | pass | r2 pass: atomic sidecar, identity | test/16-canvas-endpoint.test.js | d57d328 |
+| CAN-03 | CAN | canvas | pass | r1 pass: p95 0.8 ms; flight 282 ms | test/13-canvas-frames.test.js | d57d328 |
+| CAN-04 | CAN | canvas | critic-fail | r2 split: Sonnet tie, Codex Figma better; polish r3 | test/17-canvas-round2.test.js | 388726e |
+| CAN-05 | CAN | canvas | pass | r1 pass: 1 revision per multi-edit | test/13-canvas-frames.test.js | d57d328 |
+| CAN-06 | CAN | canvas | pass | r1 blind WIN vs Figma; r2 far-zoom strip 11 px | test/17-canvas-round2.test.js | d57d328 |
+| CAN-07 | CAN | canvas | pass | r1 pass: exact at 5/30/100% | test/13-canvas-frames.test.js | d57d328 |
+| CAN-08 | CAN | canvas | pass | r1 pass | test/13-canvas-frames.test.js | d57d328 |
 | LAY-01 | LAY | layout | open |  |  |  |
 | LAY-02 | LAY | layout | open |  |  |  |
 | LAY-03 | LAY | layout | open |  |  |  |
@@ -66,7 +66,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | HIS-01 | HIS | history | open |  |  |  |
 | HIS-02 | HIS | history | open |  |  |  |
 | HIS-03 | HIS | history | open |  |  |  |
-| HIS-04 | HIS | files | building |  |  |  |
+| HIS-04 | HIS | files | critic-pass | r1 pass: sha256 revisions survive restart | test/invariants/revisions.test.js | 93e2d5a |
 | HIS-05 | HIS | history | open |  |  |  |
 | AST-01 | AST | inspect | open |  |  |  |
 | AST-02 | AST | inspect | open |  |  |  |
@@ -85,27 +85,27 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-06 | PRF | engine | building |  |  |  |
 | PRF-07 | PRF | engine | building |  |  |  |
 | PRF-08 | PRF | engine | building |  |  |  |
-| FMT-01 | FMT | files | building |  |  |  |
-| FMT-02 | FMT | files | building |  |  |  |
-| FMT-03 | FMT | files | building |  |  |  |
-| FMT-04 | FMT | files | building |  |  |  |
-| FMT-05 | FMT | files | building |  |  |  |
-| FMT-06 | FMT | files | building |  |  |  |
-| FMT-07 | FMT | files | building |  |  |  |
+| FMT-01 | FMT | files | critic-pass | r1 pass: cold walk opened editable | docs/dialect.md | 93e2d5a |
+| FMT-02 | FMT | files | critic-fail | r1 fail: same as INV-03 | test/invariants/diff-budget.test.js | 93e2d5a |
+| FMT-03 | FMT | files | critic-fail | r1 fail: eslint not run (prettier+tsc 0) | test/invariants/format.test.js | 93e2d5a |
+| FMT-04 | FMT | files | critic-pass | r1 pass 20/20 | test/invariants/merge.test.js | 93e2d5a |
+| FMT-05 | FMT | files | critic-pass | r1 pass 2000/2000 | docs/evidence/FMT-05.txt | 93e2d5a |
+| FMT-06 | FMT | files | critic-pass | r1 pass | test/invariants | 93e2d5a |
+| FMT-07 | FMT | files | critic-pass | r1 pass 0 lost | test/invariants/live-edit.test.js | 93e2d5a |
 | ONB-01 | ONB | onboarding | open |  |  |  |
 | ONB-02 | ONB | onboarding | open |  |  |  |
 | ONB-03 | ONB | onboarding | open |  |  |  |
 | ONB-04 | ONB | onboarding | open |  |  |  |
 | ONB-05 | ONB | onboarding | open |  |  |  |
-| REL-01 | REL | files | building |  |  |  |
-| REL-02 | REL | files | building |  |  |  |
+| REL-01 | REL | files | critic-pass | r1 pass 200/200 | docs/evidence/INV-01-REL-01.txt | 93e2d5a |
+| REL-02 | REL | files | critic-pass | r1 pass; one lock at merge | test/invariants/lock.test.js | 93e2d5a |
 | REL-03 | REL | engine | building |  |  |  |
 | REL-04 | REL | engine | building |  |  |  |
 | REL-05 | REL | engine | building |  |  |  |
 | FEEL-01 | FEEL | canvas | building |  |  |  |
-| FEEL-02 | FEEL | canvas | critic | built r1; critic running | test/15-canvas-panel.test.js | 98f301e |
-| FEEL-03 | FEEL | canvas | critic | built r1; critic running | test/14-canvas-look.test.js | 98f301e |
-| FEEL-04 | FEEL | canvas | critic | built r1; critic running | test/12-canvas-nav.test.js | 98f301e |
+| FEEL-02 | FEEL | canvas | critic-fail | r2 split: Sonnet tie/narrow win, Codex Figma better; polish r3 | test/17-canvas-round2.test.js | 388726e |
+| FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
+| FEEL-04 | FEEL | canvas | critic-fail | r2 fail: CLS 0.0003-0.01 on variant selection | test/12-canvas-nav.test.js | 388726e |
 | FEEL-05 | FEEL | canvas | building |  |  |  |
 | SCN-1 | SCN | whole | open |  |  |  |
 | SCN-2 | SCN | whole | open |  |  |  |
@@ -129,3 +129,10 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | When | ccusage total | Note |
 |---|---|---|
 | 2026-10-21 start of round 1 | $53.19 today, machine-wide (Claude $47.57, Codex $5.62, Opencode $0.00) | ccusage@20.0.26 daily; includes other sessions on this machine |
+
+## New dependencies (merged)
+
+| Package | Version | Published | Why | Lane |
+|---|---|---|---|---|
+| axe-core | 4.13.0 | 2026-08-05 | test-only accessibility check for FEEL-03 | canvas |
+| Inter, JetBrains Mono (vendored woff2, OFL) | @fontsource-variable 5.2.8 | 2025-09-17 | chrome typefaces that work offline; not an npm dependency | canvas |
