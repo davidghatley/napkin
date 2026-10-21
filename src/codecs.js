@@ -1,22 +1,12 @@
-// How the store reads and writes each file type. A codec bundles the format with its edit rules,
-// so store.js stays the same single commit path (decision 0002) for both.
+// How the store reads and writes a component file. A codec bundles the format with its edit rules,
+// so store.js stays the single commit path (decision 0002).
 //   load(text, file) -> { doc, state }          throws on unreadable files
 //   save(state, before, after) -> { text, state }
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { basename } from 'node:path';
-import { parse, serialize } from './format.js';
-import * as spikeEdits from './edits.js';
 import * as model from './model.js';
 import { readComponent } from './tsx/read.js';
 import { writeComponent } from './tsx/write.js';
-
-// The 18 Oct spike format (decision 0001), kept until the canvas moves to TSX (M2).
-export const jsonCodec = {
-  kind: 'napkin/0',
-  load: (text) => ({ doc: parse(text), state: null }),
-  save: (state, before, after) => ({ text: serialize(after), state }),
-  ...spikeEdits,
-};
 
 // Sidecar <Name>.napkin.json: what isn't code (the stable component id, canvas position).
 export function sidecarPath(file) { return file.replace(/\.tsx$/, '.napkin.json'); }
@@ -49,4 +39,7 @@ export const tsxCodec = {
   EditError: model.EditError,
 };
 
-export const codecFor = (file) => (basename(file).endsWith('.tsx') ? tsxCodec : jsonCodec);
+export function codecFor(file) {
+  if (basename(file).endsWith('.tsx')) return tsxCodec;
+  throw new Error(`napkin opens .tsx component files, not ${basename(file)}`);
+}

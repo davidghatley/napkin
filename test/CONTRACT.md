@@ -1,7 +1,6 @@
-# Spike contract (what the acceptance tests rely on)
+# Contract (what the acceptance tests rely on)
 
-Shared and fixed (on `feat/core`): `src/format.js` (F01), `src/edits.js` (F02 validation, pure), `src/render.js` (F04), `fixtures/Card/Card.json`, `test/`.
-Each sync variant implements the four modules below. Revisions are opaque (number or string); tests only compare them for equality.
+The 18 Oct spike's JSON format, `src/format.js`, `src/edits.js`, `src/render.js` and `fixtures/Card/Card.json` are gone (M2); tests 1-5 now run on the TSX fixtures. The store section below is the commit path from the spike; the server, canvas client, MCP and page are specified in "First build". Revisions are opaque (number or string); tests only compare them for equality.
 
 ## `src/store.js` (F02 + F03 commit path)
 `export async function openStore(file)` resolves to:
@@ -12,35 +11,9 @@ Each sync variant implements the four modules below. Revisions are opaque (numbe
   - Otherwise edits that touch different keys land even if `baseRevision` is old (rebase onto current).
 - `close()`
 
-## `src/server.js --file <path> --port <n>` (F04, F05, F07)
-- Prints `napkin canvas: http://127.0.0.1:<port>/` on stdout once listening (`--port 0` picks a free port).
-- `GET /` is the canvas page. The page:
-  - renders the Card with `src/render.js` inside `#stage` (elements carry `data-node="<id>"`);
-  - has a side panel with `input#padding` (the `card.padding` value) and `input#fontWeight` (`title.fontWeight`); a `change` event sends a `set` edit through the store's edit path, with the page's current revision as base;
-  - shows the current revision in `#revision` and sets `document.body.dataset.ready = "1"` once live;
-  - updates without reload when the file changes for any reason (canvas, agent, external write such as `git restore`).
-- Edits reach the file through the same store path as the agent's.
-
-## `src/canvas-client.js` (the canvas socket, usable from Node)
-`export async function connectCanvas(baseUrl)` resolves (after the first state arrives) to:
-- `state()` returns `{ revision, doc }`
-- `onChange(cb)` where `cb({ revision, by, doc })` is called on every new revision; `by` is `"canvas"`, `"agent"` or `"file"`
-- `sendEdits(baseRevision, edits)` resolves the same result shape as `store.apply`
-- `close()`
-It speaks the same protocol as the page.
-
-## `src/mcp.js --file <path>` (F06, F07), env `NAPKIN_URL` = the server URL
-MCP over stdio: newline-delimited JSON-RPC 2.0, answers `initialize` (protocolVersion `2025-06-18`), `tools/list`, `tools/call`.
-Tools (results as `content[0].text` JSON, plus `structuredContent`):
-- `list_components {}` -> `[{ id, name }]`
-- `read_component { component }` -> `{ component, revision, doc }` (`component` may be the id or the name)
-- `apply_edits { component, baseRevision, edits }` -> `{ revision }`, or `isError: true` with the store's error text
-Change notices: whenever the component reaches a new revision made by someone else, send the notification
-`{ "jsonrpc": "2.0", "method": "notifications/napkin/change", "params": { component, revision, by, edits? } }`.
-
 ## First build (from 2026-10-20, decision 0003)
 
-- **`src/model.js`** (pure; the canvas page can import it): the napkin/1 model plus `applyEdits`, `touched`, `conflicts`, `diffKeys`, `index`, `resolveStyle(doc, nodeId, variant)`, `variantGrid(doc)`, `getValue`, `EditError`.
+- **`src/model.js`** (pure; the canvas page imports it): the napkin/1 model plus `applyEdits`, `touched`, `conflicts`, `diffKeys`, `index`, `resolveStyle(doc, nodeId, variant)`, `variantGrid(doc)`, `getValue`, `EditError`.
   - **Ops:**
     - `set {path, value, variant?}`, where `path` is `node.cssProp`, `node.text` or `node.@src` / `node.@alt`; `value: null` removes it; `variant: { axis: value }` writes an override;
     - `insert`, `delete`, `move`;
@@ -48,10 +21,26 @@ Change notices: whenever the component reaches a new revision made by someone el
     - `bindText {id, prop}` ("Make setting"; `prop: null` unbinds);
     - `addVariant {axis, value, base?}`, `removeVariant {axis, value}`.
 - **`src/tsx/read.js`:** `readComponent(text) -> { doc, ast, parts }`, or throws `DialectError` (`line N: reason`).
-- **`src/tsx/write.js`:**
-  - `writeComponent(ast, before, after, originalText) -> text` touches only what changed;
-  - `newComponentSource(Name)`.
-- **`src/codecs.js`:** `tsxCodec` and `jsonCodec`. The store picks one by file extension. The sidecar `<Name>.napkin.json` holds `{ id, canvas }`.
-- **`store.read()`** adds `readOnly: '<reason>'` for a `.tsx` outside the dialect. `apply` then returns `{ ok: false, error: 'read-only: …' }` and never writes.
-- **Fixtures:** `fixtures/Card/Card.tsx` and `fixtures/Button/Button.tsx` (size md/sm/lg × state default/hover, which is 6 variants).
-- **Tests:** `test/6-tsx-format.test.js` (M1). Tests 1–5 still run the 18 Oct JSON spike until M2 moves the canvas to TSX.
+- **`src/tsx/write.js`:** `writeComponent(ast, before, after, originalText) -> text` touches only what changed; `newComponentSource(Name)`.
+- **`src/codecs.js`:** `tsxCodec` (the only codec). The sidecar `<Name>.napkin.json` holds `{ id, canvas }`.
+- **`src/store.js`:** `openStore(file)` as above, and:
+  - `read()` also returns `source` (the file text), `readOnly: '<reason>'` for a `.tsx` outside the dialect, and `problem: '<error>'` while a hand edit is broken. `apply` on a read-only file returns `{ ok: false, error: 'read-only: ...' }` and never writes;
+  - `events`: `change { revision, by, edits, origin, doc }` and `problem { error }` (`error: null` clears it). A broken or half-written file keeps the last good doc, and the error carries `line N:`.
+- **`src/bundle.js`:** `createBundler()` -> `build(file, name) -> { ok, code, ms } | { ok: false, error, ms }`, `dispose(file)`, `close()`. esbuild in-process, one incremental context per file, `jsx: 'automatic'`, React from this repo's `node_modules`. The bundle is an ES module exporting `mount(el, props) -> unmount` (react-dom/client, rendered synchronously).
+- **`src/workspace.js`:** `openWorkspace(dir, { only? })` opens one store and one esbuild context per `*.tsx`, and picks up files added or removed while running. A component's id is the one in its sidecar; `find(idOrName)`, `summary()`, `snapshot(entry)`, `bundle(entry)`, `events` (`change`, `problem`, `added`, `removed`, `build`).
+- **`src/server.js --dir <folder> --port <n>`** (or `--file <one .tsx>` as a one-file folder; neither opens a temp copy of `fixtures/`). Prints `napkin canvas: http://127.0.0.1:<port>/`.
+  - `GET /api/components` -> `[{ id, name, readOnly? }]`
+  - `GET /api/components/:idOrName` -> `{ component, revision, doc, source, readOnly? }`
+  - `POST /api/components/:idOrName/edits` `{ baseRevision, edits, by, origin? }` -> `store.apply`'s result (409 on failure)
+  - `GET /api/events` (SSE): first a `state` frame per component, then `ready`; later `change` (`component, revision, by, edits?, origin, doc`), `problem` (`component, error`), `added` (a state frame), `removed` (`component`), `build` (`component, ok, ms, error?`). Every frame has `component`.
+  - `GET /bundle/:id.js?rev=N` -> the component's ES module bundle (waits for the build after the latest revision; `?rev` only busts caches); 500 `{ ok: false, error }` if esbuild fails.
+- **`src/canvas-client.js`:** `connectCanvas(baseUrl, { by })` -> `components()`, `state(idOrName)` (`{ component, name, revision, doc, readOnly?, problem? }`), `onChange(cb)` (every non-initial frame, with `mine`), `sendEdits(component, baseRevision, edits)`, `close()`.
+- **`src/mcp.js`:** needs only `NAPKIN_URL`. `list_components` -> `[{ id, name, readOnly? }]`; `read_component { component }` -> `{ component, revision, doc, source, readOnly? }`; `apply_edits { component, baseRevision, edits }`. Notices carry `component` (the id).
+- **The canvas page** (`public/index.html`, ES modules in `public/canvas/`):
+  - `main.js` builds the shared `ctx` (shape documented at its top); `stage.js` draws every component with its full variant grid, plus selection and hover overlays; `panel.js` (M3 replaces the stub) and `tools.js` (M4 replaces the stub).
+  - Each component is a `section.cmp[data-component=<id>][data-name][data-revision][data-ready="1"]`, with a `.badge` ("read-only: <reason>"), a `.problem` line (a broken hand edit: names the line, the last good render stays) and a `.build-error`.
+  - Each variant is a `figure.cell[data-variant='{"size":"sm"}']` whose `figcaption` reads `size=sm · state=hover` (`default` when there are no axes). Rendered elements keep their `data-n`.
+  - Click selects (`#overlay-select`, label "Component · node"), hover shows `#overlay-hover`. The panel shows `#sel-component`, `#sel-node`, `#sel-variant`, `#base-styles` and `input#padding` (a `change` sends a `set` edit on the selected node).
+  - `#revision` shows the revision of the component drawn last; `document.body.dataset.ready = "1"` once every component has drawn.
+- **Fixtures:** `fixtures/Card/Card.tsx` and `fixtures/Button/Button.tsx` (size md/sm/lg × state default/hover = 6 variants).
+- **Tests:** `test/1`-`5` (TSX versions of the spike tests), `test/6-tsx-format.test.js` (M1), `test/7-render.test.js` (M2: bundles and rebuild time, the 6-variant grid, external writes within 1 s, a broken hand edit, branch switch with `stale revision`, files added and removed, read-only badge).
