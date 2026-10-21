@@ -277,7 +277,7 @@ export function renderPanel(ctx) {
     const alpha = px ? Math.round((px.a ?? 1) * 100) : 100;
     return `<div class="crow"><div class="fbox txt hascolor colorbox"><button type="button" class="swatch" id="pick-btn-${idBase}" data-swatch="${idBase}" data-group="${group}" aria-label="Open the colour picker"${dis}><span class="chipcolor" data-color="${esc(value ?? '')}"></span></button><input type="color" class="nativepick" id="pick-${idBase}" data-pick="${idBase}" data-group="${group}" tabindex="-1" aria-label="Pick colour"${dis}>
       <input id="${idBase}" data-field="part" data-group="${group}" data-part="c" data-text="1" autocomplete="off" spellcheck="false" value="${esc(shownColor)}" placeholder="None" aria-label="Colour"${dis}>
-      <span class="vdiv" aria-hidden="true"></span><input class="alpha" id="${alphaId}" data-field="part" data-group="${group}" data-part="a" data-step="1" data-prop="${alphaId}" autocomplete="off" value="${alpha}" aria-label="Opacity"${px ? '' : ' disabled'}${dis}><span class="unit" aria-hidden="true">%</span></div>
+      <span class="vdiv" aria-hidden="true"></span><input class="alpha" id="${alphaId}" data-field="part" data-group="${group}" data-part="a" data-step="1" data-prop="${alphaId}" data-orig="${esc(value ?? '')}" autocomplete="off" value="${alpha}" aria-label="Opacity"${px ? '' : ' disabled'}${dis}><span class="unit" aria-hidden="true">%</span></div>
       ${eye ? `<button type="button" class="rowbtn" id="eye-${group}" data-action="toggle-eye" data-group="${group}" aria-pressed="${!eye.off}" aria-label="${eye.off ? 'Show' : 'Hide'} ${group}" title="${eye.off ? 'Show' : 'Hide'}"${dis}>${eye.off ? I.eyeoff : I.eye}</button>` : '<span></span>'}
       ${remove ? `<button type="button" class="rowbtn" id="remove-${remove.id}" data-action="clear-prop" data-props="${remove.props.join(',')}" aria-label="Remove ${group}" title="Remove"${dis}>−</button>` : ''}</div>`;
   };
@@ -514,8 +514,14 @@ function wire(ctx, el) {
     if (!c) return '';
     const p = parseColor(c);
     if (!p) return c; // a name, a var(): written as typed
-    const a = p.a < 1 ? p.a : Math.min(100, Math.max(0, nv(alphaId, 100))) / 100; // an alpha typed into the colour itself wins
-    return formatColor({ ...p, a }, p.space, p);
+    const ai = el.querySelector('#' + CSS.escape(alphaId)), orig = ai?.dataset.orig ? parseColor(ai.dataset.orig) : null;
+    const touched = !!ai && ai.value !== ai.defaultValue;
+    // an alpha typed into the colour itself wins; an alpha field nobody touched keeps the file's alpha exactly (0.333 stays 0.333, 77 stays 77)
+    let a, like = p;
+    if (p.a < 1) a = p.a;
+    else if (orig && !touched) { a = orig.a; if (orig.space === p.space) like = orig; }
+    else a = Math.min(100, Math.max(0, nv(alphaId, 100))) / 100;
+    return formatColor({ ...p, a }, p.space, a === like.a ? like : p);
   };
   const box = (ids) => { const n = ids.map((i) => nv(i)); return n.every((x) => x === n[0]) ? n[0] : n.map((x) => `${x}px`).join(' '); };
   function readGroup(g) {

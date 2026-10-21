@@ -244,3 +244,25 @@ test('LAY-01 and LAY-03 controls: wrap, space-between and grid tracks are one li
     assert.deepEqual(changedLines(before, text('Grid')), { added: 1, removed: 1 });
   } finally { await L.close(); }
 });
+
+test('LAY-08: a colour-only edit keeps the alpha the file had, exactly', { timeout: 90000 }, async () => {
+  const L = await lab({ Alpha: tsx('Alpha', { id: 'root', tag: 'div', style: { width: 100, height: 40, background: 'rgb(10 20 30 / 0.333)', border: '2px solid #12345677' } }) }, { theme: 'light' });
+  const { browser } = L;
+  try {
+    await L.select('Alpha', 'root');
+    let r0 = await L.rev('Alpha');
+    await browser.type('#background', 'rgb(11 20 30)');
+    await waitRev(L, 'Alpha', r0);
+    assert.equal((await L.doc('Alpha')).root.style.background, 'rgb(11 20 30 / 0.333)');
+    await L.select('Alpha', 'root');
+    r0 = await L.rev('Alpha');
+    await browser.type('#stroke-color', '#223456');
+    await waitRev(L, 'Alpha', r0);
+    assert.equal((await L.doc('Alpha')).root.style.border, '2px solid #22345677');
+    await L.select('Alpha', 'root');
+    r0 = await L.rev('Alpha');
+    await browser.type('#fill-a', '50'); // an alpha the person changed is written with two decimals
+    await waitRev(L, 'Alpha', r0);
+    assert.equal((await L.doc('Alpha')).root.style.background, 'rgb(11 20 30 / 0.5)');
+  } finally { await L.close(); }
+});

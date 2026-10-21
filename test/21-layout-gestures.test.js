@@ -177,6 +177,22 @@ test('LAY-06: smart guides and snapping on an absolute layer; Shift locks the ax
       }
       await zoomTo1(L);
     });
+    await t.test('without Alt a dragged position rounds to the grid at every zoom (8 px, 4 px from 200%)', async () => {
+      for (const z of [0.5, 1, 1.37, 1.5, 2, 3, 4]) {
+        await L.edit('Abs', [{ op: 'set', path: 'mover.left', value: 20 }, { op: 'set', path: 'mover.top', value: 220 }]);
+        await L.q(`napkin.view.set({ x: ${600 - 248 - 50 * z}, y: ${450 - 44 - 240 * z}, z: ${z} }, { animate: false })`); // the mover sits near the middle of the screen at every zoom
+        await sleep(150);
+        const r0 = await L.rev('Abs');
+        const m = await centerOf(L.browser, el('Abs', 'mover'));
+        await io.drag(m.x, m.y, m.x + 37, m.y - 23); // 37 and 23 screen px: never a multiple of the step in canvas px
+        await waitRev(L, 'Abs', r0);
+        const s = (await L.doc('Abs')).root.children[1].style, step = z >= 2 ? 4 : 8;
+        assert.equal(s.left % step, 0, `left ${s.left} at ${z}x`);
+        assert.equal(s.top % step, 0, `top ${s.top} at ${z}x`);
+        assert.ok(Math.abs(s.left - (20 + 37 / z)) <= step / 2 + 0.6 && Math.abs(s.top - (220 - 23 / z)) <= step / 2 + 0.6, `the nearest step: ${s.left},${s.top} at ${z}x`);
+      }
+      await zoomTo1(L);
+    });
     await t.test('Shift moves along one axis only', async () => {
       await L.edit('Abs', [{ op: 'set', path: 'mover.left', value: 40 }, { op: 'set', path: 'mover.top', value: 150 }]);
       const r0 = await L.rev('Abs');

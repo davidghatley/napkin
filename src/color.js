@@ -50,7 +50,7 @@ export function parseColor(text) {
   if (m) {
     let h = m[1];
     if (h.length <= 4) h = [...h].map((c) => c + c).join('');
-    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16), a: h.length === 8 ? round(parseInt(h.slice(6), 16) / 255, 2) : 1, space: 'hex', short: m[1].length <= 4, upper: /[A-F]/.test(m[1]) };
+    return { r: parseInt(h.slice(0, 2), 16), g: parseInt(h.slice(2, 4), 16), b: parseInt(h.slice(4, 6), 16), a: h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1, aRaw: h.length === 8 ? h.slice(6) : undefined, space: 'hex', short: m[1].length <= 4, upper: /[A-F]/.test(m[1]) };
   }
   m = FN.exec(t);
   if (!m) return null;
@@ -63,29 +63,32 @@ export function parseColor(text) {
   const n = parts.map((p) => re.exec(p));
   if (n.length !== 3 || n.some((x) => !x)) return null;
   const v = n.map((x) => Number(x[1])), unit = n.map((x) => x[2]);
-  let a = 1;
-  if (aRaw !== undefined) { const am = re.exec(aRaw.trim()); if (!am) return null; a = am[2] === '%' ? Number(am[1]) / 100 : Number(am[1]); }
-  a = round(clamp(a, 0, 1), 2);
+  let a = 1, rawA;
+  if (aRaw !== undefined) { const am = re.exec(aRaw.trim()); if (!am) return null; a = am[2] === '%' ? Number(am[1]) / 100 : Number(am[1]); rawA = aRaw.trim(); }
+  a = clamp(a, 0, 1); // exact: the alpha you wrote is kept as you wrote it until you change it
   const legacy = !/\s/.test(main.trim()) || /,/.test(main);
-  if (fn.startsWith('rgb')) return { r: clamp(unit[0] === '%' ? v[0] * 2.55 : v[0], 0, 255), g: clamp(unit[1] === '%' ? v[1] * 2.55 : v[1], 0, 255), b: clamp(unit[2] === '%' ? v[2] * 2.55 : v[2], 0, 255), a, space: 'rgb', legacy, fn };
-  if (fn.startsWith('hsl')) return { ...fromHsl(v[0], v[1], v[2]), a, space: 'hsl', legacy, fn };
-  return { ...fromOklch(unit[0] === '%' ? v[0] / 100 : v[0], v[1], v[2]), a, space: 'oklch', oklch: { l: unit[0] === '%' ? v[0] / 100 : v[0], c: v[1], h: v[2] } };
+  if (fn.startsWith('rgb')) return { r: clamp(unit[0] === '%' ? v[0] * 2.55 : v[0], 0, 255), g: clamp(unit[1] === '%' ? v[1] * 2.55 : v[1], 0, 255), b: clamp(unit[2] === '%' ? v[2] * 2.55 : v[2], 0, 255), a, aRaw: rawA, space: 'rgb', legacy, fn };
+  if (fn.startsWith('hsl')) return { ...fromHsl(v[0], v[1], v[2]), a, aRaw: rawA, space: 'hsl', legacy, fn };
+  return { ...fromOklch(unit[0] === '%' ? v[0] / 100 : v[0], v[1], v[2]), a, aRaw: rawA, space: 'oklch', oklch: { l: unit[0] === '%' ? v[0] / 100 : v[0], c: v[1], h: v[2] } };
 }
 // Colour -> text in `space` ('hex' | 'rgb' | 'hsl' | 'oklch'). `like` (a parsed colour) keeps small habits: rgba() vs rgb(), commas vs spaces, upper-case hex.
 export function formatColor(c, space = 'hex', like = {}) {
-  const a = round(c.a ?? 1, 2); // two decimals: 0.25, never 0.251
+  // The alpha you did not touch is written exactly as you wrote it; a changed alpha gets two decimals (0.25, never 0.251).
+  const raw = like.space === space && like.aRaw !== undefined && c.a === like.a;
+  const a = round(c.a ?? 1, 2), hasA = raw || a < 1;
   if (space === 'hex') {
-    const body = hex2(c.r) + hex2(c.g) + hex2(c.b) + (a < 1 ? hex2(a * 255) : '');
+    const body = hex2(c.r) + hex2(c.g) + hex2(c.b) + (hasA ? (raw ? like.aRaw : hex2(a * 255)) : '');
     return '#' + (like.upper ? body.toUpperCase() : body);
   }
+  const at = raw ? like.aRaw : String(a);
   if (space === 'rgb') {
     const [r, g, b] = [c.r, c.g, c.b].map((x) => Math.round(x));
-    if (like.legacy === false) return `rgb(${r} ${g} ${b}${a < 1 ? ` / ${a}` : ''})`;
-    return a < 1 ? `rgba(${r}, ${g}, ${b}, ${a})` : `rgb(${r}, ${g}, ${b})`;
+    if (like.legacy === false) return `rgb(${r} ${g} ${b}${hasA ? ` / ${at}` : ''})`;
+    return hasA ? `rgba(${r}, ${g}, ${b}, ${at})` : `rgb(${r}, ${g}, ${b})`;
   }
-  if (space === 'hsl') { const h = toHsl(c); return `hsl(${Math.round(h.h)} ${Math.round(h.s)}% ${Math.round(h.l)}%${a < 1 ? ` / ${a}` : ''})`; }
+  if (space === 'hsl') { const h = toHsl(c); return `hsl(${Math.round(h.h)} ${Math.round(h.s)}% ${Math.round(h.l)}%${hasA ? ` / ${at}` : ''})`; }
   const o = c.oklch && Math.abs(c.oklch.l - toOklch(c).l) < 0.002 ? c.oklch : toOklch(c);
-  return `oklch(${round(o.l, 3)} ${round(o.c, 3)} ${round(o.h, 1)}${a < 1 ? ` / ${a}` : ''})`;
+  return `oklch(${round(o.l, 3)} ${round(o.c, 3)} ${round(o.h, 1)}${hasA ? ` / ${at}` : ''})`;
 }
 const IN = /#[0-9a-f]{3,8}\b|(?:rgba?|hsla?|oklch)\([^)]*\)/gi;
 // Every colour written in a piece of CSS (a border or shadow value has one inside it).

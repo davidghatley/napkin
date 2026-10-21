@@ -131,10 +131,22 @@ export function diffKeys(before, after) {
 }
 
 // --- validation helpers ---
+// A CSS value may hold ; { } < > inside quotes or parentheses (url(data:image/png;base64,...), 'a;b'); outside them they would end the declaration.
+export function unsafeCssValue(value) {
+  let d = 0, q = '';
+  for (const ch of value) {
+    if (/[\n`\\]/.test(ch)) return true;
+    if (q) { if (ch === q) q = ''; continue; }
+    if (ch === '"' || ch === "'") { q = ch; continue; }
+    if (ch === '(') d++; else if (ch === ')') { d--; if (d < 0) return true; }
+    else if (d === 0 && /[;{}<>]/.test(ch)) return true;
+  }
+  return d !== 0 || q !== '';
+}
 function checkValue(i, path, value) {
   if (typeof value === 'number') { if (!Number.isFinite(value)) throw new EditError(i, `value for ${path} must be finite`); return; }
   if (typeof value !== 'string') throw new EditError(i, `value for ${path} must be a string or number`);
-  if (/[;{}<>\\`\n]/.test(value)) throw new EditError(i, `unsafe value for ${path}`);
+  if (unsafeCssValue(value)) throw new EditError(i, `unsafe value for ${path}`);
 }
 function checkText(i, text) {
   if (typeof text !== 'string') throw new EditError(i, 'text must be a string');

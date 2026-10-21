@@ -99,3 +99,21 @@ test('LAY-04: 8 cases, a pinned child follows its parent like a Figma constraint
     }
   } finally { await L.close(); }
 });
+
+test('LAY-04: an odd-sized child keeps its place through min -> centre -> min (no half-pixel drift)', { timeout: 90000 }, async () => {
+  const L = await lab({ Odd: tsx('Odd', { id: 'stage', tag: 'div', style: { position: 'relative', width: 400, height: 300 }, kids: [{ id: 'pin', tag: 'div', style: { position: 'absolute', left: 40, top: 30, width: 101, height: 61, background: '#2236b0' } }] }) }, { theme: 'light' });
+  try {
+    const read = () => L.q(`(() => { const c = document.querySelector('section[data-name=Odd] .cell .mount'); const a = c.querySelector('[data-n=stage]').getBoundingClientRect(), b = c.querySelector('[data-n=pin]').getBoundingClientRect(), z = napkin.state.zoom; return JSON.stringify({ x: (b.left - a.left) / z, y: (b.top - a.top) / z }); })()`).then(JSON.parse);
+    await L.select('Odd', 'pin');
+    for (const [axis, mode] of [['h', 'center'], ['h', 'min'], ['v', 'center'], ['v', 'min'], ['h', 'center'], ['v', 'center'], ['h', 'min'], ['v', 'min']]) {
+      const r0 = await L.rev('Odd');
+      await L.q(`document.querySelector('#pin-${axis}-${mode}').click()`);
+      await L.browser.waitFor(`napkin.find('Odd').revision > ${r0} && document.querySelector('section[data-name=Odd]').dataset.revision === String(napkin.find('Odd').revision)`);
+      await L.select('Odd', 'pin');
+      const p = await read();
+      assert.deepEqual([p.x, p.y], [40, 30], `after ${axis} ${mode}`);
+    }
+    const s = (await L.doc('Odd')).root.children[0].style;
+    assert.deepEqual([s.left, s.top, s.width, s.height], [40, 30, 101, 61]);
+  } finally { await L.close(); }
+});

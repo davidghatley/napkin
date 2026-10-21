@@ -24,6 +24,11 @@ test('snaps centres and right edges, and to parent edges and the parent centre',
   assert.equal(snap({ x: 3, y: 500, w: 50, h: 10 }, [parent], { threshold: 4 }).dx, -3, 'parent left edge');
   assert.equal(snap({ x: 176, y: 500, w: 50, h: 10 }, [parent], { threshold: 4 }).dx, -1, 'centre of the parent (200)');
 });
+test('the grid is a quantization: it rounds to the nearest step however far off, and edges within the threshold win over it', () => {
+  for (const [x, want] of [[0, 0], [3.9, 0], [4.1, 8], [11, 8], [12.1, 16], [-5, -8], [1003.4, 1000]]) assert.equal(snap({ x, y: 7000, w: 5, h: 5 }, [], { threshold: 4, grid: 8 }).dx + x, want, `x=${x}`);
+  const near = snap({ x: 99, y: 7000, w: 5, h: 5 }, [{ x: 100, y: 0, w: 5, h: 5, kind: 'sibling' }], { threshold: 4, grid: 8 });
+  assert.equal(near.dx + 99, 100, 'the sibling edge, not the grid step 96 or 104');
+});
 test('falls back to a 4 or 8 px grid, and the closest line wins', () => {
   assert.equal(snap({ x: 19, y: 500, w: 5, h: 5 }, [], { threshold: 4, grid: 8 }).dx, -3);
   assert.equal(snap({ x: 18, y: 31, w: 5, h: 5 }, [], { threshold: 4, grid: 4 }).dy, 1);

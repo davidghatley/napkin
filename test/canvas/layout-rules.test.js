@@ -37,3 +37,12 @@ test('grid: a placement is one line; cells come from track sizes', () => {
   assert.deepEqual(placePatch({ gridColumn: '1' }, 3, 2), { gridColumn: '3', gridRow: '2' });
   assert.deepEqual(placementOf({ gridArea: '2 / 3' }), { col: 3, row: 2 });
 });
+
+test('a centre pin keeps an odd size exactly where it was (halves are kept), and min -> centre -> min is stable', () => {
+  const p = { w: 400, h: 300 };
+  const c = pinPatch({ h: 'center', v: 'min' }, { x: 40, y: 10, w: 101, h: 20 }, p);
+  assert.equal(c.left, 'calc(50% - 109.5px)');
+  assert.equal(pinPatch({ h: 'center', v: 'min' }, { x: 150, y: 10, w: 100, h: 20 }, p).left, '50%');
+  // centre: left = 200 - 109.5 - 50.5 = 40, so the element is measured at x = 40 and min writes 40 again
+  assert.equal(pinPatch({ h: 'min', v: 'min' }, { x: 40, y: 10, w: 101, h: 20 }, p).left, 40);
+});

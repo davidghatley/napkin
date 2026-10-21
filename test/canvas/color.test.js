@@ -25,3 +25,17 @@ test('a file that uses rgb() keeps rgb(): new colours follow the file', () => {
   assert.equal(fileSpace({ root: node({ margin: 0 }), variants: {} }), 'hex');
   assert.deepEqual(colorsIn('1px solid rgba(0, 0, 0, .2)'), ['rgba(0, 0, 0, .2)']);
 });
+
+test('an alpha nobody touched is written back exactly; a changed alpha has two decimals', () => {
+  for (const t of ['rgb(10 20 30 / 0.333)', 'rgba(10, 20, 30, 0.333)', '#12345677', 'hsl(10 20% 30% / 33.3%)', 'oklch(0.7 0.05 200 / 0.333)']) {
+    const p = parseColor(t);
+    assert.equal(formatColor({ r: p.r, g: p.g, b: p.b, a: p.a, ...(p.oklch ? { oklch: p.oklch } : {}) }, p.space, p), t, t);
+  }
+  const p = parseColor('rgb(10 20 30 / 0.333)');
+  assert.equal(formatColor({ ...p, r: 11 }, 'rgb', p), 'rgb(11 20 30 / 0.333)', 'a colour-only edit keeps the alpha');
+  assert.equal(formatColor({ ...p, a: 0.5 }, 'rgb', p), 'rgb(10 20 30 / 0.5)');
+  assert.equal(formatColor({ ...p, a: 0.251 }, 'rgb', p), 'rgb(10 20 30 / 0.25)');
+  assert.equal(formatColor(parseColor('#00000040'), 'rgb', parseColor('#00000040')), 'rgba(0, 0, 0, 0.25)', 'hex to rgb rounds to two decimals');
+  const h = parseColor('#12345677');
+  assert.equal(formatColor({ ...h, r: 0x22 }, 'hex', h), '#22345677');
+});
