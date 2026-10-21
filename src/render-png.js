@@ -2,7 +2,7 @@
 // for one variant and returns a PNG of the component's root element. The page is a blank host;
 // bundles are imported from blob URLs, so no web server is needed (works in the MCP fallback too).
 import { explainError } from './errors.js';
-import { spawn } from 'node:child_process';
+import { spawnChromium } from './chromium.js';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,10 +16,10 @@ export class RenderError extends Error { constructor(message) { super(explainErr
 
 async function launch() {
   const profile = mkdtempSync(join(tmpdir(), 'napkin-render-'));
-  const proc = spawn(process.env.CHROMIUM || 'chromium', [
+  const proc = spawnChromium([
     '--headless=new', '--disable-gpu', '--use-angle=swiftshader', '--no-first-run', '--no-default-browser-check',
     '--hide-scrollbars', `--user-data-dir=${profile}`, '--remote-debugging-port=0', '--window-size=1600,1200', 'about:blank',
-  ], { stdio: 'ignore' });
+  ]);
   let dead = false; proc.on('exit', () => { dead = true; });
   const portFile = join(profile, 'DevToolsActivePort');
   for (let i = 0; i < 100 && !existsSync(portFile) && !dead; i++) await sleep(100);
