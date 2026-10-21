@@ -1,7 +1,7 @@
 // Whole-file writes (REL-01). The bytes go to a temp file in the same folder, are flushed to disk,
 // and only then renamed over the target, so a kill -9 at any moment leaves the old file or the new
 // one, never half of one. Nothing else in napkin writes a component or sidecar any other way.
-import { openSync, writeSync, fsyncSync, closeSync, renameSync, linkSync, unlinkSync, statSync, readdirSync } from 'node:fs';
+import { openSync, writeSync, fsyncSync, closeSync, renameSync, linkSync, unlinkSync, statSync, readdirSync, readFileSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 
 let counter = 0;
@@ -14,11 +14,17 @@ function fsyncDir(dir) {
 // writeAtomic(file, text)                 replace (or create) the file
 // writeAtomic(file, text, { exclusive })  create only; throws EEXIST when the file is already there
 // { check }: called after the temp file is on disk and just before it replaces the target; if it throws, nothing is replaced.
-export function writeAtomic(file, data, { exclusive = false, check } = {}) {
+// { guard }: the text the caller based this write on. A hard link to the target is taken just before the rename; after the
+// rename the link is read, and if it does not hold `guard` a hand save landed in that window (an in-place write shows through the
+// shared inode): the user's text is renamed back over the target and HandSave is thrown. A target replaced by a rename
+// (an editor's atomic save) is noticed by its inode before we rename, and nothing is replaced.
+export class HandSave extends Error {}
+export function writeAtomic(file, data, { exclusive = false, check, guard } = {}) {
   const tmp = tmpName(file);
   let mode = 0o644;
   try { mode = statSync(file).mode & 0o777; } catch { /* new file */ }
   const buf = Buffer.from(data);
+  let guardPath = null;
   try {
     const fd = openSync(tmp, 'wx', mode);
     try {
@@ -27,9 +33,21 @@ export function writeAtomic(file, data, { exclusive = false, check } = {}) {
       fsyncSync(fd);
     } finally { closeSync(fd); }
     check?.();
+    if (guard !== undefined && !exclusive) {
+      const gdir = join(dirname(file), '.napkin', 'guard');
+      mkdirSync(gdir, { recursive: true });
+      guardPath = join(gdir, `${basename(file)}.${process.pid}.${counter++}`);
+      try { linkSync(file, guardPath); } catch { guardPath = null; } // no target yet: nothing to guard
+      if (guardPath) { let same = false; try { same = statSync(file).ino === statSync(guardPath).ino; } catch { /* target vanished */ } if (!same) throw new HandSave(''); }
+    }
     if (exclusive) linkSync(tmp, file); // fails with EEXIST instead of replacing
     else renameSync(tmp, file);
+    if (guardPath) {
+      const seen = readFileSync(guardPath, 'utf8');
+      if (seen !== guard) { renameSync(guardPath, file); guardPath = null; throw new HandSave(seen); } // the user's text wins
+    }
   } finally {
+    if (guardPath) { try { unlinkSync(guardPath); } catch { /* gone */ } }
     if (exclusive) { try { unlinkSync(tmp); } catch { /* already gone */ } }
     else { try { unlinkSync(tmp); } catch { /* renamed away: the normal case */ } }
   }

@@ -94,3 +94,35 @@ test('FMT-07: the same race on the same property: the canvas edit is refused as 
     assert.equal(readComponent(readFileSync(file, 'utf8')).doc.root.style.fontSize, 99);
   } finally { await store.close(); }
 });
+
+// The last window: after the hard link guard is taken and just before the rename. An in-place hand save shows through the shared
+// inode (the user's text is renamed back); an editor's atomic save replaces the inode (nothing of ours is renamed over it).
+async function withEditorBeforeRename(file, how, handEdit, run) {
+  const realRename = fs.renameSync, realWrite = fs.writeFileSync, realLink = fs.linkSync;
+  let fired = 0;
+  if (how === 'inplace') { // a plain write to the file, just before our rename
+    fs.renameSync = function (from, to, ...rest) { if (to === file && !fired++) realWrite(file, handEdit); return realRename.call(this, from, to, ...rest); };
+  } else { // an editor's save (new file renamed over the target) right after the guard link was taken
+    fs.linkSync = function (from, to, ...rest) { const r = realLink.call(this, from, to, ...rest); if (from === file && !fired++) { realWrite(`${file}.vim`, handEdit); realRename(`${file}.vim`, file); } return r; };
+  }
+  syncBuiltinESMExports();
+  try { return await run(); } finally { fs.renameSync = realRename; fs.linkSync = realLink; syncBuiltinESMExports(); }
+}
+for (const how of ['inplace', 'atomic']) {
+  test(`FMT-07: a hand save (${how}) between the guard link and the rename wins: stale reply, the user's text stays`, async () => {
+    const { file } = tempRepo(['Button']);
+    const store = await openStore(file);
+    try {
+      const { revision } = await store.read();
+      const hand = readFileSync(file, 'utf8').replace(/^(\s+fontSize: )\d+,$/m, '$177,');
+      const r = await withEditorBeforeRename(file, how, hand, () => store.apply({ baseRevision: revision, edits: [{ op: 'set', path: 'label.fontWeight', value: 800 }], by: 'canvas' }));
+      assert.equal(r.ok, false);
+      assert.match(r.error, /^stale revision: Button\.tsx changed on disk while saving; reread and retry$/);
+      assert.equal(readFileSync(file, 'utf8'), hand, 'the hand-written text is what is on disk');
+      assert.equal((await store.read()).doc.root.style.fontSize, 77, 'and the store took it in');
+      const again = await store.apply({ baseRevision: (await store.read()).revision, edits: [{ op: 'set', path: 'label.fontWeight', value: 800 }], by: 'canvas' });
+      assert.equal(again.ok, true, again.error);
+      assert.equal(readComponent(readFileSync(file, 'utf8')).doc.root.style.fontSize, 77);
+    } finally { await store.close(); }
+  });
+}

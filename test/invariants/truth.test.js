@@ -17,6 +17,8 @@ import { openStore, revisionOf } from '../../src/store.js';
 import { readComponent } from '../../src/tsx/read.js';
 import { ROOT, fixture, sleep } from '../helpers/harness.js';
 import { payload } from '../helpers/payload.js';
+import { rng } from '../helpers/fuzz.js';
+// kill timings come from a seeded generator (SEED=n to vary); the operating system's scheduling is still its own
 
 const sha16 = (t) => createHash('sha256').update(t).digest('hex').slice(0, 16);
 const shaFull = (t) => createHash('sha256').update(t).digest('hex');
@@ -41,6 +43,7 @@ async function runAndKill(script, args, ms, selfKill) {
 }
 
 const TRIALS = Number(process.env.TRIALS || 12);
+const rand = rng(Number(process.env.SEED || 1));
 test(`INV-01: ${TRIALS} random SIGKILLs during edits; after restart the model is exactly what is on disk`, async () => {
   let wasOld = 0, wasNew = 0, leftovers = 0, edits = 0;
   for (let i = 0; i < TRIALS; i++) {
@@ -48,8 +51,8 @@ test(`INV-01: ${TRIALS} random SIGKILLs during edits; after restart the model is
     const file = join(dir, 'Button.tsx');
     writeFileSync(file, readFileSync(fixture('Button'), 'utf8'));
     // even trials: killed from outside at a random moment; odd trials: the child kills itself at a random step of the write protocol
-    const selfKill = i % 2 ? { at: 1 + Math.floor(Math.random() * 60), phase: Math.random() < 0.5 ? 'before' : 'after' } : undefined;
-    const { out } = await runAndKill('edit-loop.mjs', [file, String(1000 + i)], Math.floor(Math.random() * 200), selfKill);
+    const selfKill = i % 2 ? { at: 1 + Math.floor(rand() * 60), phase: rand() < 0.5 ? 'before' : 'after' } : undefined;
+    const { out } = await runAndKill('edit-loop.mjs', [file, String(1000 + i)], Math.floor(rand() * 200), selfKill);
     const lines = out.trim().split('\n').filter(Boolean);
     const lastC = [...lines].reverse().find((l) => l.startsWith('C '))?.slice(2) ?? sha16(readFileSync(fixture('Button'), 'utf8'));
     const lastP = [...lines].reverse().find((l) => l.startsWith('P '))?.slice(2);
@@ -85,7 +88,7 @@ test(`REL-01: ${REL} kill -9 trials during atomic writes: the file is whole ever
   let leftover = 0, a = 0, b = 0;
   for (let i = 0; i < REL; i++) {
     writeFileSync(file, payload('A', KB));
-    await runAndKill('atomic-loop.mjs', [file, 'atomic', String(KB)], Math.floor(Math.random() * 60));
+    await runAndKill('atomic-loop.mjs', [file, 'atomic', String(KB)], Math.floor(rand() * 60));
     const h = shaFull(readFileSync(file, 'utf8'));
     assert.ok(whole.has(h), `trial ${i}: the file is neither payload A nor payload B`);
     if (h === shaFull(payload('A', KB))) a++; else b++;
@@ -97,7 +100,7 @@ test(`REL-01: ${REL} kill -9 trials during atomic writes: the file is whole ever
   const CTRL = Math.min(REL, 20);
   for (let i = 0; i < CTRL; i++) {
     writeFileSync(file, payload('A', KB));
-    await runAndKill('atomic-loop.mjs', [file, 'naive', String(KB)], Math.floor(Math.random() * 60));
+    await runAndKill('atomic-loop.mjs', [file, 'naive', String(KB)], Math.floor(rand() * 60));
     if (!whole.has(shaFull(readFileSync(file, 'utf8')))) torn++;
   }
   console.log(`REL-01: ${REL}/${REL} atomic trials whole (A ${a}, B ${b}; ${leftover} left a temp file); control (truncate+write in place): ${torn}/${CTRL} torn`);

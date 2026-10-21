@@ -145,6 +145,8 @@ export function returnLines(text) {
   return end - at + 1;
 }
 // `const variants = {` ... `};` and `const variants = {};` share their first line: going between empty and not costs the merged line on one side and two lines on the other.
+// Lines the model says a node's blocks take (its base block and its override blocks).
+const modelBlockLines = (doc, id) => (nprops(index(doc).byId.get(id)?.style) ? 2 + nprops(index(doc).byId.get(id).style) : 0) + Object.values(doc.variants || {}).reduce((a, vals) => a + Object.values(vals).reduce((b, nodes) => b + (nodes[id] ? 2 + nprops(nodes[id]) : 0), 0), 0);
 // Lines of every `id: {` ... `}` block in the text (a node's base block and its override blocks), comments and all.
 function blockLines(text, id) {
   const lines = text.split(/\r?\n/);
@@ -153,7 +155,7 @@ function blockLines(text, id) {
     const m = l.match(new RegExp(`^(\\s*)['"]?${id}['"]?: \\{\\s*$`));
     if (!m) return;
     let j = i + 1;
-    while (j < lines.length && !new RegExp(`^${m[1]}\\},?\\s*$`).test(lines[j])) j++;
+    while (j < lines.length && !new RegExp(`^${m[1]}\\},?\\s*(//.*|/\\*.*\\*/)?\\s*$`).test(lines[j])) j++;
     total += j - i + 1;
   });
   return total;
@@ -228,7 +230,11 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
     case 'removeVariant': {
       const gone = axes(before).length !== axes(after).length;
       const mB = memberLines(ctx.textBefore, edit.axis), mA = predictMember(ctx.textBefore, after, edit.axis);
-      const gone2 = Math.max(pos(-dV), blockLines(ctx.textBefore, edit.value) + (gone ? blockLines(ctx.textBefore, edit.axis) : 0)); // (the blocks as written, comments inside them included)
+      const nodesModel = (vals) => Object.values(vals || {}).reduce((a, st) => a + 2 + Object.keys(st).length, 0);
+      const valueModel = before.variants?.[edit.axis]?.[edit.value] ? 2 + nodesModel(before.variants[edit.axis][edit.value]) : 0;
+      const axisModel = gone ? 2 + Object.values(before.variants?.[edit.axis] || {}).reduce((a, v) => a + 2 + nodesModel(v), 0) : 0;
+      const actual = blockLines(ctx.textBefore, edit.value) + (gone ? blockLines(ctx.textBefore, edit.axis) : 0);
+      const gone2 = pos(-dV) + Math.max(0, actual - valueModel - axisModel + (gone ? valueModel : 0)); // (+ comment lines written inside the removed blocks)
       return gone ? { add: pc.add + 1, del: mB + 1 + pc.del + gone2 } : { add: layoutCost(mB, mA).add, del: layoutCost(mB, mA).del + gone2 };
     }
     case 'insert': {
@@ -240,7 +246,7 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
       const parent = index(before).parentOf.get(edit.id);
       const sub = elementLines(ctx.textBefore, edit.id);
       const nowLeaf = parent.children.length === 1;
-      return { add: nowLeaf ? 1 + predictExtra(ctx, after, Z.get(parent.id)) : 0, del: sub + (nowLeaf ? 2 + extraTag(ctx.textBefore, parent.id) : 0) + Math.max(pos(-dB) + pos(-dV), subtreeIds(A.get(edit.id)).reduce((a, i) => a + blockLines(ctx.textBefore, i), 0)) };
+      return { add: nowLeaf ? 1 + predictExtra(ctx, after, Z.get(parent.id)) : 0, del: sub + (nowLeaf ? 2 + extraTag(ctx.textBefore, parent.id) : 0) + pos(-dB) + pos(-dV) + Math.max(0, subtreeIds(A.get(edit.id)).reduce((a, i) => a + blockLines(ctx.textBefore, i) - modelBlockLines(before, i), 0)) }; // (+ comment lines written inside the removed blocks)
     }
     case 'move': {
       const n = A.get(edit.id), from = index(before).parentOf.get(edit.id);

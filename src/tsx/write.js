@@ -108,7 +108,8 @@ function ifaceSplices(text, parts, before, after, st) {
   for (const m of members) {
     const name = keyName(m.key), p = now.get(renamed.get(name) ?? name), old = was.get(name);
     if (!p) out.push({ start: lineStart(text, m.start), end: lineEnd(text, m.end), text: '' });
-    else if (old && (old.name !== p.name || old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
+    else if (old && old.name !== p.name && old.type === p.type && same(old.options, p.options)) out.push({ start: m.key.start, end: m.key.end, text: p.name }); // a rename: only the name changes
+    else if (old && (old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
   }
   const have = new Set(members.map((m) => renamed.get(keyName(m.key)) ?? keyName(m.key)));
   const added = after.props.filter((p) => !have.has(p.name));
@@ -141,7 +142,7 @@ function paramsSplice(text, parts, before, after, st) {
     const fitsNew = `export function ${fn.id.name}(${items.length ? `{ ${items.join(', ')} }` : '{}'}: ${iface}) {`.length <= 80;
     return !wasPrettier || !fitsNew;
   })();
-  if (stillMulti && param && /\n/.test(text.slice(param.start, param.end)) && same(before.props.map((p) => p.name), after.props.map((p) => p.name)) && param.properties.length === after.props.length) {
+  if (stillMulti && param && /\n/.test(text.slice(param.start, param.end)) && (same(before.props.map((p) => p.name), after.props.map((p) => p.name)) || st.renames.props.length) && param.properties.length === after.props.length) {
     return param.properties.map((pr, i) => (text.slice(pr.start, pr.end) === items[i] ? null : { start: pr.start, end: pr.end, text: items[i] })).filter(Boolean);
   }
   const flat = items.length ? `{ ${items.join(', ')} }: ${iface}` : `{}: ${iface}`;
@@ -190,7 +191,9 @@ const attrsOf = (node) => {
 function textText(node, room) {
   if (node.textProp) return `{${node.textProp}}`;
   if (node.text === undefined || node.text === '') return '';
-  if (/^[^{}<>&]+$/.test(node.text) && node.text === node.text.trim() && node.text.length <= room) return node.text;
+  // plain JSX text when it can be (only what JSX needs is escaped); `{'...'}` for text with edge or doubled spaces, or too long for the line
+  const plain = node.text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\{/g, '&#123;').replace(/\}/g, '&#125;');
+  if (node.text === node.text.trim() && !/\s{2}/.test(node.text) && plain.length <= room) return plain;
   return `{${litText(node.text)}}`;
 }
 const shape = (n) => ({ id: n.id, tag: n.tag, text: n.text, textProp: n.textProp, attrs: n.attrs, children: n.children.map(shape) });
@@ -242,7 +245,7 @@ function jsxPrinter(text, jsx, before, st) {
       // on one line by hand stays on one line, so editing its text is a one-line diff
       const handLine = sameOpen && old.children.length === 0 && !/\n/.test(text.slice(el.start, el.end));
       if (handLine) return `${text.slice(el.openingElement.start, el.openingElement.end)}${textText(n, 1000)}${close}`;
-      return [sameOpen ? text.slice(el.openingElement.start, el.openingElement.end) : open(n, at, false).text, at + unit + textText(n, 0), at + close].join(eol);
+      return [sameOpen ? text.slice(el.openingElement.start, el.openingElement.end) : open(n, at, false).text, at + unit + textText(n, WIDTH - at.length - unit.length), at + close].join(eol);
     }
     const o = sameOpen ? { text: text.slice(el.openingElement.start, el.openingElement.end) } : open(n, at, false);
     return [o.text, ...n.children.map((c) => at + unit + print(c, at + unit)), at + close].join(eol);
@@ -271,18 +274,66 @@ function jsxSplices(text, parts, before, after, st) {
   const walk = (n, old) => {
     const el = els.get(n.id);
     if (same(shape(old), shape(n))) return;
-    if (!n.children.length || !old.children.length || old.tag !== n.tag || !same(old.attrs, n.attrs)) return whole(n, el);
+    if (old.tag !== n.tag) return whole(n, el);
+    const oc = hasContent(old), nc = hasContent(n);
+    const leafBoth = !n.children.length && !old.children.length;
+    // 1. the attributes (src, alt): only the attribute changes, so comments between attributes stay
+    if (!same(old.attrs, n.attrs)) {
+      const sp = attrSplices(el, old, n);
+      if (!sp) return whole(n, el);
+      out.push(...sp);
+    }
+    // 2. leaves: change only the text span, or open/close an empty element, never the opening tag
+    if (leafBoth) {
+      if (oc && nc) { if (old.text !== n.text || old.textProp !== n.textProp) { const sp = textSplice(el, n); if (!sp) return whole(n, el); out.push(sp); } return; }
+      if (!oc && !nc) return;
+      const cm = el.children.find((x) => x.type === 'JSXExpressionContainer' && x.expression.type === 'JSXEmptyExpression');
+      if (!oc && nc && cm && !el.openingElement.selfClosing) { // an element holding only a comment gets its text before the comment
+        const own = /^[ \t]*$/.test(text.slice(lineStart(text, cm.start), cm.start));
+        const at = own ? lineStart(text, cm.start) : cm.start;
+        out.push({ start: at, end: at, text: own ? `${indentOfLine(text, cm.start)}${textText(n, WIDTH)}${eol}` : textText(n, WIDTH) });
+        return;
+      }
+      if (oc && !nc && cm && !el.openingElement.selfClosing) { // the text goes, the comment stays
+        const tn = el.children.find((x) => (x.type === 'JSXText' && x.value.trim()) || (x.type === 'JSXExpressionContainer' && x.expression.type !== 'JSXEmptyExpression'));
+        if (tn) {
+          const ownT = /^[ \t]*$/.test(text.slice(lineStart(text, tn.start), tn.start)) && /^\s*\r?\n/.test(text.slice(tn.end));
+          if (tn.type === 'JSXText') { const raw = text.slice(tn.start, tn.end); const a = tn.start + raw.match(/^\s*/)[0].length, b2 = tn.end - raw.match(/\s*$/)[0].length; out.push(ownT ? { start: lineStart(text, a), end: lineEnd(text, b2), text: '' } : { start: a, end: b2, text: '' }); }
+          else out.push(ownT ? { start: lineStart(text, tn.start), end: lineEnd(text, tn.end), text: '' } : { start: tn.start, end: tn.end, text: '' });
+          return;
+        }
+      }
+      if (!oc && nc) { // `<x ... />` -> `<x ...>` + text + `</x>`
+        const oe = el.openingElement;
+        if (!oe.selfClosing) return whole(n, el);
+        const at = indentOfLine(text, el.start);
+        let from = oe.end - 2; if (text[from - 1] === ' ') from--;
+        out.push({ start: from, end: oe.end, text: `>${eol}${at}${st.unit}${textText(n, WIDTH - at.length - st.unit.length)}${eol}${at}</${n.tag}>` });
+        return;
+      }
+      // text -> nothing: `<x ...>text</x>` -> `<x ... />`
+      const oe = el.openingElement;
+      if (oe.selfClosing || !el.closingElement) return whole(n, el);
+      out.push({ start: oe.end - 1, end: el.end, text: ' />' });
+      return;
+    }
+    // an element that holds a comment keeps it: children are added or removed around it instead of rewriting the element
+    const comment = el.children.find((x) => x.type === 'JSXExpressionContainer' && x.expression.type === 'JSXEmptyExpression');
+    if ((!n.children.length || !old.children.length) && !(comment && !el.openingElement.selfClosing && (n.children.length || old.children.length))) return whole(n, el);
+    // 3. elements with children: removed children are deleted by their own lines, new ones inserted after the previous sibling that stays
     const oldIds = old.children.map((c) => c.id), newIds = n.children.map((c) => c.id);
     const stay = new Set(lcs(oldIds.filter((i) => newIds.includes(i)), newIds.filter((i) => oldIds.includes(i))));
-    if (!old.children.every((c) => els.get(c.id) && onOwnLines(els.get(c.id)))) return whole(n, el); // children written inline: rewrite this element
+    const structural = old.children.some((c) => !stay.has(c.id)) || n.children.some((c) => !stay.has(c.id));
+    if (structural && !old.children.every((c) => els.get(c.id) && onOwnLines(els.get(c.id)))) return whole(n, el); // children written inline: rewrite this element
     for (const c of old.children) {
       if (stay.has(c.id)) continue;
       const ce = els.get(c.id);
       out.push({ start: lineStart(text, ce.start), end: lineEnd(text, ce.end), text: '' });
     }
     for (const c of n.children) if (stay.has(c.id)) walk(c, A.get(c.id));
+    if (!structural) return;
     // new (or moved) children go after the previous sibling that stays, or right after the opening tag
-    const childIndent = indentOfLine(text, els.get(old.children[0].id).start);
+    const childIndent = old.children.length ? indentOfLine(text, els.get(old.children[0].id).start) : comment && /^[ \t]*$/.test(text.slice(lineStart(text, comment.start), comment.start)) ? indentOfLine(text, comment.start) : indentOfLine(text, el.start) + st.unit;
     const groups = new Map();
     let anchor = null;
     for (const c of n.children) {
@@ -295,6 +346,40 @@ function jsxSplices(text, parts, before, after, st) {
       out.push({ start: at, end: at, text: lines.join('') });
     }
   };
+  // The text of a leaf: replace only the text node itself (keeping the whitespace round it and any comment beside it).
+  function textSplice(el, n) {
+    const c = el.children.find((x) => (x.type === 'JSXText' && x.value.trim()) || (x.type === 'JSXExpressionContainer' && x.expression.type !== 'JSXEmptyExpression'));
+    if (!c) return null;
+    let start = c.start, end = c.end;
+    if (c.type === 'JSXText') { const raw = text.slice(c.start, c.end); start += raw.match(/^\s*/)[0].length; end -= raw.match(/\s*$/)[0].length; }
+    const ownLine = /^[ \t]*$/.test(text.slice(lineStart(text, start), start));
+    const room = ownLine ? WIDTH - indentOfLine(text, start).length : 1000;
+    return { start, end, text: textText(n, room) };
+  }
+  // src / alt: change the value in place, add after the last attribute, or remove the attribute with the space before it.
+  function attrSplices(el, old, n) {
+    const oe = el.openingElement, attrs = oe.attributes, sp = [];
+    const adds = [];
+    for (const k of ['src', 'alt']) {
+      const ov = old.attrs?.[k], nv = n.attrs?.[k];
+      if (ov === nv) continue;
+      const a = attrs.find((x) => x.name?.name === k);
+      if (nv === undefined) { if (!a) continue; const prev = attrs[attrs.indexOf(a) - 1]; sp.push({ start: prev ? prev.end : a.start, end: a.end, text: '' }); }
+      else if (a) sp.push({ start: a.value.start, end: a.value.end, text: attrValue(nv) });
+      else adds.push(`${k}=${attrValue(nv)}`);
+    }
+    if (adds.length) {
+      const last = attrs.at(-1);
+      const multi = /\n/.test(text.slice(oe.start, oe.end)) && /^[ \t]*$/.test(text.slice(lineStart(text, last.start), last.start));
+      sp.push({ start: last.end, end: last.end, text: multi ? adds.map((x) => eol + indentOfLine(text, last.start) + x).join('') : ` ${adds.join(' ')}` });
+    }
+    // a single-line tag that no longer fits in 80 columns is laid out again by the caller
+    if (!/\n/.test(text.slice(oe.start, oe.end))) {
+      const grow = sp.reduce((a, x) => a + x.text.length - (x.end - x.start), 0);
+      if (indentOfLine(text, oe.start).length + (oe.end - oe.start) + grow > WIDTH && grow > 0) return null;
+    }
+    return sp;
+  }
   walk(after.root, before.root);
   return out;
 }
@@ -438,7 +523,8 @@ export function writeComponent(ast, before, after, original) {
   }
   if (!same(shape(before.root), shape(after.root))) {
     // the `return` statement changes form (`return <x />;` <-> `return (` ... `);`) only when the root gains or loses its content
-    if (hasContent(before.root) !== hasContent(after.root)) splices.push({ start: parts.ret.start, end: parts.ret.end, text: returnText(original, parts, before, after, st) });
+    const rootComment = parts.jsx.children.some((x) => x.type === 'JSXExpressionContainer' && x.expression.type === 'JSXEmptyExpression'); // a root that holds a comment keeps its parentheses
+    if (hasContent(before.root) !== hasContent(after.root) && !rootComment) splices.push({ start: parts.ret.start, end: parts.ret.end, text: returnText(original, parts, before, after, st) });
     else {
       const jsxUnit = unitOf(lineIndent(original, parts.ret.start), indentOfLine(original, parts.jsx.start), st.unit);
       splices.push(...jsxSplices(original, parts, before, after, { ...st, unit: jsxUnit }));

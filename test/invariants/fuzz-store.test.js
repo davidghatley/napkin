@@ -12,6 +12,7 @@ import { tsxCodec } from '../../src/codecs.js';
 import { readComponent } from '../../src/tsx/read.js';
 import { makeCorpus } from '../helpers/corpus.js';
 import { rng, nextValidEdit } from '../helpers/fuzz.js';
+import { commentDiff, mayDropComments } from '../helpers/comments.js';
 
 const FUZZ = Number(process.env.FUZZ || 200);
 test(`FMT-05: ${FUZZ} edits through store.apply on hand-formatted files keep every file valid, equal to the model and stable`, async () => {
@@ -27,12 +28,15 @@ test(`FMT-05: ${FUZZ} edits through store.apply on hand-formatted files keep eve
     const store = await openStore(f);
     try {
       for (let n = 0, done = 0; done < per && applied < FUZZ && n < per * 20; n++) {
-        const { doc, revision } = await store.read();
+        const { doc, revision, source: srcBefore } = await store.read();
         const r = nextValidEdit(doc, rand, n);
         if (!r) continue;
         const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
         assert.equal(res.ok, true, `${basename(f)} ${JSON.stringify(r.edit)}: ${res.error}`);
         const disk = readFileSync(f, 'utf8');
+        const cd = commentDiff(srcBefore, disk);
+        assert.deepEqual(cd.invented, [], `${basename(f)} after ${JSON.stringify(r.edit)}: invented comments`);
+        if (!mayDropComments(r.edit)) assert.deepEqual(cd.lost, [], `${basename(f)} after ${JSON.stringify(r.edit)}: lost comments`);
         const { id, ...model } = res.doc;
         assert.deepEqual(readComponent(disk).doc, model, `${basename(f)} after ${JSON.stringify(r.edit)}`);
         assert.doesNotMatch(disk, /\r\r/, 'no doubled line endings');

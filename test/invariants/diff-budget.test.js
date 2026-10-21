@@ -15,10 +15,12 @@ import { tempRepo } from '../helpers/harness.js';
 import { makeCorpus } from '../helpers/corpus.js';
 import { rng, nextValidEdit } from '../helpers/fuzz.js';
 import { budget, signatureLines } from '../helpers/budget.js';
+import { commentDiff, mayDropComments } from '../helpers/comments.js';
 
 // { added, removed } for one file since the last commit; the commit is then made so the next op is measured alone.
 function measure(git, rel) {
-  const out = git('diff', '--numstat').trim().split('\n').filter(Boolean).map((l) => l.split('\t'));
+  // --minimal: with several identical lines (a file full of the same comment) git's default heuristic can show a move as a bigger edit than it is
+  const out = git('diff', '--minimal', '--numstat').trim().split('\n').filter(Boolean).map((l) => l.split('\t'));
   const row = (f) => { const r = out.find((x) => x[2] === f); return r ? { add: Number(r[0]), del: Number(r[1]) } : { add: 0, del: 0 }; };
   const res = { file: row(rel), others: out.filter((x) => x[2] !== rel).map((x) => x[2]) };
   git('add', rel); git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'op', '--allow-empty');
@@ -91,6 +93,8 @@ test('FMT-02: comments and blank lines survive edits: trailing comment, blank-li
     blank: [(t) => t.replace("padding: '16px',\n", "padding: '16px',\n\n\n"), { op: 'set', path: 'card.padding', value: '20px' }, [1, 1], ["\n\n\n"]],
     jsxcomment: [(t) => t.replace('      <div data-n="image"', '      {/* hero */}\n      <div data-n="image"'), { op: 'set', path: 'title.text', value: 'Hello' }, [1, 1], ['{/* hero */}']],
     linecomment: [(t) => t.replace("    gap: '12px',", "    // spacing\n    gap: '12px',"), { op: 'set', path: 'card.gap', value: '20px' }, [1, 1], ['// spacing']],
+    textTrailingJsxComment: [(t) => t.replace('A person and an agent edit this Card at the same time.</p>', 'A person and an agent edit this Card at the same time.</p> {/* tail */}').replace('      <h3 data-n="title"', '      {/* before title */}\n      <h3 data-n="title"'), { op: 'set', path: 'body.text', value: 'Plain new text, with &amp; and <b>' }, [1, 1], ['{/* tail */}', '{/* before title */}', 'Plain new text, with &amp;amp; and &lt;b&gt;']],
+    textCommentBetweenAttrs: [(t) => t.replace('<p data-n="body" style={s(\'body\', v)}>', '<p\n        data-n="body" // keep me\n        style={s(\'body\', v)}\n      >'), { op: 'set', path: 'body.text', value: 'Short' }, [1, 1], ['// keep me', '>Short</p>']],
     insertBeside: [(t) => t.replace('      <div data-n="image"', '      {/* hero */}\n      <div data-n="image"'), { op: 'insert', parent: 'card', index: 1, node: { id: 'note', tag: 'small' } }, [1, 0], ['{/* hero */}']],
     deleteBeside: [(t) => t.replace('      <h3 data-n="title"', '      {/* title next */}\n      <h3 data-n="title"'), { op: 'delete', id: 'image' }, [0, 6], ['{/* title next */}']],
   };
@@ -139,9 +143,6 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
     assert.deepEqual(over.slice(0, 5), [], `${over.length} ops over budget`);
   } finally { await store.close(); }
 });
-
-// The same budgets on files a person formatted: tabs, 4 spaces, CRLF, double quotes, comments, blank lines.
-// (Files without trailing commas or interface semicolons are left out: adding a line there also touches its neighbour.)
 // Hand-formatted files (comments on property lines and between properties, blank-line groups, JSX comments, no trailing commas, no interface semicolons, compounded indentation, tabs, CRLF, double quotes, comments, blank lines), four corpora of 20 files.
 const HAND = Number(process.env.HAND_OPS || 100), HAND_FILES = Number(process.env.HAND_FILES || 20);
 const HAND_SEEDS = (process.env.HAND_SEEDS || '1,2,3,777').split(',').map(Number);
@@ -170,6 +171,8 @@ for (const seed of HAND_SEEDS) {
           const srcAfter = (await store.read()).source;
           const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(source), textBefore: source, textAfter: srcAfter });
           if (m.file.add > b.add || m.file.del > b.del) over.push({ rel, edit: r.edit, got: m.file, budget: b });
+          const cd = commentDiff(source, srcAfter);
+          if (cd.invented.length || (cd.lost.length && !mayDropComments(r.edit))) over.push({ rel, edit: r.edit, comments: cd });
           done++; ops++;
         }
       } finally { await store.close(); }

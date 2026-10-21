@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { writeComponent } from './commit.js';
 import { codecFor, readSidecar, writeSidecar } from './codecs.js';
-import { cleanStaleTmp } from './atomic.js';
+import { cleanStaleTmp, HandSave } from './atomic.js';
 import { summarize } from './summary.js';
 import { staleEntries } from './stale.js';
 
@@ -63,7 +63,11 @@ export async function openStore(file, start = {}) {
   // Returns an error string when the file on disk can't be absorbed (half-written or outside the dialect).
   function absorbDisk() {
     let t; try { t = readFileSync(file, 'utf8'); } catch { return null; }
-    if (t === text) { if (broken) problem(null); return syntaxErr; } // back to the last good text (e.g. git restore)
+    if (t === text) { // back to the text we hold: if that is the last good text (undo, git restore) the file is fine again
+      if (broken) problem(null);
+      if (state) syntaxErr = null;
+      return syntaxErr;
+    }
     let loaded; try { loaded = codec.load(t, file); } catch (e) { const r = reason(e); problem(r); syntaxErr = e.loc ? r : null; return r; } // keep the last good doc
     syntaxErr = null;
     if (broken) problem(null);
@@ -113,7 +117,13 @@ export async function openStore(file, start = {}) {
     if (dryRun) return { ok: true, dryRun: true, revision, doc: next, source: saved.text };
     if (saved.text !== text) { // a batch that changes nothing leaves the file (and its mtime) alone
       // a hand edit may land after our last look at the file: check again just before the rename, and start over if it did
-      writeComponent(file, saved.text, { check: () => { let now; try { now = readFileSync(file, 'utf8'); } catch { return; } if (now !== text) throw new Raced(); } });
+      try {
+        writeComponent(file, saved.text, { guard: text, check: () => { let now; try { now = readFileSync(file, 'utf8'); } catch { return; } if (now !== text) throw new Raced(); } });
+      } catch (e) {
+        if (!(e instanceof HandSave)) throw e;
+        absorbDisk(); // the user's text won: it is the new state of the file
+        return { ok: false, error: `stale revision: ${basename(file)} changed on disk while saving; reread and retry`, currentRevision: revision };
+      }
     }
     text = saved.text; state = saved.state;
     commit(next, keys, by, edits, origin);
