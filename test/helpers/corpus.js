@@ -24,7 +24,7 @@ const FORMATS = {
   inlineComment: (t) => t.replace(/^(\s+)(display|padding|gap): /m, '$1// tuned by eye\n$1$2: '),
   extraBlankLines: (t) => t.replace(/^(function s|const variants)/gm, '\n$1'),
   noFinalNewline: (t) => t.replace(/\n$/, ''),
-  crlf: (t) => t.replace(/\n/g, '\r\n'),
+  crlf: (t) => (t.includes('\r') ? t : t.replace(/\n/g, '\r\n')),
   semicolonlessInterface: (t) => t.replace(/^(\s+\w+\??: [^;\n]+);$/gm, '$1'),
 };
 

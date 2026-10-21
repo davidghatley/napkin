@@ -1,68 +1,83 @@
-// Write a model back into the component's AST, touching only what changed between two models,
-// then print with recast. recast reuses the original text of every AST node we don't replace,
-// so a save with no change is byte-identical and one property change is a one-line diff.
-import * as recast from 'recast';
+// Write a model back into the component's text, touching only what changed between two models.
+// Every change is a text splice made at the offsets of a fresh parse of the file: new lines take the indentation and
+// line endings of their neighbours, and a line that is not part of the change is never reprinted. So a save with no
+// change is byte-identical and one property change is a one-line diff, whatever the file's own formatting.
 import { parse as babelParse } from '@babel/parser';
-import { locate, literalValue, parseAst } from './read.js';
+import { locate, literalValue } from './read.js';
 import { index } from '../model.js';
 
-const b = recast.types.builders;
-const PRINT = { quote: 'single', trailingComma: true, tabWidth: 2, reuseWhitespace: true, wrapColumn: 120 };
 const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
 const IDENT = /^[A-Za-z_$][\w$]*$/;
-// How the file being written is laid out (set at the top of each writeComponent call, which is synchronous):
-// the quote its strings use, so a double-quoted file stays double-quoted.
+// The quote of the file being written (set at the top of each writeComponent call, which is synchronous): a
+// double-quoted file stays double-quoted.
 let Q = "'";
-
 // The quote prettier picks for a string: the file's quote, unless the string holds more of it than of the other one.
 const quoteFor = (value) => {
   const other = Q === "'" ? '"' : "'";
   return value.split(Q).length > value.split(other).length ? other : Q;
 };
-// Literals carry their raw text so quotes come out the way we want (the file's quote in code, double in JSX).
-function str(value, quote) {
-  quote ??= quoteFor(value);
-  const lit = b.stringLiteral(value);
-  const body = JSON.stringify(value).slice(1, -1).replace(/\\"/g, '"');
-  lit.extra = { rawValue: value, raw: quote === "'" ? `'${body.replace(/'/g, "\\'")}'` : `"${body.replace(/"/g, '\\"')}"` };
-  return lit;
-}
-function lit(value) {
-  if (typeof value === 'string') return str(value);
-  if (typeof value === 'boolean') return b.booleanLiteral(value);
-  if (value < 0) return b.unaryExpression('-', b.numericLiteral(-value));
-  return b.numericLiteral(value);
-}
-const key = (k) => (IDENT.test(k) ? b.identifier(k) : str(k));
+
 const keyName = (k) => (k.type === 'Identifier' ? k.name : k.value);
 const findProp = (obj, k) => obj.properties.find((p) => keyName(p.key) === k);
-const prop = (k, v) => b.objectProperty(key(k), v);
+const baseMap = (doc) => Object.fromEntries([...index(doc).byId.values()].map((n) => [n.id, n.style]));
+const EOL = (text) => (text.includes('\r\n') ? '\r\n' : '\n');
+const lineStart = (text, at) => text.lastIndexOf('\n', at - 1) + 1;
+const lineEnd = (text, at) => { const i = text.indexOf('\n', at); return i < 0 ? text.length : i + 1; };
+// The indentation of the line that holds offset `at`.
+const indentOfLine = (text, at) => text.slice(lineStart(text, at)).match(/^[ \t]*/)[0];
+// One level inside `inner` compared with `outer`, as this file writes it (`fallback` if there is no example).
+const unitOf = (outer, inner, fallback) => (inner.length > outer.length && inner.startsWith(outer) ? inner.slice(outer.length) : fallback);
+const litText = (v) => { if (typeof v !== 'string') return String(v); const q = quoteFor(v); return `${q}${v.replace(/\\/g, '\\\\').split(q).join(`\\${q}`)}${q}`; };
 
 // --- object literals: base and variants ---
-function syncStyle(obj, before, after) {
-  for (const k of Object.keys(before)) if (!(k in after)) obj.properties.splice(obj.properties.indexOf(findProp(obj, k)), 1);
-  for (const [k, v] of Object.entries(after)) {
+// syncObj(text, obj, before, after, d, st) -> splices that turn the object literal `obj` (a babel node) from `before` into
+// `after`. The values are nested objects `d` levels deep ending in literals (d = 0: the values themselves are literals).
+// Existing entries are edited in place; new ones are added after the last entry, with its indentation.
+const litSrc = (v) => (typeof v === 'string' ? litText(v) : typeof v === 'number' && v < 0 ? `-${-v}` : String(v));
+const keySrc = (k) => (IDENT.test(k) ? k : litText(k));
+function emit(key, value, d, indent, unit, eol) {
+  if (d === 0) return `${indent}${keySrc(key)}: ${litSrc(value)},${eol}`;
+  return `${indent}${keySrc(key)}: {${eol}${Object.entries(value).map(([k, v]) => emit(k, v, d - 1, indent + unit, unit, eol)).join('')}${indent}},${eol}`;
+}
+const ownLines = (text, node) => /^[ \t]*$/.test(text.slice(lineStart(text, node.start), node.start)) && /^[ \t]*,?[ \t]*(\r?\n|$)/.test(text.slice(node.end));
+function syncObj(text, obj, bef, aft, d, st) {
+  const eol = EOL(text);
+  const out = [];
+  const props = obj.properties;
+  const closeIndent = indentOfLine(text, obj.start);
+  const memberIndent = props.length && ownLines(text, props[0]) ? indentOfLine(text, props[0].start) : closeIndent + st.unit;
+  const unit = unitOf(closeIndent, memberIndent, st.unit);
+  const removed = Object.keys(bef).filter((k) => !(k in aft));
+  const added = Object.keys(aft).filter((k) => !(k in bef));
+  if (!Object.keys(aft).length && props.length) return [{ start: obj.start, end: obj.end, text: '{}' }];
+  if (!props.length || !props.every((p) => ownLines(text, p))) { // empty, or written inline: print the whole object
+    if (same(bef, aft)) return [];
+    const body = Object.entries(aft).map(([k, v]) => emit(k, v, d, memberIndent, unit, eol)).join('');
+    return [{ start: obj.start, end: obj.end, text: body ? `{${eol}${body}${closeIndent}}` : '{}' }];
+  }
+  for (const k of removed) {
     const p = findProp(obj, k);
-    if (!p) obj.properties.push(prop(k, lit(v)));
-    else if (literalValue(p.value) !== v) p.value = lit(v);
+    out.push({ start: lineStart(text, p.start), end: lineEnd(text, p.end), text: '' });
   }
-}
-// A nested object: levels of plain keys ending in style objects. Removes empty branches.
-function syncNested(obj, before, after, depth) {
-  for (const k of Object.keys(before)) if (!(k in after)) obj.properties.splice(obj.properties.indexOf(findProp(obj, k)), 1);
-  for (const [k, v] of Object.entries(after)) {
-    let p = findProp(obj, k);
-    if (!p) { p = prop(k, b.objectExpression([])); obj.properties.push(p); }
-    if (depth === 0) syncStyle(p.value, before[k] || {}, v);
-    else syncNested(p.value, before[k] || {}, v, depth - 1);
+  for (const k of Object.keys(aft)) {
+    if (!(k in bef)) continue;
+    const p = findProp(obj, k);
+    if (d === 0) {
+      if (literalValue(p.value) !== aft[k]) out.push({ start: p.value.start, end: p.value.end, text: litSrc(aft[k]) });
+    } else if (!same(bef[k], aft[k])) out.push(...syncObj(text, p.value, bef[k], aft[k], d - 1, st));
   }
+  if (added.length) {
+    const last = props.at(-1);
+    if (!removed.includes(keyName(last.key)) && !/^[ \t]*,/.test(text.slice(last.end))) out.push({ start: last.end, end: last.end, text: ',' }); // hand-written, no trailing comma
+    const at = lineEnd(text, last.end);
+    out.push({ start: at, end: at, text: (at === text.length && !text.endsWith('\n') ? eol : '') + added.map((k) => emit(k, aft[k], d, memberIndent, unit, eol)).join('') });
+  }
+  return out;
 }
-const baseMap = (doc) => Object.fromEntries([...index(doc).byId.values()].map((n) => [n.id, n.style]));
 
 // --- props: the interface, the destructured parameter list, and `const v` ---
-// All three are text splices made after recast has printed the style objects (see writeComponent): recast prints them
-// in its own layout, and these have to look the way prettier writes them. Members, parameters and the `v` object that
-// did not change keep their text.
+// All three are text splices (see writeComponent), laid out the way prettier writes them. Members, parameters and the
+// `v` object that did not change keep their text.
 function typeText(p, indent, unit, eol, name) {
   if (p.type === 'string') return 'string';
   if (p.type === 'boolean') return 'boolean';
@@ -71,16 +86,14 @@ function typeText(p, indent, unit, eol, name) {
   if (`${indent}${name}?: ${one};`.length <= 80) return one;
   return `${eol}${opts.map((o) => `${indent}${unit}| ${o}`).join(eol)}`; // prettier's layout for a union that does not fit
 }
-const litText = (v) => { if (typeof v !== 'string') return String(v); const q = quoteFor(v); return `${q}${v.replace(/\\/g, '\\\\').split(q).join(`\\${q}`)}${q}`; };
-const lineStart = (text, at) => text.lastIndexOf('\n', at - 1) + 1;
-const lineEnd = (text, at) => { const i = text.indexOf('\n', at); return i < 0 ? text.length : i + 1; };
 
 // --- the interface ---
 function ifaceSplices(text, parts, before, after, st) {
   const iface = parts.iface;
   if (!iface || same(before.props.map((p) => [p.name, p.type, p.options]), after.props.map((p) => [p.name, p.type, p.options]))) return [];
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
-  const outer = lineIndent(text, parts.ifaceStmt.start), indent = outer + st.unit;
+  const outer = lineIndent(text, parts.ifaceStmt.start);
+  const indent = parts.iface.body.body.length ? indentOfLine(text, parts.iface.body.body[0].start) : outer + st.unit;
   const member = (p) => `${indent}${p.name}?: ${typeText(p, indent, st.unit, eol, p.name)};`;
   const body = iface.body;
   const members = body.body;
@@ -131,7 +144,8 @@ function paramsSplice(text, parts, before, after, st) {
   const prettierBefore = param ? wasMulti === !(`export function ${fn.id.name}(${oldFlat}) {`.length <= 80) : true;
   const multi = items.length > 0 && (sameNames && !prettierBefore ? wasMulti : !fits);
   const indent = lineIndent(text, parts.fnStmt.start);
-  const out = multi ? `{${eol}${items.map((x) => `${indent}${st.unit}${x},${eol}`).join('')}${indent}}: ${iface}` : flat;
+  const itemIndent = param && wasMulti && param.properties.length ? indentOfLine(text, param.properties[0].start) : indent + st.unit; // (the file's own indentation of the list)
+  const out = multi ? `{${eol}${items.map((x) => `${itemIndent}${x},${eol}`).join('')}${indent}}: ${iface}` : flat;
   return param ? { start: param.start, end: param.end, text: out } : { start: fn.id.end + 1, end: fn.id.end + 1, text: out };
 }
 
@@ -148,7 +162,7 @@ function vSplice(text, parts, before, after, st) {
 }
 
 // --- JSX ---
-// The element tree is printed by us, not by recast (recast re-indents moved nodes badly). Unchanged subtrees keep their
+// The element tree is printed by us. Unchanged subtrees keep their
 // own text, shifted to the new depth; only elements that changed are printed fresh, laid out as prettier lays them out:
 //   <tag data-n="id" style={s('id', v)} />                 an empty element (one line when it fits in 80 columns)
 //   <tag data-n="id" style={s('id', v)}>                    an element with text or children: prettier always puts the
@@ -230,56 +244,14 @@ function printJsx(text, jsx, before, after, st, indent) {
 function returnText(text, parts, before, after, st) {
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const ind = lineIndent(text, parts.ret.start);
+  const jsxIndent = indentOfLine(text, parts.jsx.start);
+  const unit = unitOf(ind, jsxIndent, st.unit); // the file's own step from `return` to the root element
+  st = { ...st, unit };
   const tree = printJsx(text, parts.jsx, before, after, st, ind + st.unit);
   const single = `return ${tree};`;
   return !tree.includes('\n') && ind.length + single.length <= WIDTH ? single : `return (${eol}${ind}${st.unit}${tree}${eol}${ind});`;
 }
 
-// recast separates reprinted multi-line object entries with blank lines. The dialect has none, so
-// drop blank lines that weren't in the original text (an LCS line diff finds the inserted ones).
-// For each line of `b`, the index of the line of `a` it is (same text, order kept: a longest common subsequence), or -1.
-function alignLines(a, b) {
-  const n = a.length, m = b.length;
-  const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
-  const from = new Array(m).fill(-1);
-  let i = 0, j = 0;
-  while (j < m && i < n) {
-    if (a[i] === b[j]) from[j++] = i++;
-    else if (L[i + 1][j] >= L[i][j + 1]) i++;
-    else j++;
-  }
-  return from;
-}
-function dropInsertedBlankLines(original, out) {
-  const o = out.split('\n');
-  const from = alignLines(original.split('\n'), o);
-  return o.filter((l, j) => from[j] >= 0 || l.trim() !== '').join('\n');
-}
-// A tab-indented file is edited as if it used four spaces per level (recast mixes tabs and spaces when it reprints);
-// lines that did not change get their original text back, new lines are indented with tabs.
-function restoreTabs(spaced, out, original) {
-  const o = out.split('\n'), orig = original.split('\n');
-  const from = alignLines(spaced.split('\n'), o);
-  return o.map((l, j) => (from[j] >= 0 ? orig[from[j]] : l.replace(/^( {4})+/, (m) => '\t'.repeat(m.length / 4)))).join('\n');
-}
-
-// How the file is written, so what we add looks like what is there: line endings, tabs or spaces (and how many), quotes.
-// (A tab prints with recast's tabWidth 4 because parseAst reads a tab as 4 columns; the two must agree.)
-function detectStyle(text) {
-  const useTabs = /^\t/m.test(text);
-  const widths = (text.match(/^ {2,}(?=\S)/gm) || []).map((x) => x.length);
-  const width = useTabs ? 2 : Math.min(8, widths.length ? Math.min(...widths) : 2);
-  const single = (text.match(/[:=] '/g) || []).length, double = (text.match(/[:=] "[^"\n]*"[,;]?$/gm) || []).length;
-  const quote = double > single ? '"' : "'";
-  return {
-    unit: useTabs ? '\t' : ' '.repeat(width),
-    quote,
-    recast: { quote: quote === '"' ? 'double' : 'single', tabWidth: useTabs ? 4 : width, ...(text.includes('\r\n') && { lineTerminator: '\r\n' }), ...(useTabs && { useTabs: true }) },
-  };
-}
-
-// A prop or a variant value that kept its place but changed its name is a rename (the model's renameProp / renameVariant):
 // the file gets only the lines that name it changed, instead of the old entry removed and a new one added at the end.
 function findRenames(before, after) {
   const props = [], values = [];
@@ -299,67 +271,74 @@ function findRenames(before, after) {
   }
   return { props, values };
 }
-// `variants` with the renames applied, key order kept.
-function renameVariantsKeys(variants, renames) {
-  const axisTo = new Map(renames.props);
+
+
+// How the file is written, so what we add looks like what is there: tabs or spaces (and how many), quotes.
+function detectStyle(text) {
+  const useTabs = /^\t/m.test(text);
+  const widths = (text.match(/^ {2,}(?=\S)/gm) || []).map((x) => x.length);
+  const width = Math.min(8, widths.length ? Math.min(...widths) : 2);
+  const single = (text.match(/[:=] '/g) || []).length, double = (text.match(/[:=] "[^"\n]*"[,;]?$/gm) || []).length;
+  return { unit: useTabs ? '\t' : ' '.repeat(width), quote: double > single ? '"' : "'" };
+}
+
+// The key of an entry, renamed in place: only the key's characters change.
+function keySplices(text, parts, renames) {
+  const out = [];
+  if (!parts.variants) return out;
+  for (const [from, to] of renames.props) { const p = findProp(parts.variants, from); if (p) out.push({ start: p.key.start, end: p.key.end, text: keySrc(to) }); }
+  for (const r of renames.values) {
+    const axis = findProp(parts.variants, r.axis);
+    const p = axis && findProp(axis.value, r.from);
+    if (p) out.push({ start: p.key.start, end: p.key.end, text: keySrc(r.toValue) });
+  }
+  return out;
+}
+// `variants` (new names) with the renames undone, so it can be compared with the old text that still has the old names.
+function unrenameVariants(variants, renames) {
+  const axisFrom = new Map(renames.props.map(([a, b]) => [b, a]));
   const out = {};
   for (const [axis, vals] of Object.entries(variants)) {
-    const r = renames.values.find((x) => x.axis === axis);
-    out[axisTo.get(axis) ?? axis] = r ? Object.fromEntries(Object.entries(vals).map(([k, v]) => [k === r.from ? r.toValue : k, v])) : vals;
+    const oldAxis = axisFrom.get(axis) ?? axis;
+    const r = renames.values.find((x) => x.axis === oldAxis);
+    out[oldAxis] = r ? Object.fromEntries(Object.entries(vals).map(([k, v]) => [k === r.toValue ? r.from : k, v])) : vals;
   }
   return out;
 }
 
-// Patch `ast` (from readComponent, parsed from `original`) from model `before` to model `after`; returns the new text.
+// Patch the text `original` from model `before` to model `after`; returns the new text. (`ast` is unused: the splices need
+// offsets into the real text, so the file is parsed again here.)
 export function writeComponent(ast, before, after, original) {
   if (same(before, after)) return original; // nothing to change: the bytes stay exactly as they were
-  const tabbed = /^\t/m.test(original);
-  const src = tabbed ? original.replace(/^\t+/gm, (m) => '    '.repeat(m.length)) : original;
-  if (tabbed) ast = parseAst(src);
-  const st = detectStyle(src);
+  const st = detectStyle(original);
   Q = st.quote;
-  const parts = locate(ast);
+  const parts = locate(babelParse(original, { sourceType: 'module', plugins: ['typescript', 'jsx'] }));
+  const splices = [];
   const bb = baseMap(before), ba = baseMap(after);
   if (!same(bb, ba)) {
-    // Only entries that exist in the file or have styles: an unstyled node without a base entry
-    // stays without one, so inserting a bare element adds one line, not an empty block.
+    // Only entries that exist in the file or have styles: an unstyled node without a base entry stays without one, so
+    // inserting a bare element adds one line, not an empty block; a node whose last style was removed loses its block.
     const inFile = (k) => !!findProp(parts.base, k);
     const from = Object.fromEntries(Object.keys(bb).filter(inFile).map((k) => [k, bb[k]]));
-    // a node whose last style was just removed loses its (now empty) block
-    const to = Object.fromEntries(Object.entries(ba).filter(([k, st]) => Object.keys(st).length || (inFile(k) && !Object.keys(bb[k] || {}).length)));
-    syncNested(parts.base, from, to, 0);
+    const to = Object.fromEntries(Object.entries(ba).filter(([k, st2]) => Object.keys(st2).length || (inFile(k) && !Object.keys(bb[k] || {}).length)));
+    splices.push(...syncObj(original, parts.base, from, to, 1, st));
   }
   const renames = findRenames(before, after);
-  let wasVariants = before.variants;
-  if (renames.props.length || renames.values.length) { // rename the keys in place, then diff against the renamed "before"
-    if (parts.variants) {
-      for (const [from, to] of renames.props) { const pr = findProp(parts.variants, from); if (pr) pr.key = key(to); }
-      for (const r of renames.values) { const axisObj = findProp(parts.variants, r.to)?.value; const pr = axisObj && findProp(axisObj, r.from); if (pr) pr.key = key(r.toValue); }
-    }
-    wasVariants = renameVariantsKeys(before.variants, renames);
-  }
-  if (!same(wasVariants, after.variants)) {
+  splices.push(...keySplices(original, parts, renames));
+  const afterVariants = unrenameVariants(after.variants, renames);
+  if (!same(before.variants, afterVariants)) {
     if (!parts.variants) throw new Error('component has no variants object');
-    syncNested(parts.variants, wasVariants, after.variants, 2);
+    splices.push(...syncObj(original, parts.variants, before.variants, afterVariants, 3, st));
   }
   st.renames = renames;
-  let out = recast.print(ast, { ...PRINT, ...st.recast }).code;
-  // The pieces recast does not print the way we want are spliced in by offset, last one first so earlier offsets stay valid:
-  // the interface, the parameter list, `const v`, and the `return` with its element tree.
-  const jsxChanged = !same(shape(before.root), shape(after.root));
-  const propsChanged = !same(before.props, after.props);
-  if (jsxChanged || propsChanged) {
-    const p2 = locate(babelParse(out, { sourceType: 'module', plugins: ['typescript', 'jsx'] }));
-    const splices = [];
-    if (jsxChanged) splices.push({ start: p2.ret.start, end: p2.ret.end, text: returnText(out, p2, before, after, st) });
-    if (propsChanged) {
-      splices.push(...ifaceSplices(out, p2, before, after, st));
-      for (const sp of [paramsSplice(out, p2, before, after, st), vSplice(out, p2, before, after, st)]) if (sp) splices.push(sp);
-    }
-    for (const sp of splices.sort((x, y) => y.start - x.start)) out = out.slice(0, sp.start) + sp.text + out.slice(sp.end);
+  if (!same(before.props, after.props)) {
+    splices.push(...ifaceSplices(original, parts, before, after, st));
+    for (const sp of [paramsSplice(original, parts, before, after, st), vSplice(original, parts, before, after, st)]) if (sp) splices.push(sp);
   }
-  const result = out === src ? out : dropInsertedBlankLines(src, out);
-  return tabbed ? restoreTabs(src, result, original) : result;
+  if (!same(shape(before.root), shape(after.root))) splices.push({ start: parts.ret.start, end: parts.ret.end, text: returnText(original, parts, before, after, st) });
+  let out = original;
+  for (const sp of splices.sort((x, y) => y.start - x.start || y.end - x.end)) out = out.slice(0, sp.start) + sp.text + out.slice(sp.end);
+  return out;
 }
 
 // Source for a brand-new component: one root frame, no props.

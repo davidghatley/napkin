@@ -99,7 +99,7 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
       assert.equal(res.ok, true, `${JSON.stringify(r.edit)}: ${res.error}`);
       const m = measure(git, rel);
       const srcAfter = (await store.read()).source;
-      const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(srcBefore), sigAfter: signatureLines(srcAfter), textBefore: srcBefore, textAfter: srcAfter });
+      const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(srcBefore), textBefore: srcBefore, textAfter: srcAfter });
       const stat = (per[r.edit.op + (r.edit.variant ? '+variant' : '')] ??= { n: 0, maxAdd: 0, maxDel: 0, budgetAdd: 0, budgetDel: 0 });
       stat.n++; stat.maxAdd = Math.max(stat.maxAdd, m.file.add); stat.maxDel = Math.max(stat.maxDel, m.file.del);
       stat.budgetAdd = Math.max(stat.budgetAdd, b.add); stat.budgetDel = Math.max(stat.budgetDel, b.del);
@@ -115,36 +115,40 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
 
 // The same budgets on files a person formatted: tabs, 4 spaces, CRLF, double quotes, comments, blank lines.
 // (Files without trailing commas or interface semicolons are left out: adding a line there also touches its neighbour.)
-const HAND = Number(process.env.HAND_OPS || 120), HAND_FILES = Number(process.env.HAND_FILES || 12), HAND_SEED = Number(process.env.HAND_SEED || 777);
-test(`INV-03: budgets also hold on hand-formatted files (${HAND} ops over ${HAND_FILES} corpus files)`, async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'napkin-hand-'));
-  mkdirSync(join(dir, 'components'));
-  const files = makeCorpus(join(dir, 'components'), HAND_FILES, HAND_SEED, { skip: ['noTrailingCommas', 'semicolonlessInterface'] });
-  const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' });
-  git('init', '-q'); git('add', 'components');
-  git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'corpus');
-  const rand = rng(77);
-  const over = [];
-  let ops = 0;
-  for (const file of files) {
-    const rel = `components/${basename(file)}`;
-    const store = await openStore(file);
-    try {
-      for (let n = 0, done = 0; done < HAND / HAND_FILES && n < 400; n++) {
-        const { doc, revision, source } = await store.read();
-        const r = nextValidEdit(doc, rand, n);
-        if (!r) continue;
-        const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
-        assert.equal(res.ok, true, `${rel} ${JSON.stringify(r.edit)}: ${res.error}`);
-        const m = measure(git, rel);
-        const srcAfter = (await store.read()).source;
-        const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(source), sigAfter: signatureLines(srcAfter), textBefore: source, textAfter: srcAfter });
-        if (m.file.add > b.add || m.file.del > b.del) over.push({ rel, edit: r.edit, got: m.file, budget: b });
-        done++; ops++;
-      }
-    } finally { await store.close(); }
-  }
-  console.log(`INV-03 (hand-formatted): ${ops} ops; over budget: ${over.length}`);
-  if (over.length) console.log(JSON.stringify(over.slice(0, 8)));
-  assert.deepEqual(over.slice(0, 5), []);
-});
+// Hand-formatted files (compounded indentation, tabs, CRLF, double quotes, comments, blank lines), four corpora of 20 files.
+const HAND = Number(process.env.HAND_OPS || 100), HAND_FILES = Number(process.env.HAND_FILES || 20);
+const HAND_SEEDS = (process.env.HAND_SEEDS || '1,2,3,777').split(',').map(Number);
+for (const seed of HAND_SEEDS) {
+  test(`INV-03: budgets also hold on hand-formatted files (seed ${seed}: ${HAND} ops over ${HAND_FILES} corpus files)`, async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'napkin-hand-'));
+    mkdirSync(join(dir, 'components'));
+    const files = makeCorpus(join(dir, 'components'), HAND_FILES, seed, { skip: ['noTrailingCommas', 'semicolonlessInterface'] });
+    const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' });
+    git('init', '-q'); git('add', 'components');
+    git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'corpus');
+    const rand = rng(77 + seed);
+    const over = [];
+    let ops = 0;
+    for (const file of files) {
+      const rel = `components/${basename(file)}`;
+      const store = await openStore(file);
+      try {
+        for (let n = 0, done = 0; done < HAND / HAND_FILES && n < 400; n++) {
+          const { doc, revision, source } = await store.read();
+          const r = nextValidEdit(doc, rand, n);
+          if (!r) continue;
+          const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
+          assert.equal(res.ok, true, `${rel} ${JSON.stringify(r.edit)}: ${res.error}`);
+          const m = measure(git, rel);
+          const srcAfter = (await store.read()).source;
+          const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(source), textBefore: source, textAfter: srcAfter });
+          if (m.file.add > b.add || m.file.del > b.del) over.push({ rel, edit: r.edit, got: m.file, budget: b });
+          done++; ops++;
+        }
+      } finally { await store.close(); }
+    }
+    console.log(`INV-03 (hand-formatted, seed ${seed}): ${ops} ops; over budget: ${over.length}`);
+    if (over.length) console.log(JSON.stringify(over.slice(0, 8)));
+    assert.deepEqual(over.slice(0, 5), []);
+  });
+}
