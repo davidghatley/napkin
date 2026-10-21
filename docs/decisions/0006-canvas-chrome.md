@@ -6,7 +6,7 @@ Status: **proposed** · Date: 2026-10-21 · Written by Claude (builder, canvas l
 The dream (docs/DREAM.md) asks for an infinite canvas with a variant matrix, a layers tree, quick open and a design panel that reads like a design tool, at 200 components later. The first build was a scrolling page with a form panel.
 
 ## Decisions
-- **Plain DOM modules, no UI framework.** The chrome is still small (about 2,500 lines in `public/canvas/`). React stays inside the cells only. Revisit if the proposals tray and token panel make the panel code hard to follow.
+- **Plain DOM modules, no UI framework.** The chrome is still small (about 2,400 lines in `public/canvas/`). React stays inside the cells only. Revisit if the proposals tray and token panel make the panel code hard to follow.
 - **One transform on one layer.** Pan and zoom set `translate3d(x, y, 0) scale(z)` on `#world`; nothing lays out again. Labels are counter-scaled with a quantised `--ls` so headers stay about 12 px on screen at any zoom. Far off-screen frames get `content-visibility: hidden` (only above 30 components); they are not unmounted yet. Overlays live outside the world in screen pixels and refresh in the same call that moves it, so they are never a frame late.
 - **Layout is decided once.** Frames with no saved position are packed once, alphabetically; nothing is re-packed. This is what keeps an edit in one frame from moving any other (CLS 0).
 - **Position lives in the sidecar only.** `POST /api/components/:id/canvas {x, y}` writes the `canvas` field of `<Name>.napkin.json` and nothing else. It is not a component write, so it does not go through `store.apply`; the `.tsx` is never touched. (If INV-05's spy counts sidecar writes as component writes, this endpoint is the one place to look.)
