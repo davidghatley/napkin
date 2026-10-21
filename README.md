@@ -12,7 +12,7 @@ A local canvas for **real React components**. Every `*.tsx` in a folder is a com
 **The proving demo** (`npm run demo`, [log](docs/demo/demo-log.txt), [diff](docs/demo/demo-diff.txt)): David and an agent edit one Button at once. David changes the base radius in the panel and draws an icon slot with `I`; the agent calls `add_variant` for an `xl` size. Both land in `Button.tsx` (15 lines added, 2 removed), the canvas shows "agent: editing Button / size=xl" while it works, and a separate plain React app ([examples/consumer-app](examples/consumer-app/)) renders all 8 Buttons with both changes.
 
 ```console
-npm test                              # 52 tests: format, edit path, MCP, live sync, rendering, panel, drawing, the demo
+npm test                              # format, edit path, MCP, live sync, rendering, panel, drawing, the demo, the canvas (nav, frames, quick open, layers, panel, axe)
 npm run demo                          # the proving demo in headless Chromium; writes docs/demo/
 npm start                             # canvas at http://127.0.0.1:4810/ on a temp copy of fixtures/ (the repo is not edited)
 node src/server.js --dir components --port 4810    # your own folder of components, edited in place
@@ -20,6 +20,9 @@ NAPKIN_URL=http://127.0.0.1:4810/ npm run mcp      # MCP for an agent: list_comp
 node examples/consumer-app/build.mjs <components dir> [out]   # a plain React app that imports Button
 ```
 **On the canvas:**
+- Pan with the wheel or Space-drag, zoom with Ctrl/⌘-wheel, pinch or `+` `-` (5% to 800%); `⇧1` fits everything, `⇧2` the selection, `⇧0` is 100%. Drag a frame by its title to place it (the position is saved in the `.napkin.json` beside the file).
+- `⌘K` jumps to any component, layer or action. `Enter` focuses the selected component, `Esc` comes back; `#Button/label` in the address deep-links.
+- The left tree is the JSX: click to select, F2 or double-click to rename, drag to reorder. Shift-click or drag a box to select several; hold Alt to measure to the hovered element.
 - Click an element to select it.
 - The panel edits styles on the **Base** or on **This variant**. An override shows a dot and a "Reset to base" button.
 - The panel also edits text, "Make setting" (text becomes a prop), props and defaults, and variant axes and values.

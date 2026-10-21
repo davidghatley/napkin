@@ -135,16 +135,18 @@ test('evidence screenshots (EVIDENCE_OUT=docs/evidence)', { skip: !process.env.E
     await sleep(150);
     await shot('canvas-quick-open.png');
     await io.key('Escape');
-    // multi-select with Mixed values and the layers tree
-    await browser.eval(`napkin.view.fitAll({ animate: false })`);
-    await sleep(100);
+    // multi-select with Mixed values, on a focused Card
+    await browser.eval(`napkin.nav.focus(napkin.find('Card').component, undefined, { animate: false })`);
+    await sleep(300);
     const a = await centerOf(browser, node('Card', 'title')), b = await centerOf(browser, node('Card', 'body'));
     await io.click(a.x, a.y); await io.click(b.x, b.y, { shift: true });
     await browser.waitFor(`napkin.state.selections.length === 2`);
-    await sleep(150);
+    await browser.eval(`document.querySelector('[data-sec=type]').scrollIntoView({ block: 'start' })`);
+    await sleep(200);
     await shot('canvas-multi-select.png');
     // measuring
-    await io.key('Escape');
+    await browser.eval(`document.querySelector('#inspector').scrollTop = 0`);
+    await browser.eval(`napkin.select(null)`);
     await io.click(a.x, a.y);
     const img = await centerOf(browser, node('Card', 'image'));
     await io.down('Alt', { alt: true, code: 'AltLeft' });

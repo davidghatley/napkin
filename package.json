@@ -11,7 +11,8 @@
     "test": "node --test --test-concurrency=1 test/",
     "start": "node src/server.js --port 4810",
     "mcp": "node src/mcp.js",
-    "demo": "DEMO_OUT=docs/demo node --test test/10-demo.test.js"
+    "demo": "DEMO_OUT=docs/demo node --test test/10-demo.test.js",
+    "evidence:canvas": "EVIDENCE_OUT=docs/evidence node --test --test-force-exit test/14-canvas-look.test.js"
   },
   "dependencies": {
     "@babel/parser": "7.29.9",

@@ -132,10 +132,10 @@ export function renderPanel(ctx) {
       <div class="ftags">${tags(prop, f.label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   // A segmented control: one CSS property, a few values.
-  const seg = (prop, label, opts, { aria } = {}) => {
+  const seg = (prop, label, opts, { aria, iconOnly } = {}) => {
     const { value, mixed } = val(prop);
     return `<div class="f${isOver(prop) ? ' overridden' : ''}"><span class="flabel" id="lbl-${prop}">${esc(label)}</span>
-      <div class="seg" role="radiogroup" aria-labelledby="lbl-${prop}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span>${esc(text)}</span></button>`).join('')}</div>
+      <div class="seg" role="radiogroup" aria-labelledby="lbl-${prop}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span${iconOnly ? ' class="sr"' : ''}>${esc(text)}</span></button>`).join('')}</div>
       <div class="ftags">${tags(prop, label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   // Hug / Fill / Fixed for width or height.
@@ -168,7 +168,7 @@ export function renderPanel(ctx) {
   const typeSec = section('type', 'Text',
     field('fontFamily') + `<div class="pair">${field('fontSize')}${(() => `<div class="f"><label class="flabel" for="fontWeight">Weight</label><div class="fbox"><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined ? '<option value="" selected>Inherit</option>' : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select></div><div class="ftags">${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`)()}</div>`
     + `<div class="pair">${field('lineHeight')}${field('letterSpacing')}</div>`
-    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]]) + field('color', { placeholder: 'inherit' }));
+    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true }) + field('color', { placeholder: 'inherit' }));
 
   // ---- Content: text, setting binding, image attributes ----
   let content = '';
