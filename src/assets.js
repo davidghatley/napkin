@@ -30,11 +30,11 @@ function looksLike(bytes, ext) {
 
 export function saveAsset(dir, bytes, ext) {
   ext = extOf(ext);
-  if (!TYPES[ext]) throw new AssetError(`"${ext}" is not an image type napkin stores (${Object.keys(TYPES).join(', ')})`);
+  if (!TYPES[ext]) throw new AssetError(`"${ext}" is not an image type napkin stores. Next: use one of ${Object.keys(TYPES).join(', ')}.`);
   bytes = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
-  if (!bytes.length) throw new AssetError('the image is empty');
-  if (bytes.length > MAX_BYTES) throw new AssetError(`the image is ${bytes.length} bytes; the limit is ${MAX_BYTES}`, 413);
-  if (!looksLike(bytes, ext)) throw new AssetError(`the bytes are not a ${ext} image`);
+  if (!bytes.length) throw new AssetError('the image is empty. Next: send the image bytes.');
+  if (bytes.length > MAX_BYTES) throw new AssetError(`the image is ${bytes.length} bytes; the limit is ${MAX_BYTES}. Next: send a smaller image.`, 413);
+  if (!looksLike(bytes, ext)) throw new AssetError(`the bytes are not a ${ext} image. Next: check the file type and send it again.`);
   const sha8 = createHash('sha256').update(bytes).digest('hex').slice(0, 8);
   const name = `${sha8}.${ext === 'jpeg' ? 'jpg' : ext}`;
   const folder = join(dir, 'assets'), abs = join(folder, name);

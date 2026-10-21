@@ -3,7 +3,7 @@
 //   diffToEdits(from, to) -> [edits] that turn `from` into `to`, or null when the ops cannot say it exactly.
 // Every answer is checked: the edits are applied to `from` and the result must equal `to`, so an undo that
 // would leave the file different from the one before the edit is refused instead of guessed.
-import { applyEdits, index, propOf, EditError } from './model.js';
+import { applyEdits, index, propOf, touched, EditError } from './model.js';
 
 const canonical = (v) => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x));
 const strip = ({ id, ...rest }) => rest; // the sidecar id is not part of the file
@@ -99,4 +99,16 @@ export function diffToEdits(from, to) {
     throw e;
   }
   return sameDoc(cur, to) ? edits : null;
+}
+
+// The keys a step must still own for its undo to be safe. Finer than touched(): an insert or a move concerns the node it adds or
+// moves, not its parent's whole child list, so a sibling someone else adds next to it does not block (or trap) the undo.
+export function undoKeys(edits) {
+  const keys = new Set();
+  for (const e of edits) {
+    if (e?.op === 'insert') keys.add(`node:${e.node?.id}`);
+    else if (e?.op === 'move') keys.add(`node:${e.id}`);
+    else for (const k of touched([e])) keys.add(k);
+  }
+  return keys;
 }

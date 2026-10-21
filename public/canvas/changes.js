@@ -71,10 +71,9 @@ export function initChanges(ctx, drawer) {
     picsEl = h('div', { class: 'pics-wrap', id: 'chg-pics' });
     pane.append(listEl, h('div', { class: 'chg-main' }, titleEl, h('div', { class: 'chg-cols' }, diffEl, picsEl)));
   }
-  drawer.add('changes', 'Changes', { build, key: '⌘⇧G', onOpen: async () => { await refresh(); drawList(); if (S.picked && S.changed.has(S.picked)) show(S.picked); } });
+  drawer.add('changes', 'Changes', { build, onOpen: async () => { await refresh(); drawList(); if (S.picked && S.changed.has(S.picked)) show(S.picked); } });
   ctx.on('change', later); ctx.on('added', later); ctx.on('removed', later);
   ctx.on('render', later);
-  addEventListener('keydown', (ev) => { if ((ev.metaKey || ev.ctrlKey) && ev.shiftKey && ev.key.toLowerCase() === 'g' && !ev.target.closest?.('input, textarea')) { ev.preventDefault(); drawer.toggle('changes'); } });
   ctx.changes = { refresh, state: S, show };
   refresh();
 }

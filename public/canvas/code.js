@@ -149,7 +149,7 @@ export function initCode(ctx, drawer) {
     pane.append(head, body);
   }
 
-  drawer.add('code', 'Code', { build, key: '⌘⇧C', onOpen() { const id = currentId(); show(id); } });
+  drawer.add('code', 'Code', { build, onOpen() { const id = currentId(); show(id); } });
 
   // Sources come straight from the change frames (the server adds `source`), so the strip never waits for a fetch.
   ctx.on('change', (f) => {
@@ -163,6 +163,5 @@ export function initCode(ctx, drawer) {
     if (drawer.active !== 'code') return;
     if (s && s.component !== S.component) show(s.component).then(() => highlight(true)); else highlight(true);
   });
-  addEventListener('keydown', (ev) => { if ((ev.metaKey || ev.ctrlKey) && ev.shiftKey && ev.key.toLowerCase() === 'c' && !ev.target.closest?.('input, textarea')) { ev.preventDefault(); drawer.toggle('code'); } });
   ctx.code = { perf: S.perf, state: S, mapNodes, nodeAt };
 }

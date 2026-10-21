@@ -26,7 +26,7 @@ test('AST-01/04: a dropped image is copied to assets/<sha8>.<ext>, src is one ch
     assert.equal(a.path, `assets/${sha8}.png`); assert.equal(a.created, true);
     assert.deepEqual(readFileSync(join(r.compDir, 'assets', `${sha8}.png`)), bytes, 'the file is the dropped bytes');
     assert.match(r.git('diff', '--numstat', '--', 'components/Card.tsx'), /^1\t1\t/, 'one changed line');
-    assert.match(r.read('Card'), new RegExp(`src=["']assets/${sha8}\\.png["']`));
+    assert.match(r.read('Card'), new RegExp(`src="assets/${sha8}\\.png"`));
     assert.deepEqual(r.git('status', '--porcelain', '-uall').split('\n').filter(Boolean).map((l) => l.slice(3)).filter((p) => !p.endsWith('.napkin.json')).sort(), ['components/Card.tsx', `components/assets/${sha8}.png`], '1 changed file + 1 new file');
     const hist = (await r.history('Card'))[0];
     assert.equal(hist.by, 'you'); assert.match(hist.summary, /photo\.@src/);

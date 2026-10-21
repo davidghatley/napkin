@@ -12,11 +12,11 @@ const keyOf = (v) => JSON.stringify(v);
 
 export async function visualDiff(ws, renderer, e) {
   const snap = await e.store.read();
-  if (!snap.doc) return { ok: false, error: `cannot compare a read-only file (${snap.readOnly})` };
+  if (!snap.doc) return { ok: false, error: `cannot compare a read-only file (${snap.readOnly}). Next: fix the file so napkin can edit it.` };
   const headText = headSource(e.file);
   let before = null, state = 'added';
   if (headText !== null) {
-    try { before = readComponent(headText).doc; } catch (err) { return { ok: false, error: `the file at HEAD is outside the napkin dialect (${err.message})` }; }
+    try { before = readComponent(headText).doc; } catch (err) { return { ok: false, error: `the file at HEAD is outside the napkin dialect (${err.message}). Next: compare against a commit napkin can read.` }; }
     state = headText === snap.source ? 'clean' : 'modified';
   }
   if (state === 'clean') return { ok: true, state, cells: [], total: variantGrid(snap.doc).length, unchanged: variantGrid(snap.doc).length };
@@ -24,10 +24,10 @@ export async function visualDiff(ws, renderer, e) {
   const after = snap.doc;
   const cellsAfter = new Map(variantGrid(after).map((v) => [keyOf(v), v]));
   const cellsBefore = new Map(before ? variantGrid(before).map((v) => [keyOf(v), v]) : []);
-  const bundleAfter = await e.built;
-  if (!bundleAfter?.ok) return { ok: false, error: `build failed: ${bundleAfter?.error}` };
+  const bundleAfter = await ws.bundle(e);
+  if (!bundleAfter?.ok) return { ok: false, error: `build failed: ${bundleAfter?.error}. Next: fix the build error shown on the frame.` };
   const bundleBefore = before ? await ws.bundleText(e, headText) : null;
-  if (before && !bundleBefore.ok) return { ok: false, error: `the file at HEAD does not build: ${bundleBefore.error}` };
+  if (before && !bundleBefore.ok) return { ok: false, error: `the file at HEAD does not build: ${bundleBefore.error}. Next: compare against a commit that builds.` };
 
   const b64 = (r) => 'data:image/png;base64,' + r.png.toString('base64');
   const jobs = [];

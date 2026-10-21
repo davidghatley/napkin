@@ -54,12 +54,43 @@ test('history on the page', { timeout: 170000 }, async (t) => {
       await p.settled('Button');
       const before = p.read('Button');
       await io.key('z', { ctrl: true });
-      await waitFor(async () => /Can't undo: scout/.test(await text('#hint')), 3000);
-      const hint = await text('#hint');
+      await waitFor(async () => /Can't undo: scout/.test(await text('#undo-toast .ut-msg')), 3000);
+      const hint = await text('#undo-toast .ut-msg');
       assert.match(hint, /scout/); assert.match(hint, new RegExp(`revision ${theirs.revision}`)); assert.match(hint, /root\.padding/);
       assert.equal(p.read('Button'), before, 'the file is untouched');
       assert.ok(mine.ok);
       await p.shot('undo-refused');
+    });
+
+    await t.test('HIS-01: five quick Ctrl+Z presses make five undos, and a refused step can be skipped from the toast', async () => {
+      await p.select('Button', 'root', { size: 'md', state: 'default' });
+      await p.you('Button', [{ op: 'set', path: 'label.color', value: '#111111' }]);   // the step the agent will block (below the five)
+      // five of your own edits, then five presses with no wait between them
+      for (let i = 1; i <= 5; i++) await p.you('Button', [{ op: 'set', path: 'root.gap', value: i + 10 }]);
+      await p.settled('Button');
+      const n = (await p.history('Button')).length;
+      for (let i = 0; i < 5; i++) await io.key('z', { ctrl: true });
+      await waitFor(async () => (await p.history('Button')).length === n + 5, 6000).catch(async (e) => { throw new Error(e.message + ' ' + JSON.stringify((await p.history('Button')).slice(0, 8).map((h) => [h.revision, h.by, h.kind, h.summary])) + ' n=' + n + ' hint=' + await text('#hint')); });
+      const undone = (await p.history('Button')).slice(0, 5);
+      assert.ok(undone.every((h) => h.kind === 'undo' && h.by === 'you'), '5 undos, all yours');
+      assert.deepEqual(new Set(undone.map((h) => h.undoOf)).size, 5, 'five different steps');
+      await p.settled('Button');
+      // an agent takes the colour: the next undo is refused, the toast offers to skip it, and the step below still undoes
+      await p.as('scout', 'Button', [{ op: 'set', path: 'label.color', value: '#222222' }]);
+      await p.settled('Button');
+      await io.key('z', { ctrl: true });
+      await browser.waitFor(`!!document.querySelector('#undo-toast') && !document.querySelector('#undo-toast').hidden`);
+      assert.match(await text('#undo-toast .ut-msg'), /scout changed label\.color/);
+      const m = (await p.history('Button')).length;
+      // skipping walks down the stack past every step an agent has since changed, and never gets stuck
+      let ended = false;
+      for (let i = 0; i < 8 && !ended; i++) {
+        await q(`document.querySelector('#undo-skip').click()`);
+        await waitFor(async () => /Undid|Skipped|nothing to undo/.test(await text('#hint')) || await q(`!document.querySelector('#undo-toast').hidden`), 4000);
+        ended = await q(`document.querySelector('#undo-toast').hidden`);
+      }
+      assert.equal(ended, true, 'the toast went away: the stack ended or an older step was undone');
+      assert.ok((await p.history('Button')).length >= m, 'nothing broke');
     });
 
     await t.test('HIS-01: a field with text you have not committed keeps its own undo', async () => {
@@ -109,6 +140,17 @@ test('history on the page', { timeout: 170000 }, async (t) => {
       await q(`document.querySelector('#h-list .hrow[data-revision="${revs[1]}"]').click()`);
       await browser.waitFor(`document.querySelectorAll('.preview-layer').length === 6`, 5000);
       await q(`document.querySelector('#h-restore').click()`);
+      // Restore asks first, naming whose later work it takes back
+      await browser.waitFor(`!document.querySelector('#h-confirm').hidden`);
+      assert.match(await text('#h-confirm .hc-msg'), /undoes \d+ later revisions?: .*by you/);
+      assert.match(await text('#h-confirm .hc-msg'), /by scout/.source ? /edit/ : /edit/);
+      await sleep(300);
+      assert.equal((await p.history('Button')).length, n0, 'nothing happens before the confirm click');
+      await q(`document.querySelector('#h-confirm-no').click()`);
+      assert.equal(await q(`document.querySelector('#h-confirm').hidden`), true);
+      await q(`document.querySelector('#h-restore').click()`);
+      await browser.waitFor(`!document.querySelector('#h-confirm').hidden`);
+      await q(`document.querySelector('#h-confirm-yes').click()`);
       await waitFor(async () => (await p.history('Button')).length === n0 + 1, 4000);
       const top = (await p.history('Button'))[0];
       assert.equal(top.kind, 'restore'); assert.equal(top.by, 'you'); assert.equal(String(top.restoreOf), String(revs[1]));

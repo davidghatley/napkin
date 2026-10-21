@@ -112,17 +112,24 @@ test('code strip, inspect, usage and assets on the page', { timeout: 175000 }, a
       writeFileSync(join(dir, 'App.tsx'), `import { createRoot } from 'react-dom/client';\nimport { flushSync } from 'react-dom';\nimport { Button } from '@components/Button';\nflushSync(() => createRoot(document.getElementById('m')!).render(${usage}));\n`);
       await build({ entryPoints: [join(dir, 'App.tsx')], bundle: true, format: 'iife', jsx: 'automatic', alias: { '@components': p.compDir }, nodePaths: [join(ROOT, 'node_modules')], outfile: join(dir, 'app.js'), define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent' });
       writeFileSync(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><style>* { box-sizing: border-box; } body { color: #1c1f27; margin: 0; }</style><div id="m" style="position:absolute;left:16px;top:16px"></div><script src="app.js"></script>`);
-      const app = await launchChromium({ width: 1600, height: 1200 });
-      try {
-        await app.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
-        await app.goto(`file://${join(dir, 'index.html')}`);
-        await app.waitFor(`!!document.querySelector('#m button')`);
-        const box = JSON.parse(await app.eval(`JSON.stringify((() => { const r = document.querySelector('#m').firstElementChild.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; })())`));
-        const shot = Buffer.from((await app.send('Page.captureScreenshot', { format: 'png', clip: { x: box.x, y: box.y, width: Math.ceil(box.w), height: Math.ceil(box.h), scale: 1 }, captureBeyondViewport: true })).data, 'base64');
-        const rendered = Buffer.from(await (await fetch(new URL(`api/components/Button/render?variant=${encodeURIComponent(JSON.stringify({ size: 'sm', state: 'hover' }))}`, p.server.url))).arrayBuffer());
-        t.diagnostic(`consumer cell ${shot.length} bytes, napkin render ${rendered.length} bytes`);
-        assert.ok(shot.equals(rendered), 'identical pixels');
-      } finally { await app.close(); }
+      const rendered = Buffer.from(await (await fetch(new URL(`api/components/Button/render?variant=${encodeURIComponent(JSON.stringify({ size: 'sm', state: 'hover' }))}`, p.server.url))).arrayBuffer());
+      // 20 runs, each in a fresh browser: the consumer app's cell must equal napkin's render byte for byte every time
+      let same = 0;
+      for (let run = 0; run < 20; run++) {
+        const app = await launchChromium({ width: 1600, height: 1200 });
+        try {
+          await app.send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
+          await app.goto(`file://${join(dir, 'index.html')}`);
+          await app.waitFor(`!!document.querySelector('#m button')`);
+          await app.eval(`document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))`);
+          const box = JSON.parse(await app.eval(`JSON.stringify((() => { const r = document.querySelector('#m').firstElementChild.getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: Math.ceil(r.width), h: Math.ceil(r.height) }; })())`));
+          const clip = { x: box.x, y: box.y, width: box.w, height: box.h, scale: 1 };
+          const shot = Buffer.from((await app.send('Page.captureScreenshot', { format: 'png', clip, captureBeyondViewport: true })).data, 'base64');
+          if (shot.equals(rendered)) same++;
+        } finally { await app.close(); }
+      }
+      t.diagnostic(`consumer cell vs napkin render: ${same}/20 identical (${rendered.length} bytes)`);
+      assert.equal(same, 20, 'identical pixels in 20 of 20 runs');
       await q(`napkin.drawer.close()`);
     });
 

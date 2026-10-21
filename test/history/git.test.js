@@ -91,3 +91,31 @@ test('HIS-05: changed-since-HEAD list, diff against HEAD, and 0 commits made by 
     assert.equal(r.git('status', '--porcelain', '--', 'components/Button.tsx').trim(), '', 'undo left Button as committed');
   } finally { await r.close(); }
 });
+
+test('HIS-05: git stash and stash pop are git; a hand edit right after checkout -b, git status or a commit is file', async () => {
+  const r = await rig(['Card']);
+  try {
+    let seen = (await r.history('Card', 500)).length, e;
+    // a hand edit, then stash it away and bring it back
+    hand(r, "padding: '16px'", "padding: '61px'");
+    ({ count: seen } = await next(r, seen));
+    r.git(...ident, 'stash', '-q');
+    ({ entry: e, count: seen } = await next(r, seen));
+    assert.equal(e.by, 'git'); assert.equal(e.summary, 'git stash');
+    r.git(...ident, 'stash', 'pop', '-q');
+    ({ entry: e, count: seen } = await next(r, seen));
+    assert.equal(e.by, 'git', 'stash pop is git, not file'); assert.equal(e.summary, 'git stash');
+    assert.match(r.read('Card'), /padding: '61px'/);
+
+    // checkout -b changes no content; a hand edit within the window is the person
+    r.git('checkout', '-q', '-b', 'topic');
+    hand(r, "padding: '61px'", "padding: '62px'");
+    ({ entry: e, count: seen } = await next(r, seen));
+    assert.equal(e.by, 'file', 'a hand edit right after checkout -b');
+    // and right after `git status` (which rewrites the index)
+    r.git('status', '--short');
+    hand(r, "padding: '62px'", "padding: '63px'");
+    ({ entry: e } = await next(r, seen));
+    assert.equal(e.by, 'file', 'a hand edit right after git status');
+  } finally { await r.close(); }
+});

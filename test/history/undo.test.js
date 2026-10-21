@@ -195,3 +195,62 @@ test('history records who approved an accepted proposal', async () => {
     assert.equal((await r.call('you', 'POST', '/api/undo', {})).status, 409);
   } finally { await r.close(); }
 });
+
+test('HIS-01: a sibling someone else adds does not block undoing your insert, nor trap the older steps below it', async () => {
+  const r = await rig(['Card']);
+  try {
+    const original = r.read('Card');
+    await r.edit('you', 'Card', PAD('21px'));                                                    // A: older, unrelated
+    await r.edit('you', 'Card', [{ op: 'insert', parent: 'card', node: { id: 'mine', tag: 'p', text: 'mine' } }]); // B
+    await r.edit('scout', 'Card', [{ op: 'insert', parent: 'card', node: { id: 'theirs', tag: 'p', text: 'theirs' } }]); // an agent adds a sibling in the same parent
+    const b = await r.call('you', 'POST', '/api/undo', {});
+    assert.equal(b.status, 200, JSON.stringify(b).slice(0, 300));
+    assert.doesNotMatch(r.read('Card'), /data-n="mine"/); assert.match(r.read('Card'), /data-n="theirs"/, "the agent's sibling stays");
+    const a = await r.call('you', 'POST', '/api/undo', {});
+    assert.equal(a.status, 200, 'the older edit is not trapped'); assert.match(r.read('Card'), /padding: '16px'/);
+    assert.notEqual(r.read('Card'), original, 'only the agent\'s node differs from the start');
+    // a move conflicts only on the nodes moved: the agent moves another node and your move still undoes
+    await r.edit('you', 'Card', [{ op: 'move', id: 'title', parent: 'card', index: 0 }]);
+    await r.edit('scout', 'Card', [{ op: 'move', id: 'body', parent: 'card', index: 0 }]);
+    assert.equal((await r.call('you', 'POST', '/api/undo', {})).status, 200);
+    // ...but if the agent touched your node's own key it is refused
+    await r.edit('you', 'Card', [{ op: 'move', id: 'title', parent: 'card', index: 0 }]);
+    await r.edit('scout', 'Card', [{ op: 'set', path: 'title.margin', value: '9px' }]);
+    const bad = await r.call('you', 'POST', '/api/undo', {});
+    assert.equal(bad.status, 409); assert.equal(bad.refused.by, 'scout');
+  } finally { await r.close(); }
+});
+
+test('HIS-01: a refused step can be skipped, so the stack is never trapped', async () => {
+  const r = await rig(['Card']);
+  try {
+    await r.edit('you', 'Card', PAD('25px'));        // A
+    await r.edit('you', 'Card', WEIGHT(600));        // B
+    await r.edit('scout', 'Card', WEIGHT(900));      // the agent changes B's key
+    const refused = await r.call('you', 'POST', '/api/undo', {});
+    assert.equal(refused.status, 409);
+    const skipped = await r.call('you', 'POST', '/api/undo', { skip: true });
+    assert.equal(skipped.status, 200, JSON.stringify(skipped).slice(0, 300));
+    assert.equal(skipped.skipped.summary, 'title.fontWeight = 600'); assert.equal(skipped.undone.summary, 'card.padding = "25px"');
+    assert.match(r.read('Card'), /padding: '16px'/); assert.match(r.read('Card'), /fontWeight: 900/, "the agent's value stays");
+    // skipping with nothing below says so, and leaves nothing stuck
+    await r.edit('you', 'Card', WEIGHT(500)); await r.edit('scout', 'Card', WEIGHT(100));
+    const none = await r.call('you', 'POST', '/api/undo', { skip: true });
+    assert.equal(none.status, 409); assert.match(none.error, /nothing to undo/);
+    assert.equal((await r.call('you', 'POST', '/api/undo', {})).status, 409);
+  } finally { await r.close(); }
+});
+
+test('HIS-03: restore-preview names whose later work a restore would take back', async () => {
+  const r = await rig(['Card']);
+  try {
+    await r.edit('you', 'Card', PAD('20px'));
+    const keep = (await r.history('Card'))[0].revision;
+    await r.edit('scout', 'Card', WEIGHT(700)); await r.edit('scout', 'Card', WEIGHT(800)); await r.edit('you', 'Card', PAD('22px'));
+    const p = await r.call(null, 'GET', `/api/components/Card/restore-preview?revision=${keep}`);
+    assert.equal(p.status, 200);
+    assert.deepEqual(p.overwrites.map((o) => o.by), ['scout', 'scout', 'you']);
+    assert.match(p.overwrites[0].summary, /title\.fontWeight = 700/);
+    assert.equal((await r.call(null, 'GET', '/api/components/Card/restore-preview?revision=nope')).status, 404);
+  } finally { await r.close(); }
+});

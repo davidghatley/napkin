@@ -16,17 +16,27 @@ const isTyping = (t) => {
 
 export function initHistory(ctx, drawer) {
   // ------------------------------------------------------------------------------------------- undo and redo
-  let busy = false;
-  async function step(verb, component) {
-    if (busy) return null;
-    busy = true;
-    try {
-      const r = await ctx.fetch(component ? `/api/components/${encodeURIComponent(component)}/${verb}` : `/api/${verb}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-      const j = await r.json().catch(() => ({ ok: false, error: `${verb} failed (${r.status})` }));
-      if (j.ok) ctx.hint(`${verb === 'undo' ? 'Undid' : 'Redid'}: ${(j.undone || j.redone)?.summary ?? 'your last edit'}`);
-      else ctx.hint(j.refused ? `Can't ${verb}: ${j.refused.by} changed ${j.refused.keys.join(', ')} in revision ${j.refused.revision}` : `Can't ${verb}: ${String(j.error).replace(/^(undo|redo) refused: /, '')}`);
-      return j;
-    } finally { busy = false; }
+  // Presses are queued, never dropped: five quick Cmd+Z are five undos, and a held key repeats.
+  let chain = Promise.resolve();
+  const step = (verb, component, skip = false) => (chain = chain.then(() => run(verb, component, skip)).catch(() => null));
+  let toast;
+  function showToast(message, verb, component) {
+    toast ??= h('div', { id: 'undo-toast', role: 'status' }, h('span', { class: 'ut-msg' }), h('button', { type: 'button', id: 'undo-skip', text: 'Skip this step' }), h('button', { type: 'button', id: 'undo-dismiss', 'aria-label': 'Dismiss', text: '×' }));
+    if (!toast.isConnected) document.querySelector('#stage').append(toast);
+    toast.querySelector('.ut-msg').textContent = message;
+    toast.querySelector('#undo-skip').onclick = () => { hideToast(); step(verb, component, true); };
+    toast.querySelector('#undo-dismiss').onclick = hideToast;
+    toast.hidden = false;
+    clearTimeout(showToast.t); showToast.t = setTimeout(hideToast, 12000);
+  }
+  const hideToast = () => { if (toast) toast.hidden = true; };
+  async function run(verb, component, skip) {
+    const r = await ctx.fetch(component ? `/api/components/${encodeURIComponent(component)}/${verb}` : `/api/${verb}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(skip ? { skip: true } : {}) });
+    const j = await r.json().catch(() => ({ ok: false, error: `${verb} failed (${r.status})` }));
+    if (j.ok) { hideToast(); ctx.hint(`${j.skipped ? `Skipped "${j.skipped.summary}". ` : ''}${verb === 'undo' ? 'Undid' : 'Redid'}: ${(j.undone || j.redone)?.summary ?? 'your last edit'}`); }
+    else if (j.refused) showToast(`Can't ${verb}: ${j.refused.by} changed ${j.refused.keys.join(', ')} in revision ${j.refused.revision}. Skip this step to ${verb} the one before it.`, verb, component ?? j.component);
+    else { hideToast(); ctx.hint(`Can't ${verb}: ${String(j.error).replace(/^(undo|redo) refused: /, '')}`); }
+    return j;
   }
   ctx.undo = () => step('undo'); ctx.redo = () => step('redo');
 
@@ -45,7 +55,7 @@ export function initHistory(ctx, drawer) {
   });
 
   // ------------------------------------------------------------------------------------------- the History tab
-  let pane, list, slider, who, flagText;
+  let pane, list, slider, who, flagText, confirmBox;
   const S = { component: null, rows: [], picked: null, mod: null, token: 0, unmounts: [], timer: 0 };
   const sectionOf = (id) => document.querySelector(`section.cmp[data-component="${CSS.escape(id)}"]`);
   const nameOf = (id) => ctx.state.components.get(id)?.name ?? id;
@@ -128,11 +138,27 @@ export function initHistory(ctx, drawer) {
     ctx.emit('preview', { component: id, revision: row.revision });
   }
   function exitPreview() {
+    if (confirmBox) confirmBox.hidden = true;
     S.token++; S.mod = null; S.picked = null; clearLayers();
     if (list) draw();
     ctx.emit('preview', { component: S.component, revision: null });
   }
 
+  // Restore replaces the whole file with an older state, so say first whose later work it takes back and ask for a click.
+  async function askRestore() {
+    if (S.picked === null) return;
+    const rev = S.picked;
+    const r = await fetch(`/api/components/${encodeURIComponent(S.component)}/restore-preview?revision=${encodeURIComponent(rev)}`).then((x) => x.json()).catch(() => null);
+    const over = r?.overwrites ?? [];
+    const by = new Map(); for (const o of over) by.set(o.by, (by.get(o.by) ?? 0) + 1);
+    const names = [...by].map(([n, c]) => `${c} edit${c === 1 ? '' : 's'} by ${n}`).join(', ');
+    confirmBox.replaceChildren(
+      h('p', { class: 'hc-msg', text: over.length ? `Restoring r${rev} undoes ${over.length} later revision${over.length === 1 ? '' : 's'}: ${names}.` : `Restoring r${rev} changes nothing that came after it.` }),
+      over.length ? h('ul', { class: 'hc-list' }, over.slice(-6).map((o) => h('li', { text: `r${o.revision} ${o.by}: ${o.summary}` })), over.length > 6 ? h('li', { text: `and ${over.length - 6} more` }) : null) : null,
+      h('div', { class: 'hc-btns' }, h('button', { type: 'button', id: 'h-confirm-yes', class: 'primary', text: 'Restore anyway', onclick: () => { confirmBox.hidden = true; restore(); } }), h('button', { type: 'button', id: 'h-confirm-no', text: 'Cancel', onclick: () => { confirmBox.hidden = true; } })));
+    confirmBox.hidden = false;
+    confirmBox.querySelector('#h-confirm-no').focus();
+  }
   async function restore() {
     if (S.picked === null) return;
     const id = S.component, rev = S.picked;
@@ -155,8 +181,9 @@ export function initHistory(ctx, drawer) {
         h('button', { type: 'button', id: 'h-redo', title: 'Redo (⇧⌘Z)', text: 'Redo', onclick: () => step('redo', S.component) }),
         h('label', { class: 'h-scrub' }, h('span', { text: 'older' }), slider, h('span', { text: 'now' })),
         h('button', { type: 'button', id: 'h-back', text: 'Back to now', onclick: () => exitPreview() }),
-        h('button', { type: 'button', id: 'h-restore', class: 'primary', text: 'Restore this', onclick: restore }),
+        h('button', { type: 'button', id: 'h-restore', class: 'primary', text: 'Restore this', onclick: askRestore }),
         flagText),
+      confirmBox = h('div', { id: 'h-confirm', role: 'alertdialog', 'aria-label': 'Confirm restore', hidden: true }),
       list);
   }
   const fillComponents = () => {
@@ -165,7 +192,7 @@ export function initHistory(ctx, drawer) {
     who.replaceChildren(...[...ctx.state.components.values()].sort((a, b) => a.name.localeCompare(b.name)).map((c) => h('option', { value: c.component, text: c.name })));
     if (cur) who.value = cur;
   };
-  drawer.add('history', 'History', { build, key: '⌘⇧H', onOpen() { fillComponents(); const id = currentComponent(); if (id !== S.component) setComponent(id); else load(); } });
+  drawer.add('history', 'History', { build, onOpen() { fillComponents(); const id = currentComponent(); if (id !== S.component) setComponent(id); else load(); } });
 
   ctx.on('select', (s) => { if (drawer.active === 'history' && s && s.component !== S.component) { fillComponents(); setComponent(s.component); } });
   ctx.on('change', (f) => {
@@ -176,6 +203,5 @@ export function initHistory(ctx, drawer) {
   ctx.on('removed', ({ component }) => { if (component === S.component) { S.component = null; exitPreview(); fillComponents(); } });
   setInterval(() => { if (drawer.active === 'history') for (const t of document.querySelectorAll('#h-list time')) { const row = S.rows.find((r) => String(r.revision) === t.closest('li').dataset.revision); if (row) t.textContent = `${clock(row.at)} · ${ago(row.at)}`; } }, 15000);
   addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && S.picked !== null && !ev.target.closest?.('input, select, textarea')) { ev.stopPropagation(); exitPreview(); } }, true);
-  addEventListener('keydown', (ev) => { if ((ev.metaKey || ev.ctrlKey) && ev.shiftKey && ev.key.toLowerCase() === 'h') { ev.preventDefault(); drawer.toggle('history'); } });
-  ctx.history = { show: (id) => { drawer.open('history'); if (id) setComponent(ctx.find(id)?.component ?? id); }, preview: pick, state: S, restore, exit: exitPreview };
+  ctx.history = { show: (id) => { drawer.open('history'); if (id) setComponent(ctx.find(id)?.component ?? id); }, preview: pick, state: S, restore, ask: askRestore, exit: exitPreview };
 }

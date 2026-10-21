@@ -113,9 +113,8 @@ export function initInspect(ctx, drawer) {
     table = h('table', { id: 'i-table', class: 'i-table' });
     pane.append(h('div', { class: 'i-bar' }, status, picker), h('div', { class: 'i-use' }, usage, copyBtn), h('div', { class: 'i-scroll' }, table));
   }
-  drawer.add('inspect', 'Inspect', { build, key: '⌘⇧I', onOpen: render });
+  drawer.add('inspect', 'Inspect', { build, onOpen: render });
   ctx.on('select', (s) => { if (s) S.cell = null; render(); });
   ctx.on('render', () => { if (drawer.active === 'inspect') render(); });
-  addEventListener('keydown', (ev) => { if ((ev.metaKey || ev.ctrlKey) && ev.shiftKey && ev.key.toLowerCase() === 'i' && !ev.target.closest?.('input, textarea')) { ev.preventDefault(); drawer.toggle('inspect'); } });
   ctx.inspect = { render, rowsFor, declaredFrom };
 }

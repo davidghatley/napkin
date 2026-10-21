@@ -20,3 +20,6 @@ export function moveComponent(from, to, text) { writeFileSync(to, text, { flag: 
 // Sidecar files (<Name>.napkin.json) travel with their component.
 export function writeSidecar(file, text) { writeFileAtomic(file, text); } // atomic: a kill mid-write never leaves a truncated sidecar
 export function removeSidecar(file) { try { unlinkSync(file); } catch {} }
+
+// CLI init creates a project config only after checking an empty destination.
+export function createProjectConfig(file, text) { writeFileSync(file, text, { flag: 'wx' }); }

@@ -1,6 +1,7 @@
 // Write a model back into the component's AST, touching only what changed between two models,
 // then print with recast. recast reuses the original text of every AST node we don't replace,
 // so a save with no change is byte-identical and one property change is a one-line diff.
+import { explainError } from '../errors.js';
 import * as recast from 'recast';
 import { locate, literalValue } from './read.js';
 import { index } from '../model.js';
@@ -157,7 +158,7 @@ function syncJsx(parts, before, after) {
       const attrs = el.openingElement.attributes;
       const i = attrs.findIndex((a) => a.name?.name === k);
       if (node.attrs?.[k] === undefined) attrs.splice(i, 1);
-      else if (i >= 0) attrs[i].value = str(node.attrs[k], '"');
+      else if (i >= 0) attrs[i] = b.jsxAttribute(b.jsxIdentifier(k), str(node.attrs[k], '"')); // a new node, so the quotes stay double like the rest of the JSX
       else attrs.push(b.jsxAttribute(b.jsxIdentifier(k), str(node.attrs[k], '"')));
     }
     const kidsChanged = !same(old.children.map((c) => c.id), node.children.map((c) => c.id));
@@ -231,18 +232,19 @@ export function writeComponent(ast, before, after, original) {
     syncNested(parts.base, from, to, 0);
   }
   if (!same(before.variants, after.variants)) {
-    if (!parts.variants) throw new Error('component has no variants object');
+    if (!parts.variants) throw new Error(explainError('component has no variants object'));
     syncNested(parts.variants, before.variants, after.variants, 2);
   }
   syncJsx(parts, before, after);
   // keep the dialect's `return (\n    <jsx>\n  );` shape when recast collapses a one-line root
-  const out = recast.print(ast, PRINT).code.replace(/^( *)return \((<.*>)\);$/m, (_, pad, jsx) => `${pad}return (\n${pad}  ${jsx}\n${pad});`);
+  // recast prints a replaced JSX attribute value with its own quote setting; the dialect's JSX is double-quoted, so put the quotes back
+  const out = recast.print(ast, PRINT).code.replace(/^.*data-n=".*$/gm, (l) => l.replace(/ (src|alt)='([^'"\\]*)'/g, ' $1="$2"')).replace(/^( *)return \((<.*>)\);$/m, (_, pad, jsx) => `${pad}return (\n${pad}  ${jsx}\n${pad});`);
   return original === undefined || out === original ? out : dropInsertedBlankLines(original, out);
 }
 
 // Source for a brand-new component: one root frame, no props.
 export function newComponentSource(name, rootTag = 'div') {
-  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(`component name "${name}" must be PascalCase`);
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(explainError(`component name "${name}" must be PascalCase`));
   return `import type { CSSProperties } from 'react';
 
 export interface ${name}Props {

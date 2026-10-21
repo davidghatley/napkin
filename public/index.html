@@ -14,8 +14,9 @@
   <header id="topbar">
     <div class="brand"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true"><path d="M3 4.5 12.5 3 17 8l-1.5 9L5 16.5z" fill="var(--accent)" opacity=".18"/><path d="M3 4.5 12.5 3 17 8l-1.5 9L5 16.5z M12.5 3l.6 5 3.9 0" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linejoin="round"/></svg><h1>napkin</h1><span id="folder">components</span></div>
     <div id="toolbar"></div>
+    <button type="button" id="quick-open" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
     <div class="top-right">
-      <button type="button" id="quick-open" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
+
       <span class="meta">revision <code id="revision">…</code></span>
       <span class="slot"><span id="agent-status" hidden>agent connected</span><span id="presence" role="status" aria-live="polite"></span></span>
       <button type="button" id="theme-toggle" aria-label="Switch chrome theme" title="Light / dark chrome"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13z" fill="currentColor"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
@@ -24,9 +25,10 @@
   <nav id="sidebar" aria-label="Layers and changes">
     <h2 class="pane-title">Layers</h2>
     <div id="layers" role="tree" aria-label="Layers"></div>
-    <details id="changes" open><summary>Changes</summary><ul id="log" aria-live="polite"></ul></details>
+    <details id="changes" open><summary>Changes</summary><p id="changes-placeholder" class="empty">No changes yet.</p><ul id="log" aria-live="polite"></ul></details>
   </nav>
   <main id="stage" aria-label="Canvas" tabindex="-1">
+    <p id="scan-progress" role="status"></p>
     <div id="world"></div>
     <div id="overlays" aria-hidden="true"></div>
     <div id="marquee" hidden></div>

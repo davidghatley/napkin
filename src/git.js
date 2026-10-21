@@ -1,7 +1,7 @@
 // Read-only git awareness (HIS-05). napkin never commits, stages, checks out or writes anything in .git:
 // every call here is `git show`, `git diff`, `git status`, `git rev-parse` or a file read.
 import { execFileSync } from 'node:child_process';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync, statSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
 const run = (cwd, args, opts = {}) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 32 * 1024 * 1024, ...opts });
@@ -27,24 +27,44 @@ function lastHeadMove(gitDir) {
   return { at: mtime(log), verb };
 }
 
+// Texts of this file in the stash entries, remembered while they exist: `git stash pop` drops the entry it applies, so the text
+// a pop writes can only be recognised from what we saw before. Primed when a store opens and refreshed after each outside change.
+const stashTexts = new Map(); // git dir -> Set of file texts
+export function primeGit(file) {
+  const dir = dirname(resolve(file)), gitDir = gitDirOf(dir);
+  if (!gitDir || !existsSync(join(gitDir, 'logs', 'refs', 'stash'))) return;
+  const set = stashTexts.get(gitDir + '|' + basename(file)) ?? new Set();
+  const names = tryRun(dir, ['stash', 'list', '--format=%gd']);
+  for (const ref of (names ?? '').split('\n').filter(Boolean).slice(0, 20)) { const t = tryRun(dir, ['show', `${ref}:./${basename(file)}`]); if (t !== null) set.add(t); }
+  stashTexts.set(gitDir + '|' + basename(file), set);
+}
+
 // Did a git command just rewrite this file? Called by the store's watcher with the text it found.
-// Evidence: HEAD moved (reflog, a verb other than commit) or the index was rewritten within `windowMs`, and, for the index case,
-// the file now equals its committed or staged blob. A hand edit leaves HEAD and index alone, so it stays "file".
+// Both must hold: a trace of git in the last `windowMs` (HEAD's reflog moved by something other than a commit, the stash moved, or the
+// index was rewritten) AND the new text is one git itself wrote: the HEAD blob, the index blob, or (stash) a stash entry's blob.
+// A hand edit after `git checkout -b` or `git status` matches no blob, so it stays "file".
 // -> { by: 'git', summary: 'git checkout' } | null
 export function gitAttribution(file, text, { windowMs = 4000, now = Date.now() } = {}) {
   const dir = dirname(resolve(file));
   const gitDir = gitDirOf(dir);
   if (!gitDir) return null;
+  const name = basename(file), key = gitDir + '|' + name;
   const head = lastHeadMove(gitDir);
-  const headMoved = head.at >= now - windowMs && head.verb && !/^commit/.test(head.verb);
-  if (headMoved) return { by: 'git', summary: `git ${head.verb}` };
-  const indexMoved = mtime(join(gitDir, 'index')) >= now - windowMs;
-  if (!indexMoved) return null;
-  const name = basename(file);
-  const inHead = tryRun(dir, ['show', `HEAD:./${name}`]);
-  const inIndex = tryRun(dir, ['show', `:./${name}`]);
-  if (text === inHead || text === inIndex) return { by: 'git', summary: 'git checkout' };
-  return null;
+  const recent = (t) => t >= now - windowMs;
+  const headMoved = recent(head.at) && head.verb && !/^commit/.test(head.verb);
+  // the stash log vanishes with the last entry (a pop), so once a stash has been seen the folders around it count too
+  const stashMoved = recent(mtime(join(gitDir, 'logs', 'refs', 'stash'))) || (stashTexts.has(key) && recent(Math.max(mtime(join(gitDir, 'logs', 'refs')), mtime(join(gitDir, 'refs')))));
+  const indexMoved = recent(mtime(join(gitDir, 'index')));
+  let result = null;
+  if (headMoved || stashMoved || indexMoved) {
+    const blobs = [tryRun(dir, ['show', `HEAD:./${name}`]), tryRun(dir, ['show', `:./${name}`])];
+    const isBlob = blobs.includes(text);
+    if (stashMoved && (isBlob || stashTexts.get(key)?.has(text))) result = { by: 'git', summary: 'git stash' }; // stash push also resets HEAD: say stash
+    else if (headMoved && isBlob) result = { by: 'git', summary: `git ${head.verb}` };
+    else if (indexMoved && isBlob) result = { by: 'git', summary: 'git checkout' };
+  }
+  primeGit(file); // a stash pushed just now will be gone after its pop; remember its text first
+  return result;
 }
 
 // What the file at HEAD says, or null (not a repo, no commit, or the file is not tracked at HEAD).

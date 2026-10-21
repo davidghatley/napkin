@@ -28,6 +28,9 @@ import { renderPanel } from './panel.js';
 import { initTools } from './tools.js';
 import { initLayers } from './layers.js';
 import { initQuick } from './quick.js';
+import { initReadOnly } from './readonly.js';
+import { initEmpty } from './empty.js';
+import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
 import { initHistoryLane } from './history-lane.js';
 
@@ -38,6 +41,7 @@ const handlers = new Map();
 // The toast says it in plain words; the raw store message stays in the panel's inline errors.
 const plain = (e) => (/^invalid edit #\d+: id ".*" already exists/.test(e) ? 'That id is already used' : e.replace(/^invalid edit #\d+: /, ''));
 const keyOf = (s) => `${s.component}|${s.node}`;
+const nameCounts = new Map(), nameById = new Map(), idsByName = new Map();
 const ctx = {
   state: { components: new Map(), selection: null, selections: [], tool: 'select', zoom: 1 },
   select(selection) { ctx.selectMany(selection ? [selection] : []); },
@@ -63,6 +67,8 @@ const ctx = {
     return r;
   },
   hint(text) { const h = $('#hint'); h.textContent = text; clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },
+  title(c) { return nameCounts.get(c.name) > 1 && c.path ? `${c.name} · ${c.path}` : c.name; },
+  named(name) { return [...(idsByName.get(name) || [])].map(id => ctx.state.components.get(id)).filter(Boolean); },
   find(idOrName) { return ctx.state.components.get(idOrName) ?? [...ctx.state.components.values()].find((c) => c.name === idOrName); },
   on(event, cb) { if (!handlers.has(event)) handlers.set(event, new Set()); handlers.get(event).add(cb); return () => handlers.get(event).delete(cb); },
   emit(event, payload) { for (const cb of handlers.get(event) || []) cb(payload); },
@@ -89,12 +95,22 @@ Object.assign(ctx, { view, stage });
 initTools(ctx);
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
+initShortcuts(ctx);
+initReadOnly(ctx);
 const nav = initNav(ctx);
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
-ctx.on('select', () => renderPanel(ctx));
-ctx.on('render', ({ component, revision }) => { $('#revision').textContent = revision; renderPanel(ctx); counts(); });
+ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
+ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
 
-const sync = (id) => { const s = client.state(id); s ? ctx.state.components.set(id, s) : ctx.state.components.delete(id); };
+const sync = id => {
+  if (!id) return;
+  const s = client.state(id), old = nameById.get(id);
+  if (old !== s?.name) {
+    if (old) { nameCounts.set(old, nameCounts.get(old) - 1); idsByName.get(old)?.delete(id); nameById.delete(id); }
+    if (s) { nameCounts.set(s.name, (nameCounts.get(s.name) || 0) + 1); nameById.set(id, s.name); if (!idsByName.has(s.name)) idsByName.set(s.name, new Set()); idsByName.get(s.name).add(id); }
+  }
+  s ? ctx.state.components.set(id, s) : ctx.state.components.delete(id);
+};
 
 function counts() {
   const cells = document.querySelectorAll('.cell').length, n = ctx.state.components.size;
@@ -105,6 +121,7 @@ function counts() {
 const LOG_ROWS = 6, logRows = [];
 for (let i = 0; i < LOG_ROWS; i++) { const li = document.createElement('li'); logRows.push(li); $('#log').append(li); }
 function note(c) {
+  $('#changes-placeholder').hidden = true;
   const name = ctx.state.components.get(c.component)?.name ?? c.component;
   for (let i = LOG_ROWS - 1; i > 0; i--) { logRows[i].className = logRows[i - 1].className; logRows[i].textContent = logRows[i - 1].textContent; }
   logRows[0].className = 'by-' + c.by;
@@ -113,9 +130,10 @@ function note(c) {
 
 client.onChange((f) => {
   sync(f.component);
-  if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
+  if (f.type === 'progress') { ctx.state.progress = f; $('#scan-progress').textContent = f.done ? '' : `Scanning components… ${f.scanned} / ${f.total}`; ctx.emit('progress', f); }
+  else if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
-  else if (f.type === 'added') { stage.render(f.component).catch(console.error); ctx.emit('added', f); }
+  else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; }
   else if (f.type === 'presence') {
@@ -133,4 +151,6 @@ stage.layoutAll();
 nav.restore();
 renderPanel(ctx);
 counts();
+initEmpty(ctx, $('#stage'));
+$('#revision').parentElement.hidden = !ctx.state.selection;
 document.body.dataset.ready = '1';

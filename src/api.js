@@ -2,6 +2,7 @@
 // src/server.js (over HTTP) and by src/mcp.js when it runs without a canvas server (called directly).
 //   const api = createApi(ws, { broadcast, dir });   await api.handle({ method, path, query, body }) -> { status, json } | { status, png } | null
 // Writes all go through store.apply (INV-05). Proposals live in memory only and never touch a file.
+import { explainError } from './errors.js';
 import { readFileSync, realpathSync } from 'node:fs';
 import { join, dirname, extname, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -9,6 +10,7 @@ import { CreateError } from './workspace.js';
 import { search } from './ws-ops.js';
 import { createRenderer, RenderError } from './render-png.js';
 import { summarize } from './summary.js';
+import { ADOPTION, proposeAdoption } from './adopt.js';
 import { GUIDE } from './guide.js';
 import { saveAsset, listAssets, resolveAsset, AssetError, MAX_BYTES } from './assets.js';
 import { changedFiles, diffAgainstHead } from './git.js';
@@ -36,7 +38,7 @@ export function agentsConfig(dir) {
 export const agentPermission = (dir, name) => { const c = agentsConfig(dir); return c ? (c[name] ?? c['*'] ?? { mode: 'read' }).mode : 'write'; };
 
 const res = (status, json) => ({ status, json });
-const fail = (status, error, extra) => res(status, { ok: false, error, ...extra });
+const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error), ...extra });
 
 export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose = true } = {}) {
   const sessions = new Map(); // token -> name
@@ -84,7 +86,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
 
   async function resolve(id, action, by) {
     const p = proposals.get(id);
-    if (!p) return fail(404, 'no such proposal');
+    if (!p) return fail(404, `no such proposal "${id}"`);
     if (action === 'reject') {
       proposals.delete(id);
       broadcast({ type: 'proposal-resolved', id, component: p.component, status: 'rejected', by });
@@ -92,7 +94,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     }
     const e = ws.find(p.component);
     if (!e) { proposals.delete(id); return fail(404, 'the component no longer exists'); }
-    const r = await e.store.apply({ baseRevision: p.baseRevision, edits: p.edits, by: p.by, origin: undefined }, { approvedBy: by }); // history records who approved it
+    const r = await e.store.apply({ baseRevision: p.baseRevision, edits: p.edits, by: p.by, origin: undefined, ...(p.adoption && { [ADOPTION]: { before: p.before, source: p.source } }) }, { approvedBy: by }); // history records who approved it
     if (!r.ok) return res(409, { ...r, proposal: id }); // stale (or invalid now): the proposal stays so it can be rejected
     proposals.delete(id);
     broadcast({ type: 'proposal-resolved', id, component: p.component, status: 'accepted', by, revision: r.revision });
@@ -103,11 +105,11 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
   function bytesOf(msg) {
     if (typeof msg.from === 'string') {
       const a = resolveAsset(dir, msg.from);
-      if (!a) throw new AssetError(`no image at ${msg.from}`, 404);
+      if (!a) throw new AssetError(`no image at ${msg.from}. Next: choose one listed by GET /api/assets.`, 404);
       return Object.assign(readFileSync(a.abs), { ext: extname(a.abs) });
     }
     if (typeof msg.data !== 'string') throw new AssetError('send { data: <base64 bytes>, ext } or { from: <image path> }');
-    if (msg.data.length > MAX_BYTES * 1.4) throw new AssetError('the image is too large', 413);
+    if (msg.data.length > MAX_BYTES * 1.4) throw new AssetError('the image is too large. Next: send one under 8 MB.', 413);
     return Buffer.from(msg.data, 'base64');
   }
   async function stepFor(verb, e, msg, caller) {
@@ -118,10 +120,12 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       e = best?.e;
     }
     if (!e) return fail(409, `nothing to ${verb}`);
-    const r = await e.store[verb](caller, msg.origin);
+    const r = await e.store[verb](caller, msg.origin, { skip: msg.skip === true });
     return res(r.ok ? 200 : 409, { ...r, component: e.id });
   }
   async function handle({ method, path, query = new URLSearchParams(), body = '', token }) {
+    let contextFile;
+    const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error, { file: /body is not JSON/.test(error) ? undefined : /invalid edit|stale revision|read-only:|line \d+:|cannot adopt|build failed|render failed/.test(error) ? contextFile : undefined }), ...extra });
     if (!path.startsWith('/api/') || path === '/api/events' || path === '/api/presence') return null;
     const seg = path.split('/').slice(2).map(decodeURIComponent);
     const msgOf = () => parse(body);
@@ -190,7 +194,8 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     }
 
     const e = ws.find(seg[1]);
-    if (!e) return fail(404, 'not found');
+    if (!e) return fail(404, `component "${seg[1]}" not found`);
+    contextFile = e.path || e.name + '.tsx';
     const sub = seg[2];
 
     if (!sub) {
@@ -203,6 +208,21 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
         try { return res(200, { ok: true, ...(await ws.delete(e.id, { by: caller })) }); }
         catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
       }
+    }
+    if (sub === 'adoption' && method === 'POST') {
+      const n = needId(); if (n) return n;
+      const mode = agentPermission(dir, caller);
+      if (mode === 'read') return fail(403, `agent "${caller}" is read-only (napkin.json). Next: ask a write or propose agent to propose_adoption.`, { permission: mode });
+      if (!canPropose) return fail(409, 'propose needs a running napkin canvas server. Next: run napkin open to review an adoption.');
+      const r = await e.store.read();
+      if (!r.readOnly) return fail(409, `${e.file} is already editable. Next: use apply_edits.`);
+      let converted;
+      try { converted = proposeAdoption(r.source, e.path || e.name + '.tsx'); } catch (err) { return fail(422, err.message); }
+      const p = { id: 'prp_' + randomBytes(5).toString('hex'), component: e.id, name: e.name, adoption: true,
+        baseRevision: r.revision, currentRevision: r.revision, before: r.source, edits: [], by: caller,
+        summary: `adopt ${e.name} into the dialect`, at: Date.now(), ...converted };
+      proposals.set(p.id, p); broadcast({ type: 'proposal', component: e.id, proposal: p });
+      return res(200, { ok: true, proposed: true, proposal: p });
     }
     if (sub === 'edits' && method === 'POST') {
       const msg = msgOf(); if (!msg) return fail(400, 'invalid edit #0: body is not JSON');
@@ -239,6 +259,10 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       if (msg.revision === undefined) return fail(400, 'send { revision }');
       const r = await e.store.restore(msg.revision, caller, msg.origin);
       return res(r.ok ? 200 : 409, r);
+    }
+    if (sub === 'restore-preview' && method === 'GET') {
+      const over = e.store.overwrittenBy(query.get('revision'));
+      return over ? res(200, { ok: true, overwrites: over }) : fail(404, `revision ${query.get('revision')} is not in the history this server keeps`);
     }
     if (sub === 'at' && method === 'GET') {
       const past = e.store.at(query.get('revision'));

@@ -1,5 +1,6 @@
 // Quick open (CAN-03): Cmd/Ctrl+K opens a palette that fuzzy-searches components, nodes and actions.
 // Enter flies there (about 280 ms; none with prefers-reduced-motion) and selects it.
+import { actionsFor } from './actions.js';
 import { search } from './fuzzy.js';
 import { variantGrid } from '/src/model.js';
 
@@ -21,23 +22,9 @@ export function initQuick(ctx) {
   const input = root.querySelector('#q-input'), list = root.querySelector('#q-list');
   let items = [], results = [], active = 0, returnTo = null;
 
-  const actions = () => [
-    { kind: 'action', label: 'Fit all', hint: 'view', key: '⇧1', run: () => ctx.view.fitAll({ animate: true }) },
-    { kind: 'action', label: 'Fit selection', hint: 'view', key: '⇧2', run: () => ctx.view.fitSelection({ animate: true }) },
-    { kind: 'action', label: 'Zoom to 100%', hint: 'view', key: '⇧0', run: () => { const b = ctx.view.stageBox(); ctx.view.zoomBy(1 / ctx.view.get().z, b.left + b.width / 2, b.top + b.height / 2, { animate: true }); } },
-    { kind: 'action', label: 'Focus selected component', hint: 'view', key: 'Enter', run: () => { const s = ctx.state.selection; if (s) ctx.nav.focus(s.component, s.node); } },
-    { kind: 'action', label: 'Leave focus', hint: 'view', key: 'Esc', run: () => ctx.nav.unfocus() },
-    { kind: 'action', label: 'New component', hint: 'create', key: 'N', run: () => key('n') },
-    { kind: 'action', label: 'Frame tool', hint: 'draw', key: 'F', run: () => ctx.tools?.use('frame') },
-    { kind: 'action', label: 'Text tool', hint: 'draw', key: 'T', run: () => ctx.tools?.use('text') },
-    { kind: 'action', label: 'Image slot tool', hint: 'draw', key: 'I', run: () => ctx.tools?.use('image') },
-    { kind: 'action', label: 'Select tool', hint: 'draw', key: 'V', run: () => ctx.tools?.use('select') },
-    { kind: 'action', label: 'Switch light or dark chrome', hint: 'theme', run: () => document.querySelector('#theme-toggle').click() },
-  ];
-  const key = (k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
 
   function build() {
-    items = actions();
+    items = actionsFor(ctx);
     for (const c of ctx.state.components.values()) {
       items.push({ kind: 'component', label: c.name, hint: c.readOnly ? 'read-only component' : 'component', component: c.component, boost: 4 });
       if (!c.doc) continue;
@@ -92,7 +79,9 @@ export function initQuick(ctx) {
     close();
     if (item.kind === 'action') { item.run(); return; }
     const c = ctx.state.components.get(item.component);
-    if (!c?.doc) return;
+    if (!c) return;
+    ctx.stage.live(c.component);
+    if (!c.doc) { const rect = ctx.stage.componentRect(c.component); if (rect) ctx.view.flyTo(rect, { pad: 96, max: 1.5 }); return; }
     const variant = variantGrid(c.doc)[0];
     if (item.kind === 'component') {
       ctx.select({ component: c.component, node: c.doc.root.id, variant });

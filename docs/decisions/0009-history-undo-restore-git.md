@@ -1,4 +1,4 @@
-# 0007: How undo, restore, git attribution and assets work
+# 0009: How undo, restore, git attribution and assets work
 
 Status: **proposed** · Date: 2026-10-21 · Written by the AI builder (Claude) for the history lane; David has not decided on this yet.
 Builds on 0005 (G5: undo only your own edits, refused when someone else touched the same keys).
@@ -13,3 +13,9 @@ Builds on 0005 (G5: undo only your own edits, refused when someone else touched 
 
 ## Consequences
 History lives for the server's session (500 revisions, as before). Undo of a file the files lane re-keys with content hashes still works: only equality of revisions is used.
+
+## Amendment after the critic (2026-10-21)
+- Undo conflicts use precise keys (the node an insert or move concerns, not its parent's child list), and a refused step can be skipped so the stack is never trapped. Restore names whose later work it takes back and needs a confirm click on the page.
+- Git attribution needs a git trace AND a blob git wrote; stash text is remembered before a pop drops it.
+- `napkin docs` opens the folder read-only (no sidecars, no lock). The catalog has a playground that runs the component's own bundle offline.
+- The render host paints an empty page before every cell so a cell's bytes do not depend on what was drawn before it.

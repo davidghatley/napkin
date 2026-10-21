@@ -41,7 +41,7 @@ export function initAssets(ctx, drawer) {
     grid = h('ul', { id: 'a-grid', class: 'a-grid', 'aria-label': 'Images and SVGs in this repo' });
     pane.append(h('div', { class: 'a-bar' }, filter, count, h('button', { type: 'button', id: 'a-refresh', text: 'Refresh', onclick: load })), grid);
   }
-  drawer.add('assets', 'Assets', { build, key: '⌘⇧A', onOpen: load });
+  drawer.add('assets', 'Assets', { build, onOpen: load });
 
   // ------------------------------------------------------------------------------------------- dropping
   let target = null;
