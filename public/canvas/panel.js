@@ -63,6 +63,7 @@ const ui = {
   side: '',        // which border side the Stroke controls edit ('' = all)
   info: false,     // the scope explanation
   lastFill: null,
+  limits: false,   // the Min / Max rows are open
   scrubbing: false,
 };
 
@@ -237,7 +238,6 @@ export function renderPanel(ctx) {
     if (shown === '' && !mixed && f.eff) { const e = eff(prop); if (e !== null && e !== undefined && e !== '') { shown = String(e); kind = f.inherit ? 'inherited' : 'computed'; } }
     const isNum = NUMBER.test(shown);
     const mark = kind === 'inherited' && !isNum ? '<span class="inh" title="Inherited from the parent">inherited</span>'
-      : kind === 'inherited' ? '<span class="inh arrow" title="Inherited from the parent" aria-label="inherited">↑</span>'
       : f.unit && shown !== '' && isNum && !mixed ? `<span class="unit" aria-hidden="true">${f.unit}</span>` : '';
     const lab = f.scrub ? `class="flabel scrub pfx" data-scrub="${prop}" title="Drag to change ${esc(f.label.toLowerCase())}"` : 'class="flabel pfx"';
     const sw = f.color ? `<button type="button" class="swatch" id="swatch-${prop}" data-swatch="${prop}" aria-label="Pick ${esc(f.label.toLowerCase())}"${dis}><span class="chipcolor" data-color="${esc(shown)}"></span></button>` : '';
@@ -292,17 +292,17 @@ export function renderPanel(ctx) {
   const justify = val('justifyContent'), alignI = val('alignItems');
   const between = !justify.mixed && justify.value === 'space-between';
   const wrapOn = val('flexWrap').value === 'wrap';
-  const matrix = flex ? `<div class="amatrix${between ? ' dist' : ''}" role="group" aria-label="Alignment">${[0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => {
+  const matrix = flex ? `<div class="amwrap ${dir}"><div class="amatrix ${dir}${between ? ' dist' : ''}" role="group" aria-label="Alignment">${[0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => {
     const [mainI, crossI] = dir === 'row' ? [c, r] : [r, c];
     const on = !alignI.mixed && !justify.mixed && alignI.value === ALIGN[crossI] && (between ? true : (justify.value ?? 'flex-start') === ALIGN[mainI]);
-    return `<button type="button" id="align-${r}${c}" data-align="${mainI},${crossI}" aria-pressed="${on}" aria-label="Align ${AL_NAME[r][c]}" title="Align ${AL_NAME[r][c]}"${dis}><i></i></button>`;
-  })).join('')}</div>` : '';
+    return `<button type="button" id="align-${r}${c}" data-align="${mainI},${crossI}" aria-pressed="${on}" aria-label="Align ${AL_NAME[r][c]}" title="Align ${AL_NAME[r][c]} (children run ${dir === 'row' ? 'left to right' : 'top to bottom'})"${dis}><i></i></button>`;
+  })).join('')}</div><span class="axisarrow" data-dir="${dir}" aria-hidden="true" title="Children run ${dir === 'row' ? 'left to right' : 'top to bottom'}">${dir === 'row' ? '<svg viewBox="0 0 40 8" width="40" height="8"><path d="M1 4h36M33 1l4 3-4 3" fill="none" stroke="currentColor" stroke-width="1.200" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '<svg viewBox="0 0 8 40" width="8" height="40"><path d="M4 1v36M1 33l3 4 3-4" fill="none" stroke="currentColor" stroke-width="1.200" stroke-linecap="round" stroke-linejoin="round"/></svg>'}</span></div>` : '';
   const padSides = ui.sides.pad, radSides = ui.sides.rad;
   const pb = padSides ? boxOf('padding') : null, rb = radSides ? boxOf('borderRadius') : null;
   const sidesFields = (group, b, labels, ids, unsupported) => (b
     ? `<div class="irow n2 sides">${ids.map((id, i) => part(group, id, labels[i], String(b[i]), { part: String(i), glyph: GLYPH.padding })).join('')}</div>`
     : `<p class="hint">${unsupported}</p>`);
-  const gapAuto = `<button type="button" class="minibtn" id="gap-auto" data-action="gap-auto" aria-pressed="${between}" title="Space between: spread the children and ignore the gap"${dis}>Auto</button>`;
+  const gapAuto = `<button type="button" class="minibtn" id="gap-auto" data-action="gap-auto" aria-pressed="${between}" title="Space between: spread the children to both ends (the gap is ignored)" aria-label="Space between"${dis}>Auto</button>`;
   const tracksField = (prop, label, key) => {
     const v = val(prop).value;
     return `<div class="fld wide"><div class="fbox txt"><label class="flabel pfx" for="${prop}">${GLYPH[prop]}<span class="lt">${label}</span></label><input id="${prop}" data-field="style" data-prop="${prop}" data-text="1" autocomplete="off" spellcheck="false" value="${esc(v ?? '')}" placeholder="1fr 1fr"${dis}><span class="stepper"><button type="button" id="${key}-remove" data-action="track" data-prop="${prop}" data-dir="-1" aria-label="Remove a ${label.toLowerCase().slice(0, -1)}" title="Remove a ${label.toLowerCase().slice(0, -1)}"${dis}>−</button><button type="button" id="${key}-add" data-action="track" data-prop="${prop}" data-dir="1" aria-label="Add a ${label.toLowerCase().slice(0, -1)}" title="Add a ${label.toLowerCase().slice(0, -1)}"${dis}>+</button></span></div>${err('style-' + prop)}</div>`;
@@ -323,9 +323,11 @@ export function renderPanel(ctx) {
   const pins = abs ? pinsOf(resolvedOf(node)) : null;
   const pinSeg = (axis, items) => `<div class="fld full"><div class="seg pins" role="radiogroup" aria-label="${axis === 'h' ? 'Horizontal' : 'Vertical'} pin">${items.map(([m, text, tip]) => `<button type="button" role="radio" id="pin-${axis}-${m}" aria-checked="${pins[axis] === m}" data-pin="${axis}" data-mode="${m}" title="${tip}"${dis}>${text}</button>`).join('')}</div></div>`;
   const inset = (p) => { const v = val(p).value; return v === undefined ? '' : field(p, { eff: false }); };
+  const limitsOpen = ui.limits || ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'].some(has);
   const sizeSec = section('size', 'Size',
     sizeRow('width') + sizeRow('height')
-    + row(field('minWidth'), field('maxWidth')) + row(field('minHeight'), field('maxHeight'))
+    + `<div class="limitsrow"><button type="button" class="minibtn" id="limits-toggle" data-action="limits" aria-expanded="${limitsOpen}" title="Minimum and maximum size">Min / Max <svg viewBox="0 0 8 8" width="8" height="8" aria-hidden="true"><path d="${limitsOpen ? 'M1 5.500 4 2.500 7 5.500' : 'M1 2.500 4 5.500 7 2.500'}" fill="none" stroke="currentColor" stroke-width="1.200" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`
+    + (limitsOpen ? row(field('minWidth'), field('maxWidth')) + row(field('minHeight'), field('maxHeight')) : '')
     + (parent ? `<div class="fld full"><div class="seg" role="radiogroup" aria-label="Position"><button type="button" role="radio" id="seg-position-auto" aria-checked="${!abs}" data-position="auto" title="Part of the layout flow"${dis}>In flow</button><button type="button" role="radio" id="seg-position-absolute" aria-checked="${abs}" data-position="absolute" title="Pinned inside the parent (position: absolute)"${dis}>Absolute</button></div></div>` : '')
     + (abs ? pinSeg('h', [['min', 'Left', 'Pin to the left edge'], ['max', 'Right', 'Pin to the right edge'], ['both', 'Left + right', 'Pin both sides: stretches'], ['center', 'Centre', 'Centre horizontally']]) + pinSeg('v', [['min', 'Top', 'Pin to the top edge'], ['max', 'Bottom', 'Pin to the bottom edge'], ['both', 'Top + bottom', 'Pin both sides: stretches'], ['center', 'Centre', 'Centre vertically']])
       + row(field('left', { eff: false }), field('right', { eff: false })) + row(field('top', { eff: false }), field('bottom', { eff: false })) : '')
@@ -355,11 +357,12 @@ export function renderPanel(ctx) {
       <div class="irow n2">${part('shadow', 'shadow-blur', 'Blur', sp ? String(sp.b) : '', { part: 'b' })}${part('shadow', 'shadow-spread', 'Spread', sp ? String(sp.s) : '', { part: 's' })}</div>`
       : `<p class="hint">This shadow has several layers or an inset; edit it as text.</p><div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="boxShadow"><span class="lt">CSS</span></label><input id="boxShadow" data-field="style" data-prop="boxShadow" data-text="1" value="${esc(sv.value)}"${dis}></div>${err('style-boxShadow')}</div>`,
     '0px 2px 6px 0px #00000040');
+  const showType = isText || ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing', 'color', 'textAlign'].some(has);
   const wt = val('fontWeight');
   const effW = cs ? Number(cs.fontWeight) : null;
   const weightSel = `<div class="fld"><div class="fbox sel${wt.value === undefined && !wt.mixed ? ' inherited' : ''}" title="${wt.value === undefined && !wt.mixed ? 'Inherited from the parent' : ''}"><label class="flabel pfx" for="fontWeight">${L('B')}<span class="lt">Weight</span></label><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined && !wt.mixed ? `<option value="" selected>${effW ?? 400}</option>` : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select>${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`;
   const typeSec = section('type', 'Text',
-    field('fontFamily', { wide: true }) + row(field('fontSize'), weightSel) + row(field('lineHeight'), field('letterSpacing'))
+    `<p class="hint typehint">Grey values come from the parent. Type a value to set one here.</p>` + field('fontFamily', { wide: true }) + row(field('fontSize'), weightSel) + row(field('lineHeight'), field('letterSpacing'))
     + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true, eff: (c) => ({ start: 'left', end: 'right', justify: 'left' }[c.textAlign] ?? c.textAlign) }) + field('color'));
 
   // ---- Content: the text and its setting binding (near the top for a text node), image attributes ----
@@ -436,7 +439,7 @@ export function renderPanel(ctx) {
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec : layout + sizeSec + look + fill + stroke + effects + typeSec + content}${advanced}
+    ${isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec : layout + sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + content}${advanced}
     <div class="grouphead">Component</div>${propsUi}${variantsUi}`;
 
   for (const sw of el.querySelectorAll('.chipcolor')) {
@@ -698,9 +701,10 @@ function wire(ctx, el) {
     const pin = ev.target.closest('button[data-pin]');
     if (pin) { await setPin(pin.dataset.pin, pin.dataset.mode); return; }
     const act = ev.target.closest('button[data-action]');
-    if (act && ['info', 'toggle-sides', 'stroke-side', 'toggle-eye', 'set-prop', 'clear-prop', 'gap-auto', 'wrap', 'track'].includes(act.dataset.action)) {
+    if (act && ['info', 'toggle-sides', 'stroke-side', 'toggle-eye', 'set-prop', 'clear-prop', 'gap-auto', 'wrap', 'track', 'limits'].includes(act.dataset.action)) {
       const a = act.dataset.action;
-      if (a === 'gap-auto') { const j = curVal('justifyContent'); if (j === 'space-between') await commit('justifyContent', ui.lastJustify && ui.lastJustify !== 'space-between' ? ui.lastJustify : null); else { ui.lastJustify = j; await commit('justifyContent', 'space-between'); } }
+      if (a === 'limits') { ui.limits = !ui.limits; rerender(); }
+      else if (a === 'gap-auto') { const j = curVal('justifyContent'); if (j === 'space-between') await commit('justifyContent', ui.lastJustify && ui.lastJustify !== 'space-between' ? ui.lastJustify : null); else { ui.lastJustify = j; await commit('justifyContent', 'space-between'); } }
       else if (a === 'wrap') await commit('flexWrap', curVal('flexWrap') === 'wrap' ? null : 'wrap');
       else if (a === 'track') {
         const prop = act.dataset.prop, list = tracks(curVal(prop) ?? ''), d = Number(act.dataset.dir);

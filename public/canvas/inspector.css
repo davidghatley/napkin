@@ -12,10 +12,10 @@
 
 /* sections: lighter headings, a quiet + on the right */
 #panel details.sec { border-top: 1px solid var(--line); }
-#panel details.sec > summary { height: 34px; padding: 0 var(--gut); gap: 6px; font: 600 11.5px var(--sans); color: var(--text-2); letter-spacing: 0; }
+#panel details.sec > summary { height: 36px; padding: 0 var(--gut); gap: 6px; font: 700 12.5px var(--sans); color: var(--text); letter-spacing: 0; }
 #panel details.sec > summary::before { width: 8px; font-size: 8px; color: var(--text-3); }
 #panel details.sec > summary:hover { background: transparent; color: var(--text); }
-#panel .sec.empty { display: flex; align-items: center; height: 34px; padding: 0 var(--gut) 0 calc(var(--gut) + 14px); border-top: 1px solid var(--line); font: 600 11.5px var(--sans); color: var(--text-2); }
+#panel .sec.empty { display: flex; align-items: center; height: 36px; padding: 0 var(--gut) 0 calc(var(--gut) + 14px); border-top: 1px solid var(--line); font: 700 12.5px var(--sans); color: var(--text); }
 #panel .addbtn { margin-left: auto; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); cursor: pointer; }
 #panel .addbtn:hover { background: var(--chrome-3); color: var(--text); }
 #panel .sbody { display: grid; gap: var(--gap); padding: 0 var(--gut) 14px; }
@@ -32,17 +32,16 @@
 #panel .fbox:focus-within { border-color: var(--accent); background: var(--chrome); }
 #panel .fbox input:not([type=color]), #panel .fbox select { flex: 1; min-width: 22px; height: 24px; padding: 0; border: 0; outline: 0; background: transparent; color: var(--text); font: 12px var(--sans); font-variant-numeric: tabular-nums; }
 #panel .fbox.num input { text-align: right; }
-#panel .fbox input::placeholder { color: var(--text-3); opacity: .8; font-weight: 400; }
+#panel .fbox input::placeholder { color: var(--text-3); opacity: 1; font-weight: 400; }
 #panel .fbox.computed input, #panel .fbox.inherited input, #panel .fbox.inherited select { color: var(--text-2); }
-#panel .fbox.inherited input { font-style: italic; }
-#panel .pfx { display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; min-width: 0; color: var(--text-3); font: 450 11px var(--sans); user-select: none; max-width: 70%; }
+#panel .pfx { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; min-width: 0; color: var(--text-2); font: 400 11px var(--sans); user-select: none; }
 #panel .pfx .lt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#panel .pfx .gl { flex: none; color: var(--text-3); }
+#panel .pfx .gl { flex: none; color: var(--text-2); }
 #panel .pfx .gt { width: 12px; text-align: center; font: 600 10px var(--sans); }
 #panel .flabel.scrub { cursor: ew-resize; text-decoration: none; touch-action: none; }
 #panel .flabel.scrub:hover, #panel .flabel.scrub:hover .gl { color: var(--text); }
 #panel .fld.overridden .pfx, #panel .fld.overridden .pfx .gl { color: var(--accent-text); }
-#panel .unit, #panel .inh { flex: none; margin: 0; color: var(--text-3); font: 10.5px var(--sans); }
+#panel .unit, #panel .inh { flex: none; margin: 0; color: var(--text-2); font: 10.5px var(--sans); }
 #panel .inh.arrow { font-size: 12px; }
 #panel .dot { flex: none; width: 6px; height: 6px; }
 #panel .reset { flex: none; width: 18px; height: 18px; }
@@ -199,3 +198,26 @@ body[data-gesture="move"] #stage, body[data-gesture="reorder"] #stage { cursor: 
 #panel .none { display: flex; align-items: center; justify-content: space-between; }
 #panel .seg.quiet button[aria-checked="true"] { color: var(--text-2); font-weight: 500; }
 #panel .fld.full.textrow { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+
+/* round 5: a bigger alignment matrix with axis cues, Min / Max behind a toggle, and a quieter type hint */
+#panel .alignrow { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+#panel .amwrap { position: relative; display: flex; gap: 4px; align-items: flex-start; color: var(--text-3); }
+#panel .amwrap.row { flex-direction: column; align-items: flex-start; }
+#panel .amwrap.column { flex-direction: row; }
+#panel .amatrix { width: 96px; height: 72px; }
+#panel .amwrap .axisarrow { display: block; line-height: 0; color: var(--text-3); }
+#panel .amwrap.row .axisarrow { width: 96px; text-align: center; margin-top: 2px; }
+#panel .amwrap.row .axisarrow svg { width: 96px; }
+#panel .amwrap.column .axisarrow { margin-left: 2px; }
+#panel .amatrix button i { transition: all .08s; }
+#panel .amatrix.row button:hover i { width: 16px; height: 6px; border-radius: 3px; background: var(--text-2); opacity: 1; }
+#panel .amatrix.column button:hover i { width: 6px; height: 16px; border-radius: 3px; background: var(--text-2); opacity: 1; }
+#panel .amatrix.row button[aria-pressed="true"] i { width: 16px; height: 6px; border-radius: 3px; background: var(--accent); }
+#panel .amatrix.column button[aria-pressed="true"] i { width: 6px; height: 16px; border-radius: 3px; background: var(--accent); }
+#panel .amatrix.dist.row button[aria-pressed="true"] i { width: 6px; height: 14px; }
+#panel .amatrix.dist.column button[aria-pressed="true"] i { width: 14px; height: 6px; }
+#panel .limitsrow { display: flex; }
+#panel .limitsrow .minibtn { display: inline-flex; align-items: center; gap: 5px; height: 22px; color: var(--text-2); font-weight: 500; }
+#panel .typehint { margin: -2px 0 0; color: var(--text-2); font-size: 11px; }
+#panel .hint { color: var(--text-2); }
+#panel .amatrix button { width: 100%; height: 100%; }
