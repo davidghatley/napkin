@@ -1,25 +1,25 @@
-// Build-first #2 (F02 + F03): one safe edit path for both writers.
+// Build-first #2 (F02 + F03), on TSX: one safe edit path for both writers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { applyEdits, getValue } from '../src/edits.js';
-import { parse } from '../src/format.js';
+import { applyEdits, getValue } from '../src/model.js';
+import { readComponent } from '../src/tsx/read.js';
 import { openStore } from '../src/store.js';
 import { tempRepo } from './helpers/harness.js';
 
-const fixture = () => parse(readFileSync(tempRepo().file, 'utf8'));
+const onDisk = (file) => readComponent(readFileSync(file, 'utf8')).doc;
 
-test('applyEdits: all four ops work on a copy', () => {
-  const doc = fixture();
+test('applyEdits: set, insert, move and delete work on a copy', () => {
+  const doc = onDisk(tempRepo().file);
   const next = applyEdits(doc, [
-    { op: 'set', path: 'title.text', value: 'Hi' },
-    { op: 'insert', parent: 'card', index: 3, node: { id: 'cta', tag: 'button', text: 'Open' } },
+    { op: 'set', path: 'body.text', value: 'Hi' },
+    { op: 'insert', parent: 'card', index: 3, node: { id: 'cta', tag: 'button', style: {}, text: 'Open', children: [] } },
     { op: 'move', id: 'cta', parent: 'card', index: 0 },
     { op: 'delete', id: 'image' },
   ]);
-  assert.equal(getValue(next, 'title.text'), 'Hi');
+  assert.equal(getValue(next, 'body.text'), 'Hi');
   assert.deepEqual(next.root.children.map((c) => c.id), ['cta', 'title', 'body']);
-  assert.equal(getValue(doc, 'title.text'), 'From napkin to component', 'input not mutated');
+  assert.equal(getValue(doc, 'body.text'), 'A person and an agent edit this Card at the same time.', 'input not mutated');
 });
 
 test('a rejected batch makes no change to the file and names the edit', async () => {
@@ -63,8 +63,8 @@ test('two edits to different properties from the same revision both land', async
   ]);
   assert.equal(a.ok, true); assert.equal(b.ok, true);
   assert.notEqual(a.revision, b.revision);
-  const onDisk = parse(readFileSync(file, 'utf8'));
-  assert.equal(getValue(onDisk, 'card.padding'), '28px');
-  assert.equal(getValue(onDisk, 'title.fontWeight'), 600);
+  const doc = onDisk(file);
+  assert.equal(getValue(doc, 'card.padding'), '28px');
+  assert.equal(getValue(doc, 'title.fontWeight'), 600);
   await store.close();
 });

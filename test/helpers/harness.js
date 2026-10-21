@@ -1,24 +1,26 @@
 // Shared test harness. Every variant must satisfy test/CONTRACT.md; these helpers only use that contract.
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, copyFileSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const FIXTURE = join(ROOT, 'fixtures', 'Card', 'Card.json');
+export const fixture = (name) => join(ROOT, 'fixtures', name, `${name}.tsx`);
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// A temp git repo with the Card fixture committed. Returns the path to its Card.json.
-export function tempRepo() {
+// A temp git repo with the given fixtures (default Card and Button) committed under components/.
+// Returns { dir, compDir, file (the first fixture's path), fileOf(name), git }.
+export function tempRepo(names = ['Card', 'Button']) {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-test-'));
-  mkdirSync(join(dir, 'components'));
-  const file = join(dir, 'components', 'Card.json');
-  copyFileSync(FIXTURE, file);
+  const compDir = join(dir, 'components');
+  mkdirSync(compDir);
+  for (const n of names) copyFileSync(fixture(n), join(compDir, `${n}.tsx`));
   const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' });
-  git('init', '-q'); git('add', 'components/Card.json');
+  git('init', '-q'); git('add', ...names.map((n) => `components/${n}.tsx`));
   git('-c', 'user.name=test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture');
-  return { dir, file, git };
+  const fileOf = (n) => join(compDir, `${n}.tsx`);
+  return { dir, compDir, file: fileOf(names[0]), fileOf, git };
 }
 
 export async function waitFor(fn, timeout = 3000, step = 10) {
@@ -27,8 +29,9 @@ export async function waitFor(fn, timeout = 3000, step = 10) {
   throw new Error('waitFor timed out');
 }
 
-export async function startServer(file) {
-  const proc = spawn(process.execPath, [join(ROOT, 'src', 'server.js'), '--file', file, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+// Starts src/server.js on a free port for a components folder.
+export async function startServer(compDir) {
+  const proc = spawn(process.execPath, [join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
   let out = '';
   const url = await new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error('server did not start: ' + out)), 5000);
@@ -40,8 +43,8 @@ export async function startServer(file) {
 }
 
 // Scripted MCP client over stdio: newline-delimited JSON-RPC 2.0.
-export async function startMcp(file, napkinUrl) {
-  const proc = spawn(process.execPath, [join(ROOT, 'src', 'mcp.js'), '--file', file], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NAPKIN_URL: napkinUrl } });
+export async function startMcp(napkinUrl) {
+  const proc = spawn(process.execPath, [join(ROOT, 'src', 'mcp.js')], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NAPKIN_URL: napkinUrl } });
   let buf = ''; let id = 0; const pending = new Map(); const notifications = []; let stderr = '';
   proc.stderr.on('data', (d) => (stderr += d));
   proc.stdout.on('data', (d) => {

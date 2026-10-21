@@ -1,16 +1,16 @@
 // Same-contract benchmark for the sync variants: latency both ways and a contention race.
 // Usage: node bench/sync-bench.js [rounds]   (run from the variant's checkout)
 import { readFileSync } from 'node:fs';
-import { parse } from '../src/format.js';
-import { getValue } from '../src/edits.js';
+import { readComponent } from '../src/tsx/read.js';
+import { getValue } from '../src/model.js';
 import { tempRepo, startServer, startMcp, waitFor } from '../test/helpers/harness.js';
 import { connectCanvas } from '../src/canvas-client.js';
 
 const N = Number(process.argv[2] || 30);
 const pct = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s[Math.min(s.length - 1, Math.floor(p * s.length))].toFixed(1); };
-const { file } = tempRepo();
-const server = await startServer(file);
-const mcp = await startMcp(file, server.url);
+const { file, compDir } = tempRepo();
+const server = await startServer(compDir);
+const mcp = await startMcp(server.url);
 const canvas = await connectCanvas(server.url);
 const seen = []; canvas.onChange((c) => seen.push({ ...c, at: performance.now() }));
 
@@ -24,7 +24,7 @@ for (let i = 0; i < N; i++) {
 }
 for (let i = 0; i < N; i++) {
   const t0 = performance.now();
-  const r = await canvas.sendEdits(canvas.state().revision, [{ op: 'set', path: 'card.gap', value: `${i}px` }]);
+  const r = await canvas.sendEdits('Card', canvas.state('Card').revision, [{ op: 'set', path: 'card.gap', value: `${i}px` }]);
   const { value } = await waitFor(() => mcp.notifications.find((n) => n.params?.revision === r.revision), 2000);
   c2a.push(value.at - t0);
 }
@@ -35,10 +35,10 @@ for (let k = 0; k < N; k++) {
   const w = 100 * ((k % 9) + 1), pad = `${k + 1}px`;
   const [ag, cv] = await Promise.all([
     mcp.call('apply_edits', { component: 'Card', baseRevision: base, edits: [{ op: 'set', path: 'title.fontWeight', value: w }] }),
-    canvas.sendEdits(base, [{ op: 'set', path: 'card.padding', value: pad }]),
+    canvas.sendEdits('Card', base, [{ op: 'set', path: 'card.padding', value: pad }]),
   ]);
   if (!ag.isError && cv.ok) {
-    const d = parse(readFileSync(file, 'utf8'));
+    const d = readComponent(readFileSync(file, 'utf8')).doc;
     if (getValue(d, 'title.fontWeight') === w && getValue(d, 'card.padding') === pad) landed++; else other.push(`round ${k}: file missing an edit`);
   } else if (/stale/.test(ag.text) || /stale/.test(cv.error || '')) { stale++; other.push(`round ${k}: ${ag.text || ''} ${cv.error || ''}`); }
   else other.push(`round ${k}: ${ag.text} ${cv.error}`);
