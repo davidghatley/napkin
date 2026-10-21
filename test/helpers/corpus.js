@@ -46,6 +46,7 @@ export function makeCorpus(dir, n = 40, seed = 40, { skip = [] } = {}) {
     }
     // 0 to 3 formatting habits per file; i % 4 == 0 stays as napkin wrote it
     const habits = i % 4 === 0 ? [] : Array.from({ length: 1 + Math.floor(rand() * 3) }, () => pick(formats));
+    habits.sort((x, y) => (x === 'crlf') - (y === 'crlf')); // line endings last, so the whole file ends up with one kind
     for (const h of habits) {
       const t = FORMATS[h](text);
       try {

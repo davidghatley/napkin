@@ -47,7 +47,7 @@ ws.events.on('added', async ({ component }) => {
 });
 
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js' };
+const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/css-props.js': 'src/css-props.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css' };
 const send = (res, file) => {
   res.writeHead(200, { 'content-type': TYPES[file.split('.').pop()], 'cache-control': 'no-store' });

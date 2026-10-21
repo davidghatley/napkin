@@ -88,7 +88,7 @@ export function createStage(ctx, root) {
     sec.unmounts = unmounts;
     queueMicrotask(() => old.forEach((u) => u()));
     sec.el.dataset.revision = c.revision; sec.el.dataset.ready = '1';
-    sec.el.querySelector('.rev').textContent = `r${c.revision}`;
+    sec.el.querySelector('.rev').textContent = `r${String(c.revision).slice(0, 7)}`; // revisions are content hashes; show them short
     // Keep the selection while its node still exists; drop it when the node is gone.
     const sel = ctx.state.selection;
     if (sel?.component === id && !(c.doc && index(c.doc).byId.has(sel.node))) ctx.select(null);

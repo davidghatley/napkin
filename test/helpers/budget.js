@@ -16,6 +16,9 @@ export const variantLines = (doc) => Object.values(doc.variants || {}).reduce((a
 const axes = (doc) => doc.props.filter((p) => p.type === 'enum').map((p) => p.name);
 const pos = (n) => Math.max(n, 0);
 
+// Extra lines a tag takes because its attributes are one per line (it did not fit in 80 columns).
+const extraTag = (text, id) => tagLines(text, id) - 1;
+
 // Lines the opening tag of element `id` takes in the text: 1 when it is on one line, more when each attribute has its own line.
 export function tagLines(text, id) {
   const lines = text.split(/\r?\n/);
@@ -94,7 +97,7 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
       if (prop.startsWith('@')) return { add: tagLines(ctx.textAfter, id), del: tagLines(ctx.textBefore, id) }; // a tag that crosses 80 columns changes layout
       if (prop === 'text') { // changing text is one line; adding or clearing it turns `<x />` into three lines or back
         const had = hasText(A.get(id)), has = hasText(Z.get(id));
-        return { add: had && has ? 1 : has ? 3 : 1, del: had && has ? 1 : had ? 3 : 1 };
+        return { add: had && has ? 1 : has ? 3 + extraTag(ctx.textAfter, id) : 1, del: had && has ? 1 : had ? 3 + extraTag(ctx.textBefore, id) : 1 };
       }
       if (edit.variant) {
         const [[axis, val]] = Object.entries(edit.variant);
@@ -104,12 +107,12 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
       const had = A.get(id).style[prop] !== undefined;
       return { add: pos(dB) + (had && edit.value !== null ? 1 : 0), del: pos(-dB) + (had && edit.value !== null ? 1 : 0) };
     }
-    case 'setDefault': return { add: 1, del: 1 };
+    case 'setDefault': return pc; // one line, or the whole parameter list when it now fits on one line (or no longer does)
     case 'addProp': return { add: 1 + pc.add, del: pc.del }; // an interface member + the parameter list
     case 'removeProp': return { add: pc.add, del: 1 + pc.del };
     case 'bindText': {
       if (edit.prop === null) return hasText(Z.get(edit.id)) ? { add: 1, del: 1 } : { add: 1, del: 3 }; // unbinding a setting with no default leaves an empty element
-      const line = hasText(A.get(edit.id)) ? { add: 1, del: 1 } : { add: 3, del: 1 }; // the element: its text line, or `<x />` becoming three lines
+      const line = hasText(A.get(edit.id)) ? { add: 1, del: 1 } : { add: 3 + extraTag(ctx.textAfter, edit.id), del: 1 }; // the element: its text line, or `<x />` becoming three lines
       const fresh = !before.props.some((p) => p.name === edit.prop);
       return fresh ? { add: line.add + 1 + pc.add, del: line.del + pc.del } : line; // (+ a new prop: interface member and parameter list)
     }
@@ -126,20 +129,20 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
     case 'insert': {
       const parentLeaf = wasLeaf(before, edit.parent);
       const sub = elementLines(ctx.textAfter, edit.node.id);
-      return { add: sub + (parentLeaf ? 2 : 0) + pos(dB), del: (parentLeaf ? 1 : 0) + pos(-dB) };
+      return { add: sub + (parentLeaf ? 2 + extraTag(ctx.textAfter, edit.parent) : 0) + pos(dB), del: (parentLeaf ? 1 : 0) + pos(-dB) };
     }
     case 'delete': {
       const parent = index(before).parentOf.get(edit.id);
       const sub = elementLines(ctx.textBefore, edit.id);
       const nowLeaf = parent.children.length === 1;
-      return { add: nowLeaf ? 1 : 0, del: sub + (nowLeaf ? 2 : 0) + pos(-dB) + pos(-dV) };
+      return { add: nowLeaf ? 1 + extraTag(ctx.textAfter, parent.id) : 0, del: sub + (nowLeaf ? 2 + extraTag(ctx.textBefore, parent.id) : 0) + pos(-dB) + pos(-dV) };
     }
     case 'move': {
       const n = A.get(edit.id), from = index(before).parentOf.get(edit.id);
       const sub = elementLines(ctx.textBefore, edit.id);
       const fromLeaf = from.children.length === 1 && from.id !== edit.parent;
       const toLeaf = wasLeaf(before, edit.parent) && from.id !== edit.parent;
-      return { add: sub + (toLeaf ? 2 : 0) + (fromLeaf ? 1 : 0), del: sub + (fromLeaf ? 2 : 0) + (toLeaf ? 1 : 0) };
+      return { add: sub + (toLeaf ? 2 + extraTag(ctx.textAfter, edit.parent) : 0) + (fromLeaf ? 1 + extraTag(ctx.textAfter, from.id) : 0), del: sub + (fromLeaf ? 2 + extraTag(ctx.textBefore, from.id) : 0) + (toLeaf ? 1 : 0) };
     }
     default: return { add: Infinity, del: Infinity };
   }

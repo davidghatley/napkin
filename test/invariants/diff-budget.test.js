@@ -111,10 +111,11 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
 
 // The same budgets on files a person formatted: tabs, 4 spaces, CRLF, double quotes, comments, blank lines.
 // (Files without trailing commas or interface semicolons are left out: adding a line there also touches its neighbour.)
-test(`INV-03: budgets also hold on hand-formatted files (${Math.min(OPS, 120)} ops over 12 corpus files)`, async () => {
+const HAND = Number(process.env.HAND_OPS || 120), HAND_FILES = Number(process.env.HAND_FILES || 12), HAND_SEED = Number(process.env.HAND_SEED || 777);
+test(`INV-03: budgets also hold on hand-formatted files (${HAND} ops over ${HAND_FILES} corpus files)`, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-hand-'));
   mkdirSync(join(dir, 'components'));
-  const files = makeCorpus(join(dir, 'components'), 12, 777, { skip: ['noTrailingCommas', 'semicolonlessInterface'] });
+  const files = makeCorpus(join(dir, 'components'), HAND_FILES, HAND_SEED, { skip: ['noTrailingCommas', 'semicolonlessInterface'] });
   const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' });
   git('init', '-q'); git('add', 'components');
   git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'corpus');
@@ -125,7 +126,7 @@ test(`INV-03: budgets also hold on hand-formatted files (${Math.min(OPS, 120)} o
     const rel = `components/${basename(file)}`;
     const store = await openStore(file);
     try {
-      for (let n = 0, done = 0; done < Math.min(OPS, 120) / 12 && n < 400; n++) {
+      for (let n = 0, done = 0; done < HAND / HAND_FILES && n < 400; n++) {
         const { doc, revision, source } = await store.read();
         const r = nextValidEdit(doc, rand, n);
         if (!r) continue;

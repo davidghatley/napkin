@@ -3,7 +3,7 @@
 // so a save with no change is byte-identical and one property change is a one-line diff.
 import * as recast from 'recast';
 import { parse as babelParse } from '@babel/parser';
-import { locate, literalValue } from './read.js';
+import { locate, literalValue, parseAst } from './read.js';
 import { index } from '../model.js';
 
 const b = recast.types.builders;
@@ -124,7 +124,11 @@ function paramsSplice(text, parts, before, after, st) {
   const sameNames = same(before.props.map((p) => p.name), after.props.map((p) => p.name));
   const wasMulti = param ? /\n/.test(text.slice(param.start, param.end)) : false;
   const fits = `export function ${fn.id.name}(${flat}) {`.length <= 80;
-  const multi = items.length > 0 && (sameNames ? wasMulti : !fits);
+  // Same names (a default changed): keep a hand-chosen layout, but if the list is laid out the way prettier would lay out
+  // the old one, re-lay it out for the new one (a shorter default can make a list fit on one line again).
+  const oldFlat = param ? `{ ${[...old.values()].join(', ')} }: ${iface}` : '';
+  const prettierBefore = param ? wasMulti === !(`export function ${fn.id.name}(${oldFlat}) {`.length <= 80) : true;
+  const multi = items.length > 0 && (sameNames && !prettierBefore ? wasMulti : !fits);
   const indent = lineIndent(text, parts.fnStmt.start);
   const out = multi ? `{${eol}${items.map((x) => `${indent}${st.unit}${x},${eol}`).join('')}${indent}}: ${iface}` : flat;
   return param ? { start: param.start, end: param.end, text: out } : { start: fn.id.end + 1, end: fn.id.end + 1, text: out };
@@ -232,22 +236,35 @@ function returnText(text, parts, before, after, st) {
 
 // recast separates reprinted multi-line object entries with blank lines. The dialect has none, so
 // drop blank lines that weren't in the original text (an LCS line diff finds the inserted ones).
-function dropInsertedBlankLines(original, out) {
-  const a = original.split('\n'), o = out.split('\n');
-  const n = a.length, m = o.length;
-  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === o[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
-  const keep = [];
+// For each line of `b`, the index of the line of `a` it is (same text, order kept: a longest common subsequence), or -1.
+function alignLines(a, b) {
+  const n = a.length, m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const from = new Array(m).fill(-1);
   let i = 0, j = 0;
-  while (j < m) {
-    if (i < n && a[i] === o[j]) { keep.push(o[j]); i++; j++; }
-    else if (i < n && L[i + 1][j] >= L[i][j + 1]) i++;
-    else { if (o[j].trim() !== '') keep.push(o[j]); j++; }
+  while (j < m && i < n) {
+    if (a[i] === b[j]) from[j++] = i++;
+    else if (L[i + 1][j] >= L[i][j + 1]) i++;
+    else j++;
   }
-  return keep.join('\n');
+  return from;
+}
+function dropInsertedBlankLines(original, out) {
+  const o = out.split('\n');
+  const from = alignLines(original.split('\n'), o);
+  return o.filter((l, j) => from[j] >= 0 || l.trim() !== '').join('\n');
+}
+// A tab-indented file is edited as if it used four spaces per level (recast mixes tabs and spaces when it reprints);
+// lines that did not change get their original text back, new lines are indented with tabs.
+function restoreTabs(spaced, out, original) {
+  const o = out.split('\n'), orig = original.split('\n');
+  const from = alignLines(spaced.split('\n'), o);
+  return o.map((l, j) => (from[j] >= 0 ? orig[from[j]] : l.replace(/^( {4})+/, (m) => '\t'.repeat(m.length / 4)))).join('\n');
 }
 
 // How the file is written, so what we add looks like what is there: line endings, tabs or spaces (and how many), quotes.
+// (A tab prints with recast's tabWidth 4 because parseAst reads a tab as 4 columns; the two must agree.)
 function detectStyle(text) {
   const useTabs = /^\t/m.test(text);
   const widths = (text.match(/^ {2,}(?=\S)/gm) || []).map((x) => x.length);
@@ -257,14 +274,17 @@ function detectStyle(text) {
   return {
     unit: useTabs ? '\t' : ' '.repeat(width),
     quote,
-    recast: { quote: quote === '"' ? 'double' : 'single', tabWidth: width, ...(text.includes('\r\n') && { lineTerminator: '\r\n' }), ...(useTabs && { useTabs: true }) },
+    recast: { quote: quote === '"' ? 'double' : 'single', tabWidth: useTabs ? 4 : width, ...(text.includes('\r\n') && { lineTerminator: '\r\n' }), ...(useTabs && { useTabs: true }) },
   };
 }
 
 // Patch `ast` (from readComponent, parsed from `original`) from model `before` to model `after`; returns the new text.
 export function writeComponent(ast, before, after, original) {
   if (same(before, after)) return original; // nothing to change: the bytes stay exactly as they were
-  const st = detectStyle(original);
+  const tabbed = /^\t/m.test(original);
+  const src = tabbed ? original.replace(/^\t+/gm, (m) => '    '.repeat(m.length)) : original;
+  if (tabbed) ast = parseAst(src);
+  const st = detectStyle(src);
   Q = st.quote;
   const parts = locate(ast);
   const bb = baseMap(before), ba = baseMap(after);
@@ -296,7 +316,8 @@ export function writeComponent(ast, before, after, original) {
     }
     for (const sp of splices.sort((x, y) => y.start - x.start)) out = out.slice(0, sp.start) + sp.text + out.slice(sp.end);
   }
-  return out === original ? out : dropInsertedBlankLines(original, out);
+  const result = out === src ? out : dropInsertedBlankLines(src, out);
+  return tabbed ? restoreTabs(src, result, original) : result;
 }
 
 // Source for a brand-new component: one root frame, no props.

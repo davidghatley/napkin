@@ -7,6 +7,7 @@
 //             a node holds child elements OR one text (a string, or a prop: "a setting")
 //   variants: { [axis]: { [value]: { [nodeId]: { [cssProp]: value } } } }   overrides only
 // Pure: no Node imports, so the canvas page can load it too.
+import { CSS_PROPS, CSS_NUMBER_PROPS } from './css-props.js';
 
 export class EditError extends Error {
   constructor(index, message) {
@@ -128,7 +129,14 @@ export function diffKeys(before, after) {
 
 // --- validation helpers ---
 function checkValue(i, path, value) {
-  if (typeof value === 'number') { if (!Number.isFinite(value)) throw new EditError(i, `value for ${path} must be finite`); return; }
+  // only real CSS properties, and numbers only where React's CSSProperties takes them: the file must pass `tsc --strict`
+  const prop = path.slice(path.lastIndexOf('.') + 1);
+  if (!CSS_PROPS.has(prop)) throw new EditError(i, `unknown CSS property "${prop}"`);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new EditError(i, `value for ${path} must be finite`);
+    if (!CSS_NUMBER_PROPS.has(prop)) throw new EditError(i, `${prop} takes text such as '8px' or 'red', not the number ${value}`);
+    return;
+  }
   if (typeof value !== 'string') throw new EditError(i, `value for ${path} must be a string or number`);
   if (/[;{}<>\\`\n]/.test(value)) throw new EditError(i, `unsafe value for ${path}`);
 }
