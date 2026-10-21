@@ -91,12 +91,13 @@ function ifaceSplices(text, parts, before, after, st) {
   const was = new Map(before.props.map((p) => [p.name, p]));
   const now = new Map(after.props.map((p) => [p.name, p]));
   const out = [];
+  const renamed = new Map(st.renames.props);
   for (const m of members) {
-    const name = keyName(m.key), p = now.get(name), old = was.get(name);
+    const name = keyName(m.key), p = now.get(renamed.get(name) ?? name), old = was.get(name);
     if (!p) out.push({ start: lineStart(text, m.start), end: lineEnd(text, m.end), text: '' });
-    else if (old && (old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
+    else if (old && (old.name !== p.name || old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
   }
-  const have = new Set(members.map((m) => keyName(m.key)));
+  const have = new Set(members.map((m) => renamed.get(keyName(m.key)) ?? keyName(m.key)));
   const added = after.props.filter((p) => !have.has(p.name));
   if (added.length) { const at = lineStart(text, body.end - 1); out.push({ start: at, end: at, text: added.map((p) => member(p) + eol).join('') }); }
   return out;
@@ -121,7 +122,7 @@ function paramsSplice(text, parts, before, after, st) {
     return p.default === undefined ? p.name : `${p.name} = ${litText(p.default)}`;
   });
   const flat = items.length ? `{ ${items.join(', ')} }: ${iface}` : `{}: ${iface}`;
-  const sameNames = same(before.props.map((p) => p.name), after.props.map((p) => p.name));
+  const sameNames = before.props.length === after.props.length; // (a rename, or a default changed: the list keeps its shape)
   const wasMulti = param ? /\n/.test(text.slice(param.start, param.end)) : false;
   const fits = `export function ${fn.id.name}(${flat}) {`.length <= 80;
   // Same names (a default changed): keep a hand-chosen layout, but if the list is laid out the way prettier would lay out
@@ -278,6 +279,37 @@ function detectStyle(text) {
   };
 }
 
+// A prop or a variant value that kept its place but changed its name is a rename (the model's renameProp / renameVariant):
+// the file gets only the lines that name it changed, instead of the old entry removed and a new one added at the end.
+function findRenames(before, after) {
+  const props = [], values = [];
+  if (before.props.length === after.props.length) {
+    before.props.forEach((p, i) => {
+      const q = after.props[i];
+      if (p.name !== q.name && p.type === q.type && same(p.options, q.options) && p.default === q.default) props.push([p.name, q.name]);
+    });
+  }
+  const renamedAxis = new Map(props);
+  for (const p of before.props) {
+    if (p.type !== 'enum') continue;
+    const q = after.props.find((x) => x.name === (renamedAxis.get(p.name) ?? p.name));
+    if (!q || q.type !== 'enum' || q.options.length !== p.options.length) continue;
+    const diff = p.options.map((o, i) => [o, q.options[i]]).filter(([a, b2]) => a !== b2);
+    if (diff.length === 1) values.push({ axis: p.name, to: q.name, from: diff[0][0], toValue: diff[0][1] });
+  }
+  return { props, values };
+}
+// `variants` with the renames applied, key order kept.
+function renameVariantsKeys(variants, renames) {
+  const axisTo = new Map(renames.props);
+  const out = {};
+  for (const [axis, vals] of Object.entries(variants)) {
+    const r = renames.values.find((x) => x.axis === axis);
+    out[axisTo.get(axis) ?? axis] = r ? Object.fromEntries(Object.entries(vals).map(([k, v]) => [k === r.from ? r.toValue : k, v])) : vals;
+  }
+  return out;
+}
+
 // Patch `ast` (from readComponent, parsed from `original`) from model `before` to model `after`; returns the new text.
 export function writeComponent(ast, before, after, original) {
   if (same(before, after)) return original; // nothing to change: the bytes stay exactly as they were
@@ -297,10 +329,20 @@ export function writeComponent(ast, before, after, original) {
     const to = Object.fromEntries(Object.entries(ba).filter(([k, st]) => Object.keys(st).length || (inFile(k) && !Object.keys(bb[k] || {}).length)));
     syncNested(parts.base, from, to, 0);
   }
-  if (!same(before.variants, after.variants)) {
-    if (!parts.variants) throw new Error('component has no variants object');
-    syncNested(parts.variants, before.variants, after.variants, 2);
+  const renames = findRenames(before, after);
+  let wasVariants = before.variants;
+  if (renames.props.length || renames.values.length) { // rename the keys in place, then diff against the renamed "before"
+    if (parts.variants) {
+      for (const [from, to] of renames.props) { const pr = findProp(parts.variants, from); if (pr) pr.key = key(to); }
+      for (const r of renames.values) { const axisObj = findProp(parts.variants, r.to)?.value; const pr = axisObj && findProp(axisObj, r.from); if (pr) pr.key = key(r.toValue); }
+    }
+    wasVariants = renameVariantsKeys(before.variants, renames);
   }
+  if (!same(wasVariants, after.variants)) {
+    if (!parts.variants) throw new Error('component has no variants object');
+    syncNested(parts.variants, wasVariants, after.variants, 2);
+  }
+  st.renames = renames;
   let out = recast.print(ast, { ...PRINT, ...st.recast }).code;
   // The pieces recast does not print the way we want are spliced in by offset, last one first so earlier offsets stay valid:
   // the interface, the parameter list, `const v`, and the `return` with its element tree.

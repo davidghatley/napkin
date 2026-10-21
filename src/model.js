@@ -81,6 +81,8 @@ export function touched(edits) {
       case 'delete': keys.add(`node:${e.id}`); break;
       case 'move': keys.add(`node:${e.id}`); keys.add(`children:${e.parent}`); break;
       case 'addProp': case 'removeProp': case 'setDefault': keys.add(`prop:${e.name}`); break;
+      case 'renameProp': keys.add(`prop:${e.name}`); keys.add(`prop:${e.to}`); break;
+      case 'renameVariant': keys.add(`prop:${e.axis}`); break;
       case 'bindText': keys.add(`${e.id}.text`); if (e.prop) keys.add(`prop:${e.prop}`); break;
       case 'addVariant': case 'removeVariant': keys.add(`prop:${e.axis}`); break;
       default: keys.add(`op:${e?.op}`);
@@ -286,6 +288,28 @@ export function applyEdits(doc, edits) {
         checkPropValue(i, p, e.value);
         if (p.type === 'enum' && next.variants[e.name]?.[e.value]) throw new EditError(i, `${e.name}=${e.value} has overrides; reset them before making it the base`);
         p.default = e.value;
+        break;
+      }
+      case 'renameProp': { // {name, to}: the prop, every element that shows it, and (for a variant axis) its overrides
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        if (typeof e.to !== 'string' || !PROP_NAME.test(e.to) || RESERVED.has(e.to)) throw new EditError(i, `bad prop name "${e.to}"`);
+        if (propOf(next, e.to)) throw new EditError(i, `prop "${e.to}" already exists`);
+        p.name = e.to;
+        for (const n of byId.values()) if (n.textProp === e.name) n.textProp = e.to;
+        if (next.variants[e.name]) next.variants = Object.fromEntries(Object.entries(next.variants).map(([k, v]) => [k === e.name ? e.to : k, v]));
+        break;
+      }
+      case 'renameVariant': { // {axis, value, to}: a value of a variant axis, including its overrides (and the base, if it is the base)
+        const p = propOf(next, e.axis);
+        if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
+        if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
+        if (typeof e.to !== 'string' || !OPTION.test(e.to)) throw new EditError(i, `bad variant value "${e.to}"`);
+        if (p.options.includes(e.to)) throw new EditError(i, `${e.axis} already has "${e.to}"`);
+        p.options = p.options.map((o) => (o === e.value ? e.to : o));
+        if (p.default === e.value) p.default = e.to;
+        const vals = next.variants[e.axis];
+        if (vals?.[e.value]) next.variants[e.axis] = Object.fromEntries(Object.entries(vals).map(([k, v]) => [k === e.value ? e.to : k, v]));
         break;
       }
       case 'bindText': {
