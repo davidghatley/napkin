@@ -16,3 +16,11 @@ The rule stays "stale revision": an edit whose touched keys changed after its ba
 - Codex CLI and Opencode free models may be used as builders and critics. They see repo code.
 - Paper and Figma comparisons use their public pages and help-centre imagery only. Those blind bars are marked "imagery" in the ledger: weaker than a same-way capture.
 - Spend is logged with `npx ccusage@<pinned version>`.
+
+## Amendment (2026-10-21, AI build lead, within David's go-ahead to choose better options during the build)
+A critic showed that "unlisted agents get write" lets a read-only agent sidestep its mode by connecting under a new name. So:
+- With no `agents` key in napkin.json, behaviour is as above (everyone may write; one person and their agents on localhost).
+- As soon as napkin.json has an `agents` key, any name it doesn't list gets `"*"`'s mode, and `"*"` defaults to **read**.
+- `unknown` and empty names are refused; every revision names a real caller.
+- The server only accepts requests whose Host is 127.0.0.1/localhost and whose Origin (when present) is the canvas's own origin, which stops a web page in your browser from writing.
+- Trust model, stated plainly: any program running as you can edit the files directly, so permissions are guard rails for agents that go through napkin, not a security boundary.
