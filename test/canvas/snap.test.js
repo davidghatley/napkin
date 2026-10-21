@@ -34,3 +34,9 @@ test('Shift constrains to the dominant axis', () => {
   assert.deepEqual(constrain(10, 3), [10, 0]);
   assert.deepEqual(constrain(-2, 9), [0, 9]);
 });
+test('the grid is measured from the origin you give, so panning the view never changes where things land', () => {
+  for (const ox of [0, 3.7, -120.2, 1000.9]) {
+    const r = snap({ x: 53 + ox, y: 500, w: 5, h: 5 }, [], { threshold: 4, grid: 8, origin: { x: ox, y: 0 } });
+    assert.ok(Math.abs(r.dx - 3) < 1e-6, `origin ${ox}: moves 3 to reach a multiple of 8 (got ${r.dx})`);
+  }
+});

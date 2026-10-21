@@ -2,10 +2,23 @@
 // anything the dialect cannot hold exactly (a class, a script, an svg, text beside elements, an unknown tag...) refuses the whole snippet.
 // Pure (no DOM), so the same code runs in the page and in the tests.
 import { TAGS, VOID } from './model.js';
+import { ENTITIES } from './html-entities.js';
 
 const VOID_HTML = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
-const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', copy: '©', mdash: '—', ndash: '–', hellip: '…' };
-const decode = (t) => t.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => (e[0] === '#' ? String.fromCodePoint(e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENT[e.toLowerCase()] ?? m));
+// Character references: every one in the HTML 4 table is decoded once; anything else is refused, never left as literal text.
+function decode(t) {
+  const stray = /&(?![#a-zA-Z0-9]+;)(?=[#a-zA-Z])/.exec(t.replace(/&(#x[0-9a-f]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/gi, ''));
+  if (stray) no('the text has an "&" that is not a complete character reference (write &amp;)');
+  return t.replace(/&(#x[0-9a-f]+|#\d+|[a-zA-Z][a-zA-Z0-9]*);/gi, (m, e) => {
+    if (e[0] === '#') {
+      const cp = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+      if (!(cp > 0 && cp <= 0x10ffff) || (cp >= 0xd800 && cp <= 0xdfff)) no(`&${e}; is not a valid character`);
+      return String.fromCodePoint(cp);
+    }
+    if (!(e in ENTITIES)) no(`&${e}; is not a character reference napkin knows; type the character itself`);
+    return ENTITIES[e];
+  });
+}
 class Refuse extends Error {}
 const no = (why) => { throw new Refuse(why); };
 
@@ -33,6 +46,9 @@ function tokenize(html) {
   return root;
 }
 
+// Properties whose bare numbers are valid CSS. Everywhere else a bare number (width:100) is invalid, ignored by browsers, and so refused.
+const UNITLESS = new Set(['opacity', 'fontWeight', 'lineHeight', 'zIndex', 'flex', 'flexGrow', 'flexShrink', 'order', 'aspectRatio', 'zoom', 'gridArea', 'gridColumn', 'gridRow', 'gridColumnStart', 'gridColumnEnd', 'gridRowStart', 'gridRowEnd', 'font', 'columnCount', 'columns', 'orphans', 'widows', 'tabSize', 'scale', 'fillOpacity', 'strokeOpacity', 'animationIterationCount']);
+const bareTokens = (v) => { const out = []; let d = 0, cur = ''; for (const ch of v) { if (ch === '(') d++; if (ch === ')') d--; if (d === 0 && /[\s,\/]/.test(ch)) { if (cur) out.push(cur); cur = ''; } else cur += ch; } if (cur) out.push(cur); return out.filter((x) => /^[+-]?(\d+\.?\d*|\.\d+)$/.test(x) && Number(x) !== 0); };
 const camel = (p) => p.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
 function parseStyle(text) {
   const out = {};
@@ -56,7 +72,9 @@ function parseStyle(text) {
     if (!/^[a-z][a-zA-Z]*$/.test(prop)) no(`"${name}" is not a CSS property napkin can write`);
     if (!value) no(`${name} has no value`);
     if (/[;{}<>\\`\n]/.test(value)) no(`the value of ${name} has a character the dialect cannot hold`);
-    out[prop] = /^-?\d*\.?\d+$/.test(value) ? Number(value) : value;
+    if (prop === 'whiteSpace' && /pre|break-spaces/.test(value)) no('white-space: ' + value + ' keeps every space and line break, which napkin text does not');
+    if (!UNITLESS.has(prop) && bareTokens(value).length) no(`${name}: ${value} has a number with no unit (${bareTokens(value)[0]}); browsers ignore that, so napkin will not write it as px`);
+    out[prop] = UNITLESS.has(prop) || value === '0' ? (/^-?\d*\.?\d+$/.test(value) ? Number(value) : value) : value;
   }
   return out;
 }
@@ -68,7 +86,7 @@ function convert(el) {
   const node = { id: STEM[tag] ?? tag, tag, style: {}, children: [] };
   for (const [k, v] of Object.entries(attrs)) {
     if (k === 'style') node.style = parseStyle(v);
-    else if ((k === 'src' || k === 'alt') && tag === 'img') { if (v.length > 500) no('the image address is too long to keep'); (node.attrs ??= {})[k] = v; }
+    else if ((k === 'src' || k === 'alt') && tag === 'img') { if (v.length > 500) no('the image address or alt text is longer than 500 characters'); if (/[\n`]/.test(v)) no(`the ${k} text has a line break or a backtick, which the dialect cannot hold`); (node.attrs ??= {})[k] = v; }
     else if (k === 'class') no(`<${tag}> has a class name; classes cannot be kept, only inline styles`);
     else no(`the attribute ${k} on <${tag}> cannot be kept (only style${tag === 'img' ? ', src and alt' : ''})`);
   }
@@ -78,8 +96,9 @@ function convert(el) {
   const texts = el.kids.filter((k) => typeof k === 'string' && k.trim());
   if (texts.length && elements.length) no(`<${tag}> mixes text with other elements; put the text in its own <span>`);
   if (texts.length) {
-    const text = decode(texts.join('')).replace(/\s+/g, ' ').trim();
+    const text = decode(texts.join('')).replace(/[ \t\r\n\f]+/g, ' ').replace(/^ | $/g, '');
     if (text.length > 500) no('a text is longer than 500 characters');
+    if (text.includes('`')) no('the text has a backtick, which the dialect cannot hold in a text');
     node.text = text;
   } else node.children = elements.map(convert);
   return node;

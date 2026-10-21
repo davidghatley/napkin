@@ -170,6 +170,8 @@ export function initHandles(ctx) {
     return out;
   }
   const gridStep = () => (zoom() >= 2 ? 4 : 8);
+  // where the parent's inner box starts, in the same units as targetsFor (screen px / zoom): the 8 px grid is measured from here
+  const gridOrigin = (info) => { const z = zoom(), pe = info.parentEl; if (!pe) return { x: 0, y: 0 }; const r = pe.getBoundingClientRect(); return { x: (r.left + pe.clientLeft * z) / z, y: (r.top + pe.clientTop * z) / z }; };
 
   // ------------------------------------------------------------------------------------------ resize
   layer.addEventListener('pointerdown', (ev) => {
@@ -192,7 +194,7 @@ export function initHandles(ctx) {
       let dx = (ev2.clientX - g.x0) / z, dy = (ev2.clientY - g.y0) / z;
       const west = hd.includes('w'), east = hd.includes('e'), north = hd.includes('n'), south = hd.includes('s');
       // snap the edge that moves
-      const res = snap({ x: r0.left / z + (east ? w0 + dx : west ? dx : 0), y: r0.top / z + (south ? h0 + dy : north ? dy : 0), w: 0, h: 0 }, targets, { threshold: THRESH / z, grid: ev2.altKey ? 0 : gridStep(), edges: [...(east || west ? ['l'] : []), ...(north || south ? ['t'] : [])] });
+      const res = snap({ x: r0.left / z + (east ? w0 + dx : west ? dx : 0), y: r0.top / z + (south ? h0 + dy : north ? dy : 0), w: 0, h: 0 }, targets, { threshold: THRESH / z, grid: ev2.altKey ? 0 : gridStep(), origin: gridOrigin(info), edges: [...(east || west ? ['l'] : []), ...(north || south ? ['t'] : [])] });
       if (east || west) dx += res.dx; if (north || south) dy += res.dy;
       let w = Math.max(1, w0 + (east ? dx : west ? -dx : 0)), h = Math.max(1, h0 + (south ? dy : north ? -dy : 0));
       if (ev2.shiftKey && (east || west) && (north || south)) { const k = Math.max(w / w0, h / h0); w = w0 * k; h = h0 * k; }
@@ -318,7 +320,7 @@ export function initHandles(ctx) {
       if (ev2.shiftKey) [dx, dy] = constrain(dx, dy);
       g.ghost.style.transform = `translate(${g.r0.left - base.left + dx}px, ${g.r0.top - base.top + dy}px)`;
       if (g.mode === 'abs') {
-        const res = snap({ x: (g.r0.left + dx) / z2, y: (g.r0.top + dy) / z2, w: g.r0.width / z2, h: g.r0.height / z2 }, g.targets, { threshold: THRESH / z2, grid: ev2.altKey ? 0 : gridStep() });
+        const res = snap({ x: (g.r0.left + dx) / z2, y: (g.r0.top + dy) / z2, w: g.r0.width / z2, h: g.r0.height / z2 }, g.targets, { threshold: THRESH / z2, grid: ev2.altKey ? 0 : gridStep(), origin: gridOrigin(info) });
         const ax = dx + res.dx * z2, ay = dy + res.dy * z2;
         g.result = { dx: ax / z2, dy: ay / z2 };
         info.el.style.left = `${Math.round(g.baseLeft + ax / z2)}px`;

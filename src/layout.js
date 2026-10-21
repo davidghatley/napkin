@@ -54,7 +54,7 @@ export function pinPatch(pins, rect, parent, style = {}) {
     if (mode === 'min') { patch[lo] = r(a); patch[hi] = null; patch[dim] = r(size); }
     else if (mode === 'max') { patch[hi] = r(p - a - size); patch[lo] = null; patch[dim] = r(size); }
     else if (mode === 'both') { patch[lo] = r(a); patch[hi] = r(p - a - size); patch[dim] = null; }
-    else { const off = r(a + size / 2 - p / 2); patch[lo] = off ? `calc(50% + ${off}px)` : '50%'; patch[hi] = null; patch[dim] = r(size); }
+    else { const off = r(a + size / 2 - p / 2); patch[lo] = off ? `calc(50% ${off < 0 ? '-' : '+'} ${Math.abs(off)}px)` : '50%'; patch[hi] = null; patch[dim] = r(size); }
   };
   axis(h, rect.x, rect.w, parent.w, 'left', 'right', 'width');
   axis(v, rect.y, rect.h, parent.h, 'top', 'bottom', 'height');
@@ -92,8 +92,8 @@ export function placementOf(style = {}) {
 
 // ---- LAY-06: snapping -----------------------------------------------------------------------------------------
 // moving: { x, y, w, h } in canvas px. targets: [{ x, y, w, h, kind: 'sibling'|'parent' }]. threshold: canvas px (4 screen px / zoom).
-// grid: 4 or 8 (or 0 = off). Returns { dx, dy, guides: [{ axis: 'x'|'y', at, from, to, kind }] } : add dx, dy to the moving rect.
-export function snap(moving, targets, { threshold = 4, grid = 0, edges = ['l', 'c', 'r', 't', 'm', 'b'] } = {}) {
+// grid: 4 or 8 (or 0 = off), measured from `origin` (the parent's inner top-left in the same coordinates). Returns { dx, dy, guides: [{ axis: 'x'|'y', at, from, to, kind }] } : add dx, dy to the moving rect.
+export function snap(moving, targets, { threshold = 4, grid = 0, origin = { x: 0, y: 0 }, edges = ['l', 'c', 'r', 't', 'm', 'b'] } = {}) {
   const lines = (r) => ({ x: [r.x, r.x + r.w / 2, r.x + r.w], y: [r.y, r.y + r.h / 2, r.y + r.h] });
   const mine = lines(moving), res = { dx: 0, dy: 0, guides: [] };
   const best = { x: null, y: null };
@@ -110,7 +110,7 @@ export function snap(moving, targets, { threshold = 4, grid = 0, edges = ['l', '
       }
     });
     if (best[axis] === null && grid) {
-      const m = mine[axis][0], g = Math.round(m / grid) * grid, d = g - m;
+      const o = origin[axis], m = mine[axis][0], g = Math.round((m - o) / grid) * grid + o, d = g - m; // the grid starts at the parent's inner corner, wherever the view is panned
       if (Math.abs(d) <= threshold) best[axis] = { d, v: g, t: null, kind: 'grid' };
     }
   }

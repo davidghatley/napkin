@@ -1,4 +1,4 @@
-# 0007: Layout controls write plain CSS, one line per control
+# 0008: Layout controls write plain CSS, one line per control
 
 Status: **proposed** · Date: 2026-10-21 · Proposed by: the AI layout lane (Claude); David has not reviewed it.
 Extends: [0003](0003-tsx-dialect.md), [0006](0006-canvas-chrome.md). Everything in those still holds.

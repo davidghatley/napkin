@@ -165,16 +165,19 @@ test('LAY-08: the colour picker writes the file\'s own colour format; hex, rgb a
       await waitRev(L, 'Swatch', r0);
       assert.equal((await L.doc('Swatch')).root.style.background, 'rgb(200, 54, 176)');
     });
-    await t.test('the OKLCH tab writes oklch(), the Hex tab writes hex, and the alpha is part of the value', async () => {
+    await t.test('switching tabs writes nothing; the next real edit is written in the tab\'s format; alpha is part of the value', async () => {
       let r0 = await L.rev('Swatch');
       await q(`document.querySelector('#cpop [data-space=oklch]').click()`);
+      await sleep(400);
+      assert.equal(await L.rev('Swatch'), r0, 'a tab only changes the display');
+      assert.match(await q(`document.querySelector('#cp-ol').value`), /^0\.\d+$/);
+      await setField('cp-oc', '0.1');
       await waitRev(L, 'Swatch', r0);
-      assert.match((await L.doc('Swatch')).root.style.background, /^oklch\(0\.\d+ 0\.\d+ \d+(\.\d)?\)$/);
+      assert.match((await L.doc('Swatch')).root.style.background, /^oklch\(0\.\d+ 0\.1 \d+(\.\d)?\)$/);
       r0 = await L.rev('Swatch');
       await q(`document.querySelector('#cpop [data-space=hex]').click()`);
-      await waitRev(L, 'Swatch', r0);
-      assert.match((await L.doc('Swatch')).root.style.background, /^#[0-9a-f]{6}$/);
-      r0 = await L.rev('Swatch');
+      await sleep(400);
+      assert.equal(await L.rev('Swatch'), r0, 'back to hex: still nothing written');
       await setField('cp-a', '50');
       await waitRev(L, 'Swatch', r0);
       assert.match((await L.doc('Swatch')).root.style.background, /^#[0-9a-f]{6}80$/);
@@ -201,6 +204,11 @@ test('LAY-08: the colour picker writes the file\'s own colour format; hex, rgb a
       await q(`document.querySelector('#add-fill').click()`);
       await waitRev(L, 'Swatch', r0);
       assert.equal((await L.doc('Swatch')).root.style.background, 'rgb(217, 217, 217)');
+      await L.select('Swatch', 'root');
+      const r1 = await L.rev('Swatch');
+      await q(`document.querySelector('#add-effects').click()`);
+      await waitRev(L, 'Swatch', r1);
+      assert.equal((await L.doc('Swatch')).root.style.boxShadow, '0px 2px 6px 0px rgba(0, 0, 0, 0.25)', 'alpha has two decimals, no rounding noise');
     });
   } finally { await L.close(); }
 });

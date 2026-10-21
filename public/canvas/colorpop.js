@@ -36,7 +36,7 @@ export function openColorPicker(opts) {
   Object.assign(el.style, { left: `${left}px`, top: `${top}px` });
 
   const text = () => formatColor({ ...c, ...(space === 'oklch' && like.oklch ? { oklch: like.oklch } : {}) }, space, like);
-  function paint() {
+  function paint(force) {
     const hue = `hsl(${hsv.h} 100% 50%)`;
     $('#cp-sv').style.background = `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, ${hue})`;
     $('#cp-sv .cp-knob').style.cssText = `left:${hsv.s * 100}%;top:${(1 - hsv.v) * 100}%;background:${formatColor({ ...c, a: 1 }, 'hex')}`;
@@ -44,11 +44,11 @@ export function openColorPicker(opts) {
     const rgb = formatColor({ ...c, a: 1 }, 'hex');
     $('#cp-alpha').style.setProperty('--c', rgb);
     $('#cp-alpha .cp-knob').style.left = `${c.a * 100}%`;
-    fields();
+    fields(force);
   }
-  function fields() {
+  function fields(force) {
     const box = $('#cp-fields');
-    if (box.contains(document.activeElement)) return; // never rebuild under a field being typed in
+    if (!force && box.contains(document.activeElement)) return; // never rebuild under a field being typed in
     const n = (id, label, v, extra = '') => `<label class="cp-f"><span>${label}</span><input id="${id}" value="${esc(v)}" ${extra} autocomplete="off" spellcheck="false"></label>`;
     const a = n('cp-a', 'A %', String(Math.round(c.a * 100)), 'inputmode="decimal"');
     if (space === 'hex') box.innerHTML = n('cp-hex', 'Hex', formatColor({ ...c, a: 1 }, 'hex', like)) + a;
@@ -85,7 +85,7 @@ export function openColorPicker(opts) {
 
   el.addEventListener('click', (ev) => {
     const t = ev.target.closest('[data-space]');
-    if (t) { space = t.dataset.space; el.querySelectorAll('[data-space]').forEach((b) => b.setAttribute('aria-checked', String(b === t))); paint(); preview(); commit(); return; }
+    if (t) { space = t.dataset.space; el.querySelectorAll('[data-space]').forEach((b) => b.setAttribute('aria-checked', String(b === t))); paint(true); return; } // only the display changes; the next real edit is written in this format
     const s = ev.target.closest('.cp-s');
     if (s) { const p = parseColor(s.dataset.c); if (p) { c = { r: p.r, g: p.g, b: p.b, a: p.a }; hsv = toHsv(c); like = p; paint(); preview(); commit(); } return; }
     if (ev.target.closest('#cp-eye') && hasEyeDropper()) {

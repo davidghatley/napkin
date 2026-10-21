@@ -162,6 +162,21 @@ test('LAY-06: smart guides and snapping on an absolute layer; Shift locks the ax
       const s = (await L.doc('Abs')).root.children[1].style;
       assert.equal(s.left, 194);
     });
+    await t.test('an unmodified drag lands on multiples of 8 in the file, wherever the view is panned', async () => {
+      for (const [vx, vy] of [[61.3, 33.9], [133.6, 80.4]]) {
+        await L.edit('Abs', [{ op: 'set', path: 'mover.left', value: 40 }, { op: 'set', path: 'mover.top', value: 152 }]);
+        await L.q(`napkin.view.set({ x: ${vx}, y: ${vy}, z: 1 }, { animate: false })`);
+        await sleep(150);
+        const r0 = await L.rev('Abs');
+        const m = await centerOf(L.browser, el('Abs', 'mover'));
+        await io.drag(m.x, m.y, m.x + 13, m.y - 9); // no Alt: the grid is on
+        await waitRev(L, 'Abs', r0);
+        const s = (await L.doc('Abs')).root.children[1].style;
+        assert.equal(s.left % 8, 0, `left ${s.left} at pan ${vx},${vy}`);
+        assert.equal(s.top % 8, 0, `top ${s.top} at pan ${vx},${vy}`);
+      }
+      await zoomTo1(L);
+    });
     await t.test('Shift moves along one axis only', async () => {
       await L.edit('Abs', [{ op: 'set', path: 'mover.left', value: 40 }, { op: 'set', path: 'mover.top', value: 150 }]);
       const r0 = await L.rev('Abs');

@@ -27,7 +27,7 @@ test('pins write inset CSS; centre uses 50% and a translate', () => {
   assert.deepEqual(pinPatch({ h: 'max', v: 'both' }, rect, p), { position: 'absolute', right: 260, width: 100, top: 30, bottom: 210 });
   const c = pinPatch({ h: 'center', v: 'center' }, { x: 150, y: 120, w: 100, h: 60 }, p);
   assert.equal(c.left, '50%'); assert.equal(c.top, '50%'); assert.equal(c.transform, 'translate(-50%, -50%)');
-  assert.equal(pinPatch({ h: 'center', v: 'min' }, rect, p).left, 'calc(50% + -110px)');
+  assert.equal(pinPatch({ h: 'center', v: 'min' }, rect, p).left, 'calc(50% - 110px)');
   assert.deepEqual(pinsOf({ left: 1, right: 2, top: '50%' }), { h: 'both', v: 'center' });
 });
 test('grid: a placement is one line; cells come from track sizes', () => {
