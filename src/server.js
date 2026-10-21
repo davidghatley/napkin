@@ -9,7 +9,8 @@ import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { openWorkspace, CreateError } from './workspace.js';
+import { openWorkspace } from './workspace.js';
+import { createApi } from './api.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -31,6 +32,7 @@ const broadcast = (obj) => { const f = frame(obj); for (const res of clients) re
 const presence = new Map(); // component -> label
 let agents = 0;
 
+const api = createApi(ws, { broadcast, dir });
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
@@ -94,32 +96,19 @@ const server = createServer(async (req, res) => {
       return res.end(r.code);
     }
 
-    if (req.method === 'POST' && path === '/api/components') {
-      let body = ''; for await (const chunk of req) body += chunk;
-      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
-      try { return json(res, 201, { ok: true, ...(await ws.create(msg?.name, msg?.rootTag)) }); }
-      catch (err) { if (err instanceof CreateError) return json(res, err.status, { ok: false, error: err.message }); throw err; }
+    // Components, edits, proposals, history, search, render, guide (src/api.js).
+    if (path.startsWith('/api/')) {
+      let body = ''; if (req.method !== 'GET' && req.method !== 'HEAD') for await (const chunk of req) body += chunk;
+      const r = await api.handle({ method: req.method, path, query: url.searchParams, body });
+      if (r?.png) { res.writeHead(r.status, { 'content-type': 'image/png', 'cache-control': 'no-store', 'x-napkin-render-ms': r.ms.toFixed(1) }); return res.end(r.png); }
+      if (r) return json(res, r.status, r.json);
     }
-    if (req.method === 'GET' && path === '/api/components') return json(res, 200, await ws.summary());
-    const m = path.match(/^\/api\/components\/([^/]+)(\/edits)?$/);
-    const e = m && ws.find(decodeURIComponent(m[1]));
-    if (!e) return json(res, 404, { ok: false, error: 'not found' });
-    if (req.method === 'GET' && !m[2]) {
-      const { component, revision, doc, source, readOnly } = await ws.snapshot(e);
-      return json(res, 200, { component, revision, doc, source, ...(readOnly && { readOnly }) });
-    }
-    if (req.method === 'POST' && m[2]) {
-      let body = ''; for await (const chunk of req) body += chunk;
-      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'invalid edit #0: body is not JSON' }); }
-      const result = await e.store.apply(msg);
-      return json(res, result.ok ? 200 : 409, result);
-    }
-    json(res, 405, { ok: false, error: 'method not allowed' });
+    json(res, 404, { ok: false, error: 'not found' });
   } catch (err) { console.error(err); json(res, 500, { ok: false, error: String(err.message) }); }
 });
 
 server.listen(Number(args.port), '127.0.0.1', () => {
   console.log(`napkin canvas: http://127.0.0.1:${server.address().port}/`);
 });
-const stop = () => { for (const c of clients) c.end(); server.close(); ws.close().then(() => process.exit(0)); };
+const stop = () => { for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => process.exit(0)); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);

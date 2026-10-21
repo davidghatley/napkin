@@ -1,0 +1,14 @@
+AGT-07 agent eval: 10/10  (bar >= 8/10)
+model: sonnet; only the napkin MCP connected (--strict-mcp-config, --tools "", --allowedTools "mcp__napkin__*"); NO canvas server (in-process fallback, AGT-08); temp copy of fixtures per task
+run: AGENT_EVAL=1 EVIDENCE=1 node --test test/agent-eval/   (2026-10-21)
+PASS  set-style           6s  turns 3  $0.017
+PASS  base-color          6s  turns 3  $0.019
+PASS  add-variant         7s  turns 3  $0.019
+PASS  create              7s  turns 4  $0.018
+PASS  rename              4s  turns 2  $0.012
+PASS  insert             10s  turns 3  $0.019
+PASS  delete-node         5s  turns 3  $0.018
+PASS  add-prop            5s  turns 3  $0.019
+PASS  variant-override    7s  turns 3  $0.019
+PASS  change-override     4s  turns 3  $0.019
+total cost: $0.18

@@ -1,0 +1,45 @@
+// The guide agents read from napkin itself (AGT-07): served as the MCP resource napkin://guide,
+// the prompt "napkin_guide" and GET /api/guide. Keep it short and exact: agents act on it.
+export const GUIDE = `# napkin guide for agents
+
+napkin edits real React components: components/<Name>.tsx plus a <Name>.napkin.json sidecar. You change them only through the napkin tools; never write the files directly.
+
+## Workflow
+1. list_components, then read_component { component } (name or id). You get { revision, doc, source }.
+2. apply_edits { component, baseRevision: <revision you read>, edits: [...] }. All edits land together or none do.
+3. Use dryRun: true first when unsure: it validates and returns the would-be TSX source without writing.
+4. render_component { component, variant } returns a PNG of one variant cell so you can look at the result.
+
+## The document (doc)
+- doc.name, doc.props [{name,type,default,options?}], doc.root (a tree of nodes {id, tag, style, text?, attrs?, children}).
+- Every node has a stable id (the data-n attribute). Styles are CSS properties in camelCase.
+- A prop whose type is an enum (a union of strings) is a variant axis; its default is the base value.
+- doc.variants[axis][value][nodeId] holds only what differs from the base.
+
+## Edit ops
+- set a style:      { "op": "set", "path": "title.fontWeight", "value": 600 }
+- remove a style:   { "op": "set", "path": "title.color", "value": null }
+- set text / attrs: { "op": "set", "path": "title.text", "value": "Hello" }  |  "image.@src" / "image.@alt"
+- override for one variant: { "op": "set", "path": "root.padding", "value": "4px", "variant": { "size": "sm" } }
+- insert a node:    { "op": "insert", "parent": "root", "index": 1, "node": { "id": "badge", "tag": "span", "style": { "color": "red" }, "text": "New" } }
+- delete / move:    { "op": "delete", "id": "badge" }  |  { "op": "move", "id": "badge", "parent": "root", "index": 0 }
+- props:            { "op": "addProp", "name": "tone", "type": "enum", "options": ["plain","loud"], "default": "plain" } | { "op": "removeProp", "name": "tone" } | { "op": "setDefault", "name": "label", "value": "Go" }
+- text from a prop: { "op": "bindText", "id": "label", "prop": "label" }  (prop: null unbinds)
+- variants:         { "op": "addVariant", "axis": "size", "value": "xl" } | { "op": "removeVariant", "axis": "size", "value": "xl" }
+  The add_variant tool does addVariant plus style overrides in one call: { component, baseRevision, axis: "size", value: "xl", overrides: { root: { padding: "14px 28px" } } }.
+Numbers stay numbers (fontSize: 20); strings are CSS text ("14px 28px").
+
+## Other tools
+- create_component { name (PascalCase), rootTag? }, rename_component { component, name }, delete_component { component }.
+- search { query } finds components and nodes by name, id, tag or text.
+- subscribe { waitMs? } returns changes other people made since your last call.
+- A file outside the napkin dialect is read-only: read it, but every write is refused with the reason.
+
+## Stale revisions
+If something you touch changed after your baseRevision, apply_edits fails with "stale revision" and a "stale" list:
+[{ key, value (what it holds now), yours (what you tried), revision, by }] and currentRevision.
+Look at the list, decide whether your edit still makes sense, then retry once with baseRevision = currentRevision. Edits to different properties never conflict, even on an old revision.
+
+## Propose mode
+apply_edits with propose: true (or an agent configured as "propose" in napkin.json) does not write. The edits are validated like a dry run and held as a proposal; the person accepts or rejects it on the canvas. You get { proposed: true, proposal: { id } }. An agent configured as "read" can only read and dry-run.
+`;

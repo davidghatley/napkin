@@ -1,0 +1,110 @@
+// render_component (AGT-02): one warm headless Chromium (CPU) draws a component's own bundle
+// for one variant and returns a PNG of the component's root element. The page is a blank host;
+// bundles are imported from blob URLs, so no web server is needed (works in the MCP fallback too).
+import { spawn } from 'node:child_process';
+import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createHash } from 'node:crypto';
+import { axes } from './model.js';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export class RenderError extends Error {}
+
+async function launch() {
+  const profile = mkdtempSync(join(tmpdir(), 'napkin-render-'));
+  const proc = spawn(process.env.CHROMIUM || 'chromium', [
+    '--headless=new', '--disable-gpu', '--use-angle=swiftshader', '--no-first-run', '--no-default-browser-check',
+    '--hide-scrollbars', `--user-data-dir=${profile}`, '--remote-debugging-port=0', '--window-size=1600,1200', 'about:blank',
+  ], { stdio: 'ignore' });
+  let dead = false; proc.on('exit', () => { dead = true; });
+  const portFile = join(profile, 'DevToolsActivePort');
+  for (let i = 0; i < 100 && !existsSync(portFile) && !dead; i++) await sleep(100);
+  if (!existsSync(portFile)) { rmSync(profile, { recursive: true, force: true }); throw new RenderError('could not start Chromium (set CHROMIUM to its path)'); }
+  const port = readFileSync(portFile, 'utf8').split('\n')[0];
+  const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
+  const ws = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl);
+  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  let id = 0; const pending = new Map();
+  ws.onmessage = (m) => {
+    const msg = JSON.parse(m.data);
+    if (msg.id && pending.has(msg.id)) { const { res, rej } = pending.get(msg.id); pending.delete(msg.id); msg.error ? rej(new Error(msg.error.message)) : res(msg.result); }
+  };
+  ws.onclose = () => { dead = true; for (const { rej } of pending.values()) rej(new Error('browser closed')); };
+  const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
+  await send('Page.enable');
+  await send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 1200, deviceScaleFactor: 1, mobile: false });
+  await send('Emulation.setDefaultBackgroundColorOverride', { color: { r: 0, g: 0, b: 0, a: 0 } });
+  await send('Runtime.evaluate', { expression: `document.body.innerHTML='<div id="m" style="position:absolute;left:16px;top:16px"></div>';document.body.style.margin='0';window.__mods=new Map();window.__un=null;true` });
+  const evaluate = async (expression) => {
+    const r = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
+    if (r.exceptionDetails) throw new RenderError(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+    return r.result.value;
+  };
+  return {
+    send, evaluate, isDead: () => dead,
+    async close() { try { ws.close(); } catch {} proc.kill('SIGTERM'); await sleep(150); rmSync(profile, { recursive: true, force: true }); },
+  };
+}
+
+export function createRenderer() {
+  let browser = null, queue = Promise.resolve(), closed = false;
+  const loaded = new Set(); // module keys already in the page
+
+  const get = async () => {
+    if (closed) throw new RenderError('renderer is closed');
+    if (!browser) browser = launch();
+    try {
+      const b = await browser;
+      if (!b.isDead()) return b;
+    } catch (e) { browser = null; throw e; }
+    loaded.clear(); browser = launch();
+    try { return await browser; } catch (e) { browser = null; throw e; }
+  };
+
+  async function draw({ key, code, variant }) {
+    const b = await get();
+    if (!loaded.has(key)) {
+      await b.evaluate(`(async()=>{const u=URL.createObjectURL(new Blob([${JSON.stringify(code)}],{type:'text/javascript'}));window.__mods.set(${JSON.stringify(key)},await import(u));URL.revokeObjectURL(u);return true})()`);
+      loaded.add(key);
+    }
+    const box = await b.evaluate(`(async()=>{
+      if(window.__un){window.__un();window.__un=null}
+      const el=document.getElementById('m'); el.replaceChildren();
+      window.__un=window.__mods.get(${JSON.stringify(key)}).mount(el, ${JSON.stringify(variant)});
+      if(document.fonts&&document.fonts.ready) await document.fonts.ready;
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+      const t=el.firstElementChild||el, r=t.getBoundingClientRect();
+      return {x:r.left+scrollX,y:r.top+scrollY,w:r.width,h:r.height};
+    })()`);
+    const w = Math.max(1, Math.ceil(box.w)), h = Math.max(1, Math.ceil(box.h));
+    const shot = await b.send('Page.captureScreenshot', { format: 'png', clip: { x: box.x, y: box.y, width: w, height: h, scale: 1 }, captureBeyondViewport: true });
+    return Buffer.from(shot.data, 'base64');
+  }
+
+  return {
+    // entry: a workspace entry; returns { png, ms }. variant: { axis: value }.
+    render(ws, entry, variant = {}) {
+      const run = async () => {
+        const t0 = performance.now();
+        const snap = await entry.store.read();
+        if (!snap.doc) throw new RenderError(`cannot render a read-only file (${snap.readOnly})`);
+        for (const [axis, value] of Object.entries(variant)) {
+          const a = axes(snap.doc).find((x) => x.name === axis);
+          if (!a) throw new RenderError(`no variant axis "${axis}" (axes: ${axes(snap.doc).map((x) => x.name).join(', ') || 'none'})`);
+          if (!a.options.includes(value)) throw new RenderError(`axis "${axis}" has no value "${value}" (values: ${a.options.join(', ')})`);
+        }
+        const built = await entry.built;
+        if (!built?.ok) throw new RenderError(`build failed: ${built?.error}`);
+        const key = entry.id + ':' + createHash('sha1').update(built.code).digest('hex').slice(0, 12);
+        const png = await draw({ key, code: built.code, variant });
+        return { png, ms: performance.now() - t0 };
+      };
+      const p = queue.then(run);
+      queue = p.catch(() => {});
+      return p;
+    },
+    async warm() { await get(); },
+    async close() { closed = true; await queue; if (browser) { const b = await browser.catch(() => null); await b?.close(); } },
+  };
+}

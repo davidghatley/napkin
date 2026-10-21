@@ -7,6 +7,8 @@ import { readFileSync, writeFileSync, renameSync, watch } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { codecFor } from './codecs.js';
+import { summarize } from './summary.js';
+import { staleEntries } from './stale.js';
 
 // Syntax errors from the parser carry loc.line but not "line N:" in the message; dialect errors already do.
 const reason = (e) => (e.loc?.line && !/^line \d+/.test(e.message) ? `line ${e.loc.line}: ${e.message}` : e.message);
@@ -22,16 +24,18 @@ export async function openStore(file) {
   let doc = null, state = null, readOnly = null;
   try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = reason(e); }
   let revision = 1;
-  const history = [{ revision, keys: new Set() }];
+  const history = [{ revision, keys: new Set(), by: 'file', summary: 'opened', at: Date.now() }];
   let queue = Promise.resolve();
   let broken = null; // the error of a hand edit the last good doc could not absorb (F22), else null
   const problem = (error) => { broken = error; events.emit('problem', { error }); };
 
   const commit = (next, keys, by, edits, origin) => {
     doc = next; revision += 1;
-    history.push({ revision, keys });
+    by = by || 'unknown'; // every revision is attributed (AGT-05)
+    const summary = summarize(edits), at = Date.now();
+    history.push({ revision, keys, by, summary, at });
     if (history.length > HISTORY) history.shift();
-    events.emit('change', { revision, by, edits, origin, doc });
+    events.emit('change', { revision, by, edits, origin, doc, summary, at });
   };
 
   const writeFile = (t) => {
@@ -43,12 +47,13 @@ export async function openStore(file) {
   function applyNow({ baseRevision, edits, by = 'unknown', origin, dryRun = false }) {
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
     const base = history.find((h) => h.revision === baseRevision);
-    if (!base) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})` };
+    if (!base) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})`, currentRevision: revision, stale: [] };
     let keys;
     try { keys = touched(edits); } catch { return { ok: false, error: 'invalid edit #0: edits must be an array' }; }
     for (const h of history) {
       if (h.revision > baseRevision && conflicts(keys, h.keys)) {
-        return { ok: false, error: `stale revision: ${[...keys].join(', ')} changed in revision ${h.revision} (base ${baseRevision})` };
+        const stale = staleEntries({ doc, edits, keys, history, baseRevision });
+        return { ok: false, error: `stale revision: ${[...keys].join(', ')} changed in revision ${h.revision} (base ${baseRevision})`, currentRevision: revision, stale };
       }
     }
     let next;
@@ -81,6 +86,8 @@ export async function openStore(file) {
     events,
     async read() { await queue; return { revision, doc, source: text, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
     apply(req) { const p = queue.then(() => applyNow(req)); queue = p.catch(() => {}); return p; },
+    // Recent revisions, newest first: [{ revision, by, summary, at, keys }].
+    history(limit = 50) { return history.slice(-Math.max(1, limit)).reverse().map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, at: h.at, keys: [...h.keys] })); },
     async close() { watcher.close(); await queue; },
   };
 }
