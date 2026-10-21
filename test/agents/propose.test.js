@@ -116,7 +116,7 @@ test('an invalid proposal is refused like an invalid edit and not held; dryRun w
 
 test('AGT-11 permissions: read refuses writes, propose turns every apply into a proposal, unlisted writes', async () => {
   const { dir, compDir, fileOf } = tempRepo();
-  writeFileSync(join(dir, 'napkin.json'), JSON.stringify({ agents: { looker: 'read', suggester: 'propose', builder: 'write', odd: 'banana' } }));
+  writeFileSync(join(dir, 'napkin.json'), JSON.stringify({ agents: { looker: 'read', suggester: 'propose', builder: 'write', odd: 'banana', '*': 'write' } }));
   const card = fileOf('Card');
   const server = await startServer(compDir);
   const T = await session(server.url, 'david');
@@ -148,7 +148,7 @@ test('AGT-11 permissions: read refuses writes, propose turns every apply into a 
     assert.equal((await suggester.call('delete_component', { component: 'Card' })).isError, true);
     // an unknown permission word fails closed
     assert.equal((await odd.call('apply_edits', { component: 'Card', baseRevision: rev, edits: EDIT(1) })).isError, true);
-    // write and unlisted
+    // write and unlisted (here "*" is write; with no "*" it would be read, see identity.test.js)
     assert.equal((await builder.call('apply_edits', { component: 'Card', baseRevision: rev, edits: EDIT(333) })).isError, false);
     const s = await stranger.call('apply_edits', { component: 'Card', baseRevision: (await stranger.call('read_component', { component: 'Card' })).data.revision, edits: [{ op: 'set', path: 'title.color', value: 'red' }] });
     assert.equal(s.isError, false, s.text);

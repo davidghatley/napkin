@@ -25,6 +25,9 @@ export class CreateError extends Error {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(fn, ms = 4000) { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await sleep(10); } return false; }
 
+// Every file-level commit names a real caller (AGT-05).
+const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown') throw new CreateError('a caller name is required: every commit names who made it'); };
+
 export async function openWorkspace(dir, { only } = {}) {
   dir = resolve(dir);
   const events = new EventEmitter();
@@ -105,7 +108,8 @@ export async function openWorkspace(dir, { only } = {}) {
     async bundle(e) { return e.built; },
     // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
     // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.
-    async create(name, rootTag = 'div', { by = 'unknown' } = {}) {
+    async create(name, rootTag = 'div', { by } = {}) {
+      needBy(by);
       if (typeof name !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new CreateError(`component name "${name}" must be PascalCase (letters and digits, starting with a capital)`);
       if (typeof rootTag !== 'string' || !TAGS.has(rootTag) || VOID.has(rootTag)) throw new CreateError(`root tag "${rootTag}" is not supported`);
       if (wanted) throw new CreateError('this server opened a single file, so it cannot add components');
@@ -123,7 +127,8 @@ export async function openWorkspace(dir, { only } = {}) {
     },
     activity: (limit = 50) => log.slice(-limit).reverse(),
     // Delete: remove the file and its sidecar through commit.js; the workspace records who and why and announces 'removed'.
-    async delete(idOrName, { by = 'unknown' } = {}) {
+    async delete(idOrName, { by } = {}) {
+      needBy(by);
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
       const { id, name, file } = e;
@@ -133,7 +138,8 @@ export async function openWorkspace(dir, { only } = {}) {
       return { id, name };
     },
     // Rename: the file, the exported function and its Props interface; the component id stays and the revision continues.
-    async rename(idOrName, newName, { by = 'unknown' } = {}) {
+    async rename(idOrName, newName, { by } = {}) {
+      needBy(by);
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
       if (typeof newName !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(newName)) throw new CreateError(`component name "${newName}" must be PascalCase (letters and digits, starting with a capital)`);

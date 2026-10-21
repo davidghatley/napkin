@@ -16,20 +16,21 @@ import { GUIDE } from './guide.js';
 //   POST /api/session { as?, token? } -> { token, name, mode }. A name listed with a token needs that token to get a session
 //   (so one agent cannot take another's name); a token in napkin.json also works directly as a bearer.
 const MODES = ['read', 'propose', 'write'];
+// null when napkin.json has no `agents` key (everyone may write). With one, a name it does not list gets "*"'s mode, "*" defaulting to read (decision 0005, amendment).
 export function agentsConfig(dir) {
   for (const d of [dir, dirname(dir)]) {
     try {
       const a = JSON.parse(readFileSync(join(d, 'napkin.json'), 'utf8'))?.agents;
-      if (!a || typeof a !== 'object') continue;
+      if (!a || typeof a !== 'object' || Array.isArray(a)) continue;
       return Object.fromEntries(Object.entries(a).map(([name, v]) => {
         const mode = typeof v === 'string' ? v : v?.mode;
         return [name, { mode: MODES.includes(mode) ? mode : 'read', token: typeof v === 'object' ? v?.token : undefined }]; // an unknown word fails closed
       }));
     } catch {}
   }
-  return {};
+  return null;
 }
-export const agentPermission = (dir, name) => { const c = agentsConfig(dir); return (c[name] ?? c['*'] ?? { mode: 'write' }).mode; };
+export const agentPermission = (dir, name) => { const c = agentsConfig(dir); return c ? (c[name] ?? c['*'] ?? { mode: 'read' }).mode : 'write'; };
 
 const res = (status, json) => ({ status, json });
 const fail = (status, error, extra) => res(status, { ok: false, error, ...extra });
@@ -47,9 +48,10 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
   const publicProposal = (p) => p;
   // A session for a name. Names listed with a token in napkin.json need it; the name "*" cannot be claimed.
   function session(as, token) {
-    const name = typeof as === 'string' && as.trim() ? as.trim().slice(0, 40) : 'you';
+    const name = typeof as === 'string' ? as.trim().slice(0, 40) : '';
+    if (!name || name.toLowerCase() === 'unknown') return fail(400, 'a real name is required (not empty, not "unknown"): { as: "you" }');
     if (name === '*') return fail(400, 'that name is reserved');
-    const listed = agentsConfig(dir)[name];
+    const listed = agentsConfig(dir)?.[name];
     if (listed?.token && listed.token !== token) return fail(403, `"${name}" is configured with a token in napkin.json; send it as { token }`);
     const t = randomBytes(16).toString('hex');
     sessions.set(t, name);
@@ -58,7 +60,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
   const identify = (bearer) => {
     if (!bearer) return null;
     if (sessions.has(bearer)) return sessions.get(bearer);
-    for (const [name, c] of Object.entries(agentsConfig(dir))) if (c.token && c.token === bearer && name !== '*') return name;
+    for (const [name, c] of Object.entries(agentsConfig(dir) ?? {})) if (c.token && c.token === bearer && name !== '*') return name;
     return null;
   };
   const parse = (body) => { if (body && typeof body === 'object') return body; try { return JSON.parse(body || '{}'); } catch { return null; } };
@@ -69,7 +71,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     if (!dry.ok) return res(dry.error.startsWith('read-only') ? 403 : 409, dry);
     const p = {
       id: 'prp_' + randomBytes(5).toString('hex'), component: e.id, name: e.name,
-      baseRevision: msg.baseRevision, currentRevision: dry.revision, edits: msg.edits, by: msg.by || 'unknown',
+      baseRevision: msg.baseRevision, currentRevision: dry.revision, edits: msg.edits, by: msg.by,
       summary: summarize(msg.edits), at: Date.now(), doc: dry.doc, source: dry.source,
     };
     proposals.set(p.id, p);

@@ -41,6 +41,9 @@ If something you touch changed after your baseRevision, apply_edits fails with "
 Look at the list, decide whether your edit still makes sense, then retry once with baseRevision = currentRevision. Edits to different properties never conflict, even on an old revision.
 If your baseRevision is too old to remember (or unknown), the error still lists your keys that changed since (stale), plus changedKeys (everything that moved since oldestRevision): read the component again and rebase.
 
+## Who you are, and permissions
+Your name is NAPKIN_AGENT; the server names you from your session, not from anything you send. If the project's napkin.json has an "agents" key, only the names it lists get their listed mode (read, propose or write); any other name gets the "*" mode, which is read when absent. With no "agents" key everyone may write. Permissions are guard rails for agents that go through napkin, not a security boundary: any program running as the user can edit the files directly.
+
 ## Propose mode
 apply_edits with propose: true (or an agent configured as "propose" in napkin.json) does not write. The edits are validated like a dry run and held as a proposal; the person accepts or rejects it on the canvas. You get { proposed: true, proposal: { id } }. An agent configured as "read" can only read and dry-run. Propose mode needs the napkin canvas to be running (that is where a person reviews); without it the call is refused, so apply directly if you are allowed to.
 `;

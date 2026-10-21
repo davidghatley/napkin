@@ -70,6 +70,16 @@ test('runtime: every .tsx write, create, move and remove made by edits, create, 
     for (const ev of [['change', /title\.fontWeight = 700/], ['added', /created Badge/], ['added', /renamed Badge to Chip/], ['change', /title\.color = "red"/], ['removed', /deleted Chip/]]) {
       assert.ok(done.some((f) => f.ev === ev[0] && ev[1].test(f.summary) && f.by), `a ${ev[0]} frame says ${ev[1]} with by`);
     }
+    // a commit without a name is refused everywhere
+    await assert.rejects(ws.create('Nameless'), /caller name is required/);
+    await assert.rejects(ws.rename('Card', 'Cardy'), /caller name is required/);
+    await assert.rejects(ws.delete('Button'), /caller name is required/);
+    const store = ws.find('Card').store, r0 = (await store.read()).revision;
+    for (const by of [undefined, '', 'unknown']) {
+      const r = await store.apply({ baseRevision: r0, edits: [{ op: 'set', path: 'title.color', value: 'blue' }], by });
+      assert.equal(r.ok, false); assert.match(r.error, /real caller/);
+    }
+    assert.equal((await store.read()).revision, r0);
     assert.equal(done.filter((f) => f.by === 'david').length >= 4, true);
     assert.ok(frames.every((f) => f.ev === 'change' ? f.by : true), 'every change has by');
     // the workspace activity log has each action with its author

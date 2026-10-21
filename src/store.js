@@ -33,7 +33,6 @@ export async function openStore(file, start = {}) {
 
   const commit = (next, keys, by, edits, origin) => {
     doc = next; revision += 1;
-    by = by || 'unknown'; // every revision is attributed (AGT-05)
     const summary = summarize(edits), at = Date.now();
     history.push({ revision, keys, by, summary, at });
     if (history.length > HISTORY) history.shift();
@@ -43,8 +42,10 @@ export async function openStore(file, start = {}) {
   const writeFile = (t) => { writeComponent(file, t); text = t; };
 
   // dryRun: validate and produce the would-be file without writing or committing (F19).
-  function applyNow({ baseRevision, edits, by = 'unknown', origin, dryRun = false }) {
+  function applyNow({ baseRevision, edits, by, origin, dryRun = false }) {
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
+    // every revision names a real caller (AGT-05); a dry run makes none
+    if (!dryRun && (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown')) return { ok: false, error: 'by is required: every revision names a real caller' };
     const safeTouched = (e) => { try { return touched(e); } catch { return new Set(); } };
     const base = history.find((h) => h.revision === baseRevision);
     if (!base) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})`, currentRevision: revision, stale: staleEntries({ doc, edits, keys: safeTouched(edits), history, baseRevision: 0 }), oldestRevision: history[0].revision, changedKeys: [...new Set(history.slice(1).flatMap((h) => [...h.keys]))].slice(0, 200) };

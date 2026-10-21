@@ -42,18 +42,22 @@ test('AGT-05: every revision is attributed (david, agent names, file) and the hi
   } finally { david.close(); mcp.stop(); await server.stop(); }
 });
 
-test('AGT-05 in the store: no revision is ever unattributed, whatever the caller passes', async () => {
+test('AGT-05 in the store: a commit without a real name is refused, so no revision is unattributed', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-attr-'));
   copyFileSync(fixture('Card'), join(dir, 'Card.tsx'));
   const store = await openStore(join(dir, 'Card.tsx'));
   try {
     let rev = (await store.read()).revision;
-    for (const by of [undefined, '', null, 'david', 'agent-7']) {
+    for (const by of [undefined, '', null, ' ', 'unknown', 'Unknown']) {
+      const r = await store.apply({ baseRevision: rev, edits: [{ op: 'set', path: 'title.fontWeight', value: 100 + rev }], by });
+      assert.equal(r.ok, false, String(by)); assert.match(r.error, /real caller/);
+    }
+    for (const by of ['david', 'agent-7']) {
       const r = await store.apply({ baseRevision: rev, edits: [{ op: 'set', path: 'title.fontWeight', value: 100 + rev }], by });
       assert.equal(r.ok, true); rev = r.revision;
     }
     const hist = store.history(100);
-    assert.equal(hist.length, 6);
+    assert.equal(hist.length, 3);
     assert.ok(hist.every((h) => h.by), JSON.stringify(hist.map((h) => h.by)));
   } finally { await store.close(); }
 });

@@ -87,3 +87,9 @@ The 18 Oct spike's JSON format, `src/format.js`, `src/edits.js`, `src/render.js`
 - **Render** uses a pool of up to 4 pages (`NAPKIN_RENDER_PAGES`), and the host page has the canvas's `box-sizing: border-box` and body font.
 - `apply_edits.edits` items have a `oneOf` schema with one entry per op (`src/mcp-schema.js`).
 - Known canvas bug (not mine): `public/canvas/canvas.css` line 8 `.cmp h3 { font: 600 16px/1 Georgia }` leaks into a component's own `<h3>` (Card's title gets line-height 1).
+
+### Round 3 (decision 0005 amendment)
+- **Permissions:** no `agents` key in napkin.json = everyone may write. With an `agents` key, an unlisted name (including `you`) gets the `"*"` mode, which is `read` when absent. This replaces "unlisted = write" above.
+- **Names:** `POST /api/session` refuses empty, non-string and `unknown` names (400). `store.apply` (unless `dryRun`) and `workspace.create/rename/delete` refuse a missing, empty or `unknown` `by` (`by is required: every revision names a real caller`); nothing in src/ defaults one.
+- **Host/Origin guard, every route** (including `/`, `/bundle`, `/api/events`): `Host` must be `127.0.0.1:<port>` or `localhost:<port>`, and `Origin`, when present, `http://` plus one of those; otherwise 403 `forbidden`.
+- **Trust model:** permissions are guard rails for agents that go through napkin, not a security boundary: any program running as you can edit the files directly.
