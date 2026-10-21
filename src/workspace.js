@@ -5,12 +5,19 @@
 //          'problem' { component, error }     a broken hand edit; error null clears it (F22)
 //          'added'   { component }            a file appeared (snapshot via snapshot())
 //          'removed' { component }
-import { readdirSync, watch } from 'node:fs';
+import { readdirSync, watch, writeFileSync, existsSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { openStore } from './store.js';
 import { readSidecar } from './codecs.js';
 import { createBundler } from './bundle.js';
+import { newComponentSource } from './tsx/write.js';
+import { TAGS, VOID } from './model.js';
+
+// create() failures: `status` is the HTTP code the server answers with (400 bad input, 409 already exists).
+export class CreateError extends Error {
+  constructor(message, status = 400) { super(message); this.status = status; }
+}
 
 export async function openWorkspace(dir, { only } = {}) {
   dir = resolve(dir);
@@ -81,6 +88,23 @@ export async function openWorkspace(dir, { only } = {}) {
       return { component: e.id, name: e.name, revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
     },
     async bundle(e) { return e.built; },
+    // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
+    // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.
+    async create(name, rootTag = 'div') {
+      if (typeof name !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new CreateError(`component name "${name}" must be PascalCase (letters and digits, starting with a capital)`);
+      if (typeof rootTag !== 'string' || !TAGS.has(rootTag) || VOID.has(rootTag)) throw new CreateError(`root tag "${rootTag}" is not supported`);
+      if (wanted) throw new CreateError('this server opened a single file, so it cannot add components');
+      await queue;
+      const taken = [...entries.values()].some((e) => e.name.toLowerCase() === name.toLowerCase());
+      const file = join(dir, `${name}.tsx`);
+      if (taken || existsSync(file)) throw new CreateError(`component "${name}" already exists`, 409);
+      try { writeFileSync(file, newComponentSource(name, rootTag), { flag: 'wx' }); }
+      catch (err) { throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
+      await scan();
+      const e = find(name);
+      if (!e) throw new Error(`created ${name}.tsx but could not open it`);
+      return { id: e.id, name: e.name };
+    },
     async settled() { await queue; await Promise.all([...entries.values()].map((e) => e.built)); },
     async close() { watcher.close(); await queue; for (const e of [...entries.values()]) await remove(e); await bundler.close(); },
   };

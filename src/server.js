@@ -9,7 +9,7 @@ import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { openWorkspace } from './workspace.js';
+import { openWorkspace, CreateError } from './workspace.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -72,6 +72,12 @@ const server = createServer(async (req, res) => {
       return res.end(r.code);
     }
 
+    if (req.method === 'POST' && path === '/api/components') {
+      let body = ''; for await (const chunk of req) body += chunk;
+      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
+      try { return json(res, 201, { ok: true, ...(await ws.create(msg?.name, msg?.rootTag)) }); }
+      catch (err) { if (err instanceof CreateError) return json(res, err.status, { ok: false, error: err.message }); throw err; }
+    }
     if (req.method === 'GET' && path === '/api/components') return json(res, 200, await ws.summary());
     const m = path.match(/^\/api\/components\/([^/]+)(\/edits)?$/);
     const e = m && ws.find(decodeURIComponent(m[1]));
