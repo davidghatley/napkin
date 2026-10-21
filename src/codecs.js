@@ -2,19 +2,26 @@
 // so store.js stays the single commit path (decision 0002).
 //   load(text, file) -> { doc, state }          throws on unreadable files
 //   save(state, before, after) -> { text, state }
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { writeAtomic } from './atomic.js';
 import { basename } from 'node:path';
 import * as model from './model.js';
 import { readComponent } from './tsx/read.js';
 import { writeComponent } from './tsx/write.js';
 
-// Sidecar <Name>.napkin.json: what isn't code (the stable component id, canvas position).
+// Sidecar <Name>.napkin.json: what isn't code (the stable component id, canvas position, preview data).
+// Always written the same way (FMT-06): keys sorted at every level, two-space indent, one trailing newline,
+// so moving a component is a one- or two-line diff in this file and nothing in the .tsx.
+const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v);
+export const sidecarText = (side) => JSON.stringify(sortKeys(side), null, 2) + '\n';
 export function sidecarPath(file) { return file.replace(/\.tsx$/, '.napkin.json'); }
+export function writeSidecar(file, side) { writeAtomic(sidecarPath(file), sidecarText(side)); }
 export function readSidecar(file, name) {
   const p = sidecarPath(file);
   if (existsSync(p)) return JSON.parse(readFileSync(p, 'utf8'));
   const side = { id: `cmp_${name.replace(/[A-Z]/g, (c, i) => (i ? '_' : '') + c.toLowerCase())}_${Math.random().toString(36).slice(2, 8)}`, canvas: { x: 0, y: 0 } };
-  writeFileSync(p, JSON.stringify(side, null, 2) + '\n');
+  try { writeAtomic(p, sidecarText(side), { exclusive: true }); }
+  catch (e) { if (e.code === 'EEXIST') return JSON.parse(readFileSync(p, 'utf8')); throw e; }
   return side;
 }
 

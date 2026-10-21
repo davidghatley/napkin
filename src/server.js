@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace, CreateError } from './workspace.js';
+import { acquireLock, LockError } from './lock.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,6 +24,9 @@ else { // a throwaway copy of the fixtures, so playing with the canvas never edi
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}`); process.exit(1); }
+// One server per folder (REL-02): a second one names the first one's PID and exits.
+let lock;
+try { lock = acquireLock(dir); } catch (e) { if (e instanceof LockError) { console.error(e.message); process.exit(1); } throw e; }
 const ws = await openWorkspace(dir, { only });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
@@ -33,6 +37,7 @@ let agents = 0;
 
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
+ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
 ws.events.on('added', async ({ component }) => {
@@ -101,14 +106,20 @@ const server = createServer(async (req, res) => {
       catch (err) { if (err instanceof CreateError) return json(res, err.status, { ok: false, error: err.message }); throw err; }
     }
     if (req.method === 'GET' && path === '/api/components') return json(res, 200, await ws.summary());
-    const m = path.match(/^\/api\/components\/([^/]+)(\/edits)?$/);
+    const m = path.match(/^\/api\/components\/([^/]+)(\/edits|\/canvas)?$/);
     const e = m && ws.find(decodeURIComponent(m[1]));
     if (!e) return json(res, 404, { ok: false, error: 'not found' });
     if (req.method === 'GET' && !m[2]) {
       const { component, revision, doc, source, readOnly } = await ws.snapshot(e);
       return json(res, 200, { component, revision, doc, source, ...(readOnly && { readOnly }) });
     }
-    if (req.method === 'POST' && m[2]) {
+    if (req.method === 'POST' && m[2] === '/canvas') { // moving a component writes the sidecar only
+      let body = ''; for await (const chunk of req) body += chunk;
+      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
+      const r = await e.store.moveCanvas(msg?.x, msg?.y);
+      return json(res, r.ok ? 200 : 400, r);
+    }
+    if (req.method === 'POST' && m[2] === '/edits') {
       let body = ''; for await (const chunk of req) body += chunk;
       let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'invalid edit #0: body is not JSON' }); }
       const result = await e.store.apply(msg);
@@ -119,7 +130,9 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(Number(args.port), '127.0.0.1', () => {
-  console.log(`napkin canvas: http://127.0.0.1:${server.address().port}/`);
+  const url = `http://127.0.0.1:${server.address().port}/`;
+  lock.update({ url });
+  console.log(`napkin canvas: ${url}`);
 });
-const stop = () => { for (const c of clients) c.end(); server.close(); ws.close().then(() => process.exit(0)); };
+const stop = () => { for (const c of clients) c.end(); server.close(); ws.close().then(() => { lock.release(); process.exit(0); }); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);

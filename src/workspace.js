@@ -5,10 +5,11 @@
 //          'problem' { component, error }     a broken hand edit; error null clears it (F22)
 //          'added'   { component }            a file appeared (snapshot via snapshot())
 //          'removed' { component }
-import { readdirSync, watch, writeFileSync, existsSync } from 'node:fs';
+//          'canvas'  { component, canvas }    the component was moved on the canvas (sidecar only)
+import { readdirSync, watch, existsSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { openStore } from './store.js';
+import { openStore, createComponentFile } from './store.js';
 import { readSidecar } from './codecs.js';
 import { createBundler } from './bundle.js';
 import { newComponentSource } from './tsx/write.js';
@@ -48,6 +49,7 @@ export async function openWorkspace(dir, { only } = {}) {
       events.emit('change', { component: id, ...c });
     });
     store.events.on('problem', (p) => events.emit('problem', { component: id, ...p }));
+    store.events.on('canvas', (c) => events.emit('canvas', { component: id, ...c }));
     await build(e);
     events.emit('added', { component: id });
   }
@@ -88,7 +90,8 @@ export async function openWorkspace(dir, { only } = {}) {
       return { component: e.id, name: e.name, revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
     },
     async bundle(e) { return e.built; },
-    // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
+    // F11/F12: write components/<Name>.tsx for a new, empty component. The write goes through the store
+    // module's createComponentFile (exclusive, atomic): the one place besides store.apply that creates a component file.
     // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.
     async create(name, rootTag = 'div') {
       if (typeof name !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new CreateError(`component name "${name}" must be PascalCase (letters and digits, starting with a capital)`);
@@ -98,7 +101,7 @@ export async function openWorkspace(dir, { only } = {}) {
       const taken = [...entries.values()].some((e) => e.name.toLowerCase() === name.toLowerCase());
       const file = join(dir, `${name}.tsx`);
       if (taken || existsSync(file)) throw new CreateError(`component "${name}" already exists`, 409);
-      try { writeFileSync(file, newComponentSource(name, rootTag), { flag: 'wx' }); }
+      try { createComponentFile(file, newComponentSource(name, rootTag)); }
       catch (err) { throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
       await scan();
       const e = find(name);

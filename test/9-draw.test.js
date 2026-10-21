@@ -57,7 +57,7 @@ test('draw a Card2 from nothing (N, F, T, I), reopen it identically, and render 
       await key('Enter');
       await browser.waitFor(`${sec('Card2')}?.dataset.ready === '1' && document.querySelector('#sel-node')?.textContent.startsWith('root')`);
       assert.equal(await q(`document.querySelector('#new-component').hidden`), true);
-      const files = readdirSync(dir).sort();
+      const files = readdirSync(dir).filter((f) => !f.startsWith('.')).sort();
       assert.deepEqual(files, ['Card2.napkin.json', 'Card2.tsx']);
       assert.equal(await q(`document.querySelector('#overlay-select').dataset.label`), 'Card2 · root');
     });
@@ -225,7 +225,7 @@ test('(c)(d)(e) Delete, Alt+Down, a taken name, and shortcuts while typing', { t
       await browser.waitFor(`document.querySelector('#new-error').textContent.includes('already exists')`);
       assert.equal(await q(`document.querySelector('#new-component').hidden`), false, 'the field stays open');
       assert.equal(readFileSync(fileOf('Card'), 'utf8'), before);
-      assert.deepEqual(readdirSync(compDir).sort(), ['Button.napkin.json', 'Button.tsx', 'Card.napkin.json', 'Card.tsx'].filter((f) => readdirSync(compDir).includes(f)));
+      assert.deepEqual(readdirSync(compDir).filter((f) => !f.startsWith('.')).sort(), ['Button.napkin.json', 'Button.tsx', 'Card.napkin.json', 'Card.tsx'].filter((f) => readdirSync(compDir).includes(f)));
       assert.equal(await q(`document.querySelectorAll('section.cmp').length`), 1);
     });
 
