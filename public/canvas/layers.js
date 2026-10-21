@@ -193,6 +193,7 @@ export function initLayers(ctx, el) {
   // ---- keep in step ----
   ctx.on('select', () => { for (const s of ctx.state.selections) expanded.add(s.component); schedule(); });
   for (const e of ['render', 'removed', 'added']) ctx.on(e, schedule);
-  ctx.on('render', () => { if (expanded.size === 0 && ctx.state.components.size <= 8) for (const id of ctx.state.components.keys()) expanded.add(id); });
+  let seeded = false; // a small repo opens fully expanded, once
+  ctx.on('render', () => { if (!seeded && ctx.state.components.size <= 8) { seeded = true; for (const id of ctx.state.components.keys()) expanded.add(id); } });
   return { redraw: draw, expand: (id) => expanded.add(id) };
 }

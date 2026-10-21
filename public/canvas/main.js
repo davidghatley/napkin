@@ -93,12 +93,14 @@ function counts() {
   $('#counts').textContent = `${n} component${n === 1 ? '' : 's'} · ${cells} variant${cells === 1 ? '' : 's'}`;
 }
 
+// The change log has a fixed number of rows that are rewritten in place, so a new entry never moves the rows (FEEL-04).
+const LOG_ROWS = 6, logRows = [];
+for (let i = 0; i < LOG_ROWS; i++) { const li = document.createElement('li'); logRows.push(li); $('#log').append(li); }
 function note(c) {
-  const li = document.createElement('li');
   const name = ctx.state.components.get(c.component)?.name ?? c.component;
-  li.className = 'by-' + c.by;
-  li.textContent = `${name} r${c.revision} ${c.by}: ` + (c.edits ? c.edits.map((e) => e.path ? `${e.path} = ${JSON.stringify(e.value)}` : `${e.op} ${e.node?.id ?? e.id ?? ''}`.trim()).join(', ') : 'file changed on disk');
-  $('#log').prepend(li);
+  for (let i = LOG_ROWS - 1; i > 0; i--) { logRows[i].className = logRows[i - 1].className; logRows[i].textContent = logRows[i - 1].textContent; }
+  logRows[0].className = 'by-' + c.by;
+  logRows[0].textContent = `${name} r${c.revision} ${c.by}: ` + (c.edits ? c.edits.map((e) => e.path ? `${e.path} = ${JSON.stringify(e.value)}` : `${e.op} ${e.node?.id ?? e.id ?? ''}`.trim()).join(', ') : 'file changed on disk');
 }
 
 client.onChange((f) => {

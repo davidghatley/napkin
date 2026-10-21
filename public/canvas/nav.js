@@ -23,8 +23,7 @@ export function initNav(ctx) {
     const r = stage.componentRect(focused);
     if (r) view.fitRect(r, { pad: 88, max: 2, animate });
     if (node && c.doc) {
-      const first = c.doc && Object.keys(c.doc).length ? c : c;
-      ctx.select({ component: focused, node, variant: firstVariant(first) });
+      ctx.select({ component: focused, node, variant: firstVariant(c) });
     } else if (!ctx.state.selections.some((s) => s.component === focused)) {
       ctx.select({ component: focused, node: c.doc.root.id, variant: firstVariant(c) });
     }
@@ -75,8 +74,8 @@ export function initNav(ctx) {
   // Registered first (capture on window), so Escape sees the tool before tools.js changes it.
   addEventListener('keydown', (ev) => {
     if (ev.defaultPrevented || ev.isComposing || typing(ev.target)) return;
-    if (document.body.dataset.modal) return;
-    if (ev.key === 'Enter' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.target.closest?.('button, a, summary, [role=treeitem], [role=option], [role=tab]')) {
+    if (document.body.dataset.modal || document.body.dataset.scrub || document.body.dataset.dragging) return;
+    if (ev.key === 'Enter' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && (ev.target.closest?.('#stage') || !ev.target.closest?.('button, a, summary, [role=treeitem], [role=option], [role=tab]'))) {
       const sel = ctx.state.selection;
       if (sel && ctx.state.tool === 'select' && sel.component !== focused) { ev.preventDefault(); focus(sel.component, sel.node); }
       else if (sel && focused) ev.preventDefault();

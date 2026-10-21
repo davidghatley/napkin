@@ -88,7 +88,8 @@ export function createStage(ctx, root, world, view) {
       for (const o of across.options) grid.append(head('colhead', o, o === across.default));
       for (const r of down ? down.options : [null]) {
         if (down) grid.append(head('rowhead', r, r === down.default));
-        for (const o of across.options) grid.append(cellFor({ ...g, [across.name]: o, ...(down ? { [down.name]: r } : {}) }));
+        // keys in axis order, like variantGrid(): data-variant is compared as a string
+        for (const o of across.options) { const m = { ...g, [across.name]: o, ...(down ? { [down.name]: r } : {}) }; grid.append(cellFor(Object.fromEntries(ax.map((a) => [a.name, m[a.name]])))); }
       }
       group.append(grid);
       matrix.append(group);
@@ -306,6 +307,8 @@ export function createStage(ctx, root, world, view) {
     const cell = el?.closest('.cell');
     return el && cell && { el, id: cell.closest('.cmp').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
+  // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
+  root.addEventListener('mousedown', (ev) => { if (ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
   root.addEventListener('mouseover', (ev) => { const h = hit(ev.target); hoverEl = h?.el ?? null; refreshOverlays(); });
   root.addEventListener('mouseleave', () => { hoverEl = null; refreshOverlays(); });
   let suppressClick = 0;
@@ -403,8 +406,17 @@ export function createStage(ctx, root, world, view) {
     ctx.emit('moved', { component: d.id, ...pos });
   });
 
+  // Bring a component into view if it is not (a new one, or a quick-open target); never moves a view that already shows it.
+  function reveal(id) {
+    const r = componentRect(id), v = view.get(), b = view.stageBox();
+    if (!r) return;
+    const x0 = r.x * v.z + v.x, y0 = r.y * v.z + v.y, x1 = (r.x + r.w) * v.z + v.x, y1 = (r.y + r.h) * v.z + v.y;
+    if (x0 >= 0 && y0 >= 0 && x1 <= b.width && y1 <= b.height) return;
+    view.flyTo(r, { pad: 96, max: Math.max(1, v.z) });
+  }
+
   return {
-    render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
+    reveal, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

@@ -9,7 +9,7 @@ const MAX = 14;
 
 export function initQuick(ctx) {
   const root = document.createElement('div');
-  root.id = 'quick'; root.hidden = true;
+  root.id = 'quick'; root.hidden = true; root.setAttribute('role', 'region'); root.setAttribute('aria-label', 'Quick open');
   root.innerHTML = `<div class="q-scrim" data-close></div>
     <div class="q-panel" role="dialog" aria-modal="true" aria-label="Quick open">
       <div class="q-field"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
@@ -124,7 +124,7 @@ export function initQuick(ctx) {
   }, true);
   document.querySelector('#quick-open').addEventListener('click', open);
 
-  const api = { open, close, search: (q) => { if (!items.length) build(); return query(q).map((r) => r.item); }, build, lastMs: 0, isOpen: () => !root.hidden };
+  const api = { open, close, search: (q) => query(q).map((r) => r.item), build, lastMs: 0, isOpen: () => !root.hidden }; // build() first, then search(): the index is rebuilt on open
   ctx.quick = api;
   return api;
 }

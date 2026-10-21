@@ -37,7 +37,7 @@ export function createView(ctx, stageEl, worldEl) {
     ctx.emit('view', { ...v });
   }
   view.get = () => ({ ...v });
-  function set(next, { animate = false, duration = 280, anchor = null } = {}) {
+  function set(next, { animate = false, duration = 220, anchor = null } = {}) {
     next = { x: next.x, y: next.y, z: clamp(next.z, MIN_Z, MAX_Z) };
     if (anim) { cancelAnimationFrame(anim.raf); anim = null; }
     if (!animate || reducedMotion()) { v = next; apply(); return Promise.resolve(); }
@@ -146,7 +146,7 @@ export function createView(ctx, stageEl, worldEl) {
   addEventListener('keydown', (ev) => {
     if (ev.isComposing) return;
     const ctl = ev.ctrlKey || ev.metaKey;
-    if (ev.code === 'Space' && !ctl && !ev.altKey && !typing(ev.target) && !ev.target.closest?.('button, a, [role=option], summary')) {
+    if (ev.code === 'Space' && !ctl && !ev.altKey && !typing(ev.target) && (ev.target.closest?.('#stage') || !ev.target.closest?.('button, a, [role=option], summary'))) {
       ev.preventDefault();
       if (!space) { space = true; grabbing(!!pan); }
       return;

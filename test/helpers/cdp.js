@@ -29,6 +29,8 @@ export async function launchChromium({ width = 1100, height = 700 } = {}) {
   };
   const send = (method, params = {}) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params })); });
   await send('Page.enable'); await send('Runtime.enable');
+  // the window size includes browser chrome; pin the page itself to width x height so screenshots and layouts are exact
+  await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   const consoleLines = [];
   listeners.push((m) => { if (m.method === 'Runtime.consoleAPICalled') consoleLines.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); });
   const api = {

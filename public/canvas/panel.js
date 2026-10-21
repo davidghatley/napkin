@@ -16,14 +16,14 @@ const css = (prop, v) => (typeof v === 'number' && !UNITLESS.has(prop) ? `${v}px
 
 // What each design control edits. `scrub`: drag the label to change the number.
 const F = {
-  gap: { label: 'Gap', unit: 'px', scrub: { step: 1, min: 0 } },
-  padding: { label: 'Padding', unit: 'px', scrub: { step: 1, min: 0 } },
+  gap: { label: 'Gap', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
+  padding: { label: 'Padding', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
   width: { label: 'Width', unit: 'px', scrub: { step: 1, min: 0 } },
   height: { label: 'Height', unit: 'px', scrub: { step: 1, min: 0 } },
   opacity: { label: 'Opacity', scrub: { step: 0.01, min: 0, max: 1, digits: 2 } },
-  borderRadius: { label: 'Corner radius', unit: 'px', scrub: { step: 1, min: 0 } },
-  border: { label: 'Border' },
-  boxShadow: { label: 'Shadow' },
+  borderRadius: { label: 'Corner radius', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
+  border: { label: 'Border', placeholder: 'none' },
+  boxShadow: { label: 'Shadow', placeholder: 'none' },
   background: { label: 'Fill', color: true },
   color: { label: 'Text color', color: true },
   fontFamily: { label: 'Font' },
@@ -158,7 +158,7 @@ export function renderPanel(ctx) {
     return `<button type="button" id="align-${r}${c}" data-align="${mainI},${crossI}" aria-pressed="${on}" aria-label="Align ${AL_NAME[r][c]}" title="Align ${AL_NAME[r][c]}"${dis}><i></i></button>`;
   })).join('')}</div><div class="ftags">${tags('justifyContent', 'Alignment') || tags('alignItems', 'Alignment')}</div>${err('align')}</div>` : '';
   const layout = section('layout', 'Layout',
-    seg('display', 'Layout', [['block', 'Block'], ['flex', 'Flex', '', /flex/], ['grid', 'Grid']])
+    seg('display', 'Display', [['block', 'Block'], ['flex', 'Flex', '', /flex/], ['grid', 'Grid']])
     + (isFlex ? seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]]) + matrix : '')
     + (isFlex || isGrid ? field('gap') : '') + field('padding'));
   const sizeSec = section('size', 'Size', size('width') + size('height'));
@@ -499,7 +499,7 @@ function wire(ctx, el) {
   };
   el.addEventListener('pointerup', endScrub);
   el.addEventListener('pointercancel', endScrub);
-  addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && scrub?.moved) { restore(); scrub.input.value = scrub.start; scrub = null; ui.scrubbing = false; delete document.body.dataset.scrub; rerender(); } }, true);
+  addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && scrub?.moved) { ev.preventDefault(); restore(); scrub.input.value = scrub.start; scrub = null; ui.scrubbing = false; delete document.body.dataset.scrub; rerender(); } }, true);
 }
 
 // How a field scrubs. A unitless line height (1.5) moves in 0.05s, a pixel one in 1s.

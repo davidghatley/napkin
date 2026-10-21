@@ -7,11 +7,12 @@
 //   initTools(ctx) -> { tools, use(id), editText(selection), createComponent(name) }; also set as ctx.tools.
 import { index, variantGrid, VOID } from '/src/model.js';
 
+const svg = (d) => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const TOOLS = [
-  { id: 'select', label: 'Select', key: 'V' },
-  { id: 'frame', label: 'Frame', key: 'F' },
-  { id: 'text', label: 'Text', key: 'T' },
-  { id: 'image', label: 'Image slot', key: 'I' },
+  { id: 'select', label: 'Select', key: 'V', icon: svg('M3.5 2.5 12 6.4l-4.2 1.4-1.4 4.2z') },
+  { id: 'frame', label: 'Frame', key: 'F', icon: svg('M5 1.8v12.4M11 1.8v12.4M1.8 5h12.4M1.8 11h12.4') },
+  { id: 'text', label: 'Text', key: 'T', icon: svg('M3 3.5V2.5h10v1M8 2.5v11M6 13.5h4') },
+  { id: 'image', label: 'Image slot', key: 'I', icon: svg('M2.5 3h11v10h-11zM2.5 11l3.3-3.4 2.4 2.4 1.6-1.6 3.7 3.6') },
 ];
 const MIN = { frame: [48, 32], image: [8, 8] };
 const DRAG = 4; // px of pointer travel before a press counts as a drag
@@ -48,8 +49,8 @@ export function initTools(ctx) {
 
   // --- toolbar -------------------------------------------------------------------------------------------
   bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Tools');
-  bar.innerHTML = TOOLS.map((t) => `<button type="button" data-tool="${t.id}" aria-pressed="false" aria-keyshortcuts="${t.key}" title="${t.label} (${t.key})">${t.label} <kbd>${t.key}</kbd></button>`).join('')
-    + '<button type="button" id="tool-new" aria-keyshortcuts="N" aria-expanded="false" aria-controls="new-component" title="New component (N)">New component <kbd>N</kbd></button>'
+  bar.innerHTML = TOOLS.map((t) => `<button type="button" data-tool="${t.id}" aria-pressed="false" aria-keyshortcuts="${t.key}" title="${t.label} (${t.key})">${t.icon}${t.label} <kbd>${t.key}</kbd></button>`).join('')
+    + `<button type="button" id="tool-new" aria-keyshortcuts="N" aria-expanded="false" aria-controls="new-component" title="New component (N)">${svg('M8 3v10M3 8h10')}New component <kbd>N</kbd></button>`
     + '<form id="new-component" hidden autocomplete="off"><label>Name <input id="new-name" aria-label="Component name" placeholder="Card" spellcheck="false"></label><button type="submit">Create</button><span id="new-error" role="alert"></span></form>';
   const buttons = new Map([...bar.querySelectorAll('[data-tool]')].map((b) => [b.dataset.tool, b]));
   const form = bar.querySelector('#new-component'), nameInput = bar.querySelector('#new-name'), newErr = bar.querySelector('#new-error'), newBtn = bar.querySelector('#tool-new');
@@ -104,7 +105,7 @@ export function initTools(ctx) {
     for (let i = 0; i < 200 && !ctx.state.components.get(r.id)?.doc; i++) await sleep(25);
     const c = ctx.state.components.get(r.id);
     const sec = c && await rendered(r.id, c.revision);
-    if (sec) { sec.scrollIntoView({ block: 'nearest' }); ctx.select({ component: r.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] }); }
+    if (sec) { ctx.stage?.reveal(r.id); ctx.select({ component: r.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] }); }
     return { ok: true, id: r.id, name: r.name };
   }
   form.addEventListener('submit', async (ev) => {
