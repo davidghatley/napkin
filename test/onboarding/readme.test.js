@@ -55,12 +55,14 @@ test('ONB-01: occupied requested port falls forward; init refuses existing files
   let proc;
   try {
     const init = execFileSync(process.execPath, [join(ROOT, 'src/cli.js'), 'init', dir], { encoding: 'utf8' });
-    assert.match(init, /Canvas: http.*4810/); assert.match(init, /NAPKIN_AGENT/);
+    assert.match(init, /run napkin open .* to start/);
+    assert.doesNotMatch(init, /Canvas:|\.mcp\.json|NAPKIN_AGENT/);
     assert.throws(() => execFileSync(process.execPath, [join(ROOT, 'src/cli.js'), 'init', dir], { stdio: 'pipe' }), /not empty/);
     const port = busy.address().port;
     proc = spawn(process.execPath, [join(ROOT, 'src/cli.js'), 'open', dir, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = ''; proc.stdout.on('data', (b) => out += b); proc.stderr.on('data', (b) => out += b);
-    await waitFor(() => out.match(/napkin canvas:/), 15000);
+    await waitFor(() => out.includes('NAPKIN_AGENT') && out.match(/napkin canvas:/), 15000);
+    assert.equal((init + out).match(/Paste into \.mcp\.json/g)?.length, 1);
     const used = Number(out.match(/napkin canvas: http:\/\/127.0.0.1:(\d+)/)[1]); assert.ok(used > port);
   } finally { busy.close(); if (proc) { proc.kill('SIGTERM'); await waitFor(() => proc.exitCode !== null, 5000); } rmSync(dir, { recursive: true, force: true }); }
 });

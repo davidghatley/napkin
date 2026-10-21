@@ -28,7 +28,7 @@ async function main() {
     mkdirSync(join(dir, 'components'), { recursive: true });
     createComponent(join(dir, 'components/Welcome.tsx'), starterSource('Welcome'));
     createProjectConfig(join(dir, 'napkin.json'), JSON.stringify({ components: 'components' }, null, 2) + '\n');
-    console.log(`Created ${dir}/napkin.json and components/Welcome.tsx.\nNext: napkin open ${JSON.stringify(dir)}\n${connection(`http://127.0.0.1:${port || 4810}/`)}`);
+    console.log(`Created ${dir}/napkin.json and components/Welcome.tsx.\nNext: run napkin open ${JSON.stringify(dir)} to start.`);
     return;
   }
   if (!existsSync(dir)) throw new Error(`folder ${dir} does not exist. Next: choose a repository folder or run napkin init ${JSON.stringify(dir)}.`);

@@ -23,7 +23,7 @@ export default forwardRef(function Button({ ...props }, ref) {
 });`;
 test('OPN-01/04: scan reports every blocking construct at its own line and counts files', () => {
   const row = classifySource(foreign, 'ui/button.tsx');
-  for (const [name, line] of [['CSS modules', 1], ['context', 3], ['extra helper functions', 4], ['default export', 5], ['forwardRef', 5], ['rest or spread props', 5], ['hooks', 6], ['className or cn() styling', 7], ['conditional rendering', 7], ['map', 7], ['missing const base', 5]]) {
+  for (const [name, line] of [['CSS modules', 1], ['context', 3], ['extra helper functions', 4], ['default export', 5], ['forwardRef', 5], ['rest or spread props', 5], ['hooks', 6], ['className or cn() styling', 7], ['conditional rendering', 7], ['map', 7], ['styles outside const base', 7]]) {
     assert.ok(row.constructs?.some(c => c.name === name && c.line === line), `${name}: ${JSON.stringify(row)}`);
   }
   assert.doesNotMatch(row.reason, /FunctionDeclaration|VariableDeclaration|ExportDefaultDeclaration/);

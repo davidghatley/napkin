@@ -8,12 +8,32 @@ import { TAGS, ATTRS } from './model.js';
 
 // Internal capability: HTTP edit payloads cannot request a source replacement.
 export const ADOPTION = Symbol('reviewed adoption');
+const b = recast.types.builders;
+const literalText = value => recast.prettyPrint(typeof value === 'string' ? b.stringLiteral(value) : b.literal(value), { quote: 'single' }).code;
+
+// Print the small, validated JSX subset without carrying source parentheses or indentation.
+function printJsx(el, indent = 4, inline = false) {
+  const open = el.openingElement;
+  const attrs = open.attributes.map(a => `${a.name.name}=${a.value.type === 'StringLiteral'
+    ? `"${a.value.value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')}"`
+    : `{${recast.prettyPrint(a.value.expression, { quote: 'single' }).code}}`}`).join(' ');
+  const tag = `<${open.name.name} ${attrs}`;
+  const children = el.children.filter(c => c.type !== 'JSXText' || c.value.trim());
+  if (!children.length) return `${tag} />`;
+  const close = `</${open.name.name}>`;
+  if (!inline && (children.length === 1 || children.every(c => c.type === 'JSXElement'))) {
+    return `${tag}>\n${children.map(c => ' '.repeat(indent + 2) + (c.type === 'JSXElement' ? printJsx(c, indent + 2) : recast.prettyPrint(c, { quote: 'single' }).code)).join('\n')}\n${' '.repeat(indent)}${close}`;
+  }
+  return `${tag}>${children.map(c => c.type === 'JSXElement' ? printJsx(c, indent, true) : recast.prettyPrint(c, { quote: 'single' }).code).join('')}${close}`;
+}
+
 export function proposeAdoption(source, file) {
-  const refuse = (node, why) => { throw new Error(`${file}: line ${node?.loc?.start?.line || 1}: cannot adopt: ${why}. Next: keep this file read-only; simplify that construct by hand before proposing again.`); };
+  const refuse = (node, why, next = 'keep this file read-only; simplify that construct by hand before proposing again.') => { throw new Error(`${file}: line ${node?.loc?.start?.line || 1}: cannot adopt: ${why}. Next: ${next}`); };
   const blockers = blockingConstructs(source, { adoption: true });
+  if (blockers[0]?.name === 'syntax error') refuse({ loc: { start: { line: blockers[0].line } } }, blockers[0].detail, `fix the syntax error at line ${blockers[0].line} first, then propose adoption again.`);
   if (blockers.length) refuse({ loc: { start: { line: blockers[0].line } } }, blockers.map(c => `line ${c.line}: ${c.name}`).join('; '));
   let ast;
-  try { ast = parseAst(source); } catch (e) { refuse(null, e.message); }
+  try { ast = parseAst(source); } catch (e) { refuse({ loc: { start: { line: e.loc?.line || 1 } } }, e.message, `fix the syntax error at line ${e.loc?.line || 1} first, then propose adoption again.`); }
   const body = ast.program.body;
   if (ast.program.directives?.length) refuse(ast.program.directives[0], 'module directives may affect runtime behavior');
   let fn;
@@ -21,7 +41,13 @@ export function proposeAdoption(source, file) {
   function constant(st) {
     if (st.type !== 'VariableDeclaration' || st.kind !== 'const') return false;
     for (const d of st.declarations) {
-      if (d.id.type !== 'Identifier' || d.init?.type !== 'ObjectExpression' || styleConstants.has(d.id.name)) refuse(d, 'style constants must have distinct names and literal object values');
+      if (d.id.type !== 'Identifier') refuse(d, 'style constants need a simple name, without destructuring');
+      if (styleConstants.has(d.id.name)) refuse(d, `style constant ${d.id.name} is declared more than once`);
+      if (d.init?.type !== 'ObjectExpression') {
+        const value = d.init && literalValue(d.init);
+        const kind = value === undefined ? 'not a literal style object' : `a ${typeof value}, not a style object`;
+        refuse(d, `${d.id.name} is ${kind}; napkin can only adopt style objects such as { color: '#f00' }`);
+      }
       for (const p of d.init.properties) if (p.type !== 'ObjectProperty' || p.computed || !['Identifier', 'StringLiteral'].includes(p.key.type) || !['string', 'number'].includes(typeof literalValue(p.value))) refuse(p, 'style constants must contain only plain string or number values');
       styleConstants.set(d.id.name, d.init);
     }
@@ -50,7 +76,7 @@ export function proposeAdoption(source, file) {
     let typeText = typeof value === 'string' ? 'string' : typeof value === 'boolean' ? 'boolean' : null;
     if (type) {
       if (['TSStringKeyword', 'TSBooleanKeyword'].includes(type.type)) typeText = type.type === 'TSStringKeyword' ? 'string' : 'boolean';
-      else if (type.type === 'TSUnionType' && type.types.every(t => t.type === 'TSLiteralType' && t.literal.type === 'StringLiteral')) typeText = type.types.map(t => JSON.stringify(t.literal.value)).join(' | ');
+      else if (type.type === 'TSUnionType' && type.types.every(t => t.type === 'TSLiteralType' && t.literal.type === 'StringLiteral')) typeText = type.types.map(t => literalText(t.literal.value)).join(' | ');
       else refuse(member, 'only string, boolean and string enum props can be preserved');
     }
     if (!typeText || !['string', 'boolean'].includes(typeof value)) refuse(p, 'only string and boolean literal defaults can be preserved');
@@ -62,7 +88,7 @@ export function proposeAdoption(source, file) {
   let jsx = statements[0].argument;
   while (jsx?.type === 'ParenthesizedExpression') jsx = jsx.expression;
   if (jsx?.type !== 'JSXElement') refuse(fn, 'the function must return one JSX element');
-  const styles = [], b = recast.types.builders;
+  const styles = [];
   function walk(el) {
     const open = el.openingElement;
     if (open.name.type !== 'JSXIdentifier' || !TAGS.has(open.name.name)) refuse(open, 'custom components and unsupported tags need their original runtime');
@@ -100,13 +126,34 @@ export function proposeAdoption(source, file) {
     }
   }
   walk(jsx);
-  const template = newComponentSource(fn.id.name);
-  let prefix = template.slice(0, template.indexOf(`export function ${fn.id.name}`));
-  prefix = prefix.replace(`export interface ${fn.id.name}Props {\n}`, `export interface ${fn.id.name}Props {\n${props.map(p => `  ${p.name}?: ${p.typeText};`).join('\n')}\n}`);
-  const start = prefix.indexOf('const base:'), end = prefix.indexOf('\nconst variants:');
-  const head = prefix.slice(0, start) + `const base: Record<string, CSSProperties> = ${recast.prettyPrint(b.objectExpression(styles.map(([id, style]) => b.objectProperty(b.identifier(id), b.objectExpression(Object.entries(style).map(([key, value]) => b.objectProperty(/^[A-Za-z_$][\w$]*$/.test(key) ? b.identifier(key) : b.stringLiteral(key), typeof value === 'string' ? b.stringLiteral(value) : value < 0 ? b.unaryExpression('-', b.numericLiteral(-value)) : b.numericLiteral(value)))))))).code};\n` + prefix.slice(end);
-  const params = props.length ? `{ ${props.map(p => `${p.name} = ${JSON.stringify(p.value)}`).join(', ')} }: ${fn.id.name}Props` : '';
-  const result = `${head}export function ${fn.id.name}(${params}) {\n  const v = {${props.filter(p => p.enum).map(p => p.name).join(', ')}};\n  return (\n    ${recast.prettyPrint(jsx).code}\n  );\n}\n`;
+  const entries = styles.filter(([, style]) => Object.keys(style).length);
+  const base = entries.length ? `{\n${entries.map(([id, style]) => `  ${id}: {\n${Object.entries(style).map(([key, value]) => `    ${/^[A-Za-z_$][\w$]*$/.test(key) ? key : literalText(key)}: ${literalText(value)},`).join('\n')}\n  },`).join('\n')}\n}` : '{}';
+  const params = props.length ? `{ ${props.map(p => `${p.name} = ${literalText(p.value)}`).join(', ')} }: ${fn.id.name}Props` : '';
+  const axes = props.filter(p => p.enum).map(p => p.name);
+  const result = `import type { CSSProperties } from 'react';
+
+export interface ${fn.id.name}Props {${props.length ? '\n' + props.map(p => `  ${p.name}?: ${p.typeText};`).join('\n') + '\n' : ''}}
+
+const base: Record<string, CSSProperties> = ${base};
+
+const variants: Record<
+  string,
+  Record<string, Record<string, CSSProperties>>
+> = {};
+
+function s(node: string, v: Record<string, string>): CSSProperties {
+  const out: CSSProperties = { ...base[node] };
+  for (const axis in v) Object.assign(out, variants[axis]?.[v[axis]]?.[node]);
+  return out;
+}
+
+export function ${fn.id.name}(${params}) {
+  const v = ${axes.length ? `{ ${axes.join(', ')} }` : '{}'};
+  return (
+    ${printJsx(jsx)}
+  );
+}
+`;
   try { readComponent(result); } catch (e) { refuse(fn, e.message); }
   return { source: result, doc: readComponent(result).doc, diff: `--- ${file}\n+++ ${file} (proposed adoption)\n@@ replace file after review @@\n${source.split('\n').map((s) => '-' + s).join('\n')}\n${result.split('\n').map((s) => '+' + s).join('\n')}` };
 }

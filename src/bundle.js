@@ -39,15 +39,15 @@ export function mount(el, props = {}) {
 }
 `;
 
-const formatError = (e) => {
-  const m = e.errors?.[0];
-  if (!m) return String(e.message);
-  return m.location ? `${m.text} (${basename(m.location.file)}:${m.location.line})` : m.text;
+const formatError = async (e) => {
+  if (!e.errors?.length) return String(e.message);
+  return (await esbuild.formatMessages(e.errors, { kind: 'error', color: false })).join('\n').trimEnd();
 };
 
 export function createBundler() {
   const contexts = new Map();
   const options = (file, name, displayFile) => ({
+    absWorkingDir: dirname(file),
     stdin: { contents: entry(file, name, displayFile), resolveDir: dirname(file), loader: 'js', sourcefile: 'napkin-canvas-entry.js' },
     bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
     jsx: 'automatic', loader: { '.tsx': 'tsx', '.ts': 'ts' },
@@ -65,7 +65,7 @@ export function createBundler() {
         const r = await ctx.rebuild();
         return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
       } catch (e) {
-        return { ok: false, error: `${displayFile}: ${formatError(e).split(dirname(file) + "/").join("")}. Next: fix the named import, CSS or syntax in this file, then reload.`, ms: performance.now() - t0 };
+        return { ok: false, error: `${displayFile}: ${await formatError(e)}\nNext: fix the reported error, then reload.`, ms: performance.now() - t0 };
       }
     },
     async dispose(file) { const c = contexts.get(file); contexts.delete(file); await c?.dispose(); },
