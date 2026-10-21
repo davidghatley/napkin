@@ -2,6 +2,7 @@
 // (NAPKIN_URL); if no server answers, they run the same API in this process on NAPKIN_DIR, holding the
 // single-writer lock <dir>/.napkin/lock (AGT-08). NAPKIN_AGENT names this agent (default "agent"); the
 // server's napkin.json may restrict it to read, propose or write (decision 0005).
+import { explainError } from './errors.js';
 import { createInterface } from 'node:readline';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -11,13 +12,14 @@ import { editItemSchema } from './mcp-schema.js';
 
 const BASE = process.env.NAPKIN_URL || 'http://127.0.0.1:4810/';
 const AGENT = process.env.NAPKIN_AGENT || 'agent';
-const send = (msg) => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...msg }) + '\n');
+const send = (msg) => { if (msg.error?.message) msg.error.message = explainError(msg.error.message); process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...msg }) + '\n'); };
 
 const NO_GUIDE = !!process.env.NAPKIN_NO_GUIDE; // eval control arm: the same tools with the teaching text removed
 const editSchema = editItemSchema(NO_GUIDE);
 const comp = { type: 'string', description: 'component name or id' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required });
 const TOOLS = [
+  { name: 'propose_adoption', description: 'Propose a faithful dialect rewrite of a read-only component. Returns source and diff in a proposal; only review Accept writes it. Unsupported logic is refused.', inputSchema: obj({ component: comp }, ['component']) },
   { name: 'list_components', description: 'List the napkin components in this folder: [{ id, name, readOnly? }].', inputSchema: obj({}) },
   { name: 'read_component', description: 'Read a component: its document tree, current revision and the TSX source text (readOnly says why a file cannot be edited).', inputSchema: obj({ component: comp }, ['component']) },
   { name: 'apply_edits', description: 'Apply a batch of edits, all or nothing, against baseRevision. Fails with "stale revision" plus a stale list ({key, value, yours, revision, by}) and currentRevision if a property you touch changed since; retry once with baseRevision = currentRevision. dryRun: true validates and returns the would-be TSX source without writing. propose: true validates and holds the edits as a proposal for the person to accept or reject (nothing is written).', inputSchema: obj({ component: comp, baseRevision: {}, edits: { type: 'array', items: editSchema }, dryRun: { type: 'boolean' }, propose: { type: 'boolean' } }, ['component', 'baseRevision', 'edits']) },
@@ -46,15 +48,15 @@ const notice = (ch) => {
   send({ method: 'notifications/napkin/change', params: n });
 };
 
-class Unreachable extends Error {}
+class Unreachable extends Error { constructor(message) { super(explainError(message, { next: "run napkin open and set NAPKIN_URL to its printed address." })); } }
 async function makeRemote() {
   const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) }).catch((e) => { throw new Unreachable(e.message); });
-  if (!probe.ok) throw new Error(`napkin server answered ${probe.status}`);
+  if (!probe.ok) throw new Error(explainError(`napkin server answered ${probe.status}`));
   const live = await connectCanvas(BASE, { by: 'agent', identify: false });
   live.onChange((ch) => { if (ch.type === 'change' && !ch.mine && ch.origin !== origin) notice(ch); });
   const base = live.origin;
   const sess = await (await fetch(new URL('api/session', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: AGENT, token: process.env.NAPKIN_TOKEN }) })).json();
-  if (!sess.ok) throw new Error(`napkin refused this agent a session: ${sess.error}`);
+  if (!sess.ok) throw new Error(explainError(`napkin refused this agent a session: ${sess.error}`));
   return {
     mode: 'server', origin: base,
     async call({ method, path, query, body }) {
@@ -70,15 +72,15 @@ async function makeRemote() {
 
 async function makeLocal() {
   const dir = resolve(process.env.NAPKIN_DIR || (existsSync(join(process.cwd(), 'components')) ? join(process.cwd(), 'components') : process.cwd()));
-  if (!existsSync(dir)) throw new Error(`no such folder: ${dir} (set NAPKIN_DIR)`);
-  const { acquireLock } = await import('./lock.js');
+  if (!existsSync(dir)) throw new Error(explainError(`no such folder: ${dir} (set NAPKIN_DIR)`));
+  const { acquireWorkspaceLock } = await import('./lock.js');
   const { openWorkspace } = await import('./workspace.js');
   const { createApi } = await import('./api.js');
-  const lock = acquireLock(dir);
+  const lock = acquireWorkspaceLock(dir);
   const ws = await openWorkspace(dir);
   const api = createApi(ws, { dir, canPropose: false }); // nobody is watching a canvas, so nobody could review a proposal
   const sess = api.session(AGENT, process.env.NAPKIN_TOKEN);
-  if (sess.status !== 200) throw new Error(sess.json.error);
+  if (sess.status !== 200) throw new Error(explainError(sess.json.error));
   const token = sess.json.token;
   ws.events.on('change', (c) => { if (c.origin !== origin) notice({ ...c, component: c.component }); });
   const stop = async () => { await api.close(); await ws.close(); lock.release(); process.exit(0); };
@@ -86,7 +88,7 @@ async function makeLocal() {
   process.stdin.on('end', stop);
   return {
     mode: 'local', origin, dir,
-    async call({ method, path, query, body }) { return (await api.handle({ method, path, query: query || new URLSearchParams(), body, token })) ?? { status: 404, json: { ok: false, error: 'not found' } }; },
+    async call({ method, path, query, body }) { return (await api.handle({ method, path, query: query || new URLSearchParams(), body, token })) ?? { status: 404, json: { ok: false, error: explainError('not found') } }; },
     async presence() {},
   };
 }
@@ -110,7 +112,7 @@ function describe(name, a, compName) {
   return `${AGENT}: editing ${compName}${node ? ` · ${node}` : ''}${v}`;
 }
 
-class ToolError extends Error { constructor(message, data) { super(message); this.data = data; } }
+class ToolError extends Error { constructor(message, data) { super(explainError(message)); this.data = data; } }
 const ok = (r) => { if (r.status >= 400 || r.json?.ok === false) { const { ok: _, ...rest } = r.json || {}; throw new ToolError(r.json?.error ?? `HTTP ${r.status}`, rest.stale || rest.permission ? { ok: false, ...rest } : undefined); } return r.json; };
 
 async function callTool(name, a = {}) {
@@ -118,6 +120,7 @@ async function callTool(name, a = {}) {
   const c = encodeURIComponent(a.component ?? '');
   const by = AGENT;
   if (name === 'list_components') return ok(await b.call({ method: 'GET', path: '/api/components' }));
+  if (name === 'propose_adoption') return ok(await b.call({ method: 'POST', path: `/api/components/${c}/adoption`, body: {} }));
   if (name === 'read_component') return ok(await b.call({ method: 'GET', path: `/api/components/${c}` }));
   if (name === 'create_component') { const r = ok(await b.call({ method: 'POST', path: '/api/components', body: { name: a.name, rootTag: a.rootTag, by } })); return { id: r.id, name: r.name }; }
   if (name === 'rename_component') { const r = ok(await b.call({ method: 'POST', path: `/api/components/${c}/rename`, body: { name: a.name, by } })); return { id: r.id, name: r.name }; }
@@ -143,7 +146,7 @@ async function callTool(name, a = {}) {
     if (r.proposed) return { proposed: true, proposal: r.proposal };
     return r.dryRun ? { dryRun: true, revision: r.revision, source: r.source } : { revision: r.revision };
   }
-  throw new Error(`unknown tool ${name}`);
+  throw new Error(explainError(`unknown tool ${name}`));
 }
 
 const INSTRUCTIONS = NO_GUIDE ? 'napkin edits React components. Use the tools.' : `napkin edits real React components. This text is also served as the napkin://guide resource and the napkin_guide prompt.\n\n${GUIDE}`;
@@ -176,8 +179,8 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
       if (data?.image) return send({ id, result: { content: [{ type: 'image', data: data.image.toString('base64'), mimeType: 'image/png' }, { type: 'text', text: JSON.stringify(data.info) }], structuredContent: data.info } });
       return send({ id, result: { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: Array.isArray(data) ? { components: data } : data } });
     } catch (e) {
-      const text = e.data ? JSON.stringify({ error: e.message, ...e.data }) : String(e.message);
-      return send({ id, result: { isError: true, content: [{ type: 'text', text }], ...(e.data && { structuredContent: { error: e.message, ...e.data } }) } });
+      const text = e.data ? JSON.stringify({ error: explainError(e.message), ...e.data }) : explainError(e.message);
+      return send({ id, result: { isError: true, content: [{ type: 'text', text }], ...(e.data && { structuredContent: { error: explainError(e.message), ...e.data } }) } });
     }
   }
   send({ id, error: { code: -32601, message: `method not found: ${method}` } });

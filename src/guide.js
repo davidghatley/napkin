@@ -33,7 +33,8 @@ Numbers stay numbers (fontSize: 20); strings are CSS text ("14px 28px").
 - create_component { name (PascalCase), rootTag? }, rename_component { component, name }, delete_component { component }.
 - search { query } finds components and nodes by name, id, tag or text.
 - subscribe { waitMs? } returns changes other people made since your last call.
-- A file outside the napkin dialect is read-only: read it, but every write is refused with the reason.
+- A file outside the napkin dialect is read-only: read it or render it with default props; direct edits, rename and delete are refused with the reason.
+- propose_adoption { component } proposes a faithful dialect rewrite of a simple read-only file. It returns a source diff through the existing proposals system; nothing writes until a write-capable reviewer accepts. Reject leaves the source unchanged. Local logic, hooks, class names and other unsupported behavior are refused instead of approximated. A hand edit makes a pending adoption stale: reject it and propose again. Adoption needs a running canvas server.
 
 ## Stale revisions
 If something you touch changed after your baseRevision, apply_edits fails with "stale revision" and a "stale" list:

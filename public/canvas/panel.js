@@ -175,6 +175,9 @@ export function renderPanel(ctx) {
     el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="mono" id="sel-node">${esc(sel.node)}</span></div></div><p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>`;
     return;
   }
+  if (!node && !ctx.state.components.size) {
+    el.innerHTML = '<div class="empty-panel"><h2>Design</h2><p class="hint">Your selection’s properties appear here.</p></div>'; return;
+  }
   if (!node) {
     el.innerHTML = `<div class="empty-panel"><svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="7" y="9" width="34" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 4"/><path d="M19 20l11 5-5 2-2 5z" fill="currentColor"/></svg>
       <h2>Nothing selected</h2><p class="hint">Click a layer or an element on the canvas. Shift-click or drag a box to select several.</p>

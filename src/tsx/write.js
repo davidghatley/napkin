@@ -1,6 +1,7 @@
 // Write a model back into the component's AST, touching only what changed between two models,
 // then print with recast. recast reuses the original text of every AST node we don't replace,
 // so a save with no change is byte-identical and one property change is a one-line diff.
+import { explainError } from '../errors.js';
 import * as recast from 'recast';
 import { locate, literalValue } from './read.js';
 import { index } from '../model.js';
@@ -226,7 +227,7 @@ export function writeComponent(ast, before, after, original) {
     syncNested(parts.base, from, to, 0);
   }
   if (!same(before.variants, after.variants)) {
-    if (!parts.variants) throw new Error('component has no variants object');
+    if (!parts.variants) throw new Error(explainError('component has no variants object'));
     syncNested(parts.variants, before.variants, after.variants, 2);
   }
   syncJsx(parts, before, after);
@@ -237,7 +238,7 @@ export function writeComponent(ast, before, after, original) {
 
 // Source for a brand-new component: one root frame, no props.
 export function newComponentSource(name, rootTag = 'div') {
-  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(`component name "${name}" must be PascalCase`);
+  if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(explainError(`component name "${name}" must be PascalCase`));
   return `import type { CSSProperties } from 'react';
 
 export interface ${name}Props {

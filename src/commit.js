@@ -29,3 +29,6 @@ export function writeAsset(dir, name, bytes) {
   writeFileSync(tmp, bytes); renameSync(tmp, file);
   return true;
 }
+
+// CLI init creates a project config only after checking an empty destination.
+export function createProjectConfig(file, text) { writeFileSync(file, text, { flag: 'wx' }); }
