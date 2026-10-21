@@ -31,7 +31,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | LAY-07 | LAY | layout | pass | r2 pass: no truncation | test/23-layout-panel.test.js | a4a87dd |
 | LAY-08 | LAY | layout | pass | r2 pass; bug: colour edit rewrites alpha (fixing) | test/22-*.test.js | a4a87dd |
 | LAY-09 | LAY | layout | pass | r1 pass: pasted subtree byte-identical render | test/18-*.test.js | a4a87dd |
-| LAY-10 | LAY | layout | critic | r4 merged; narrow re-critic running | test/canvas/paste-html.test.js | a4a87dd |
+| LAY-10 | LAY | layout | critic-fail | r5 fail: 14 approximations in 290 snippets; redesign: browser parse + render-verify | test/canvas/paste-html.test.js | a4a87dd |
 | LAY-11 | LAY | layout | pass | r1 pass: sidecar only, sha unchanged | test/21-*.test.js | a4a87dd |
 | CMP-01 | CMP | components | open |  |  |  |
 | CMP-02 | CMP | components | open |  |  |  |
@@ -43,11 +43,11 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | CMP-08 | CMP | components | open |  |  |  |
 | CMP-09 | CMP | components | open |  |  |  |
 | CMP-10 | CMP | components | open |  |  |  |
-| TOK-01 | TOK | tokens | open |  |  |  |
-| TOK-02 | TOK | tokens | open |  |  |  |
-| TOK-03 | TOK | tokens | open |  |  |  |
-| TOK-04 | TOK | tokens | open |  |  |  |
-| TOK-05 | TOK | tokens | open |  |  |  |
+| TOK-01 | TOK | tokens | building |  |  |  |
+| TOK-02 | TOK | tokens | building |  |  |  |
+| TOK-03 | TOK | tokens | building |  |  |  |
+| TOK-04 | TOK | tokens | building |  |  |  |
+| TOK-05 | TOK | tokens | building |  |  |  |
 | OPN-01 | OPN | open | pass | r2 pass: real causes + lines; "missing const base" wording | test/onboarding/open.test.js | ec22ab6 |
 | OPN-02 | OPN | open | pass | r2 pass: errors contained, 0 overflow | docs/evidence/OPN-02-missing.png | ec22ab6 |
 | OPN-03 | OPN | open | pass | r2 pass; converter formatting gap | test/onboarding/fix-round.test.js | ec22ab6 |
