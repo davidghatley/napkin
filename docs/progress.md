@@ -2,6 +2,8 @@
 
 Live status of every DREAM.md criterion. Updated by the lead (Claude, Opus) after each critic verdict and merge. Status: open / building / critic-fail / pass / unverifiable.
 
+Status "critic-pass" = a critic passed it on its branch; "pass" = merged into feat/core with the full suite green.
+
 Lanes are groups of areas that share files, so parallel builders don't collide. Round 1 lanes: files, engine, agents, canvas.
 
 | ID | Area | Lane | Status | Last critic verdict | Evidence | Commit |
@@ -12,14 +14,14 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | INV-04 | INV | files | building |  |  |  |
 | INV-05 | INV | files | building |  |  |  |
 | INV-06 | INV | files | building |  |  |  |
-| CAN-01 | CAN | canvas | building |  |  |  |
-| CAN-02 | CAN | canvas | building |  |  |  |
-| CAN-03 | CAN | canvas | building |  |  |  |
-| CAN-04 | CAN | canvas | building |  |  |  |
-| CAN-05 | CAN | canvas | building |  |  |  |
-| CAN-06 | CAN | canvas | building |  |  |  |
-| CAN-07 | CAN | canvas | building |  |  |  |
-| CAN-08 | CAN | canvas | building |  |  |  |
+| CAN-01 | CAN | canvas | critic | built r1; critic running | test/12-canvas-nav.test.js | 98f301e |
+| CAN-02 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
+| CAN-03 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
+| CAN-04 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
+| CAN-05 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
+| CAN-06 | CAN | canvas | critic | built r1; critic running | test/14-canvas-look.test.js | 98f301e |
+| CAN-07 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
+| CAN-08 | CAN | canvas | critic | built r1; critic running | test/13-canvas-frames.test.js | 98f301e |
 | LAY-01 | LAY | layout | open |  |  |  |
 | LAY-02 | LAY | layout | open |  |  |  |
 | LAY-03 | LAY | layout | open |  |  |  |
@@ -50,17 +52,17 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | OPN-02 | OPN | open | open |  |  |  |
 | OPN-03 | OPN | open | open |  |  |  |
 | OPN-04 | OPN | open | open |  |  |  |
-| AGT-01 | AGT | agents | building |  |  |  |
-| AGT-02 | AGT | agents | building |  |  |  |
+| AGT-01 | AGT | agents | pass | r2 pass: 10 tools, oneOf schema | test/mcp/schema.test.js | ed6ea70 |
+| AGT-02 | AGT | agents | pass | r2 pass: p95 82 ms; 8-way p95 335 ms | docs/evidence/AGT-02.txt | ed6ea70 |
 | AGT-03 | AGT | agents | building |  |  |  |
-| AGT-04 | AGT | agents | building |  |  |  |
-| AGT-05 | AGT | agents | building |  |  |  |
-| AGT-06 | AGT | agents | building |  |  |  |
-| AGT-07 | AGT | agents | building |  |  |  |
-| AGT-08 | AGT | agents | building |  |  |  |
-| AGT-09 | AGT | agents | building |  |  |  |
-| AGT-10 | AGT | agents | building |  |  |  |
-| AGT-11 | AGT | agents | building |  |  |  |
+| AGT-04 | AGT | agents | pass | r2 pass (server/MCP); canvas UI later | test/agents/propose.test.js | ed6ea70 |
+| AGT-05 | AGT | agents | pass | r3 pass; follow-ups: git attribution, approver in history | test/agents/identity.test.js | ed6ea70 |
+| AGT-06 | AGT | agents | pass | r2 pass 100/100 | docs/evidence/AGT-06.txt | ed6ea70 |
+| AGT-07 | AGT | agents | pass | r2 pass 16/16; guide = 2.3x fewer turns | docs/evidence/AGT-07.txt | ed6ea70 |
+| AGT-08 | AGT | agents | pass | r2 pass; server lock | test/mcp/fallback.test.js | ed6ea70 |
+| AGT-09 | AGT | agents | pass | r1 pass (data); UI later | test/agents/attribution.test.js | ed6ea70 |
+| AGT-10 | AGT | agents | pass | r1 pass (server); chip UI later | test/agents/attribution.test.js | ed6ea70 |
+| AGT-11 | AGT | agents | pass | r3 pass (0005 amendment) | test/agents/identity.test.js | ed6ea70 |
 | HIS-01 | HIS | history | open |  |  |  |
 | HIS-02 | HIS | history | open |  |  |  |
 | HIS-03 | HIS | history | open |  |  |  |
@@ -101,9 +103,9 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | REL-04 | REL | engine | building |  |  |  |
 | REL-05 | REL | engine | building |  |  |  |
 | FEEL-01 | FEEL | canvas | building |  |  |  |
-| FEEL-02 | FEEL | canvas | building |  |  |  |
-| FEEL-03 | FEEL | canvas | building |  |  |  |
-| FEEL-04 | FEEL | canvas | building |  |  |  |
+| FEEL-02 | FEEL | canvas | critic | built r1; critic running | test/15-canvas-panel.test.js | 98f301e |
+| FEEL-03 | FEEL | canvas | critic | built r1; critic running | test/14-canvas-look.test.js | 98f301e |
+| FEEL-04 | FEEL | canvas | critic | built r1; critic running | test/12-canvas-nav.test.js | 98f301e |
 | FEEL-05 | FEEL | canvas | building |  |  |  |
 | SCN-1 | SCN | whole | open |  |  |  |
 | SCN-2 | SCN | whole | open |  |  |  |
@@ -115,7 +117,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 
 | Round | Started | Lanes | Builders | Result |
 |---|---|---|---|---|
-| 1 | 2026-10-21 | files, engine, agents, canvas | Sonnet (files, agents, canvas), Codex (engine) | running |
+| 1 | 2026-10-21 | files, engine, agents, canvas | Sonnet (files, agents, canvas), Codex (engine) | agents merged (3 critic passes); others in critique |
 
 ## New dependencies
 
