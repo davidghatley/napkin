@@ -18,19 +18,34 @@ const writes = (flags) => typeof flags === 'number' ? (flags & (fs.constants.O_W
 const TARGETS = [
   ['writeFileSync', 0], ['appendFileSync', 0], ['truncateSync', 0], ['renameSync', 1], ['linkSync', 1], ['symlinkSync', 1], ['copyFileSync', 1], ['cpSync', 1],
   ['writeFile', 0], ['appendFile', 0], ['truncate', 0], ['rename', 1], ['link', 1], ['copyFile', 1], ['cp', 1],
+  ['unlinkSync', 0], ['rmSync', 0], ['unlink', 0], ['rm', 0], // deleting a component is a write too
 ];
 for (const [name, at] of TARGETS) {
   const orig = fs[name];
   if (typeof orig !== 'function') continue;
   fs[name] = function (...args) { if (isTsx(args[at])) record(name, args[at]); return orig.apply(this, args); };
 }
-for (const name of ['writeFile', 'appendFile', 'truncate', 'rename', 'link', 'copyFile', 'cp']) {
+for (const name of ['writeFile', 'appendFile', 'truncate', 'rename', 'link', 'copyFile', 'cp', 'unlink', 'rm']) {
   const at = ['rename', 'link', 'copyFile', 'cp'].includes(name) ? 1 : 0;
   const orig = fs.promises[name];
   if (typeof orig === 'function') fs.promises[name] = function (...args) { if (isTsx(args[at])) record(`promises.${name}`, args[at]); return orig.apply(this, args); };
 }
+// File descriptors opened on a .tsx: a later write through the descriptor is recorded too.
+const fds = new Map();
 const openSync = fs.openSync;
-fs.openSync = function (path, flags, ...rest) { if (isTsx(path) && writes(flags)) record('openSync', path); return openSync.call(this, path, flags, ...rest); };
+fs.openSync = function (path, flags, ...rest) {
+  if (isTsx(path) && writes(flags)) record('openSync', path);
+  const fd = openSync.call(this, path, flags, ...rest);
+  if (isTsx(path)) fds.set(fd, resolve(String(path)));
+  return fd;
+};
+for (const name of ['writeSync', 'write', 'ftruncateSync', 'ftruncate', 'fsyncSync']) {
+  const orig = fs[name];
+  if (name === 'fsyncSync') continue; // flushing is not a change
+  fs[name] = function (fd, ...rest) { if (fds.has(fd)) record(name, fds.get(fd)); return orig.call(this, fd, ...rest); };
+}
+const closeSync = fs.closeSync;
+fs.closeSync = function (fd) { fds.delete(fd); return closeSync.call(this, fd); };
 const open = fs.open;
 fs.open = function (path, flags, ...rest) { if (isTsx(path) && writes(typeof flags === 'function' ? 'r' : flags)) record('open', path); return open.call(this, path, flags, ...rest); };
 const popen = fs.promises.open;

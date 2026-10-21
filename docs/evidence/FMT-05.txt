@@ -1,2 +1,5 @@
 fuzz: 2000 edits applied; kinds {"bind":69,"set":283,"removeProp":70,"override":159,"renameVariant":96,"text":99,"insert":296,"move":102,"removeVariant":87,"cleartext":93,"renameProp":92,"unset":77,"addProp":97,"variant":92,"setDefault":85,"delete":98,"attr":105}
 ℹ duration_ms 32430.361023
+FMT-05 (store.apply, hand-formatted starts): 2000/2000 edits applied; every file valid, equal to the model, no-change save identical
+✔ FMT-05: 2000 edits through store.apply on hand-formatted files keep every file valid, equal to the model and stable (17845.395926ms)
+fuzz: 2000 edits applied; kinds {"bind":69,"set":283,"removeProp":70,"override":159,"renameVariant":96,"text":99,"insert":296,"move":102,"removeVariant":87,"cleartext":93,"renameProp":92,"unset":77,"addProp":97,"variant":92,"setDefault":85,"delete":98,"attr":105}

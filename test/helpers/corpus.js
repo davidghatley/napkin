@@ -68,7 +68,7 @@ const swap = (from, to) => (t) => { if (!t.includes(from)) throw new Error(`case
 const chain = (...fns) => (t) => fns.reduce((x, f) => f(x), t);
 export const OUT_OF_DIALECT = [
   ['hook-useState', swap("  const v = { size, state };", "  const [on] = useState(false);\n  const v = { size, state };"), 'useState'],
-  ['hook-useEffect', swap("  const v = { size, state };", "  useEffect(() => {}, []);\n  const v = { size, state };"), 'useEffect'],
+  ['forwardRef', (t) => `import { forwardRef } from 'react';\n\nexport const Button = forwardRef<HTMLButtonElement, { label?: string }>(({ label }, ref) => <button ref={ref}>{label}</button>);\n`, 'forwardRef'],
   ['hook-custom', swap("  const v = { size, state };", "  const theme = useTheme();\n  const v = { size, state };"), 'useTheme'],
   ['map', swap('{label}</span>', '{[1, 2].map((n) => <b key={n}>{n}</b>)}</span>'), 'map'],
   ['ternary-text', swap('{label}</span>', "{label ? 'a' : 'b'}</span>"), 'label ?'],
@@ -99,7 +99,10 @@ export const OUT_OF_DIALECT = [
   ['style-expression', swap("    gap: 8,", "    gap: 4 * 2,"), '4 * 2'],
   ['style-nested-object', swap("    gap: 8,", "    gap: 8,\n    ':hover': { color: 'red' },"), ':hover'],
   ['second-component', (t) => t + "\nexport function Other() {\n  return <div />;\n}\n", 'Other'],
-  ['extra-const', swap('function s(', 'const LIMIT = 3;\n\nfunction s('), 'LIMIT'],
+  ['no-base-classname', () => `export function Button({ label }: { label: string }) {
+  return <button className="btn">{label}</button>;
+}
+`, 'export function'],
   ['extra-function', swap('function s(', 'function helper() {\n  return 1;\n}\n\nfunction s('), 'helper'],
   ['enum-declaration', swap('const base:', 'enum Mode { A, B }\n\nconst base:'), 'enum Mode'],
   ['props-not-destructured', swap("{ label = 'Button', size = 'md', state = 'default' }: ButtonProps", 'props: ButtonProps'), 'props: ButtonProps'],

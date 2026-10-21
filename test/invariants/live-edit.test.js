@@ -50,3 +50,45 @@ test('FMT-07: hand edits show up as revisions within 1 s while canvas edits keep
     assert.ok(max <= 1000, `a hand edit took ${max} ms to show`);
   } finally { canvas.close(); await server.stop(); }
 });
+
+// The narrow race: a hand edit lands after the store re-read the file but before its rename. The test plays the editor from
+// inside the first fsync of the temp file (which happens in exactly that window).
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
+import { openStore } from '../../src/store.js';
+
+async function withEditorInTheWindow(file, handEdit, run) {
+  const realFsync = fs.fsyncSync, realWrite = fs.writeFileSync;
+  let fired = 0;
+  fs.fsyncSync = function (...a) { if (!fired++) realWrite(file, handEdit); return realFsync.apply(this, a); };
+  syncBuiltinESMExports();
+  try { return await run(); } finally { fs.fsyncSync = realFsync; syncBuiltinESMExports(); }
+}
+
+test('FMT-07: a hand edit that lands between our last look and the rename is not overwritten', async () => {
+  const { file } = tempRepo(['Button']);
+  const store = await openStore(file);
+  try {
+    const { revision } = await store.read();
+    const base = readFileSync(file, 'utf8');
+    const hand = base.replace(/^(\s+fontSize: )\d+,$/m, '$199,');
+    const r = await withEditorInTheWindow(file, hand, () => store.apply({ baseRevision: revision, edits: [{ op: 'set', path: 'label.fontWeight', value: 800 }], by: 'canvas' }));
+    assert.equal(r.ok, true, r.error);
+    const doc = readComponent(readFileSync(file, 'utf8')).doc;
+    assert.equal(doc.root.style.fontSize, 99, 'the hand edit survived');
+    assert.equal(doc.root.children[0].style.fontWeight, 800, 'the canvas edit landed on top of it');
+  } finally { await store.close(); }
+});
+
+test('FMT-07: the same race on the same property: the canvas edit is refused as stale and the hand edit stays', async () => {
+  const { file } = tempRepo(['Button']);
+  const store = await openStore(file);
+  try {
+    const { revision } = await store.read();
+    const hand = readFileSync(file, 'utf8').replace(/^(\s+fontSize: )\d+,$/m, '$199,');
+    const r = await withEditorInTheWindow(file, hand, () => store.apply({ baseRevision: revision, edits: [{ op: 'set', path: 'root.fontSize', value: 33 }], by: 'canvas' }));
+    assert.equal(r.ok, false);
+    assert.match(r.error, /^stale revision/);
+    assert.equal(readComponent(readFileSync(file, 'utf8')).doc.root.style.fontSize, 99);
+  } finally { await store.close(); }
+});

@@ -13,7 +13,8 @@ function fsyncDir(dir) {
 
 // writeAtomic(file, text)                 replace (or create) the file
 // writeAtomic(file, text, { exclusive })  create only; throws EEXIST when the file is already there
-export function writeAtomic(file, data, { exclusive = false } = {}) {
+// { check }: called after the temp file is on disk and just before it replaces the target; if it throws, nothing is replaced.
+export function writeAtomic(file, data, { exclusive = false, check } = {}) {
   const tmp = tmpName(file);
   let mode = 0o644;
   try { mode = statSync(file).mode & 0o777; } catch { /* new file */ }
@@ -25,6 +26,7 @@ export function writeAtomic(file, data, { exclusive = false } = {}) {
       while (off < buf.length) off += writeSync(fd, buf, off, buf.length - off);
       fsyncSync(fd);
     } finally { closeSync(fd); }
+    check?.();
     if (exclusive) linkSync(tmp, file); // fails with EEXIST instead of replacing
     else renameSync(tmp, file);
   } finally {

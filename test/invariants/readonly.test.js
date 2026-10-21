@@ -28,6 +28,7 @@ test('INV-04: 50 out-of-dialect files: read-only with a line number, every write
       try {
         const r = await store.read();
         assert.match(r.readOnly || '', /^line \d+: /, `${c.name}: reason with a line`);
+        assert.doesNotMatch(r.readOnly, /Declaration|Expression|Statement\b|ObjectProperty|JSX[A-Z]|\bAST\b|\btype\b.*\bnode\b/, `${c.name}: the reason is in plain words: ${r.readOnly}`);
         const line = Number(r.readOnly.match(/^line (\d+)/)[1]);
         const lines = c.text.split('\n');
         if (c.token) assert.ok(lines[line - 1]?.includes(c.token), `${c.name}: line ${line} should contain ${JSON.stringify(c.token)} but is ${JSON.stringify(lines[line - 1])}`);

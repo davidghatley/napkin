@@ -52,6 +52,23 @@ const declInit = (stmt) => {
   return decl.id.type === 'Identifier' ? { name: decl.id.name, init: decl.init, decl } : null;
 };
 
+// What an unsupported top-level statement is, in plain words.
+function describe(stmt, d) {
+  const t = d?.type || stmt.type;
+  if (t === 'VariableDeclaration') {
+    const init = d.declarations?.[0]?.init;
+    const callee = init?.type === 'CallExpression' ? (init.callee.name || init.callee.property?.name) : null;
+    if (callee === 'forwardRef' || callee === 'memo') return `a component wrapped in ${callee}(...)`;
+    if (init?.type === 'ArrowFunctionExpression' || init?.type === 'FunctionExpression') return 'a component written as an arrow function or function expression';
+    return `an extra variable (\`${d.declarations?.[0]?.id?.name ?? '...'}\`)`;
+  }
+  return ({
+    FunctionDeclaration: 'an extra function', ClassDeclaration: 'a class', ExportDefaultDeclaration: 'a default export',
+    TSEnumDeclaration: 'an enum', ExpressionStatement: 'a statement that runs code', ExportAllDeclaration: 'an `export *`',
+    ExportNamedDeclaration: 'an export', TSModuleDeclaration: 'a namespace',
+  })[t] || 'this statement';
+}
+
 // Find the dialect's parts in the program. Shared with the writer.
 export function locate(ast) {
   const parts = { imports: [] };
@@ -67,11 +84,12 @@ export function locate(ast) {
       if (parts.fn) throw new DialectError(stmt, 'only one exported component per file');
       parts.fn = d; parts.fnStmt = stmt; continue; // recast leaves loc empty on the declaration; the statement carries the line
     }
-    throw new DialectError(stmt, `napkin can't edit this statement (${d?.type || stmt.type})`);
+    throw new DialectError(stmt, `${describe(stmt, d)} is outside the napkin format, so this file is read-only (napkin edits \`export function Name({ props }: NameProps)\` components, see docs/dialect.md)`);
   }
-  if (!parts.fn) throw new DialectError(null, 'no exported component function (export function Name(...))');
-  if (!parts.base) throw new DialectError(null, 'no `const base = { ... }` style object');
-  if (!parts.helper) throw new DialectError(null, 'no style helper `function s(node, v)`');
+  const anchor = parts.fnStmt || ast.program.body.find((x) => x.type !== 'ImportDeclaration') || null; // the line to point at
+  if (!parts.fn) throw new DialectError(anchor, 'there is no `export function Name(...)` component here, so this file is read-only (see docs/dialect.md)');
+  if (!parts.base) throw new DialectError(anchor, 'this component does not keep its styles in a `const base = { ... }` object (it may use className, styled-components or inline style), so this file is read-only (see docs/dialect.md)');
+  if (!parts.helper) throw new DialectError(anchor, 'there is no style helper `function s(node, v)` in this file, so it is read-only (see docs/dialect.md)');
   if (parts.fn.async || parts.fn.generator || parts.fn.typeParameters || parts.fn.returnType) throw new DialectError(parts.fnStmt, 'the component must be a plain function (not async, a generator, generic or with a return type)');
   const body = parts.fn.body.body;
   for (const st of body) {
@@ -166,7 +184,7 @@ function readNode(el, props, seen) {
       if (node.textProp || node.text !== undefined) throw new DialectError(c, 'one text per element');
       node.textProp = x.name;
     } else if (c.type === 'JSXElement') node.children.push(readNode(c, props, seen));
-    else throw new DialectError(c, `${c.type} is not supported inside elements`);
+    else throw new DialectError(c, `${({ JSXSpreadChild: 'a spread child', JSXFragment: 'a fragment (<>...</>)' })[c.type] || 'this kind of child'} is not supported inside elements`);
   }
   if ((node.text !== undefined || node.textProp) && node.children.length) throw new DialectError(el, `${node.id} mixes text and elements; wrap the text in its own element`);
   return node;
@@ -215,6 +233,6 @@ export function readComponent(text) {
     const vNames = parts.vObj?.type === 'ObjectExpression' ? parts.vObj.properties.map((p) => keyName(p.key)) : null;
     if (!vNames || vNames.join() !== axisNames.join()) throw new DialectError(parts.vObj || parts.fnStmt, `const v must list the variant axes in order: { ${axisNames.join(', ')} }`);
   }
-  if (axisNames.length && !parts.variants) throw new DialectError(null, 'a component with variant axes needs `const variants = { ... }`');
+  if (axisNames.length && !parts.variants) throw new DialectError(parts.fnStmt, 'a component with variant axes needs `const variants = { ... }`');
   return { doc: { format: 'napkin/1', name: parts.fn.id.name, props, root, variants }, ast, parts };
 }

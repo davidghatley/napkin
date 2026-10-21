@@ -67,7 +67,8 @@ export function Badge({ label = 'New', tone = 'info' }: BadgeProps) {
 | 9 | Body | exactly `const v = { <axes in prop order> };` and one `return <jsx>;`. Nothing else (no hooks). | `readonly.test.js` |
 | 10 | Element | tags: `div span p button img a section article header footer nav ul li h1 h2 h3 h4 label strong em small`. Attributes: `data-n="<id>"` (unique), `style={s('<id>', v)}` (same id), and for `img` `src`/`alt` string literals. No other attribute, no spread. | `readonly.test.js` |
 | 11 | Content | an element holds child elements **or** one text: plain text, `{'text'}`, or `{stringProp}` (a "setting"). No mixing, no expressions. | `6-tsx-format.test.js` |
-| 12 | Sidecar | `<Name>.napkin.json`: `id`, `canvas {x, y}`, optional `preview`; keys sorted. Position changes touch only this file. | `format.test.js` (FMT-06) |
+| 12 | Empty forms | a component with no variant axes still has `const v = {};` and `const variants = {};` (an empty object, never missing); with no props the list is `{}: NameProps` and the interface `{}`. napkin writes and reads these exactly so; leaving either out makes the file read-only. | `noop.test.js`, `readonly.test.js` |
+| 13 | Sidecar | `<Name>.napkin.json`: `id`, `canvas {x, y}`, optional `preview`; keys sorted. Position changes touch only this file. | `format.test.js` (FMT-06) |
 
 Style property names must exist in React's `CSSProperties`, and numbers only go on properties that take them (otherwise `tsc --strict` would fail); `src/css-props.js` is generated from the types by `tools/gen-css-props.mjs`.
 

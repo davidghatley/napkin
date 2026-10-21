@@ -75,19 +75,25 @@ sneaky();
 appendFileSync(${JSON.stringify(join(dir, 'B.tsx'))}, 'y');
 const fd = fs.openSync(${JSON.stringify(join(dir, 'C.tsx'))}, 'w'); fs.closeSync(fd);
 fs.renameSync(${JSON.stringify(join(dir, 'C.tsx'))}, ${JSON.stringify(join(dir, 'D.tsx'))});
+const fd2 = fs.openSync(${JSON.stringify(join(dir, 'D.tsx'))}, 'r+'); fs.writeSync(fd2, 'q'); fs.closeSync(fd2);
+fs.unlinkSync(${JSON.stringify(join(dir, 'B.tsx'))});
+fs.rmSync(${JSON.stringify(join(dir, 'A.tsx'))});
 await fs.promises.writeFile(${JSON.stringify(join(dir, 'E.tsx'))}, 'z');
 `);
   execFileSync(process.execPath, ['--import', SPY, script], { env: { ...process.env, NAPKIN_SPY_LOG: logFile } });
   const entries = readLog(logFile);
-  for (const fn of ['writeFileSync', 'appendFileSync', 'openSync', 'renameSync', 'promises.writeFile']) assert.ok(entries.some((e) => e.fn === fn), `the spy saw ${fn}`);
+  for (const fn of ['writeFileSync', 'appendFileSync', 'openSync', 'renameSync', 'promises.writeFile', 'writeSync', 'unlinkSync', 'rmSync']) assert.ok(entries.some((e) => e.fn === fn), `the spy saw ${fn}`);
   assert.equal(new Set(entries.map((e) => e.path.split('/').pop())).size, 5, 'A.tsx B.tsx C.tsx D.tsx E.tsx');
+  assert.ok(entries.every((e) => classify(e) === 'outside'));
   assert.ok(entries.every((e) => classify(e) === 'outside'));
 });
 
 test('INV-05: static check: only src/atomic.js writes files; everything else in src/ calls writeAtomic or createComponentFile', () => {
-  const WRITERS = /\b(writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|createWriteStream|cpSync|truncateSync|linkSync|symlinkSync)\s*\(/;
+  const WRITERS = /\b(writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|createWriteStream|cpSync|truncateSync|linkSync|symlinkSync|unlinkSync|unlink|rmSync|rm|rmdirSync|writeSync|ftruncateSync)\s*\(/;
+  // atomic.js is the only module that writes component or sidecar files; lock.js only creates and removes the lock file under .napkin/.
+  const ALLOWED = ['src/atomic.js', 'src/lock.js'];
   const offenders = [];
-  const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith('.js') && !p.endsWith('src/atomic.js')) readFileSync(p, 'utf8').split('\n').forEach((l, i) => { if (WRITERS.test(l.replace(/\/\/.*/, ''))) offenders.push(`${p.slice(ROOT.length + 1)}:${i + 1}: ${l.trim()}`); }); } };
+  const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith('.js') && !ALLOWED.some((a) => p.endsWith(a))) readFileSync(p, 'utf8').split('\n').forEach((l, i) => { if (WRITERS.test(l.replace(/\/\/.*/, ''))) offenders.push(`${p.slice(ROOT.length + 1)}:${i + 1}: ${l.trim()}`); }); } };
   walk(join(ROOT, 'src'));
   assert.deepEqual(offenders, []);
 });

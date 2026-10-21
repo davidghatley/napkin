@@ -68,8 +68,17 @@ export async function openStore(file) {
     return null;
   }
 
+  // The file changed on disk between our last look and the rename: nothing was replaced; look again and redo the batch.
+  class Raced extends Error {}
+  function applyNow(req) {
+    for (let i = 0; i < 5; i++) {
+      try { return applyOnce(req); }
+      catch (e) { if (!(e instanceof Raced)) throw e; }
+    }
+    return { ok: false, error: 'stale revision: the file kept changing on disk while saving; read it again and retry' };
+  }
   // dryRun: validate and produce the would-be file without writing or committing (F19).
-  function applyNow({ baseRevision, edits, by = 'unknown', origin, dryRun = false }) {
+  function applyOnce({ baseRevision, edits, by = 'unknown', origin, dryRun = false }) {
     // A hand edit that landed a moment ago must not be overwritten: take it in before judging this batch.
     const disk = absorbDisk();
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
@@ -92,7 +101,10 @@ export async function openStore(file) {
     try { saved = codec.save(state, doc, next); }
     catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }
     if (dryRun) return { ok: true, dryRun: true, revision, doc: next, source: saved.text };
-    if (saved.text !== text) writeFileAtomic(file, saved.text); // a batch that changes nothing leaves the file (and its mtime) alone
+    if (saved.text !== text) {
+      // a hand edit may land after our last look at the file: check again just before the rename, and start over if it did
+      writeFileAtomic(file, saved.text, { check: () => { let now; try { now = readFileSync(file, 'utf8'); } catch { return; } if (now !== text) throw new Raced(); } });
+    } // a batch that changes nothing leaves the file (and its mtime) alone
     text = saved.text; state = saved.state;
     commit(next, keys, by, edits, origin);
     return { ok: true, revision, doc };
