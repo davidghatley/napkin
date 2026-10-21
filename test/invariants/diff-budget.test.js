@@ -1,0 +1,143 @@
+// INV-03 + FMT-02: every edit type stays within its diff budget, measured with git diff --numstat on a real repo.
+//   - a table of named cases with exact expectations (the numbers in docs/dialect.md);
+//   - a fuzz where every op's numstat is checked against test/helpers/budget.js (OPS=200 by default, OPS=1000 for more);
+//   - moving a component on the canvas changes the sidecar only.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { openStore } from '../../src/store.js';
+import { index } from '../../src/model.js';
+import { mkdtempSync, mkdirSync, copyFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, basename } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { tempRepo } from '../helpers/harness.js';
+import { makeCorpus } from '../helpers/corpus.js';
+import { rng, nextValidEdit } from '../helpers/fuzz.js';
+import { budget, signatureLines } from '../helpers/budget.js';
+
+// { added, removed } for one file since the last commit; the commit is then made so the next op is measured alone.
+function measure(git, rel) {
+  const out = git('diff', '--numstat').trim().split('\n').filter(Boolean).map((l) => l.split('\t'));
+  const row = (f) => { const r = out.find((x) => x[2] === f); return r ? { add: Number(r[0]), del: Number(r[1]) } : { add: 0, del: 0 }; };
+  const res = { file: row(rel), others: out.filter((x) => x[2] !== rel).map((x) => x[2]) };
+  git('add', rel); git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'op', '--allow-empty');
+  return res;
+}
+
+const TABLE = [
+  // [name, fixture, edits, expected { add, del }]
+  ['set style: change a value', 'Button', [{ op: 'set', path: 'root.borderRadius', value: 12 }], [1, 1]],
+  ['set style: add a property to a styled node', 'Button', [{ op: 'set', path: 'label.color', value: '#fff' }], [1, 0]],
+  ['set style: remove a property', 'Button', [{ op: 'set', path: 'root.cursor', value: null }], [0, 1]],
+  ['set text', 'Card', [{ op: 'set', path: 'body.text', value: 'New body copy' }], [1, 1]],
+  ['set attribute', 'Card', [{ op: 'insert', parent: 'card', index: 0, node: { id: 'pic', tag: 'img' } }, { op: 'set', path: 'pic.@src', value: '/a.png' }], [1, 0]],
+  ['setDefault', 'Button', [{ op: 'setDefault', name: 'label', value: 'Buy now' }], [1, 1]],
+  ['addVariant: a value on an existing axis', 'Button', [{ op: 'addVariant', axis: 'size', value: 'xl' }], [1, 1]],
+  ['addVariant + override: the union line and the new value block', 'Button', [{ op: 'addVariant', axis: 'size', value: 'xl' }, { op: 'set', path: 'root.padding', value: '14px 28px', variant: { size: 'xl' } }], [1 + 5, 1]],
+  ['override: change an existing override', 'Button', [{ op: 'set', path: 'root.padding', value: '2px 6px', variant: { size: 'sm' } }], [1, 1]],
+  ['override: a new property in an existing node block', 'Button', [{ op: 'set', path: 'root.color', value: '#fff', variant: { size: 'sm' } }], [1, 0]],
+  ['override: a new node block in an existing value', 'Button', [{ op: 'set', path: 'label.color', value: '#fff', variant: { size: 'sm' } }], [3, 0]],
+  ['override: a new value block', 'Button', [{ op: 'addVariant', axis: 'size', value: 'xs' }, { op: 'set', path: 'root.gap', value: 2, variant: { size: 'xs' } }], [1 + 5, 1]],
+  ['override: remove one of several properties', 'Button', [{ op: 'set', path: 'root.fontSize', value: null, variant: { size: 'sm' } }], [0, 1]],
+  ['move a node (its JSX line)', 'Card', [{ op: 'move', id: 'body', parent: 'card', index: 0 }], [1, 1]],
+];
+
+for (const [name, fixture, edits, [add, del]] of TABLE) {
+  test(`FMT-02 budget: ${name}: +${add} / -${del}`, async () => {
+    const { file, git } = tempRepo([fixture]);
+    const rel = `components/${fixture}.tsx`;
+    const store = await openStore(file);
+    try {
+      const { revision } = await store.read();
+      const r = await store.apply({ baseRevision: revision, edits, by: 'test' });
+      assert.equal(r.ok, true, r.error);
+      const m = measure(git, rel);
+      assert.deepEqual(m.file, { add, del });
+      assert.deepEqual(m.others, [], 'only the component file changed');
+    } finally { await store.close(); }
+  });
+}
+
+test('FMT-02 budget: moving a component on the canvas changes the sidecar only', async () => {
+  const { file, git, dir } = tempRepo(['Card']);
+  const store = await openStore(file);
+  try {
+    git('add', 'components/Card.napkin.json'); git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'sidecar');
+    // first open writes the sidecar once; the .tsx is untouched
+    const tsx = readFileSync(file, 'utf8');
+    const r = await store.moveCanvas(120.456, -40);
+    assert.deepEqual(r, { ok: true, canvas: { x: 120.46, y: -40 } });
+    const out = git('diff', '--numstat').trim().split('\n').map((l) => l.split('\t'));
+    assert.deepEqual(out.map((x) => x[2]), ['components/Card.napkin.json']);
+    assert.ok(Number(out[0][0]) <= 2 && Number(out[0][1]) <= 2, `sidecar diff ${out[0]}`);
+    assert.equal(readFileSync(file, 'utf8'), tsx);
+    assert.equal((await store.read()).revision, (await store.read()).revision);
+    const bad = await store.moveCanvas('x', 1);
+    assert.equal(bad.ok, false);
+  } finally { await store.close(); }
+});
+
+const OPS = Number(process.env.OPS || 200);
+test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, async () => {
+  const rand = rng(1021);
+  const { file, git } = tempRepo(['Button']);
+  const rel = 'components/Button.tsx';
+  const store = await openStore(file);
+  const over = [];
+  const per = {};
+  try {
+    for (let n = 0, done = 0; done < OPS && n < OPS * 20; n++) {
+      const { doc, revision, source: srcBefore } = await store.read();
+      const r = nextValidEdit(doc, rand, n);
+      if (!r) continue;
+      const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
+      assert.equal(res.ok, true, `${JSON.stringify(r.edit)}: ${res.error}`);
+      const m = measure(git, rel);
+      const b = budget(r.edit, doc, res.doc, signatureLines(srcBefore), signatureLines((await store.read()).source));
+      const stat = (per[r.edit.op + (r.edit.variant ? '+variant' : '')] ??= { n: 0, maxAdd: 0, maxDel: 0, budgetAdd: 0, budgetDel: 0 });
+      stat.n++; stat.maxAdd = Math.max(stat.maxAdd, m.file.add); stat.maxDel = Math.max(stat.maxDel, m.file.del);
+      stat.budgetAdd = Math.max(stat.budgetAdd, b.add); stat.budgetDel = Math.max(stat.budgetDel, b.del);
+      if (m.file.add > b.add || m.file.del > b.del || m.others.length) over.push({ n: done, edit: r.edit, got: m.file, budget: b, others: m.others });
+      done++;
+    }
+    console.log(`INV-03: ${OPS} ops; over budget: ${over.length}`);
+    console.log(JSON.stringify(per, null, 1));
+    if (over.length) console.log(JSON.stringify(over.slice(0, 12)));
+    assert.deepEqual(over.slice(0, 5), [], `${over.length} ops over budget`);
+  } finally { await store.close(); }
+});
+
+// The same budgets on files a person formatted: tabs, 4 spaces, CRLF, double quotes, comments, blank lines.
+// (Files without trailing commas or interface semicolons are left out: adding a line there also touches its neighbour.)
+test(`INV-03: budgets also hold on hand-formatted files (${Math.min(OPS, 120)} ops over 12 corpus files)`, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-hand-'));
+  mkdirSync(join(dir, 'components'));
+  const files = makeCorpus(join(dir, 'components'), 12, 777, { skip: ['noTrailingCommas', 'semicolonlessInterface'] });
+  const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' });
+  git('init', '-q'); git('add', 'components');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'corpus');
+  const rand = rng(77);
+  const over = [];
+  let ops = 0;
+  for (const file of files) {
+    const rel = `components/${basename(file)}`;
+    const store = await openStore(file);
+    try {
+      for (let n = 0, done = 0; done < Math.min(OPS, 120) / 12 && n < 400; n++) {
+        const { doc, revision, source } = await store.read();
+        const r = nextValidEdit(doc, rand, n);
+        if (!r) continue;
+        const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
+        assert.equal(res.ok, true, `${rel} ${JSON.stringify(r.edit)}: ${res.error}`);
+        const m = measure(git, rel);
+        const b = budget(r.edit, doc, res.doc, signatureLines(source), signatureLines((await store.read()).source));
+        if (m.file.add > b.add || m.file.del > b.del) over.push({ rel, edit: r.edit, got: m.file, budget: b });
+        done++; ops++;
+      }
+    } finally { await store.close(); }
+  }
+  console.log(`INV-03 (hand-formatted): ${ops} ops; over budget: ${over.length}`);
+  if (over.length) console.log(JSON.stringify(over.slice(0, 8)));
+  assert.deepEqual(over.slice(0, 5), []);
+});

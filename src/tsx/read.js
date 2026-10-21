@@ -58,20 +58,21 @@ export function locate(ast) {
   for (const stmt of ast.program.body) {
     if (stmt.type === 'ImportDeclaration') { parts.imports.push(stmt); continue; }
     const d = stmt.type === 'ExportNamedDeclaration' ? stmt.declaration : stmt;
-    if (d?.type === 'TSInterfaceDeclaration') { if (parts.iface) throw new DialectError(d, 'only one props interface'); parts.iface = d; continue; }
+    if (d?.type === 'TSInterfaceDeclaration') { if (parts.iface) throw new DialectError(stmt, 'only one props interface'); parts.iface = d; continue; }
     if (d?.type === 'TSTypeAliasDeclaration') continue;
     const v = declInit(stmt);
     if (v && (v.name === 'base' || v.name === 'variants')) { parts[v.name] = v.init; continue; }
-    if (d?.type === 'FunctionDeclaration' && d.id?.name === 's') { parts.helper = d; continue; }
+    if (d?.type === 'FunctionDeclaration' && d.id?.name === 's') { parts.helper = d; parts.helperStmt = stmt; continue; }
     if (d?.type === 'FunctionDeclaration' && stmt.type === 'ExportNamedDeclaration' && /^[A-Z]/.test(d.id?.name || '')) {
-      if (parts.fn) throw new DialectError(d, 'only one exported component per file');
-      parts.fn = d; continue;
+      if (parts.fn) throw new DialectError(stmt, 'only one exported component per file');
+      parts.fn = d; parts.fnStmt = stmt; continue; // recast leaves loc empty on the declaration; the statement carries the line
     }
     throw new DialectError(stmt, `napkin can't edit this statement (${d?.type || stmt.type})`);
   }
   if (!parts.fn) throw new DialectError(null, 'no exported component function (export function Name(...))');
   if (!parts.base) throw new DialectError(null, 'no `const base = { ... }` style object');
   if (!parts.helper) throw new DialectError(null, 'no style helper `function s(node, v)`');
+  if (parts.fn.async || parts.fn.generator || parts.fn.typeParameters || parts.fn.returnType) throw new DialectError(parts.fnStmt, 'the component must be a plain function (not async, a generator, generic or with a return type)');
   const body = parts.fn.body.body;
   for (const st of body) {
     const v = declInit(st);
@@ -79,13 +80,13 @@ export function locate(ast) {
     if (st.type === 'ReturnStatement') { parts.ret = st; continue; }
     throw new DialectError(st, 'the component body may only define `v` and return JSX');
   }
-  if (!parts.ret) throw new DialectError(parts.fn, 'the component must return JSX');
+  if (!parts.ret) throw new DialectError(parts.fnStmt, 'the component must return JSX');
   let jsx = parts.ret.argument;
   while (jsx?.type === 'ParenthesizedExpression') jsx = jsx.expression;
   if (jsx?.type !== 'JSXElement') throw new DialectError(parts.ret, 'the component must return one JSX element');
   parts.jsx = jsx;
   const param = parts.fn.params[0];
-  if (parts.fn.params.length > 1 || (param && param.type !== 'ObjectPattern')) throw new DialectError(parts.fn, 'props must be destructured: ({ a, b = 1 }: Props)');
+  if (parts.fn.params.length > 1 || (param && param.type !== 'ObjectPattern')) throw new DialectError(parts.fnStmt, 'props must be destructured: ({ a, b = 1 }: Props)');
   parts.pattern = param || null;
   return parts;
 }
@@ -97,6 +98,7 @@ function readProps(parts) {
     if (p.type !== 'ObjectProperty' || p.computed) throw new DialectError(p, 'props: only plain names and defaults');
     const name = keyName(p.key);
     if (p.value.type === 'AssignmentPattern') {
+      if (p.value.left.type !== 'Identifier' || p.value.left.name !== name) throw new DialectError(p, 'props: no renaming');
       const val = literalValue(p.value.right);
       if (val === undefined) throw new DialectError(p.value.right, `default for ${name} must be a literal`);
       defaults.set(name, val);
@@ -187,10 +189,19 @@ function readVariants(obj, props, ids) {
   return out;
 }
 
+// The style helper is part of the contract between the file and napkin: it must be exactly the one napkin writes
+// (whitespace aside), or the model napkin shows would not be what the component renders.
+const HELPER = 'functions(node:string,v:Record<string,string>):CSSProperties{constout:CSSProperties={...base[node]};for(constaxisinv)Object.assign(out,variants[axis]?.[v[axis]]?.[node]);returnout;}';
+function checkHelper(parts) {
+  const code = recast.print(parts.helper).code.replace(/\/\/.*|\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, '');
+  if (code !== HELPER) throw new DialectError(parts.helperStmt, 'the style helper `s` must be exactly the one napkin writes (see docs/dialect.md)');
+}
+
 // text -> { doc, ast, parts }. Throws DialectError (read-only) or SyntaxError.
 export function readComponent(text) {
   const ast = parseAst(text);
   const parts = locate(ast);
+  checkHelper(parts);
   const props = readProps(parts);
   const seen = new Set();
   const root = readNode(parts.jsx, props, seen);
@@ -201,7 +212,7 @@ export function readComponent(text) {
   const axisNames = props.filter((p) => p.type === 'enum').map((p) => p.name);
   if (axisNames.length) {
     const vNames = parts.vObj?.type === 'ObjectExpression' ? parts.vObj.properties.map((p) => keyName(p.key)) : null;
-    if (!vNames || vNames.join() !== axisNames.join()) throw new DialectError(parts.vObj || parts.fn, `const v must list the variant axes in order: { ${axisNames.join(', ')} }`);
+    if (!vNames || vNames.join() !== axisNames.join()) throw new DialectError(parts.vObj || parts.fnStmt, `const v must list the variant axes in order: { ${axisNames.join(', ')} }`);
   }
   if (axisNames.length && !parts.variants) throw new DialectError(null, 'a component with variant axes needs `const variants = { ... }`');
   return { doc: { format: 'napkin/1', name: parts.fn.id.name, props, root, variants }, ast, parts };

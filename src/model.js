@@ -173,7 +173,7 @@ export function applyEdits(doc, edits) {
           if (e.variant) throw new EditError(i, 'text cannot differ per variant; make it a setting instead');
           if (node.children.length) throw new EditError(i, `"${id}" has child elements, so it cannot hold text`);
           if (VOID.has(node.tag)) throw new EditError(i, `<${node.tag}> cannot hold text`);
-          if (e.value === null) { delete node.text; delete node.textProp; break; }
+          if (e.value === null || e.value === '') { delete node.text; delete node.textProp; break; } // empty text is no text: the file can't tell them apart
           checkText(i, e.value);
           delete node.textProp; node.text = e.value;
           break;
@@ -218,7 +218,7 @@ export function applyEdits(doc, edits) {
         if (!TAGS.has(n.tag)) throw new EditError(i, `tag "${n.tag}" is not supported`);
         const node = { id: n.id, tag: n.tag, style: {}, children: [] };
         for (const [k, v] of Object.entries(n.style || {})) { if (!CSS_PROP.test(k)) throw new EditError(i, `bad property "${k}"`); checkValue(i, `${n.id}.${k}`, v); node.style[k] = v; }
-        if (n.text !== undefined) { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); node.text = n.text; }
+        if (n.text !== undefined && n.text !== '') { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); node.text = n.text; }
         for (const [k, v] of Object.entries(n.attrs || {})) { if (!ATTRS.includes(k)) throw new EditError(i, `unknown attribute "${k}"`); checkText(i, v); (node.attrs ??= {})[k] = v; }
         const at = e.index ?? parent.children.length;
         if (!Number.isInteger(at) || at < 0 || at > parent.children.length) throw new EditError(i, `bad index ${e.index}`);
