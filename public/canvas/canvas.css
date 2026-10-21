@@ -36,3 +36,35 @@ input:disabled { opacity: .5; }
 #log li { border-top: 1px dashed var(--grid); padding: 2px 0; }
 .by-agent { color: #2d6a4f; } .by-canvas { color: var(--accent); } .by-file { color: #5a4fcf; }
 #error { color: var(--accent); min-height: 1.4em; margin: 0; }
+
+/* Panel (M3) */
+#panel .psec { display: grid; gap: 6px; padding-top: 10px; border-top: 2px solid var(--grid); }
+#panel .row { display: grid; grid-template-columns: 96px 1fr auto; gap: 2px 6px; align-items: center; }
+#panel .row label { font: 12px/1.2 ui-monospace, monospace; font-weight: 400; }
+#panel .row .field-error, #panel .row button { grid-column: 1 / -1; }
+#panel .row .dot { grid-column: 3; grid-row: 1; }
+#panel .row:has(.dot) input { grid-column: 2; }
+#panel .row.overridden input { border-color: var(--select); }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--select); display: inline-block; }
+#panel input, #panel select { min-width: 0; font-size: 13px; padding: 4px 6px; }
+#panel select { font: 13px ui-monospace, monospace; border: 2px solid var(--ink); border-radius: 6px; background: #fff; color: var(--ink); padding: 4px; }
+#panel input[type=checkbox], #panel input[type=radio] { width: auto; }
+#panel fieldset.target { border: 2px solid var(--grid); border-radius: 6px; display: grid; gap: 4px; margin: 0; padding: 6px 10px 8px; }
+#panel fieldset legend { font: 600 12px ui-monospace, monospace; }
+#panel label.radio { display: flex; gap: 6px; align-items: center; font-weight: 400; }
+#panel button { font: 12px ui-monospace, monospace; padding: 4px 8px; border: 2px solid var(--ink); border-radius: 6px; background: #fffdf7; color: var(--ink); cursor: pointer; justify-self: start; }
+#panel button:hover:not(:disabled) { background: var(--ink); color: #fffdf7; }
+#panel button:focus-visible, #panel select:focus-visible { outline: 3px solid var(--accent); outline-offset: 1px; }
+#panel button:disabled { opacity: .45; cursor: not-allowed; }
+#panel button.small { padding: 1px 6px; }
+#panel form.inline { display: grid; gap: 4px; padding: 8px; border: 2px dashed var(--ink); border-radius: 6px; }
+#panel form.inline label { font: 12px ui-monospace, monospace; font-weight: 400; }
+#panel ul.plain { display: grid; gap: 6px; }
+#panel ul.plain li { display: block; border: 0; }
+#panel ul.chips { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+#panel ul.chips li { display: flex; gap: 4px; align-items: center; border: 1px solid var(--grid); border-radius: 6px; padding: 2px 6px; }
+#panel .prop { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+#panel .badge { font-size: 10px; padding: 2px 4px; }
+#panel .axis h3 { margin: 0; font: 600 13px ui-monospace, monospace; }
+#panel .mono, #panel code { font: 12px ui-monospace, monospace; }
+.field-error { margin: 0; padding: 4px 8px; border-left: 4px solid var(--accent); background: #c8553d1a; font: 12px/1.4 ui-monospace, monospace; color: #8a2d1a; }
