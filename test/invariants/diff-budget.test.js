@@ -4,7 +4,7 @@
 //   - moving a component on the canvas changes the sidecar only.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { openStore } from '../../src/store.js';
 import { index } from '../../src/model.js';
 import { mkdtempSync, mkdirSync, copyFileSync } from 'node:fs';
@@ -82,6 +82,31 @@ test('FMT-02 budget: moving a component on the canvas changes the sidecar only',
   } finally { await store.close(); }
 });
 
+// Comments and blank lines a person left survive every edit (the critic's four shapes).
+test('FMT-02: comments and blank lines survive edits: trailing comment, blank-line group, JSX comment, comment line', async () => {
+  const CASES = {
+    trailing: [(t) => t.replace("padding: '16px',", "padding: '16px', // roomy"), { op: 'set', path: 'card.padding', value: '20px' }, [1, 1], ['// roomy']],
+    blank: [(t) => t.replace("padding: '16px',\n", "padding: '16px',\n\n\n"), { op: 'set', path: 'card.padding', value: '20px' }, [1, 1], ["\n\n\n"]],
+    jsxcomment: [(t) => t.replace('      <div data-n="image"', '      {/* hero */}\n      <div data-n="image"'), { op: 'set', path: 'title.text', value: 'Hello' }, [1, 1], ['{/* hero */}']],
+    linecomment: [(t) => t.replace("    gap: '12px',", "    // spacing\n    gap: '12px',"), { op: 'set', path: 'card.gap', value: '20px' }, [1, 1], ['// spacing']],
+    insertBeside: [(t) => t.replace('      <div data-n="image"', '      {/* hero */}\n      <div data-n="image"'), { op: 'insert', parent: 'card', index: 1, node: { id: 'note', tag: 'small' } }, [1, 0], ['{/* hero */}']],
+    deleteBeside: [(t) => t.replace('      <h3 data-n="title"', '      {/* title next */}\n      <h3 data-n="title"'), { op: 'delete', id: 'image' }, [0, 6], ['{/* title next */}']],
+  };
+  for (const [name, [edit, op, [add, del], keep]] of Object.entries(CASES)) {
+    const { file, git } = tempRepo(['Card']);
+    writeFileSync(file, edit(readFileSync(file, 'utf8')));
+    git('add', '-A'); git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'hand');
+    const store = await openStore(file);
+    try {
+      const { revision } = await store.read();
+      const r = await store.apply({ baseRevision: revision, edits: [op], by: 'test' });
+      assert.equal(r.ok, true, r.error);
+      assert.deepEqual(measure(git, 'components/Card.tsx').file, { add, del }, name);
+      for (const k of keep) assert.ok(readFileSync(file, 'utf8').includes(k), `${name}: ${JSON.stringify(k)} survived`);
+    } finally { await store.close(); }
+  }
+});
+
 const OPS = Number(process.env.OPS || 200);
 test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, async () => {
   const rand = rng(1021);
@@ -115,14 +140,14 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
 
 // The same budgets on files a person formatted: tabs, 4 spaces, CRLF, double quotes, comments, blank lines.
 // (Files without trailing commas or interface semicolons are left out: adding a line there also touches its neighbour.)
-// Hand-formatted files (compounded indentation, tabs, CRLF, double quotes, comments, blank lines), four corpora of 20 files.
+// Hand-formatted files (comments on property lines and between properties, blank-line groups, JSX comments, no trailing commas, no interface semicolons, compounded indentation, tabs, CRLF, double quotes, comments, blank lines), four corpora of 20 files.
 const HAND = Number(process.env.HAND_OPS || 100), HAND_FILES = Number(process.env.HAND_FILES || 20);
 const HAND_SEEDS = (process.env.HAND_SEEDS || '1,2,3,777').split(',').map(Number);
 for (const seed of HAND_SEEDS) {
   test(`INV-03: budgets also hold on hand-formatted files (seed ${seed}: ${HAND} ops over ${HAND_FILES} corpus files)`, async () => {
     const dir = mkdtempSync(join(tmpdir(), 'napkin-hand-'));
     mkdirSync(join(dir, 'components'));
-    const files = makeCorpus(join(dir, 'components'), HAND_FILES, seed, { skip: ['noTrailingCommas', 'semicolonlessInterface'] });
+    const files = makeCorpus(join(dir, 'components'), HAND_FILES, seed);
     const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8' });
     git('init', '-q'); git('add', 'components');
     git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'corpus');

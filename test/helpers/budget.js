@@ -25,6 +25,20 @@ const indentOfElement = (text, id) => {
   if (at < 0) return '';
   return (/^\s*<\w+ /.test(lines[at]) ? lines[at] : lines[at - 1]).match(/^\s*/)[0];
 };
+// Where an element sits, worked out from the text BEFORE the edit: an element that exists keeps its indentation; a new one is one
+// step inside its parent (the step this file uses from `return` to its root element).
+function unitOfText(text) {
+  const lines = text.split(/\r?\n/);
+  const r = lines.findIndex((l) => /^\s*return \($/.test(l));
+  if (r < 0) return /^\t/m.test(text) ? '\t' : '  ';
+  const a = lines[r].match(/^\s*/)[0], b = lines[r + 1].match(/^\s*/)[0];
+  return b.slice(a.length) || '  ';
+}
+function indentOfNode(ctx, doc, id) {
+  if (ctx.textBefore.includes(`data-n="${id}"`)) return indentOfElement(ctx.textBefore, id);
+  const parent = index(doc).parentOf.get(id);
+  return parent ? indentOfNode(ctx, doc, parent.id) + unitOfText(ctx.textBefore) : '  ';
+}
 const hasContent = (n) => n.children.length > 0 || hasText(n);
 // Lines an element's opening tag takes: 1, or one per attribute plus the two ends when `<tag attrs>` does not fit.
 function predictTagLines(node, indent) {
@@ -32,11 +46,11 @@ function predictTagLines(node, indent) {
   const open = `<${node.tag} data-n="${node.id}" style={s('${node.id}', v)}` + ['src', 'alt'].filter((k) => node.attrs?.[k] !== undefined).map((k) => ` ${k}="${node.attrs[k]}"`).join('') + (hasContent(node) ? '>' : ' />');
   return indent.length + open.length > WIDTH ? attrs + 2 : 1;
 }
-const predictExtra = (text, node) => predictTagLines(node, indentOfElement(text, node.id)) - 1;
+const predictExtra = (ctx, doc, node) => predictTagLines(node, indentOfNode(ctx, doc, node.id)) - 1;
 // Lines an element and its whole subtree take in the text napkin writes for a new or rebuilt element.
-function predictElementLines(text, node) {
-  const tag = predictTagLines(node, indentOfElement(text, node.id));
-  if (node.children.length) return tag + 1 + node.children.reduce((a, c) => a + predictElementLines(text, c), 0);
+function predictElementLines(ctx, doc, node) {
+  const tag = predictTagLines(node, indentOfNode(ctx, doc, node.id));
+  if (node.children.length) return tag + 1 + node.children.reduce((a, c) => a + predictElementLines(ctx, doc, c), 0);
   return hasText(node) ? tag + 2 : tag;
 }
 // The signature: one line when `export function Name({ a, b = 'x' }: NameProps) {` fits, else one prop per line. A layout a person
@@ -131,7 +145,29 @@ export function returnLines(text) {
   return end - at + 1;
 }
 // `const variants = {` ... `};` and `const variants = {};` share their first line: going between empty and not costs the merged line on one side and two lines on the other.
+// Lines of every `id: {` ... `}` block in the text (a node's base block and its override blocks), comments and all.
+function blockLines(text, id) {
+  const lines = text.split(/\r?\n/);
+  let total = 0;
+  lines.forEach((l, i) => {
+    const m = l.match(new RegExp(`^(\\s*)['"]?${id}['"]?: \\{\\s*$`));
+    if (!m) return;
+    let j = i + 1;
+    while (j < lines.length && !new RegExp(`^${m[1]}\\},?\\s*$`).test(lines[j])) j++;
+    total += j - i + 1;
+  });
+  return total;
+}
+// A hand-written object with no trailing comma: appending an entry also changes the line before it (a comma).
+const commaless = (text) => /[^,;{\s]\r?\n\s*\}[,;]?\r?\n/.test(text);
 export function budget(edit, before, after, ctx) {
+  const b = budgetWithSlack(edit, before, after, ctx);
+  const A = index(before).byId;
+  const appends = (edit.op === 'set' && edit.value !== null && !edit.path.split('.')[1].startsWith('@') && edit.path.split('.')[1] !== 'text' && (edit.variant ? before.variants?.[Object.keys(edit.variant)[0]]?.[Object.values(edit.variant)[0]]?.[edit.path.split('.')[0]]?.[edit.path.split('.')[1]] === undefined : A.get(edit.path.split('.')[0])?.style[edit.path.split('.')[1]] === undefined))
+    || (edit.op === 'insert' && Object.keys(edit.node.style || {}).length > 0);
+  return appends && commaless(ctx.textBefore) ? { add: b.add + 1, del: b.del + 1 } : b;
+}
+function budgetWithSlack(edit, before, after, ctx) {
   const pB = ctx.sigBefore, pA = predictSig(before, after, pB); // (the signature the file has now; the one the rules give next)
   let b = budgetOf(edit, before, after, pB, pA, ctx);
   const rB = returnLines(ctx.textBefore), rA = returnLinesFor(after, ctx.textBefore.match(/^([ \t]*)return\b/m)?.[1] ?? '  '); // `return <x />;` <-> `return (` ... `);`
@@ -156,18 +192,19 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
   switch (edit.op) {
     case 'set': {
       const [id, prop] = edit.path.split('.');
-      if (prop.startsWith('@')) return { add: 1 + predictExtra(ctx.textAfter, Z.get(id)), del: tagLines(ctx.textBefore, id) }; // a tag that crosses 80 columns changes layout
+      if (prop.startsWith('@')) return { add: 1 + predictExtra(ctx, after, Z.get(id)), del: tagLines(ctx.textBefore, id) }; // a tag that crosses 80 columns changes layout
       if (prop === 'text') { // changing text is one line; adding or clearing it turns `<x />` into three lines or back
         const had = hasText(A.get(id)), has = hasText(Z.get(id));
-        return { add: had && has ? 1 : has ? 3 + predictExtra(ctx.textAfter, Z.get(id)) : 1 + predictExtra(ctx.textAfter, Z.get(id)), del: had && has ? 1 : had ? 3 + extraTag(ctx.textBefore, id) : 1 };
+        return { add: had && has ? 1 : has ? 3 + predictExtra(ctx, after, Z.get(id)) : 1 + predictExtra(ctx, after, Z.get(id)), del: had && has ? 1 : had ? 3 + extraTag(ctx.textBefore, id) : 1 };
       }
       if (edit.variant) {
         const [[axis, val]] = Object.entries(edit.variant);
         const had = before.variants?.[axis]?.[val]?.[id]?.[prop] !== undefined;
-        return { add: pos(dV) + (had && edit.value !== null ? 1 : 0), del: pos(-dV) + (had && edit.value !== null ? 1 : 0) };
+        return { add: pos(dV) + (had && edit.value !== null ? 1 : 0), del: Math.max(pos(-dV), pos(-dV) > 1 ? (blockLines(ctx.textBefore, id) + (pos(-dV) > blockLines(ctx.textBefore, id) ? blockLines(ctx.textBefore, val) - blockLines(ctx.textBefore, id) : 0)) : 0) + (had && edit.value !== null ? 1 : 0) };
       }
       const had = A.get(id).style[prop] !== undefined;
-      return { add: pos(dB) + (had && edit.value !== null ? 1 : 0), del: pos(-dB) + (had && edit.value !== null ? 1 : 0) };
+      const emptied = pos(-dB) > 1 ? blockLines(ctx.textBefore, id) : 0; // the last property of a node takes its whole block (comments inside it too)
+      return { add: pos(dB) + (had && edit.value !== null ? 1 : 0), del: Math.max(pos(-dB), emptied) + (had && edit.value !== null ? 1 : 0) };
     }
     case 'renameProp': case 'renameVariant': { // only the lines that name it (and the parameter list, if the new name makes it break or fit on one line)
       const n = namingLines(ctx.textBefore, edit.name ?? edit.value);
@@ -178,39 +215,41 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
     case 'removeProp': return { add: pc.add, del: 1 + pc.del };
     case 'bindText': {
       if (edit.prop === null) return hasText(Z.get(edit.id)) ? { add: 1, del: 1 } : { add: 1, del: 3 }; // unbinding a setting with no default leaves an empty element
-      const line = hasText(A.get(edit.id)) ? { add: 1, del: 1 } : { add: 3 + predictExtra(ctx.textAfter, Z.get(edit.id)), del: 1 }; // the element: its text line, or `<x />` becoming three lines
+      const line = hasText(A.get(edit.id)) ? { add: 1, del: 1 } : { add: 3 + predictExtra(ctx, after, Z.get(edit.id)), del: 1 }; // the element: its text line, or `<x />` becoming three lines
       const fresh = !before.props.some((p) => p.name === edit.prop);
       return fresh ? { add: line.add + 1 + pc.add, del: line.del + pc.del } : line; // (+ a new prop: interface member and parameter list)
     }
     case 'addVariant': {
       const fresh = !before.props.some((p) => p.name === edit.axis);
-      if (!fresh) { const m = layoutCost(memberLines(ctx.textBefore, edit.axis), predictMember(ctx.textAfter, after, edit.axis)); return m; } // the union line (split when long)
+      if (!fresh) { const m = layoutCost(memberLines(ctx.textBefore, edit.axis), predictMember(ctx.textBefore, after, edit.axis)); return m; } // the union line (split when long)
       return { add: 2 + pc.add, del: 1 + pc.del }; // fresh axis: interface member, parameters, `const v` line
     }
     case 'removeVariant': {
       const gone = axes(before).length !== axes(after).length;
-      const mB = memberLines(ctx.textBefore, edit.axis), mA = predictMember(ctx.textAfter, after, edit.axis);
-      return gone ? { add: pc.add + 1, del: mB + 1 + pc.del + pos(-dV) } : { add: layoutCost(mB, mA).add, del: layoutCost(mB, mA).del + pos(-dV) };
+      const mB = memberLines(ctx.textBefore, edit.axis), mA = predictMember(ctx.textBefore, after, edit.axis);
+      const gone2 = Math.max(pos(-dV), blockLines(ctx.textBefore, edit.value) + (gone ? blockLines(ctx.textBefore, edit.axis) : 0)); // (the blocks as written, comments inside them included)
+      return gone ? { add: pc.add + 1, del: mB + 1 + pc.del + gone2 } : { add: layoutCost(mB, mA).add, del: layoutCost(mB, mA).del + gone2 };
     }
     case 'insert': {
       const parentLeaf = wasLeaf(before, edit.parent);
-      const sub = predictElementLines(ctx.textAfter, Z.get(edit.node.id));
-      return { add: sub + (parentLeaf ? 2 + predictExtra(ctx.textAfter, Z.get(edit.parent)) : 0) + pos(dB), del: (parentLeaf ? 1 : 0) + pos(-dB) };
+      const sub = predictElementLines(ctx, after, Z.get(edit.node.id));
+      return { add: sub + (parentLeaf ? 2 + predictExtra(ctx, after, Z.get(edit.parent)) : 0) + pos(dB), del: (parentLeaf ? 1 : 0) + pos(-dB) };
     }
     case 'delete': {
       const parent = index(before).parentOf.get(edit.id);
       const sub = elementLines(ctx.textBefore, edit.id);
       const nowLeaf = parent.children.length === 1;
-      return { add: nowLeaf ? 1 + predictExtra(ctx.textAfter, Z.get(parent.id)) : 0, del: sub + (nowLeaf ? 2 + extraTag(ctx.textBefore, parent.id) : 0) + pos(-dB) + pos(-dV) };
+      return { add: nowLeaf ? 1 + predictExtra(ctx, after, Z.get(parent.id)) : 0, del: sub + (nowLeaf ? 2 + extraTag(ctx.textBefore, parent.id) : 0) + Math.max(pos(-dB) + pos(-dV), subtreeIds(A.get(edit.id)).reduce((a, i) => a + blockLines(ctx.textBefore, i), 0)) };
     }
     case 'move': {
       const n = A.get(edit.id), from = index(before).parentOf.get(edit.id);
       const sub = elementLines(ctx.textBefore, edit.id);
       const fromLeaf = from.children.length === 1 && from.id !== edit.parent;
       const toLeaf = wasLeaf(before, edit.parent) && from.id !== edit.parent;
-      return { add: sub + (toLeaf ? 2 + predictExtra(ctx.textAfter, Z.get(edit.parent)) : 0) + (fromLeaf ? 1 + predictExtra(ctx.textAfter, Z.get(from.id)) : 0), del: sub + (fromLeaf ? 2 + extraTag(ctx.textBefore, from.id) : 0) + (toLeaf ? 1 : 0) };
+      return { add: sub + (toLeaf ? 2 + predictExtra(ctx, after, Z.get(edit.parent)) : 0) + (fromLeaf ? 1 + predictExtra(ctx, after, Z.get(from.id)) : 0), del: sub + (fromLeaf ? 2 + extraTag(ctx.textBefore, from.id) : 0) + (toLeaf ? 1 : 0) };
     }
     default: return { add: Infinity, del: Infinity };
   }
 }
+const subtreeIds = (n) => subtree(n).map((x) => x.id);
 export { subtree };

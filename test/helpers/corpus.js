@@ -22,6 +22,11 @@ const FORMATS = {
   headerComment: (t) => `// Hand-written note: keep this card's corners soft.\n${t}`,
   blockComment: (t) => t.replace('const base', '/* base styles, one property per line */\nconst base'),
   inlineComment: (t) => t.replace(/^(\s+)(display|padding|gap): /m, '$1// tuned by eye\n$1$2: '),
+  // comments a person leaves, on property lines and between properties, and blank-line groups
+  trailingComments: (t) => t.replace(/^(\s+\w+: [^\n]*,)(\r?)$/gm, (m, a, cr, off) => (off % 3 === 0 ? `${a} // note${cr}` : m)),
+  commentLines: (t) => t.replace(/^(\s+)(\w+: [^\n]*,)(\r?)$/gm, (m, ind, rest, cr, off) => (off % 2 === 0 ? `${ind}// between${cr}\n${ind}${rest}${cr}` : m)),
+  blankGroups: (t) => t.replace(/^(\s+\w+: [^\n]*,)(\r?)\n(?=\s+\w+: )/gm, (m, a, cr, off) => (off % 2 === 0 ? `${a}${cr}\n${cr}\n` : m)),
+  jsxComments: (t) => t.replace(/^(\s+)(<\w+ data-n=)/gm, (m, ind, rest, off) => (off % 2 === 0 && !/return/.test(t.slice(Math.max(0, off - 12), off)) ? `${ind}{/* hero */}\n${ind}${rest}` : m)),
   extraBlankLines: (t) => t.replace(/^(function s|const variants)/gm, '\n$1'),
   noFinalNewline: (t) => t.replace(/\n$/, ''),
   crlf: (t) => (t.includes('\r') ? t : t.replace(/\n/g, '\r\n')),
@@ -32,7 +37,8 @@ export function makeCorpus(dir, n = 40, seed = 40, { skip = [] } = {}) {
   const rand = rng(seed);
   const pick = (a) => a[Math.floor(rand() * a.length)];
   const files = [];
-  const formats = Object.keys(FORMATS).filter((f) => !skip.includes(f));
+  const NEW = ['trailingComments', 'commentLines', 'blankGroups', 'jsxComments', 'noTrailingCommas', 'semicolonlessInterface'];
+  const formats = [...Object.keys(FORMATS), ...NEW, ...NEW].filter((f) => !skip.includes(f)); // (the comment and blank-line shapes are drawn more often)
   for (let i = 0; i < n; i++) {
     const name = `${NAMES[i % NAMES.length]}${i >= NAMES.length ? i : ''}`;
     let text = newComponentSource(name, pick(ROOTS));

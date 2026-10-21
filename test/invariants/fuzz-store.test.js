@@ -16,7 +16,7 @@ import { rng, nextValidEdit } from '../helpers/fuzz.js';
 const FUZZ = Number(process.env.FUZZ || 200);
 test(`FMT-05: ${FUZZ} edits through store.apply on hand-formatted files keep every file valid, equal to the model and stable`, async () => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-fuzzstore-'));
-  const files = makeCorpus(dir, 4, 9090);
+  const files = makeCorpus(dir, 24, 9090);
   // make sure the starts really differ in layout
   const kinds = new Set(files.map((f) => { const t = readFileSync(f, 'utf8'); return `${/\t/.test(t)}${t.includes('\r\n')}${/: "/.test(t)}`; }));
   assert.ok(kinds.size > 1, 'the starts are not all alike');

@@ -39,7 +39,7 @@ function emit(key, value, d, indent, unit, eol) {
   if (d === 0) return `${indent}${keySrc(key)}: ${litSrc(value)},${eol}`;
   return `${indent}${keySrc(key)}: {${eol}${Object.entries(value).map(([k, v]) => emit(k, v, d - 1, indent + unit, unit, eol)).join('')}${indent}},${eol}`;
 }
-const ownLines = (text, node) => /^[ \t]*$/.test(text.slice(lineStart(text, node.start), node.start)) && /^[ \t]*,?[ \t]*(\r?\n|$)/.test(text.slice(node.end));
+const ownLines = (text, node) => /^[ \t]*$/.test(text.slice(lineStart(text, node.start), node.start)) && /^[ \t]*,?[ \t]*(\/\/[^\n]*|\/\*[^\n]*?\*\/[ \t]*)?(\r?\n|$)/.test(text.slice(node.end)); // (a trailing comment is part of the line)
 function syncObj(text, obj, bef, aft, d, st) {
   const eol = EOL(text);
   const out = [];
@@ -134,6 +134,16 @@ function paramsSplice(text, parts, before, after, st) {
     if (w && w.default === p.default && old.has(p.name)) return old.get(p.name);
     return p.default === undefined ? p.name : `${p.name} = ${litText(p.default)}`;
   });
+  // A list written one per line whose names did not change: edit only the items that changed, in place.
+  const stillMulti = (() => { // would prettier still break this list? (if it would now fit on one line, the whole list is re-laid out below)
+    const oldFlat = param ? `{ ${[...old.values()].join(', ')} }: ${iface}` : '';
+    const wasPrettier = `export function ${fn.id.name}(${oldFlat}) {`.length > 80; // the old list was broken the way prettier breaks it
+    const fitsNew = `export function ${fn.id.name}(${items.length ? `{ ${items.join(', ')} }` : '{}'}: ${iface}) {`.length <= 80;
+    return !wasPrettier || !fitsNew;
+  })();
+  if (stillMulti && param && /\n/.test(text.slice(param.start, param.end)) && same(before.props.map((p) => p.name), after.props.map((p) => p.name)) && param.properties.length === after.props.length) {
+    return param.properties.map((pr, i) => (text.slice(pr.start, pr.end) === items[i] ? null : { start: pr.start, end: pr.end, text: items[i] })).filter(Boolean);
+  }
   const flat = items.length ? `{ ${items.join(', ')} }: ${iface}` : `{}: ${iface}`;
   const sameNames = before.props.length === after.props.length; // (a rename, or a default changed: the list keeps its shape)
   const wasMulti = param ? /\n/.test(text.slice(param.start, param.end)) : false;
@@ -201,7 +211,7 @@ const lineIndent = (text, at) => { const ls = text.lastIndexOf('\n', at - 1) + 1
 
 // Print the element tree of `after` (the unchanged parts taken from `text`, where the root element is `jsx`), starting at
 // `indent`. Returns the lines joined with `eol`; the first line has no indent.
-function printJsx(text, jsx, before, after, st, indent) {
+function jsxPrinter(text, jsx, before, st) {
   const els = elementsById(jsx);
   const A = index(before).byId;
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
@@ -237,7 +247,56 @@ function printJsx(text, jsx, before, after, st, indent) {
     const o = sameOpen ? { text: text.slice(el.openingElement.start, el.openingElement.end) } : open(n, at, false);
     return [o.text, ...n.children.map((c) => at + unit + print(c, at + unit)), at + close].join(eol);
   };
-  return print(after.root, indent);
+  return { print, els, A, eol, unit };
+}
+const printJsx = (text, jsx, before, after, st, indent) => jsxPrinter(text, jsx, before, st).print(after.root, indent);
+
+// Edits to the element tree as splices, so everything we did not mean to change stays: comments (`{/* ... */}`), blank
+// lines, the layout of untouched elements. An element is only rewritten whole when its own tag, attributes or text
+// changed or it gained or lost its first/last child; otherwise a removed child is deleted by its own lines, a new one is
+// inserted after its previous sibling, and the children that stay are visited in place.
+const lcs = (a, b) => {
+  const L = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [];
+  for (let i = 0, j = 0; i < a.length && j < b.length;) { if (a[i] === b[j]) { out.push(a[i]); i++; j++; } else if (L[i + 1][j] >= L[i][j + 1]) i++; else j++; }
+  return out;
+};
+function jsxSplices(text, parts, before, after, st) {
+  const jp = jsxPrinter(text, parts.jsx, before, st);
+  const { print, els, A, eol } = jp;
+  const out = [];
+  const onOwnLines = (el) => /^[ \t]*$/.test(text.slice(lineStart(text, el.start), el.start)) && /^[ \t]*(\r?\n|$)/.test(text.slice(el.end));
+  const whole = (n, el) => out.push({ start: el.start, end: el.end, text: print(n, indentOfLine(text, el.start)) });
+  const walk = (n, old) => {
+    const el = els.get(n.id);
+    if (same(shape(old), shape(n))) return;
+    if (!n.children.length || !old.children.length || old.tag !== n.tag || !same(old.attrs, n.attrs)) return whole(n, el);
+    const oldIds = old.children.map((c) => c.id), newIds = n.children.map((c) => c.id);
+    const stay = new Set(lcs(oldIds.filter((i) => newIds.includes(i)), newIds.filter((i) => oldIds.includes(i))));
+    if (!old.children.every((c) => els.get(c.id) && onOwnLines(els.get(c.id)))) return whole(n, el); // children written inline: rewrite this element
+    for (const c of old.children) {
+      if (stay.has(c.id)) continue;
+      const ce = els.get(c.id);
+      out.push({ start: lineStart(text, ce.start), end: lineEnd(text, ce.end), text: '' });
+    }
+    for (const c of n.children) if (stay.has(c.id)) walk(c, A.get(c.id));
+    // new (or moved) children go after the previous sibling that stays, or right after the opening tag
+    const childIndent = indentOfLine(text, els.get(old.children[0].id).start);
+    const groups = new Map();
+    let anchor = null;
+    for (const c of n.children) {
+      if (stay.has(c.id)) { anchor = c.id; continue; }
+      const key = anchor ?? '';
+      (groups.get(key) ?? groups.set(key, []).get(key)).push(`${childIndent}${print(c, childIndent)}${eol}`);
+    }
+    for (const [key, lines] of groups) {
+      const at = key ? lineEnd(text, els.get(key).end) : lineEnd(text, el.openingElement.end);
+      out.push({ start: at, end: at, text: lines.join('') });
+    }
+  };
+  walk(after.root, before.root);
+  return out;
 }
 
 // The whole `return ...;` statement: `return <x />;` when a single line fits, else `return (` + the tree + `);`.
@@ -333,9 +392,16 @@ export function writeComponent(ast, before, after, original) {
   st.renames = renames;
   if (!same(before.props, after.props)) {
     splices.push(...ifaceSplices(original, parts, before, after, st));
-    for (const sp of [paramsSplice(original, parts, before, after, st), vSplice(original, parts, before, after, st)]) if (sp) splices.push(sp);
+    for (const sp of [paramsSplice(original, parts, before, after, st), vSplice(original, parts, before, after, st)].flat()) if (sp) splices.push(sp);
   }
-  if (!same(shape(before.root), shape(after.root))) splices.push({ start: parts.ret.start, end: parts.ret.end, text: returnText(original, parts, before, after, st) });
+  if (!same(shape(before.root), shape(after.root))) {
+    // the `return` statement changes form (`return <x />;` <-> `return (` ... `);`) only when the root gains or loses its content
+    if (hasContent(before.root) !== hasContent(after.root)) splices.push({ start: parts.ret.start, end: parts.ret.end, text: returnText(original, parts, before, after, st) });
+    else {
+      const jsxUnit = unitOf(lineIndent(original, parts.ret.start), indentOfLine(original, parts.jsx.start), st.unit);
+      splices.push(...jsxSplices(original, parts, before, after, { ...st, unit: jsxUnit }));
+    }
+  }
   let out = original;
   for (const sp of splices.sort((x, y) => y.start - x.start || y.end - x.end)) out = out.slice(0, sp.start) + sp.text + out.slice(sp.end);
   return out;
