@@ -18,6 +18,7 @@ import { createBundler } from './bundle.js';
 import { componentFiles, formatReport } from './scan.js';
 import { newComponentSource } from './tsx/write.js';
 import { TAGS, VOID } from './model.js';
+import { openTokens } from './tokens.js';
 
 // create() failures: `status` is the HTTP code the server answers with (400 bad input, 409 already exists).
 export class CreateError extends Error {
@@ -36,6 +37,8 @@ const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().t
 export async function openWorkspace(dir, { only, recursive = false, writeSidecars = true, progressive = false } = {}) {
   dir = resolve(dir);
   const events = new EventEmitter();
+  const tokens = openTokens(dir);
+  tokens.events.on('change', row => { events.emit('tokens', row); });
   const bundler = createBundler();
   const entries = new Map(); // id -> { id, name, file, store, built }
   let queue = Promise.resolve();
@@ -109,7 +112,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
 
   const find = (idOrName) => entries.get(idOrName) || [...entries.values()].find((e) => e.name === idOrName);
   return {
-    dir, events, ready, progress: () => progress,
+    dir, events, tokens, ready, progress: () => progress,
     async report() { return formatReport(await Promise.all([...entries.values()].map(async e => { const r = await e.store.read(); return r.readOnly ? r.classification : { file: e.path, editable: true, name: e.name }; }))); },
     find,
     entries: () => [...entries.values()],
@@ -176,7 +179,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (!e) throw new Error(explainError(`created ${name}.tsx but could not open it`));
       return { id: e.id, name: e.name };
     },
-    activity: (limit = 50) => log.slice(-limit).reverse(),
+    activity: (limit = 50) => [...log, ...tokens.history()].sort((a, b) => b.at - a.at).slice(0, limit),
     // Delete: remove the file and its sidecar through commit.js; the workspace records who and why and announces 'removed'.
     async delete(idOrName, { by } = {}) {
       needBy(by);
@@ -216,6 +219,6 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       return { id, name: newName };
     },
     async settled() { await queue; await Promise.all([...entries.values()].map((e) => e.built)); },
-    async close() { closing = true; watcher.close(); await ready; await queue; for (const e of [...entries.values()]) await remove(e); await bundler.close(); },
+    async close() { tokens.close(); closing = true; watcher.close(); await ready; await queue; for (const e of [...entries.values()]) await remove(e); await bundler.close(); },
   };
 }

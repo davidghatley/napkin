@@ -35,6 +35,7 @@ import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
 import { initHandles } from './handles.js';
+import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
 
 const $ = (s) => document.querySelector(s);
@@ -103,7 +104,9 @@ initShortcuts(ctx);
 initReadOnly(ctx);
 const nav = initNav(ctx);
 initHandles(ctx);
-initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
+initHistoryLane(ctx);
+await initTokens(ctx); // token source, theme preview and Tokens drawer
+ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
 
@@ -136,6 +139,7 @@ function note(c) {
 client.onChange((f) => {
   sync(f.component);
   if (f.type === 'progress') { ctx.state.progress = f; $('#scan-progress').textContent = f.done ? '' : `Scanning components… ${f.scanned} / ${f.total}`; ctx.emit('progress', f); }
+  else if (f.type === 'tokens') { ctx.emit('tokens', f); }
   else if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }

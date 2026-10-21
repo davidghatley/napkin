@@ -1,6 +1,7 @@
 // A plain React app that uses napkin's Button like any other component. Nothing from napkin
 // is imported at runtime: '@components' is just the folder napkin edits.
 import { createRoot } from 'react-dom/client';
+import '../../fixtures/tokens/tokens.css';
 import { Button } from '@components/Button';
 
 const sizes = ['sm', 'md', 'lg', 'xl'] as const;

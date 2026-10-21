@@ -92,7 +92,7 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
   // Every cell is drawn as a first paint (the page is blanked and painted empty first), because a repaint over an earlier cell rasterises
   // rounded corners with slightly different edge pixels than a fresh page does. A fresh app drawing the same cell matches byte for byte (INS-03).
   const draw = (page, job) => drawOnce(page, job);
-  async function drawOnce(page, { key, code, variant }) {
+  async function drawOnce(page, { key, code, variant, tokenCss = '' }) {
     if (!page.loaded.has(key)) {
       await page.evaluate(`(async()=>{const u=URL.createObjectURL(new Blob([${JSON.stringify(code)}],{type:'text/javascript'}));window.__mods.set(${JSON.stringify(key)},await import(u));URL.revokeObjectURL(u);return true})()`);
       page.loaded.add(key);
@@ -100,6 +100,7 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
     const box = await page.evaluate(`(async()=>{
       if(window.__un){window.__un();window.__un=null}
       document.getElementById('m').replaceChildren(); await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); /* paint an empty page first: every cell is a first paint */
+      let tokenStyle=document.getElementById('render-tokens'); if(!tokenStyle){tokenStyle=document.createElement('style');tokenStyle.id='render-tokens';document.head.append(tokenStyle)} tokenStyle.textContent=${JSON.stringify(tokenCss)};
       const old=document.getElementById('m'); const el=document.createElement('div'); el.id='m'; el.setAttribute('style', old.getAttribute('style')); old.replaceWith(el); /* a new element each time: a clean raster, like a page that has drawn nothing else */
       window.__un=window.__mods.get(${JSON.stringify(key)}).mount(el, ${JSON.stringify(variant)});
       if(document.fonts&&document.fonts.ready) await document.fonts.ready;
@@ -114,7 +115,7 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
 
   return {
     // entry: a workspace entry; returns { png, ms }. variant: { axis: value }.
-    async render(ws, entry, variant = {}) {
+    async render(ws, entry, variant = {}, mode) {
       const t0 = performance.now();
       try {
         const snap = await entry.store.read();
@@ -127,7 +128,11 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
         if (!built?.ok) throw new RenderError(`build failed: ${built?.error}`);
         const key = entry.id + ':' + createHash('sha1').update(built.code).digest('hex').slice(0, 12);
         const page = await acquire();
-        try { const png = await draw(page, { key, code: built.code, variant }); return { png, ms: performance.now() - t0 }; }
+        const tokens = ws.tokens?.read();
+        const selectedMode = mode || tokens?.modes[0];
+        if (mode && !tokens?.modes.includes(mode)) { release(page); throw new RenderError('unknown token mode. Next: choose a mode from list_tokens.'); }
+        const tokenCss = tokens?.tokens.length ? '#m {' + tokens.tokens.map(t => '--' + t.name + ':' + String(t.values[selectedMode]).replace(/\{([\w-]+)\}/g, 'var(--$1)') + ';').join('') + '}' : '';
+        try { const png = await draw(page, { key, code: built.code, variant, tokenCss }); return { png, ms: performance.now() - t0 }; }
         finally { release(page); }
       } catch (e) { throw new RenderError(explainError(e.message, { file: entry.path || entry.name + '.tsx' })); }
     },

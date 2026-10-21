@@ -139,6 +139,16 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     const guard = (action) => needId() || deny(action);
 
     if (seg[0] === 'session' && method === 'POST') { const m = msgOf(); return m ? session(m.as, m.token) : fail(400, 'body is not JSON'); }
+    if (seg[0] === 'tokens') {
+      if (method === 'GET') return res(200, ws.tokens.read());
+      if (method === 'POST') {
+        const g = guard('edit_token'); if (g) return g;
+        const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
+        const r = ws.tokens.write({ ...msg, by: caller });
+        return res(r.ok ? 200 : /stale revision/.test(r.error) ? 409 : 400, r);
+      }
+      return fail(405, 'method not allowed');
+    }
     if (seg[0] === 'guide' && method === 'GET') return res(200, { ok: true, guide: GUIDE });
     if (seg[0] === 'activity' && method === 'GET') return res(200, { ok: true, activity: ws.activity(Number(query.get('limit') || 50)) });
     if (seg[0] === 'search' && method === 'GET') return res(200, await search(ws, query.get('q')));
@@ -303,7 +313,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     if (sub === 'render' && method === 'GET') {
       let variant = {};
       try { variant = JSON.parse(query.get('variant') || '{}'); } catch { return fail(400, 'variant must be JSON like {"size":"sm"}'); }
-      try { const { png, ms } = await renderer.render(ws, e, variant); return { status: 200, png, ms }; }
+      try { const { png, ms } = await renderer.render(ws, e, variant, query.get('theme') || undefined); return { status: 200, png, ms }; }
       catch (err) { if (err instanceof RenderError) return fail(422, err.message); throw err; }
     }
     return fail(405, 'method not allowed');

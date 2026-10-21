@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
-import { createComponent } from './commit.js';
+import { createComponent, createProjectConfig, writeTokens } from './commit.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
 import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
 
@@ -25,6 +25,8 @@ else if (args.dir) dir = resolve(args.dir);
 else { // a throwaway copy of the fixtures, so playing with the canvas never edits the repo
   dir = mkdtempSync(join(tmpdir(), 'napkin-fixtures-'));
   for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) createComponent(join(dir, f), readFileSync(join(ROOT, 'fixtures', d, f), 'utf8'));
+  writeTokens(join(dir, 'tokens.json'), readFileSync(join(ROOT, 'fixtures/tokens/tokens.json'), 'utf8'), { file: join(dir, 'tokens.css'), text: readFileSync(join(ROOT, 'fixtures/tokens/tokens.css'), 'utf8') });
+  createProjectConfig(join(dir, 'napkin.json'), JSON.stringify({ tokens: { source: 'tokens.json', css: 'tokens.css' } }) + '\n');
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run napkin init.`); process.exit(1); }
@@ -39,6 +41,7 @@ const presence = new Map(); // component -> label
 let agents = 0;
 
 const api = createApi(ws, { broadcast, dir });
+ws.events.on('tokens', t => broadcast({ type: 'tokens', ...t }));
 ws.events.on('progress', p => broadcast({ type: 'progress', ...p }));
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
@@ -52,7 +55,7 @@ ws.events.on('added', async ({ component, by, summary }) => {
 });
 
 const json = (res, code, body) => { if (body?.error) body.error = explainError(body.error); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js' };
+const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css' };
 const send = (res, file) => {
   res.writeHead(200, { 'content-type': TYPES[file.split('.').pop()], 'cache-control': 'no-store' });

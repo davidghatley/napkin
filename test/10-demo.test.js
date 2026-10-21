@@ -19,7 +19,7 @@ import { launchChromium } from './helpers/cdp.js';
 function serveStatic(dir) {
   const srv = createServer((req, res) => {
     const f = req.url === '/' ? 'index.html' : req.url.slice(1).split('?')[0];
-    try { const body = readFileSync(join(dir, f)); res.writeHead(200, { 'content-type': f.endsWith('.js') ? 'text/javascript' : 'text/html' }); res.end(body); }
+    try { const body = readFileSync(join(dir, f)); res.writeHead(200, { 'content-type': f.endsWith('.js') ? 'text/javascript' : f.endsWith('.css') ? 'text/css' : 'text/html' }); res.end(body); }
     catch { res.writeHead(404); res.end(); }
   });
   return new Promise((r) => srv.listen(0, '127.0.0.1', () => r({ url: `http://127.0.0.1:${srv.address().port}/`, close: () => srv.close() })));

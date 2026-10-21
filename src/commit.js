@@ -32,3 +32,10 @@ export function writeAsset(dir, name, bytes) {
 
 // CLI init creates a project config only after checking an empty destination.
 export function createProjectConfig(file, text) { writeFileSync(file, text, { flag: 'wx' }); }
+
+// Token source is authoritative; generated CSS (when owned by napkin) follows it.
+// Both files use fsync + atomic rename, so neither can be observed partially written.
+export function writeTokens(file, text, generated) {
+  writeFileAtomic(file, text);
+  if (generated) writeFileAtomic(generated.file, generated.text);
+}

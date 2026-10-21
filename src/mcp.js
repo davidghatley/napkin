@@ -19,6 +19,7 @@ const editSchema = editItemSchema(NO_GUIDE);
 const comp = { type: 'string', description: 'component name or id' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required });
 const TOOLS = [
+  { name: 'list_tokens', description: 'Read every configured token, its per-mode values, resolved values, group, type, usage and source revision.', inputSchema: obj({}) },
   { name: 'propose_adoption', description: 'Propose a faithful dialect rewrite of a read-only component. Returns source and diff in a proposal; only review Accept writes it. Unsupported logic is refused.', inputSchema: obj({ component: comp }, ['component']) },
   { name: 'list_components', description: 'List the napkin components in this folder: [{ id, name, readOnly? }].', inputSchema: obj({}) },
   { name: 'read_component', description: 'Read a component: its document tree, current revision and the TSX source text (readOnly says why a file cannot be edited).', inputSchema: obj({ component: comp }, ['component']) },
@@ -119,6 +120,7 @@ async function callTool(name, a = {}) {
   const b = await backend();
   const c = encodeURIComponent(a.component ?? '');
   const by = AGENT;
+  if (name === 'list_tokens') return ok(await b.call({ method: 'GET', path: '/api/tokens' }));
   if (name === 'list_components') return ok(await b.call({ method: 'GET', path: '/api/components' }));
   if (name === 'propose_adoption') return ok(await b.call({ method: 'POST', path: `/api/components/${c}/adoption`, body: {} }));
   if (name === 'read_component') return ok(await b.call({ method: 'GET', path: `/api/components/${c}` }));
