@@ -8,28 +8,27 @@ import { http, session, sha } from './helpers/agents.js';
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
 
-test('pasted images are stored by content hash in assets/ and served back', async () => {
+test('pasted images go through the shared assets route: assets/<sha8>.<ext>, served back, scripts refused', async () => {
   const { compDir, fileOf } = tempRepo(['Card']);
   const server = await startServer(compDir);
   try {
     const token = await session(server.url, 'you');
     const post = (body, tk = token) => http(server.url, '/api/assets', { method: 'POST', body, token: tk });
-    assert.equal((await post({ type: 'image/png', data: PNG.toString('base64') }, null)).status, 401, 'needs a session');
-    const a = await post({ type: 'image/png', data: PNG.toString('base64') });
-    assert.equal(a.status, 200);
-    assert.match(a.json.src, /^assets\/[0-9a-f]{16}\.png$/);
+    assert.equal((await post({ ext: 'png', data: PNG.toString('base64') }, null)).status, 401, 'needs a session');
+    const a = await post({ ext: 'png', data: PNG.toString('base64') });
+    assert.equal(a.status, 201);
+    assert.match(a.json.path, /^assets\/[0-9a-f]{8}\.png$/);
     assert.equal(a.json.created, true);
-    const b = await post({ type: 'image/png', data: PNG.toString('base64') });
-    assert.equal(b.json.src, a.json.src); assert.equal(b.json.created, false, 'the same bytes are stored once');
-    assert.deepEqual(readdirSync(join(compDir, 'assets')), [a.json.src.slice(7)]);
-    const served = await fetch(new URL(a.json.src, server.url));
+    const b = await post({ ext: 'png', data: PNG.toString('base64') });
+    assert.equal(b.json.path, a.json.path); assert.equal(b.json.created, false, 'the same bytes are stored once');
+    assert.deepEqual(readdirSync(join(compDir, 'assets')), [a.json.path.slice(7)]);
+    const served = await fetch(new URL(a.json.path, server.url));
     assert.equal(served.headers.get('content-type'), 'image/png');
     assert.deepEqual(Buffer.from(await served.arrayBuffer()), PNG);
-    const svg = await post({ type: 'image/svg+xml', data: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>').toString('base64') });
-    assert.match(svg.json.src, /\.svg$/);
-    assert.equal((await post({ type: 'image/svg+xml', data: Buffer.from('<svg><script>1</script></svg>').toString('base64') })).status, 415);
-    assert.equal((await post({ type: 'image/png', data: Buffer.from('nope').toString('base64') })).status, 415);
-    assert.equal((await post({ type: 'image/gif', data: 'AA==' })).status, 415);
+    const svg = await post({ ext: 'svg', data: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4"/></svg>').toString('base64') });
+    assert.match(svg.json.path, /\.svg$/);
+    assert.equal((await post({ ext: 'svg', data: Buffer.from('<svg><script>1</script></svg>').toString('base64') })).status, 415);
+    assert.equal((await post({ ext: 'png', data: Buffer.from('nope').toString('base64') })).status, 400);
     assert.equal(existsSync(fileOf('Card')), true);
   } finally { await server.stop(); }
 });

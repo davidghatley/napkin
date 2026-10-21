@@ -82,7 +82,7 @@ test('LAY-10: paste an image (PNG, SVG) into assets/ by hash; HTML that fits bec
       const d = await L.doc('Card');
       const img = d.root.children.at(-1);
       assert.equal(img.tag, 'img');
-      assert.match(img.attrs.src, /^assets\/[0-9a-f]{16}\.png$/);
+      assert.match(img.attrs.src, /^assets\/[0-9a-f]{8}\.png$/);
       assert.ok(existsSync(join(L.compDir, img.attrs.src)));
       assert.equal(readdirSync(join(L.compDir, 'assets')).length, 1);
       await mkPaste(L, `const b = Uint8Array.from(atob('${PNG_B64}'), (c) => c.charCodeAt(0)); dt.items.add(new File([b], 'again.png', { type: 'image/png' }))`);

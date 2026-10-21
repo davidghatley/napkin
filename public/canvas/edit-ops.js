@@ -103,11 +103,11 @@ export function initEditOps(ctx) {
     return r;
   }
   async function pasteImage(t, type, bytes) {
-    const res = await ctx.fetch('/api/assets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type, data: b64(bytes) }) });
+    const res = await ctx.fetch('/api/assets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ext: type === 'image/svg+xml' ? 'svg' : 'png', data: b64(bytes) }) });
     const a = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
     if (!res.ok || !a.ok) { ops.last = { ok: false, kind: 'image', reason: a.error }; say(`Not pasted: ${a.error}`); return a; }
-    const [w, h] = await natural(type, bytes, a.src);
-    return insert(t, [{ id: 'image', tag: 'img', attrs: { src: a.src, alt: '' }, style: { display: 'block', width: w, height: h }, children: [] }], null, 'image');
+    const [w, h] = await natural(type, bytes, a.path);
+    return insert(t, [{ id: 'image', tag: 'img', attrs: { src: a.path, alt: '' }, style: { display: 'block', width: w, height: h }, children: [] }], null, 'image');
   }
   function natural(type, bytes, src) {
     const fit = (w, h) => { const k = Math.min(1, 320 / Math.max(w, h, 1)); return [Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k))]; };

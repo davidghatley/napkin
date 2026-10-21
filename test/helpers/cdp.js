@@ -1,6 +1,6 @@
 // Minimal headless-Chromium driver over the DevTools protocol. No dependencies:
 // uses Node's built-in WebSocket client. CPU only (--disable-gpu).
-import { spawn } from 'node:child_process';
+import { spawnChromium } from '../../src/chromium.js';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,11 +9,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export async function launchChromium({ width = 1100, height = 700 } = {}) {
   const profile = mkdtempSync(join(tmpdir(), 'napkin-chrome-'));
-  const bin = process.env.CHROMIUM || 'chromium';
-  const proc = spawn(bin, [
+  const proc = spawnChromium([
     '--headless=new', '--disable-gpu', '--use-angle=swiftshader', '--no-first-run', '--no-default-browser-check',
     `--user-data-dir=${profile}`, '--remote-debugging-port=0', `--window-size=${width},${height}`, 'about:blank',
-  ], { stdio: 'ignore' });
+  ]);
   const portFile = join(profile, 'DevToolsActivePort');
   for (let i = 0; i < 100 && !existsSync(portFile); i++) await sleep(100);
   const port = readFileSync(portFile, 'utf8').split('\n')[0];

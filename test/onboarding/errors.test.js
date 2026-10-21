@@ -50,7 +50,7 @@ test('ONB-04: every explicit thrown/returned error in src has an actionable rule
     // Audited boundaries must keep formatting even if their callers change.
     const required = {
       'api.js': /const fail[\s\S]*?error: explainError\(error/,
-      'store.js': /apply\(req\)[\s\S]*?explainError\(r.error, \{ file/,
+      'store.js': /apply\(req(, meta = \{\})?\)[\s\S]*?explainError\(r.error, \{ file/,
       'server.js': /const json[\s\S]*?explainError\(body.error/,
       'mcp.js': /const send[\s\S]*?explainError\(/,
     }[name];

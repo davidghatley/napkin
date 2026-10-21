@@ -97,6 +97,8 @@ human and agent edits landing in the same Button component.
 - Tools: `V` select, `F` frame (drag to size), `T` text, `I` image slot, `N` new component.
 - Delete removes the selected element, and Alt+↑/↓ reorders it.
 
+**History and inspection (history lane):** `⌘Z` / `⇧⌘Z` undo and redo your own edits (never an agent's; refused, naming who, if someone changed the same property after you). The drawer under the canvas has **Code** (live TSX, click a line to select its node), **History** (timeline, scrub to preview, Restore), **Inspect** (computed CSS per cell, with where each value comes from, and Copy usage), **Assets** (images in the repo; drop an image on a node) and **Changes** (a dot on components that differ from git HEAD, line diff, before/after pictures). `node src/docs.js --dir components --out catalog` writes a static catalog. napkin never commits. Details: [CONTRACT](test/CONTRACT.md#history-lane-round-2-his-01-03-his-05-ins-01-05-ast-01-04), [decision 0009](docs/decisions/0009-history-undo-restore-git.md).
+
 A file napkin can't read fully opens read-only with a badge, and napkin never rewrites it.
 
 **Not in this build:** a tokens panel, Figma/HTML import, hosting. See FEATURES.md.

@@ -35,6 +35,7 @@ import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
 import { initHandles } from './handles.js';
+import { initHistoryLane } from './history-lane.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -102,6 +103,7 @@ initShortcuts(ctx);
 initReadOnly(ctx);
 const nav = initNav(ctx);
 initHandles(ctx);
+initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
 

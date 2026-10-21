@@ -14,6 +14,7 @@ import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
 import { createComponent } from './commit.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
+import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, stream: { type: 'boolean' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -51,7 +52,7 @@ ws.events.on('added', async ({ component, by, summary }) => {
 });
 
 const json = (res, code, body) => { if (body?.error) body.error = explainError(body.error); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/errors.js': 'src/errors.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js' };
+const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css' };
 const send = (res, file) => {
   res.writeHead(200, { 'content-type': TYPES[file.split('.').pop()], 'cache-control': 'no-store' });
@@ -70,14 +71,6 @@ const server = createServer(async (req, res) => {
   try {
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
     if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
-    // Pasted images (LAY-10) live in <components>/assets/ and are served from /assets/<name>.
-    const asset = path.match(/^\/assets\/([\w-]+\.(png|svg|jpe?g|webp|gif))$/);
-    if (req.method === 'GET' && asset) {
-      const f = join(dir, 'assets', asset[1]);
-      if (!existsSync(f)) return json(res, 404, { ok: false, error: 'not found' });
-      res.writeHead(200, { 'content-type': { svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif' }[asset[2]], 'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox", 'cache-control': 'public, max-age=31536000, immutable' });
-      return res.end(readFileSync(f));
-    }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
 
     if (req.method === 'GET' && path === '/api/events') {
@@ -121,11 +114,30 @@ const server = createServer(async (req, res) => {
       return res.end(r.code);
     }
 
+    // The bundle of a past revision, for the history panel's read-only preview.
+    const ba = path.match(/^\/bundle-at\/([^/]+)\.js$/);
+    if (req.method === 'GET' && ba) {
+      const e = ws.find(decodeURIComponent(ba[1]));
+      if (!e) return json(res, 404, { ok: false, error: 'not found' });
+      const r = await ws.bundleAt(e, url.searchParams.get('revision'));
+      if (!r.ok) return json(res, r.error.includes('history') ? 404 : 500, { ok: false, error: r.error });
+      res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'no-store' });
+      return res.end(r.code);
+    }
+
+    // Images a component refers to by a relative src ("assets/ab12cd34.png"): served from the components folder or the repo, images only.
+    if (req.method === 'GET' && IMAGE_TYPES[path.split('.').pop().toLowerCase()] && !path.startsWith('/api/')) {
+      const a = resolveAsset(dir, decodeURIComponent(path.slice(1)));
+      if (a) { res.writeHead(200, { 'content-type': a.type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': 'sandbox' }); return res.end(readFileSync(a.abs)); }
+      return json(res, 404, { ok: false, error: `no image at ${path.slice(1)}` });
+    }
+
     // Components, edits, proposals, history, search, render, guide (src/api.js).
     if (path.startsWith('/api/')) {
       let body = ''; if (req.method !== 'GET' && req.method !== 'HEAD') for await (const chunk of req) body += chunk;
       const token = /^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1];
       const r = await api.handle({ method: req.method, path, query: url.searchParams, body, token });
+      if (r?.bytes) { res.writeHead(r.status, { 'content-type': r.type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': 'sandbox' }); return res.end(r.bytes); }
       if (r?.png) { res.writeHead(r.status, { 'content-type': 'image/png', 'cache-control': 'no-store', 'x-napkin-render-ms': r.ms.toFixed(1) }); return res.end(r.png); }
       if (r) return json(res, r.status, r.json);
     }

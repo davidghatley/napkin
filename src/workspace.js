@@ -67,7 +67,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       e.name = c.doc?.name || e.name;
       e.dirty = true;
       if (e.built) { e.dirty = false; build(e); }
-      note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision });
+      note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision, ...(c.approvedBy && { approvedBy: c.approvedBy }) });
       events.emit('change', { component: id, ...c });
     });
     store.events.on('problem', (p) => events.emit('problem', { component: id, ...p }));
@@ -80,6 +80,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     const why = removals.get(e.file); removals.delete(e.file);
     entries.delete(e.id);
     await e.store.close();
+    await e.built?.catch(() => {}); // a build still queued would otherwise open a new esbuild context after the dispose
     await bundler.dispose(e.file);
     note({ kind: 'removed', component: e.id, name: e.name, by: why?.by ?? 'file', summary: why?.summary ?? 'file removed' });
     events.emit('removed', { component: e.id, ...(why && { by: why.by, summary: why.summary }) });
@@ -123,6 +124,13 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       return { component: e.id, name: e.name, path: e.path, canvas: canvasOf(e), preview: previewOf(e), revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
     },
     async bundle(e) { if (!e.built || e.dirty) { e.dirty = false; build(e); } return e.built; },
+    // The bundle of a past revision's source (preview and visual diff); cached per component and revision.
+    async bundleAt(e, rev) {
+      const past = e.store.at(rev);
+      if (!past) return { ok: false, error: `revision ${rev} is not in the history this server keeps. Next: pick a revision from the history list.` };
+      return bundler.buildText(e.file, e.name, past.source);
+    },
+    bundleText: (e, text) => bundler.buildText(e.file, e.name, text),
     // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
     setCanvas(e, x, y, { by } = {}) {
       needBy(by);

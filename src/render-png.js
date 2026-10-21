@@ -2,7 +2,7 @@
 // for one variant and returns a PNG of the component's root element. The page is a blank host;
 // bundles are imported from blob URLs, so no web server is needed (works in the MCP fallback too).
 import { explainError } from './errors.js';
-import { spawn } from 'node:child_process';
+import { spawnChromium } from './chromium.js';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,10 +16,10 @@ export class RenderError extends Error { constructor(message) { super(explainErr
 
 async function launch() {
   const profile = mkdtempSync(join(tmpdir(), 'napkin-render-'));
-  const proc = spawn(process.env.CHROMIUM || 'chromium', [
+  const proc = spawnChromium([
     '--headless=new', '--disable-gpu', '--use-angle=swiftshader', '--no-first-run', '--no-default-browser-check',
     '--hide-scrollbars', `--user-data-dir=${profile}`, '--remote-debugging-port=0', '--window-size=1600,1200', 'about:blank',
-  ], { stdio: 'ignore' });
+  ]);
   let dead = false; proc.on('exit', () => { dead = true; });
   const portFile = join(profile, 'DevToolsActivePort');
   for (let i = 0; i < 100 && !existsSync(portFile) && !dead; i++) await sleep(100);
@@ -89,14 +89,18 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
   }
   const release = (page) => { const w = waiters.shift(); if (w) w(page); else idle.push(page); };
 
-  async function draw(page, { key, code, variant }) {
+  // Every cell is drawn as a first paint (the page is blanked and painted empty first), because a repaint over an earlier cell rasterises
+  // rounded corners with slightly different edge pixels than a fresh page does. A fresh app drawing the same cell matches byte for byte (INS-03).
+  const draw = (page, job) => drawOnce(page, job);
+  async function drawOnce(page, { key, code, variant }) {
     if (!page.loaded.has(key)) {
       await page.evaluate(`(async()=>{const u=URL.createObjectURL(new Blob([${JSON.stringify(code)}],{type:'text/javascript'}));window.__mods.set(${JSON.stringify(key)},await import(u));URL.revokeObjectURL(u);return true})()`);
       page.loaded.add(key);
     }
     const box = await page.evaluate(`(async()=>{
       if(window.__un){window.__un();window.__un=null}
-      const el=document.getElementById('m'); el.replaceChildren();
+      document.getElementById('m').replaceChildren(); await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); /* paint an empty page first: every cell is a first paint */
+      const old=document.getElementById('m'); const el=document.createElement('div'); el.id='m'; el.setAttribute('style', old.getAttribute('style')); old.replaceWith(el); /* a new element each time: a clean raster, like a page that has drawn nothing else */
       window.__un=window.__mods.get(${JSON.stringify(key)}).mount(el, ${JSON.stringify(variant)});
       if(document.fonts&&document.fonts.ready) await document.fonts.ready;
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
@@ -126,6 +130,14 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
         try { const png = await draw(page, { key, code: built.code, variant }); return { png, ms: performance.now() - t0 }; }
         finally { release(page); }
       } catch (e) { throw new RenderError(explainError(e.message, { file: entry.path || entry.name + '.tsx' })); }
+    },
+    // Draw an arbitrary bundle (a past revision, or the file at HEAD) for one variant: -> { png, ms }.
+    async renderCode(code, variant = {}) {
+      const t0 = performance.now();
+      const key = 'code:' + createHash('sha1').update(code).digest('hex').slice(0, 16);
+      const page = await acquire();
+      try { const png = await draw(page, { key, code, variant }); return { png, ms: performance.now() - t0 }; }
+      finally { release(page); }
     },
     async warm() { await getBrowser(); },
     async close() { closed = true; if (browser) { const b = await browser.catch(() => null); await b?.close(); } },
