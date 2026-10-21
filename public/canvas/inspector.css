@@ -165,15 +165,15 @@
 #handles .hdl-resize[data-h="ne"], #handles .hdl-resize[data-h="sw"] { cursor: nesw-resize; }
 #handles .hdl-resize[data-h="n"], #handles .hdl-resize[data-h="s"] { cursor: ns-resize; }
 #handles .hdl-resize[data-h="e"], #handles .hdl-resize[data-h="w"] { cursor: ew-resize; }
-#handles .hdl-pad { background: var(--select); border-radius: 3px; opacity: 0; transition: opacity .1s; }
+#handles .hdl-pad { background: var(--select); border-radius: 3px; transition: opacity .1s; }
 #handles .hdl-pad.h { width: 18px; height: 4px; margin: -2px 0 0 -9px; cursor: ns-resize; }
 #handles .hdl-pad.v { width: 4px; height: 18px; margin: -9px 0 0 -2px; cursor: ew-resize; }
 #handles .hdl-band { position: absolute; left: 0; top: 0; background: repeating-linear-gradient(135deg, rgba(47, 107, 255, .22) 0 3px, transparent 3px 6px); opacity: 0; pointer-events: none; }
-#handles .hdl-gap { background: #c43bd9; border-radius: 3px; opacity: 0; }
+#handles .hdl-gap { background: #c43bd9; border-radius: 3px; }
 #handles .hdl-gap.v { width: 4px; height: 18px; margin: -9px 0 0 -2px; cursor: ew-resize; }
 #handles .hdl-gap.h { width: 18px; height: 4px; margin: -2px 0 0 -9px; cursor: ns-resize; }
 #handles .hdl-gapband { position: absolute; left: 0; top: 0; background: repeating-linear-gradient(135deg, rgba(196, 59, 217, .28) 0 3px, transparent 3px 6px); opacity: 0; pointer-events: none; }
-#stage:hover #handles .hdl-pad, #stage:hover #handles .hdl-gap { opacity: .55; }
+#handles .hdl-pad, #handles .hdl-gap { opacity: .5; }
 #handles .hdl-pad:hover, #handles .hdl-gap:hover { opacity: 1; }
 body[data-gesture="padding"] #handles .hdl-band, body[data-gesture="gap"] #handles .hdl-gapband { opacity: 1; }
 #handles .hdl-track { position: absolute; left: 0; top: 0; border: 1px dashed rgba(47, 107, 255, .55); pointer-events: none; }
@@ -192,8 +192,10 @@ body[data-gesture="move"] #stage, body[data-gesture="reorder"] #stage { cursor: 
 .cell[data-pw]::before { content: attr(data-pw) " px"; position: absolute; top: -17px; right: 0; font: 500 10px/1 var(--mono); color: var(--select); }
 .cell[data-pw] .mount { justify-items: stretch; }
 .cell[data-pw] .mount > * { max-width: 100%; }
-#panel .scope select { text-align: left; text-align-last: left; }
+#panel .scope .fbox.sel select { text-align: left; text-align-last: left; }
 #panel .fbox:has(.linkbtn) .unit { display: none; }
 #panel .pfx .lt { flex: none; }
 #panel .pfx .gt::before { content: attr(data-g); }
 #panel .none { display: flex; align-items: center; justify-content: space-between; }
+#panel .seg.quiet button[aria-checked="true"] { color: var(--text-2); font-weight: 500; }
+#panel .fld.full.textrow { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }

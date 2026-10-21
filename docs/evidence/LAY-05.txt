@@ -1,0 +1,6 @@
+LAY-05: resize drag, 90 pointer moves at ~8 ms, headless Chromium (software rendering), 1440x900, zoom 100%
+frames observed: 89
+frame interval  p50 16.7 ms  p95 16.7 ms  (bar: p95 <= 16.7 ms; a vsync tick is 16.7 ms, so one missed tick reads as 33 ms)
+work per frame  p95 1.10 ms  max 1.80 ms  (main-thread time of the gesture's own frame callback)
+gesture frames: 88
+verify: EVIDENCE=1 node --test --test-force-exit test/21-layout-gestures.test.js

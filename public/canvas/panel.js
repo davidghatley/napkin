@@ -207,7 +207,13 @@ export function renderPanel(ctx) {
     if (!cs) return null;
     if (prop === 'fontSize') return Math.round(parseFloat(cs.fontSize) * 10) / 10;
     if (prop === 'fontFamily') return famName(cs.fontFamily);
-    if (prop === 'lineHeight') return cs.lineHeight === 'normal' ? null : Math.round(parseFloat(cs.lineHeight) * 10) / 10;
+    if (prop === 'lineHeight') {
+      if (cs.lineHeight !== 'normal') return Math.round(parseFloat(cs.lineHeight) * 10) / 10;
+      const probe = document.createElement('span'); // what "normal" comes to for this face and size
+      probe.textContent = 'Hg'; probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${cs.font};line-height:normal`;
+      el.append(probe); const h = probe.getBoundingClientRect().height / zoom; probe.remove();
+      return h ? Math.round(h * 10) / 10 : null;
+    }
     if (prop === 'letterSpacing') return cs.letterSpacing === 'normal' ? 0 : Math.round(parseFloat(cs.letterSpacing) * 100) / 100;
     if (prop === 'color') { const p = parseColor(cs.color); return p ? formatColor({ ...p, a: 1 }, space, p) : null; }
     if (prop === 'width' || prop === 'height') { const r = selEl.getBoundingClientRect(); return Math.round((prop === 'width' ? r.width : r.height) / zoom); }
@@ -239,9 +245,11 @@ export function renderPanel(ctx) {
     return `<div class="fld${isOver(prop) ? ' overridden' : ''}${f.wide ? ' wide' : ''}"><div class="fbox ${f.scrub ? 'num' : 'txt'}${f.color ? ' hascolor' : ''}${kind ? ' ' + kind : ''}"><label ${lab} for="${prop}">${GLYPH[prop] ?? ''}<span class="lt">${esc(f.label)}</span></label>${sw}<input id="${prop}" data-field="${prop === 'fontFamily' ? 'family' : 'style'}" data-prop="${prop}" data-step="${f.scrub?.step ?? ''}"${f.scrub ? '' : ' data-text="1"'}${f.pct ? ' data-pct="1"' : ''}${list}${kind ? ' data-eff="1"' : ''} autocomplete="off" spellcheck="false" value="${esc(prop === 'fontFamily' ? famName(shown) : shown)}" placeholder="${mixed ? 'Mixed' : f.placeholder ?? ''}"${mixed ? ' data-mixed="1"' : ''}${dis}>${mark}${o.extra || ''}${tags(prop, f.label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   const row = (...cells) => `<div class="irow n${cells.length}">${cells.join('')}</div>`;
-  const seg = (prop, label, opts, { aria, iconOnly, map } = {}) => {
-    const { value, mixed } = val(prop);
-    return `<div class="fld full${isOver(prop) ? ' overridden' : ''}"><div class="seg" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span${iconOnly ? ' class="sr"' : ''}>${esc(text)}</span></button>`).join('')}</div>${tags(prop, label)}${err('style-' + prop)}${err('reset-' + prop)}</div>`;
+  const seg = (prop, label, opts, { aria, iconOnly, eff: effProp } = {}) => {
+    let { value, mixed } = val(prop);
+    const quiet = value === undefined && !mixed && effProp && cs; // nobody set it: show what the browser uses, quietly
+    if (quiet) value = effProp(cs);
+    return `<div class="fld full${isOver(prop) ? ' overridden' : ''}"><div class="seg${quiet ? ' quiet' : ''}" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span${iconOnly ? ' class="sr"' : ''}>${esc(text)}</span></button>`).join('')}</div>${tags(prop, label)}${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   const sizeRow = (prop) => {
     const n0 = nodes[0], style = resolvedOf(n0);
@@ -349,10 +357,10 @@ export function renderPanel(ctx) {
     '0px 2px 6px 0px #00000040');
   const wt = val('fontWeight');
   const effW = cs ? Number(cs.fontWeight) : null;
-  const weightSel = `<div class="fld"><div class="fbox sel${wt.value === undefined && !wt.mixed ? ' inherited' : ''}"><label class="flabel pfx" for="fontWeight">${L('B')}<span class="lt">Weight</span></label><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined && !wt.mixed ? `<option value="" selected>${effW ?? 400} · inherited</option>` : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select>${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`;
+  const weightSel = `<div class="fld"><div class="fbox sel${wt.value === undefined && !wt.mixed ? ' inherited' : ''}" title="${wt.value === undefined && !wt.mixed ? 'Inherited from the parent' : ''}"><label class="flabel pfx" for="fontWeight">${L('B')}<span class="lt">Weight</span></label><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined && !wt.mixed ? `<option value="" selected>${effW ?? 400}</option>` : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select>${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`;
   const typeSec = section('type', 'Text',
     field('fontFamily', { wide: true }) + row(field('fontSize'), weightSel) + row(field('lineHeight'), field('letterSpacing'))
-    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true }) + field('color'));
+    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true, eff: (c) => ({ start: 'left', end: 'right', justify: 'left' }[c.textAlign] ?? c.textAlign) }) + field('color'));
 
   // ---- Content: the text and its setting binding (near the top for a text node), image attributes ----
   let content = '';

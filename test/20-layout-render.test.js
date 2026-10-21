@@ -26,7 +26,7 @@ test('LAY-02: 12 cases, every Hug / Fill / Fixed lands at the expected size, and
         await L.select('Sizes', 'box');
         const r0 = await L.rev('Sizes');
         await L.q(`document.querySelector('#size-${prop}-${mode}').click()`);
-        if (mode !== 'fixed' || true) await L.browser.waitFor(`napkin.find('Sizes').revision > ${r0}`);
+        await L.browser.waitFor(`napkin.find('Sizes').revision > ${r0}`);
         await L.browser.waitFor(`document.querySelector('section[data-name=Sizes]').dataset.revision === String(napkin.find('Sizes').revision)`);
         const size = await L.size('Sizes', 'box');
         const main = dir === 'row' ? 'width' : 'height';

@@ -31,8 +31,9 @@ export function openColorPicker(opts) {
   document.body.append(el);
   const $ = (s) => el.querySelector(s);
   const r = opts.anchor.getBoundingClientRect(), W = 236;
+  el.style.width = `${W}px`;
   const left = Math.max(8, Math.min(innerWidth - W - 8, r.left - W - 12)), top = Math.max(8, Math.min(innerHeight - el.offsetHeight - 8, r.top - 20));
-  Object.assign(el.style, { left: `${left}px`, top: `${top}px`, width: `${W}px` });
+  Object.assign(el.style, { left: `${left}px`, top: `${top}px` });
 
   const text = () => formatColor({ ...c, ...(space === 'oklch' && like.oklch ? { oklch: like.oklch } : {}) }, space, like);
   function paint() {
