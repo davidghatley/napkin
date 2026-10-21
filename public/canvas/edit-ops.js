@@ -17,10 +17,10 @@ export function initEditOps(ctx) {
   const say = (t) => ctx.hint(t);
   const cur = () => { const s = ctx.state.selection, c = s && ctx.state.components.get(s.component); return c?.doc && !c.readOnly ? { s, c, doc: c.doc, ...index(c.doc) } : null; };
   // the selected nodes, minus the root and any node whose ancestor is selected too
-  function picked() {
+  function picked({ root = false } = {}) {
     const k = cur();
     if (!k) return null;
-    const all = new Set(ctx.state.selections.filter((x) => x.component === k.s.component && x.node !== k.doc.root.id).map((x) => x.node));
+    const all = new Set(ctx.state.selections.filter((x) => x.component === k.s.component && (root || x.node !== k.doc.root.id)).map((x) => x.node));
     const under = (id) => { for (let p = k.parentOf.get(id); p; p = k.parentOf.get(p.id)) if (all.has(p.id)) return true; return false; };
     const ids = [...all].filter((id) => !under(id));
     return { ...k, ids };
@@ -66,7 +66,7 @@ export function initEditOps(ctx) {
 
   // ---- copy: the selected subtrees, with the variant overrides they carry ----
   function payload() {
-    const k = picked();
+    const k = picked({ root: true });
     if (!k?.ids.length) return null;
     const doc = k.doc;
     const bake = (n) => ({ id: n.id, tag: n.tag, style: { ...n.style }, ...(n.text !== undefined ? { text: n.text } : {}), ...(n.textProp ? { text: doc.props.find((p) => p.name === n.textProp)?.default ?? '', textProp: n.textProp } : {}), ...(n.attrs ? { attrs: { ...n.attrs } } : {}), children: n.children.map(bake) });
