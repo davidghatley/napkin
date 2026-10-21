@@ -28,8 +28,11 @@ export function createView(ctx, stageEl, worldEl) {
   function apply() {
     const { x, y, z } = v;
     worldEl.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${z})`;
-    const ls = Math.round(clamp(1 / z, 1, 2.6) * 20) / 20; // label scale, quantised so it changes rarely
+    const ls = Math.round(clamp(1 / z, 1, 3.2) * 20) / 20; // label scale, quantised so it changes rarely
     if (worldEl.dataset.ls !== String(ls)) { worldEl.dataset.ls = String(ls); worldEl.style.setProperty('--ls', ls); }
+    const lf = Math.round(clamp(1 / z, 1, 16) * 20) / 20; // titles and the axis strip stay readable down to the 200-component fit
+    if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--lf', lf); }
+    stageEl.dataset.hdr = z < 0.33 ? 'strip' : '';
     stageEl.style.setProperty('--tx', `${x}px`); stageEl.style.setProperty('--ty', `${y}px`); stageEl.style.setProperty('--gz', String(z));
     stageEl.dataset.zoomBand = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
     ctx.state.zoom = z;

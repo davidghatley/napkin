@@ -38,7 +38,7 @@ test('the design panel reads like a design tool and every control is one small e
       assert.equal(await q(`document.querySelector('label[for=borderRadius]').textContent`), 'Corner radius');
       assert.equal(await q(`document.querySelector('label[for=fontSize]').textContent`), 'Size');
       assert.equal(await q(`document.querySelector('label[for=lineHeight]').textContent`), 'Line height');
-      assert.deepEqual(JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('details.sec > summary')].map((s) => s.textContent))`)).slice(0, 6), ['Layout', 'Size', 'Appearance', 'Fill', 'Text', 'Advanced: all CSS']);
+      assert.deepEqual(JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('details.sec > summary')].map((s) => s.textContent))`)).slice(0, 7), ['Layout', 'Size', 'Appearance', 'Fill', 'Stroke', 'Shadow', 'Text']);
       const visible = await q(`[...document.querySelectorAll('#panel .flabel:not(.mono)')].map((l) => l.textContent).filter((x) => /[a-z][A-Z]/.test(x)).length`);
       assert.equal(visible, 0, 'no camelCase property names among the design labels');
       assert.equal(await q(`document.querySelector('#borderRadius').closest('.fbox').querySelector('.unit').textContent`), 'px');
@@ -147,7 +147,7 @@ test('the design panel reads like a design tool and every control is one small e
     await t.test('override dots and Reset work from the design controls', async () => {
       await browser.eval(`napkin.select({ component: napkin.find('Button').component, node: 'root', variant: { size: 'sm', state: 'default' } })`);
       await browser.waitFor(`document.querySelector('#sel-variant')?.textContent === 'size=sm · state=default'`);
-      await q(`document.querySelector('#target-variant').click()`);
+      await q(`(() => { const s = document.querySelector('#scope'); s.value = 'variant'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
       await browser.waitFor(`document.querySelector('#sel-target').textContent === 'override size=sm'`);
       assert.equal(await q(`!!document.querySelector('#dot-padding')`), true);
       assert.equal(await q(`!!document.querySelector('#dot-borderRadius')`), false);

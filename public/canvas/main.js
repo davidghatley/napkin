@@ -33,6 +33,8 @@ const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
 
 const handlers = new Map();
+// The toast says it in plain words; the raw store message stays in the panel's inline errors.
+const plain = (e) => (/^invalid edit #\d+: id ".*" already exists/.test(e) ? 'That id is already used' : e.replace(/^invalid edit #\d+: /, ''));
 const keyOf = (s) => `${s.component}|${s.node}`;
 const ctx = {
   state: { components: new Map(), selection: null, selections: [], tool: 'select', zoom: 1 },
@@ -48,14 +50,16 @@ const ctx = {
   toggle(sel) {
     const cur = ctx.state.selections;
     if (cur.some((s) => keyOf(s) === keyOf(sel))) ctx.selectMany(cur.filter((s) => keyOf(s) !== keyOf(sel)));
-    else ctx.selectMany(cur.length && cur[0].component !== sel.component ? [sel] : [...cur, sel]);
+    else if (cur.length && cur[0].component !== sel.component) { ctx.selectMany([sel]); ctx.hint('Selection stays within one component'); }
+    else ctx.selectMany([...cur, sel]);
   },
   async sendEdits(component, edits) {
     const c = ctx.state.components.get(component);
     const r = await client.sendEdits(component, c.revision, edits);
-    $('#error').textContent = r.ok ? '' : r.error;
+    $('#error').textContent = r.ok ? '' : plain(r.error);
     return r;
   },
+  hint(text) { const h = $('#hint'); h.textContent = text; clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },
   find(idOrName) { return ctx.state.components.get(idOrName) ?? [...ctx.state.components.values()].find((c) => c.name === idOrName); },
   on(event, cb) { if (!handlers.has(event)) handlers.set(event, new Set()); handlers.get(event).add(cb); return () => handlers.get(event).delete(cb); },
   emit(event, payload) { for (const cb of handlers.get(event) || []) cb(payload); },

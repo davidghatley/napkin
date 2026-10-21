@@ -8,6 +8,7 @@
 import { readdirSync, watch, writeFileSync, existsSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
+import { writeFileAtomic } from './atomic-write.js';
 import { openStore } from './store.js';
 import { readSidecar, sidecarPath } from './codecs.js';
 import { createBundler } from './bundle.js';
@@ -90,11 +91,11 @@ export async function openWorkspace(dir, { only } = {}) {
     async bundle(e) { return e.built; },
     // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
     setCanvas(e, x, y) {
-      const ok = (n) => Number.isFinite(n) && Math.abs(n) <= 1e6;
+      const ok = (n) => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6; // null, strings and NaN are refused, not turned into 0
       if (!ok(x) || !ok(y)) throw new CreateError('canvas x and y must be numbers');
       const side = readSidecar(e.file, e.name);
       const canvas = { x: Math.round(x), y: Math.round(y) };
-      writeFileSync(sidecarPath(e.file), JSON.stringify({ ...side, canvas }, null, 2) + '\n');
+      writeFileAtomic(sidecarPath(e.file), JSON.stringify({ ...side, canvas }, null, 2) + '\n');
       events.emit('canvas', { component: e.id, canvas });
       return canvas;
     },

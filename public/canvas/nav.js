@@ -12,6 +12,7 @@ export function initNav(ctx) {
   const load = () => { try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch { return null; } };
   const setHash = (h) => { const url = location.pathname + location.search + h; if (location.hash !== h) history.replaceState(null, '', url); };
 
+  const byIdHas = (c, n) => { const walk = (x) => x.id === n || x.children.some(walk); return walk(c.doc.root); };
   function focus(id, node, { animate = true } = {}) {
     const c = ctx.find(id);
     if (!c) return false;
@@ -22,6 +23,7 @@ export function initNav(ctx) {
     stage.live(focused);
     const r = stage.componentRect(focused);
     if (r) view.fitRect(r, { pad: 88, max: 2, animate });
+    if (node && c.doc && !byIdHas(c, node)) node = null; // a link to a node that is not there focuses the component only
     if (node && c.doc) {
       ctx.select({ component: focused, node, variant: firstVariant(c) });
     } else if (!ctx.state.selections.some((s) => s.component === focused)) {

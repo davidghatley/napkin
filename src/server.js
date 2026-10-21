@@ -113,7 +113,7 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && m[2] === '/canvas') {
       let body = ''; for await (const chunk of req) body += chunk;
       let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
-      try { return json(res, 200, { ok: true, canvas: ws.setCanvas(e, Number(msg?.x), Number(msg?.y)) }); }
+      try { return json(res, 200, { ok: true, canvas: ws.setCanvas(e, msg?.x, msg?.y) }); }
       catch (err) { if (err instanceof CreateError) return json(res, 400, { ok: false, error: err.message }); throw err; }
     }
     if (req.method === 'POST' && m[2]) {

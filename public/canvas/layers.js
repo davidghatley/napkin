@@ -8,7 +8,7 @@ const ICON = {
   text: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M2.5 3.5v-1h9v1M7 2.5v9M5.2 11.5h3.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   image: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><rect x="1.8" y="2.3" width="10.4" height="9.4" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="m2.5 10 3-3.2 2.2 2.2 1.4-1.4 2.4 2.4" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>',
   button: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><rect x="1.5" y="4" width="11" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>',
-  component: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M7 1.6 12.4 7 7 12.4 1.6 7z" fill="currentColor" opacity=".9"/></svg>',
+  component: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M7 1.8 12.2 7 7 12.2 1.8 7z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
 };
 const iconFor = (n) => (n.tag === 'img' ? ICON.image : n.tag === 'button' ? ICON.button : n.children.length || !(n.text !== undefined || n.textProp) ? ICON.frame : ICON.text);
 const holdsText = (n) => n.text !== undefined || !!n.textProp;
@@ -17,7 +17,8 @@ const canHold = (n) => !holdsText(n) && !VOID.has(n.tag);
 export function initLayers(ctx, el) {
   const expanded = new Set();          // component ids showing their nodes
   const folded = new Set();            // "component|node" rows whose children are hidden
-  let queued = false, renaming = null, dragging = null, reveal = false;
+  let queued = false, renaming = null, dragging = null, reveal = false, focusKey = null; // focusKey: the row that keeps keyboard focus across a rebuild
+  const rowKey = (r) => `${r.dataset.component}|${r.dataset.node ?? ''}`;
 
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; draw(); }); } };
   const selKey = (s) => `${s.component}|${s.node}`;
@@ -29,6 +30,8 @@ export function initLayers(ctx, el) {
     const sel = selected(), prim = ctx.state.selection;
     const comps = [...ctx.state.components.values()].sort((a, b) => a.name.localeCompare(b.name));
     const rows = [];
+    const anc = new Set(); // ancestors of every selected node: a quiet trail down to the selection
+    for (const sl of ctx.state.selections) { const c0 = ctx.state.components.get(sl.component); if (!c0?.doc) continue; const { parentOf } = index(c0.doc); for (let q = parentOf.get(sl.node); q; q = parentOf.get(q.id)) anc.add(`${sl.component}|${q.id}`); }
     for (const c of comps) {
       const open = expanded.has(c.component);
       const has = ctx.state.selections.some((s) => s.component === c.component);
@@ -36,7 +39,7 @@ export function initLayers(ctx, el) {
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
         const k = `${c.component}|${n.id}`, kids = n.children.length, isFolded = folded.has(k);
-        rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--d:${depth}"><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp ? ` {${esc(n.textProp)}}` : ''}</span></div>`);
+        rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${anc.has(k) ? ' anc' : ''}" title="${esc(n.id)} · ${esc(n.tag)}${n.textProp ? ' · shows ' + esc(n.textProp) : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--d:${depth}"><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp ? ` · ${esc(n.textProp)}` : ''}</span><button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(n.id)}" title="More">⋯</button></div>`);
         if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
       })(c.doc.root, 1);
     }
@@ -44,6 +47,11 @@ export function initLayers(ctx, el) {
     if (rows.length) el.setAttribute('role', 'tree'); else el.removeAttribute('role'); // an empty tree is not a tree
     const tab = el.querySelector('.primary') || el.querySelector('.has-sel') || el.querySelector('.lrow');
     if (tab) tab.tabIndex = 0;
+    if (focusKey) {
+      const f = [...el.querySelectorAll('.lrow')].find((r) => rowKey(r) === focusKey);
+      if (f) { f.tabIndex = 0; f.focus({ preventScroll: true }); }
+      focusKey = null;
+    }
     if (reveal) { reveal = false; el.querySelector('.primary')?.scrollIntoView({ block: 'nearest' }); } // only when the selection changed, never on an edit
   }
 
@@ -60,14 +68,16 @@ export function initLayers(ctx, el) {
     if (suppress) { suppress = false; return; }
     const row = ev.target.closest('.lrow');
     if (!row || ev.target.closest('input')) return;
+    if (ev.target.closest('.lmore')) { ev.stopPropagation(); pick(row); openMenu(ev.target.closest('.lmore')); return; }
     if (ev.target.closest('.twirl')) {
       if (row.dataset.kind === 'component') { const id = row.dataset.component; expanded.has(id) ? expanded.delete(id) : expanded.add(id); }
       else { const k = `${row.dataset.component}|${row.dataset.node}`; folded.has(k) ? folded.delete(k) : folded.add(k); }
       draw(); return;
     }
     if (row.dataset.kind === 'component') expanded.add(row.dataset.component);
+    focusKey = rowKey(row);
     pick(row, ev);
-    el.querySelector('.primary')?.focus({ preventScroll: true });
+    row.focus({ preventScroll: true });
   });
   el.addEventListener('dblclick', (ev) => {
     const row = ev.target.closest('.lrow');
@@ -75,6 +85,51 @@ export function initLayers(ctx, el) {
     if (row.dataset.kind === 'component') { const r = ctx.stage.componentRect(row.dataset.component); if (r) ctx.view.flyTo(r, { pad: 88, max: 2 }); }
     else startRename(row);
   });
+
+  // ---- row actions: rename, duplicate, delete ----
+  const menu = document.createElement('div');
+  menu.id = 'lmenu'; menu.setAttribute('role', 'menu'); menu.hidden = true; document.body.append(menu);
+  const closeMenu = () => { menu.hidden = true; };
+  function openMenu(btn) {
+    const row = btn.closest('.lrow'), c = ctx.state.components.get(row.dataset.component);
+    const isRoot = c?.doc?.root.id === row.dataset.node, ro = !!c?.readOnly;
+    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${ro ? ' disabled' : ''}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${ro || isRoot ? ' disabled' : ''}>Duplicate</button><button type="button" role="menuitem" data-do="delete"${ro || isRoot ? ' disabled' : ''}>Delete<kbd>⌫</kbd></button>`;
+    const r = btn.getBoundingClientRect();
+    Object.assign(menu.style, { left: `${r.right - 150}px`, top: `${r.bottom + 4}px` });
+    menu.dataset.component = row.dataset.component; menu.dataset.node = row.dataset.node;
+    menu.hidden = false; menu.querySelector('button:not(:disabled)')?.focus();
+  }
+  async function duplicate(component, id) {
+    const c = ctx.state.components.get(component), { byId, parentOf } = index(c.doc), n = byId.get(id), parent = parentOf.get(id);
+    if (!parent) return;
+    const used = new Set(byId.keys()), ops = [];
+    const fresh = (b) => { let i = 2; while (used.has(`${b}${i}`)) i++; used.add(`${b}${i}`); return `${b}${i}`; };
+    const clone = (x, pid, at) => {
+      const nid = fresh(x.id.replace(/\d+$/, '') || x.id);
+      ops.push({ op: 'insert', parent: pid, index: at, node: { id: nid, tag: x.tag, style: { ...x.style }, ...(x.text !== undefined ? { text: x.text } : {}), ...(x.attrs ? { attrs: { ...x.attrs } } : {}) } });
+      if (x.textProp) ops.push({ op: 'bindText', id: nid, prop: x.textProp });
+      x.children.forEach((ch, i) => clone(ch, nid, i));
+      return nid;
+    };
+    const top = clone(n, parent.id, parent.children.findIndex((q) => q.id === id) + 1);
+    const r = await ctx.sendEdits(component, ops);
+    if (r.ok) ctx.select({ component, node: top, variant: ctx.state.selection?.variant ?? {} });
+  }
+  menu.addEventListener('click', async (ev) => {
+    const b = ev.target.closest('button[data-do]');
+    if (!b) return;
+    const { component, node } = menu.dataset; closeMenu();
+    if (b.dataset.do === 'rename') { const r = el.querySelector(`.lrow[data-component="${CSS.escape(component)}"][data-node="${CSS.escape(node)}"]`); if (r) startRename(r); }
+    else if (b.dataset.do === 'duplicate') await duplicate(component, node);
+    else if (b.dataset.do === 'delete') await ctx.sendEdits(component, [{ op: 'delete', id: node }]);
+  });
+  menu.addEventListener('keydown', (ev) => {
+    const items = [...menu.querySelectorAll('button:not(:disabled)')], i = items.indexOf(document.activeElement);
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); items[(i + 1) % items.length]?.focus(); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeMenu(); }
+  });
+  document.addEventListener('pointerdown', (ev) => { if (!menu.hidden && !ev.target.closest('#lmenu, .lmore')) closeMenu(); }, true);
 
   // ---- hover: the row and the element light each other up ----
   el.addEventListener('mouseover', (ev) => {
@@ -110,8 +165,8 @@ export function initLayers(ctx, el) {
           ctx.selectMany(cur);
         }
       }
+      focusKey = `${c.component}|${ctx.state.selection?.node ?? old}`;
       draw();
-      el.querySelector('.primary')?.focus({ preventScroll: true });
     };
     input.addEventListener('keydown', (ev) => {
       ev.stopPropagation();
@@ -126,7 +181,7 @@ export function initLayers(ctx, el) {
     const row = ev.target.closest?.('.lrow');
     if (!row || ev.target.matches('input')) return;
     const rows = [...el.querySelectorAll('.lrow')], i = rows.indexOf(row);
-    const go = (r) => { if (r) { ev.preventDefault(); pick(r); requestAnimationFrame(() => el.querySelector('.primary, .lcomp.has-sel')?.focus({ preventScroll: false })); } };
+    const go = (r) => { if (r) { ev.preventDefault(); focusKey = rowKey(r); pick(r); } };
     if (ev.key === 'ArrowDown') go(rows[i + 1]);
     else if (ev.key === 'ArrowUp') go(rows[i - 1]);
     else if (ev.key === 'ArrowRight' && row.getAttribute('aria-expanded') === 'false') { ev.preventDefault(); row.querySelector('.twirl').click(); }
@@ -135,7 +190,8 @@ export function initLayers(ctx, el) {
       if (row.getAttribute('aria-expanded') === 'true') row.querySelector('.twirl').click();
       else { const lvl = Number(row.getAttribute('aria-level')); go(rows.slice(0, i).reverse().find((r) => Number(r.getAttribute('aria-level')) < lvl)); }
     } else if (ev.key === 'F2') { ev.preventDefault(); startRename(row); }
-    else if (ev.key === 'Enter') { ev.preventDefault(); pick(row); ctx.nav?.focus(row.dataset.component, row.dataset.node); }
+    else if (ev.key === 'ContextMenu' || (ev.shiftKey && ev.key === 'F10')) { ev.preventDefault(); const b = row.querySelector('.lmore'); if (b) openMenu(b); }
+    else if (ev.key === 'Enter') { ev.preventDefault(); focusKey = rowKey(row); pick(row); ctx.nav?.focus(row.dataset.component, row.dataset.node); }
   });
 
   // ---- drag to reorder ----

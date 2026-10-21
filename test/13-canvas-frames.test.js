@@ -194,7 +194,7 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       assert.equal(await q(`document.querySelector('#fontSize').dataset.mixed`), '1', 'font sizes differ: Mixed');
       assert.equal(await q(`document.querySelector('#fontSize').placeholder`), 'Mixed');
       const r0 = await rev('Card');
-      await browser.type('#opacity', '0.5');
+      await browser.type('#opacity', '50'); // the panel shows percent
       await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
       await sleep(250);
       assert.equal(await rev('Card'), r0 + 1, 'one batch, one revision');
@@ -202,7 +202,7 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       const byId = Object.fromEntries(doc.root.children.map((c) => [c.id, c]));
       assert.equal(byId.heading.style.opacity, 0.5); assert.equal(byId.body.style.opacity, 0.5);
       assert.equal(byId.image.style.opacity, undefined);
-      assert.equal(await q(`document.querySelector('#opacity').value`), '0.5', 'same on both: no longer mixed');
+      assert.equal(await q(`document.querySelector('#opacity').value`), '50', 'same on both: no longer mixed');
       // shift-click again removes one
       await io.click(b.x, b.y, { shift: true });
       await browser.waitFor(`napkin.state.selections.length === 1`);

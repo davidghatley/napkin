@@ -45,7 +45,7 @@ export function createStage(ctx, root, world, view) {
     if (sec) return sec;
     const el = document.createElement('section');
     el.className = 'cmp'; el.dataset.component = id;
-    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="badge" hidden></span><span class="rev"></span></span><p class="problem" role="status"></p><p class="build-error" role="alert"></p></div><div class="frame"></div>';
+    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="badge" hidden></span><span class="rev"></span></span><span class="axes-strip"></span><p class="problem" role="status"></p><p class="build-error" role="alert"></p></div><div class="frame"></div>';
     sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false };
     sections.set(id, sec);
     world.append(el);
@@ -58,6 +58,8 @@ export function createStage(ctx, root, world, view) {
     const c = ctx.state.components.get(id), sec = section(id);
     sec.el.querySelector('h3').textContent = c.name;
     sec.el.dataset.name = c.name;
+    const ax = c.doc ? axes(c.doc) : [];
+    sec.el.querySelector('.axes-strip').textContent = ax.map((a, i) => `${a.name} ×${a.options.length}${i === 0 ? ' →' : i === 1 ? ' ↓' : ''}`).join('  ');
     const badge = sec.el.querySelector('.badge');
     badge.hidden = !c.readOnly; badge.textContent = c.readOnly ? `read-only: ${c.readOnly}` : '';
     sec.el.querySelector('.problem').textContent = c.problem ? `file has an error, showing the last good version: ${c.problem}` : '';

@@ -148,7 +148,7 @@ test('evidence screenshots (EVIDENCE_OUT=docs/evidence)', { skip: !process.env.E
     await shot('canvas-dark.png');
     await theme('light');
     // the variant override scope
-    await browser.eval(`document.querySelector('#target-variant').click()`);
+    await browser.eval(`(() => { const s = document.querySelector('#scope'); s.value = 'variant'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
     await sleep(150);
     await browser.type('#borderRadius', '14');
     await browser.waitFor(`document.querySelector('#dot-borderRadius')`);
@@ -186,5 +186,24 @@ test('evidence screenshots (EVIDENCE_OUT=docs/evidence)', { skip: !process.env.E
     await sleep(150);
     await shot('canvas-measure.png');
     await io.up('Alt', { code: 'AltLeft' });
+    // compound controls: stroke and shadow on the Button, scrolled into view
+    await browser.eval(`napkin.select({ component: napkin.find('Button').component, node: 'root', variant: { size: 'md', state: 'default' } })`);
+    await browser.waitFor(`document.querySelector('#add-effects')`);
+    await browser.eval(`document.querySelector('#add-effects').click()`);
+    await browser.waitFor(`document.querySelector('#shadow-blur')`);
+    await browser.eval(`document.querySelector('[data-sec=appearance]').scrollIntoView({ block: 'start' })`);
+    await sleep(250);
+    await shot('canvas-panel-stroke-shadow.png');
+    // layers: a hovered row with its menu open, an ancestor trail and a selection
+    await browser.eval(`document.querySelector('#inspector').scrollTop = 0; napkin.view.fitAll({ animate: false })`);
+    await browser.eval(`napkin.select({ component: napkin.find('Card').component, node: 'title', variant: {} })`);
+    await sleep(200);
+    const row = await centerOf(browser, `document.querySelector('#layers [data-component="' + napkin.find('Card').component + '"][data-node="body"]')`);
+    await io.move(row.x, row.y);
+    await sleep(100);
+    await browser.eval(`document.querySelector('#layers [data-component="' + napkin.find('Card').component + '"][data-node="body"] .lmore').click()`);
+    await sleep(200);
+    await shot('canvas-layers-menu.png');
+    await io.key('Escape');
   } finally { await browser.close(); await server.stop(); }
 });

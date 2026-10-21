@@ -20,3 +20,8 @@ The dream (docs/DREAM.md) asks for an infinite canvas with a variant matrix, a l
 - DOM order of cells is matrix order, not `variantGrid` order. Tests select cells by `data-variant` (test 7 was changed for this).
 - `launchChromium` now pins the page to the requested size; earlier tests got a taller page.
 - The suite is about 48 s (it was 17 s): five new browser files.
+
+## Round 2 additions
+- Sidecar writes use `src/atomic-write.js` (`writeFileAtomic(path, text)`: temp, fsync, rename), the same name and signature as the files lane's module so they converge at merge. `POST /canvas` refuses null, strings and NaN.
+- Compound panel controls (stroke, shadow, fill alpha, per-side padding, per-corner radius) are several inputs written as one CSS value, so each stays one line in the file. Fill and stroke alpha live in the hex (#rrggbbaa).
+- Layers have no visibility toggle: it would have to write `display:none` over the node's real `display`, which loses information in one line. Row actions are rename, duplicate (one batch of inserts) and delete.

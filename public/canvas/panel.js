@@ -20,19 +20,17 @@ const F = {
   padding: { label: 'Padding', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
   width: { label: 'Width', unit: 'px', scrub: { step: 1, min: 0 } },
   height: { label: 'Height', unit: 'px', scrub: { step: 1, min: 0 } },
-  opacity: { label: 'Opacity', scrub: { step: 0.01, min: 0, max: 1, digits: 2 } },
+  opacity: { label: 'Opacity', unit: '%', pct: true, scrub: { step: 1, min: 0, max: 100 }, placeholder: '100' },
   borderRadius: { label: 'Corner radius', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
-  border: { label: 'Border', placeholder: 'none' },
-  boxShadow: { label: 'Shadow', placeholder: 'none' },
-  background: { label: 'Fill', color: true },
   color: { label: 'Text color', color: true },
   fontFamily: { label: 'Font' },
   fontSize: { label: 'Size', unit: 'px', scrub: { step: 1, min: 1 } },
-  lineHeight: { label: 'Line height', scrub: { step: 1, min: 0 }, auto: true },
-  letterSpacing: { label: 'Letter spacing', unit: 'px', scrub: { step: 0.1, min: -20, digits: 1 } },
+  lineHeight: { label: 'Line height', scrub: { step: 1, min: 0 }, auto: true, placeholder: 'Auto' },
+  letterSpacing: { label: 'Letter spacing', unit: 'px', scrub: { step: 0.1, min: -20, digits: 1 }, placeholder: '0' },
 };
 const WEIGHTS = [300, 400, 500, 600, 700, 800];
-const DESIGN = new Set([...Object.keys(F), 'display', 'flexDirection', 'justifyContent', 'alignItems', 'fontWeight', 'textAlign']);
+const ALLBORDERS = ['border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft'];
+const DESIGN = new Set([...Object.keys(F), ...ALLBORDERS, 'boxShadow', 'background', 'display', 'flexDirection', 'justifyContent', 'alignItems', 'fontWeight', 'textAlign']);
 const ALIGN = ['flex-start', 'center', 'flex-end'];
 const AL_NAME = [['top left', 'top', 'top right'], ['left', 'center', 'right'], ['bottom left', 'bottom', 'bottom right']];
 
@@ -46,6 +44,10 @@ const ui = {
   draft: {},       // input id -> unsaved text
   closed: new Set(), // collapsed sections
   advanced: false,
+  sides: { pad: false, rad: false }, // per-side padding and per-corner radius expanded
+  side: '',        // which border side the Stroke controls edit ('' = all)
+  info: false,     // the scope explanation
+  lastFill: null,
   scrubbing: false,
 };
 
@@ -72,8 +74,60 @@ const I = {
   left: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h12M2 8h7M2 12h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   center: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h12M4.5 8h7M3 12h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   right: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h12M7 8h7M4 12h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
+  eye: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8 12.200 12.500 8 12.500 1.500 8 1.500 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></svg>',
+  eyeoff: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8 12.200 12.500 8 12.500 1.500 8 1.500 8zM2.500 13.500l11-11" fill="none" stroke="currentColor" stroke-width="1.300" stroke-linecap="round"/></svg>',
+  sides: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2.500 6V2.500H6M10 2.500h3.500V6M13.500 10v3.500H10M6 13.500H2.500V10" fill="none" stroke="currentColor" stroke-width="1.300" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   reset: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 7.5a4.5 4.5 0 1 1 1.3 3.2M3.5 3.5v4h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
+
+// ---- values that are several words in CSS but one idea in the panel ----
+const parseHex = (v) => {
+  const m = typeof v === 'string' && v.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
+  if (!m) return null;
+  let h = m[1]; if (h.length === 3) h = [...h].map((c) => c + c).join('');
+  return { rgb: '#' + h.slice(0, 6).toLowerCase(), a: h.length === 8 ? Math.round(parseInt(h.slice(6), 16) * 100 / 255) : 100 };
+};
+const withAlpha = (rgb, a) => (a >= 100 || !/^#[0-9a-f]{6}$/i.test(rgb) ? rgb : rgb + Math.round(Math.max(0, a) * 255 / 100).toString(16).padStart(2, '0'));
+const topSplit = (s, sep) => { const out = []; let d = 0, cur = ''; for (const ch of s) { if (ch === '(') d++; if (ch === ')') d--; if (d === 0 && (sep === ',' ? ch === ',' : /\s/.test(ch))) { if (cur) out.push(cur); cur = ''; } else cur += ch; } if (cur) out.push(cur); return out; };
+function parseBorder(v) {
+  if (v === undefined || v === null) return null;
+  if (typeof v === 'number') return { w: v, s: 'solid', c: '#000000' };
+  const t = topSplit(String(v)), w = t.find((x) => /^[\d.]+(px)?$/.test(x)), st = t.find((x) => /^(none|solid|dashed|dotted|double)$/.test(x));
+  const c = t.filter((x) => x !== w && x !== st).join(' ');
+  return { w: w ? parseFloat(w) : 1, s: st || 'solid', c: c || '#000000' };
+}
+function parseShadow(v) {
+  if (typeof v !== 'string' || /inset/.test(v) || topSplit(v, ',').length > 1) return null;
+  const t = topSplit(v), nums = t.filter((x) => /^-?[\d.]+(px)?$/.test(x)).map(parseFloat);
+  if (nums.length < 2 || nums.length > 4) return null;
+  return { x: nums[0], y: nums[1], b: nums[2] ?? 0, s: nums[3] ?? 0, c: t.filter((x) => !/^-?[\d.]+(px)?$/.test(x)).join(' ') || '#000000' };
+}
+// "8px 16px" -> [8, 16, 8, 16] (top right bottom left), or null when it is not plain px
+function parseBox(v) {
+  if (typeof v === 'number') return [v, v, v, v];
+  if (typeof v !== 'string') return [0, 0, 0, 0];
+  const t = topSplit(v);
+  if (!t.length || t.length > 4 || !t.every((x) => /^-?[\d.]+(px)?$/.test(x))) return null;
+  const n = t.map(parseFloat);
+  return [n[0], n[1] ?? n[0], n[2] ?? n[0], n[3] ?? n[1] ?? n[0]];
+}
+// Font stacks read as a name, not as code: "Georgia, serif" shows Georgia.
+const famName = (v) => String(v ?? '').split(',')[0].trim().replace(/^["']|["']$/g, '');
+const GENERIC = ['system-ui', 'sans-serif', 'serif', 'monospace', 'cursive'];
+const COMMON = ['Inter Var', 'JB Mono', 'Georgia', 'Helvetica', 'Arial', 'Times New Roman', 'Courier New', 'Verdana', 'Trebuchet MS', ...GENERIC];
+function fontNames(ctx) {
+  const set = new Set(COMMON);
+  try { document.fonts.forEach((f) => set.add(f.family.replace(/^["']|["']$/g, ''))); } catch {}
+  const walk = (n) => { if (n.style?.fontFamily) set.add(famName(n.style.fontFamily)); n.children?.forEach(walk); };
+  for (const c of ctx.state.components.values()) if (c.doc) walk(c.doc.root);
+  return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+}
+function stackFor(name, current) {
+  if (GENERIC.includes(name)) return name;
+  const tail = String(current ?? '').split(',').slice(1).join(',').trim();
+  const q = /\s/.test(name) ? '"' + name + '"' : name;
+  return tail ? q + ', ' + tail : q + ', ' + (/mono|code|courier/i.test(name) ? 'monospace' : /times|georgia|serif/i.test(name) && !/sans/i.test(name) ? 'serif' : 'sans-serif');
+}
 
 export function renderPanel(ctx) {
   const el = document.querySelector('#panel');
@@ -121,15 +175,17 @@ export function renderPanel(ctx) {
   const isOver = (prop) => overOf(prop).length > 0;
 
   // A text/number field with a label (drag it to scrub), a unit and the override dot.
+  // Numbers are filled wells you can scrub; text is an outlined box. Units show only when the value is a plain number.
   const field = (prop, o = {}) => {
     const f = { ...F[prop], ...o }, { value, mixed } = val(prop);
-    const shown = value === undefined ? '' : String(value);
-    const unit = f.unit && (shown === '' || NUMBER.test(shown)) && !mixed ? `<span class="unit" aria-hidden="true">${f.unit}</span>` : '';
+    const shown = value === undefined ? '' : f.pct ? String(Math.round(Number(value) * 100)) : String(value);
+    const unit = f.unit && shown !== '' && NUMBER.test(shown) && !mixed ? `<span class="unit" aria-hidden="true">${f.unit}</span>` : '';
     const labelAttrs = f.scrub ? `class="flabel scrub" data-scrub="${prop}" title="Drag to change"` : 'class="flabel"';
     const sw = f.color ? `<label class="swatch"><input type="color" id="pick-${prop}" data-pick="${prop}" aria-label="Pick ${esc(f.label.toLowerCase())}"${dis}><span class="chipcolor" data-color="${esc(shown)}"></span></label>` : '';
+    const list = prop === 'fontFamily' ? ' list="fontlist"' : '';
     return `<div class="f${isOver(prop) ? ' overridden' : ''}"><label ${labelAttrs} for="${prop}">${esc(f.label)}</label>
-      <div class="fbox${f.color ? ' hascolor' : ''}">${sw}<input id="${prop}" data-field="style" data-prop="${prop}" data-step="${f.scrub?.step ?? ''}"${f.scrub ? '' : ' data-text="1"'} autocomplete="off" spellcheck="false" value="${esc(shown)}" placeholder="${mixed ? 'Mixed' : f.placeholder ?? ''}"${mixed ? ' data-mixed="1"' : ''}${dis}>${unit}</div>
-      <div class="ftags">${tags(prop, f.label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
+      <div class="fbox ${f.scrub ? 'num' : 'txt'}${f.color ? ' hascolor' : ''}">${sw}<input id="${prop}" data-field="${prop === 'fontFamily' ? 'family' : 'style'}" data-prop="${prop}" data-step="${f.scrub?.step ?? ''}"${f.scrub ? '' : ' data-text="1"'}${f.pct ? ' data-pct="1"' : ''}${list} autocomplete="off" spellcheck="false" value="${esc(prop === 'fontFamily' ? famName(shown) : shown)}" placeholder="${mixed ? 'Mixed' : f.placeholder ?? ''}"${mixed ? ' data-mixed="1"' : ''}${dis}>${unit}</div>
+      <div class="ftags">${o.extra || ''}${tags(prop, f.label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   // A segmented control: one CSS property, a few values.
   const seg = (prop, label, opts, { aria, iconOnly } = {}) => {
@@ -138,35 +194,87 @@ export function renderPanel(ctx) {
       <div class="seg" role="radiogroup" aria-labelledby="lbl-${prop}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span${iconOnly ? ' class="sr"' : ''}>${esc(text)}</span></button>`).join('')}</div>
       <div class="ftags">${tags(prop, label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
-  // Hug / Fill / Fixed for width or height.
+  // Width or height on ONE row: the mode (Hug / Fill / Fixed) and the value. The unit only shows when the size is a number.
   const sizeMode = (v) => (v === undefined || v === 'auto' || v === 'fit-content' || v === 'max-content' ? 'hug' : v === '100%' ? 'fill' : typeof v === 'number' || /^-?\d+(\.\d+)?px$/.test(String(v)) ? 'fixed' : 'custom');
   const size = (prop) => {
     const { value, mixed } = val(prop), mode = mixed ? '' : sizeMode(value);
+    const shown = value === undefined ? '' : String(value);
+    const isNum = NUMBER.test(shown) || /^-?\d+(\.\d+)?px$/.test(shown);
     const opts = [['hug', 'Hug'], ['fill', 'Fill'], ['fixed', 'Fixed']];
-    return field(prop, { placeholder: 'Auto' }).replace('<div class="ftags">', `<div class="seg sizeseg" role="radiogroup" aria-label="${prop} sizing">${opts.map(([m, text]) => `<button type="button" role="radio" id="size-${prop}-${m}" aria-checked="${mode === m}" data-size="${prop}" data-mode="${m}" title="${m === 'hug' ? 'Hug contents (auto)' : m === 'fill' ? 'Fill the parent (100%)' : 'Fixed size in px'}"${dis}><span>${text}</span></button>`).join('')}</div><div class="ftags">`);
+    const name = prop === 'width' ? 'Width' : 'Height';
+    return `<div class="f sizerow${isOver(prop) ? ' overridden' : ''}"><label class="flabel scrub" data-scrub="${prop}" for="${prop}" title="Drag to change ${name.toLowerCase()}">${name[0]}<span class="sr">${name.slice(1)}</span></label>
+      <div class="seg sizeseg" role="radiogroup" aria-label="${name} sizing">${opts.map(([m, text]) => `<button type="button" role="radio" id="size-${prop}-${m}" aria-checked="${mode === m}" data-size="${prop}" data-mode="${m}" title="${m === 'hug' ? 'Hug contents (auto)' : m === 'fill' ? 'Fill the parent (100%)' : 'Fixed size in px'}"${dis}><span>${text}</span></button>`).join('')}</div>
+      <div class="fbox num"><input id="${prop}" data-field="style" data-prop="${prop}" data-step="1" autocomplete="off" spellcheck="false" value="${esc(shown)}" placeholder="${mixed ? 'Mixed' : mode === 'fill' ? '100%' : 'Auto'}" aria-label="${name}"${mixed ? ' data-mixed="1"' : ''}${dis}>${isNum && !mixed ? '<span class="unit" aria-hidden="true">px</span>' : ''}</div>
+      <div class="ftags">${tags(prop, name)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   const section = (id, title, body, { open = true } = {}) => `<details class="sec" data-sec="${id}"${open && !ui.closed.has(id) ? ' open' : ''}><summary>${title}</summary><div class="sbody">${body}</div></details>`;
+  const has = (prop) => nodes.some((n) => resolvedOf(n)[prop] !== undefined);
+  // A section whose property can be added and removed, like Figma's + and -.
+  const optSection = (id, title, props, present, body, def, always = '') => `<div class="secwrap">${section(id, title, (present ? body : '<p class="hint none">None. Add one with +.</p>') + always)}<button type="button" class="secbtn" id="${present ? 'remove' : 'add'}-${id}" data-action="${present ? 'clear-prop' : 'set-prop'}" data-props="${props.join(',')}" data-def="${esc(def)}" aria-label="${present ? 'Remove' : 'Add'} ${title.toLowerCase()}" title="${present ? 'Remove' : 'Add'} ${title.toLowerCase()}"${dis}>${present ? '−' : '+'}</button></div>`;
+  // A swatch, the hex, an alpha % and an eye in one row. `part` inputs belong to a group written as ONE CSS value.
+  const colorRow = (group, idBase, value, { eye, alphaId } = {}) => {
+    const px = parseHex(value);
+    const hex = px ? px.rgb : value ?? '';
+    const plain = group === 'fill-plain';
+    return `<div class="crow"><div class="fbox txt hascolor"><label class="swatch"><input type="color" id="pick-${idBase}" data-pick="${idBase}" ${plain ? '' : `data-group="${group}"`} aria-label="Pick colour"${dis}><span class="chipcolor" data-color="${esc(hex)}"></span></label>
+      <input id="${idBase}" ${group === 'fill' ? 'data-field="part" data-group="fill" data-part="c"' : `data-field="part" data-group="${group}" data-part="c"`} data-text="1" autocomplete="off" spellcheck="false" value="${esc(hex)}" aria-label="Colour"${dis}></div>
+      <div class="fbox num"><input id="${alphaId}" data-field="part" data-group="${group}" data-part="a" data-step="1" data-prop="${alphaId}" autocomplete="off" value="${px ? px.a : 100}" aria-label="Opacity"${px ? '' : ' disabled'}${dis}><span class="unit" aria-hidden="true">%</span></div>
+      ${eye ? `<button type="button" class="eye" id="eye-${group}" data-action="toggle-eye" data-group="${group}" aria-pressed="${!eye.off}" aria-label="${eye.off ? 'Show' : 'Hide'} ${group}" title="${eye.off ? 'Show' : 'Hide'}"${dis}>${eye.off ? I.eyeoff : I.eye}</button>` : ''}</div>`;
+  };
+  const part = (group, id, label, value, o = {}) => `<div class="f"><label class="flabel scrub" data-scrub="${id}" title="Drag to change" for="${id}">${label}</label><div class="fbox num"><input id="${id}" data-field="part" data-group="${group}" data-part="${o.part ?? id}" data-prop="${id}" data-step="${o.step ?? 1}" autocomplete="off" spellcheck="false" value="${esc(value ?? '')}" placeholder="${o.ph ?? '0'}"${dis}>${value !== '' && value !== undefined ? '<span class="unit" aria-hidden="true">px</span>' : ''}</div></div>`;
+  const linkBtn = (which, on, label) => `<button type="button" class="linkbtn" id="${which}-sides" data-action="toggle-sides" data-which="${which}" aria-pressed="${on}" aria-label="${label}" title="${label}"${dis}>${I.sides}</button>`;
+  const boxOf = (prop) => { const { value, mixed } = val(prop); return mixed ? null : parseBox(value); };
 
   // ---- Layout ----
   const disp = val('display').value;
   const isFlex = /flex/.test(String(disp)), isGrid = disp === 'grid';
   const dir = val('flexDirection').value === 'column' ? 'column' : 'row';
   const justify = val('justifyContent'), alignI = val('alignItems');
-  const matrix = isFlex ? `<div class="f"><span class="flabel" id="lbl-align">Alignment</span><div class="amatrix" role="group" aria-labelledby="lbl-align">${[0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => {
+  const matrix = isFlex ? `<div class="amatrix" role="group" aria-label="Alignment">${[0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => {
     const [mainI, crossI] = dir === 'row' ? [c, r] : [r, c];
     const on = !justify.mixed && !alignI.mixed && (justify.value ?? 'flex-start') === ALIGN[mainI] && alignI.value === ALIGN[crossI];
     return `<button type="button" id="align-${r}${c}" data-align="${mainI},${crossI}" aria-pressed="${on}" aria-label="Align ${AL_NAME[r][c]}" title="Align ${AL_NAME[r][c]}"${dis}><i></i></button>`;
-  })).join('')}</div><div class="ftags">${tags('justifyContent', 'Alignment') || tags('alignItems', 'Alignment')}</div>${err('align')}</div>` : '';
+  })).join('')}</div>` : '';
+  const padSides = ui.sides.pad, radSides = ui.sides.rad;
+  const pb = padSides ? boxOf('padding') : null, rb = radSides ? boxOf('borderRadius') : null;
+  const sidesFields = (group, b, labels, ids, unsupported) => (b
+    ? `<div class="pair sides">${ids.map((id, i) => part(group, id, labels[i], String(b[i]), { part: String(i) })).join('')}</div>`
+    : `<p class="hint">${unsupported}</p>`);
   const layout = section('layout', 'Layout',
     seg('display', 'Display', [['block', 'Block'], ['flex', 'Flex', '', /flex/], ['grid', 'Grid']])
-    + (isFlex ? seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]]) + matrix : '')
-    + (isFlex || isGrid ? field('gap') : '') + field('padding'));
+    + (isFlex ? seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]]) : '')
+    + (isFlex ? `<div class="alignrow"><div class="f stackf"><span class="flabel" id="lbl-align">Align</span>${matrix}</div><div class="stack">${field('gap')}${field('padding', { extra: linkBtn('pad', padSides, 'Padding per side') })}</div></div>${err('align')}`
+      : (isGrid ? field('gap') : '') + field('padding', { extra: linkBtn('pad', padSides, 'Padding per side') }))
+    + (padSides ? sidesFields('pad', pb, ['Top', 'Right', 'Bottom', 'Left'], ['pad-t', 'pad-r', 'pad-b', 'pad-l'], 'Per-side editing needs px values; use the Padding field.') : ''));
   const sizeSec = section('size', 'Size', size('width') + size('height'));
-  const look = section('appearance', 'Appearance', field('borderRadius') + field('opacity', { placeholder: '1' }) + field('border') + field('boxShadow'));
-  const fill = section('fill', 'Fill', field('background', { placeholder: 'none' }));
+  const look = section('appearance', 'Appearance', field('opacity') + field('borderRadius', { extra: linkBtn('rad', radSides, 'Radius per corner') })
+    + (radSides ? sidesFields('rad', rb, ['Top left', 'Top right', 'Bottom right', 'Bottom left'], ['rad-tl', 'rad-tr', 'rad-br', 'rad-bl'], 'Per-corner editing needs px values; use the Corner radius field.') : ''));
+  // Fill
+  const bgv = val('background');
+  const fillOff = bgv.value === 'transparent';
+  const fill = optSection('fill', 'Fill', ['background'], has('background'),
+    `<div class="f colorf${isOver('background') ? ' overridden' : ''}">${colorRow('fill', 'background', bgv.mixed ? '' : String(fillOff ? ui.lastFill ?? '#d9d9d9' : bgv.value ?? ''), { eye: { off: fillOff }, alphaId: 'fill-a' })}<div class="ftags">${tags('background', 'Fill')}</div>${err('style-background')}${err('reset-background')}</div>`, '#d9d9d9');
+  // Stroke (border): colour, opacity, width and style compose ONE css line: border, or one side of it
+  const sideProp = 'border' + ui.side;
+  const bv = val(sideProp), bp = parseBorder(bv.value);
+  const strokeOff = bp?.s === 'none';
+  const strokeProps = ui.side ? [sideProp] : ALLBORDERS;
+  const stroke = optSection('stroke', 'Stroke', strokeProps, strokeProps.some(has),
+    `<div class="f colorf${isOver(sideProp) ? ' overridden' : ''}">${colorRow('stroke', 'stroke-color', bp ? bp.c : '', { eye: { off: strokeOff }, alphaId: 'stroke-a' })}<div class="ftags">${tags(sideProp, 'Stroke')}</div>${err('style-' + sideProp)}${err('reset-' + sideProp)}</div>
+     <div class="pair">${part('stroke', 'stroke-w', 'Width', bp ? String(bp.w) : '', { part: 'w', ph: '1' })}<div class="f"><label class="flabel" for="stroke-s">Style</label><div class="fbox sel"><select id="stroke-s" data-field="part" data-group="stroke" data-part="s"${dis}>${['solid', 'dashed', 'dotted', 'none'].map((s) => `<option${bp?.s === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div></div></div>
+`, '1px solid #1f2937', `<div class="f"><span class="flabel" id="lbl-side">Sides</span><div class="seg small" role="radiogroup" aria-labelledby="lbl-side">${[['', 'All', 'All sides'], ['Top', 'T', 'Top'], ['Right', 'R', 'Right'], ['Bottom', 'B', 'Bottom'], ['Left', 'L', 'Left']].map(([v, text, name]) => `<button type="button" role="radio" title="${name}" aria-label="${name}" id="side-${v || 'all'}" aria-checked="${ui.side === v}" data-action="stroke-side" data-side="${v}">${text}</button>`).join('')}</div></div>`);
+  // Effects: one drop shadow = x y blur spread colour, ONE css line
+  const sv = val('boxShadow'), sp = parseShadow(sv.value);
+  const effects = optSection('effects', 'Shadow', ['boxShadow'], has('boxShadow'),
+    sp || sv.value === undefined || sv.mixed ? `<div class="f colorf${isOver('boxShadow') ? ' overridden' : ''}">${colorRow('shadow', 'shadow-color', sp ? sp.c : '', { alphaId: 'shadow-a' })}<div class="ftags">${tags('boxShadow', 'Shadow')}</div>${err('style-boxShadow')}${err('reset-boxShadow')}</div>
+      <div class="pair">${part('shadow', 'shadow-x', 'X', sp ? String(sp.x) : '', { part: 'x' })}${part('shadow', 'shadow-y', 'Y', sp ? String(sp.y) : '', { part: 'y' })}</div>
+      <div class="pair">${part('shadow', 'shadow-blur', 'Blur', sp ? String(sp.b) : '', { part: 'b' })}${part('shadow', 'shadow-spread', 'Spread', sp ? String(sp.s) : '', { part: 's' })}</div>`
+      : `<p class="hint">This shadow has several layers or an inset; edit it as text.</p><div class="f"><label class="flabel" for="boxShadow">CSS</label><div class="fbox txt"><input id="boxShadow" data-field="style" data-prop="boxShadow" data-text="1" value="${esc(sv.value)}"${dis}></div>${err('style-boxShadow')}</div>`,
+    '0px 2px 6px 0px #00000040');
   const wt = val('fontWeight');
+  const fonts = fontNames(ctx);
   const typeSec = section('type', 'Text',
-    field('fontFamily') + `<div class="pair">${field('fontSize')}${(() => `<div class="f"><label class="flabel" for="fontWeight">Weight</label><div class="fbox"><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined ? '<option value="" selected>Inherit</option>' : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select></div><div class="ftags">${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`)()}</div>`
+    `<datalist id="fontlist">${fonts.map((n) => `<option value="${esc(n)}"></option>`).join('')}</datalist>` + field('fontFamily', { placeholder: 'Inherit' }) + `<div class="pair">${field('fontSize')}${(() => `<div class="f"><label class="flabel" for="fontWeight">Weight</label><div class="fbox sel"><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined ? '<option value="" selected>Inherit</option>' : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select></div><div class="ftags">${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`)()}</div>`
     + `<div class="pair">${field('lineHeight')}${field('letterSpacing')}</div>`
     + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true }) + field('color', { placeholder: 'inherit' }));
 
@@ -199,16 +307,16 @@ export function renderPanel(ctx) {
     : `<button type="button" class="btn" id="add-style" data-action="open" data-form="style"${dis}>+ property</button>`}${err('add-style')}</div></details>`;
   void resolvedAll;
 
-  // ---- Where do edits go? ----
-  const scope = `<fieldset class="scope"><legend class="sr">Edit where</legend>
-      <div class="seg wide">
-        <label class="segopt"><input type="radio" name="target" id="target-base" value="base"${t.overriding ? '' : ' checked'}${dis}><span>Base</span></label>
-        <label class="segopt"><input type="radio" name="target" id="target-variant" value="variant"${t.overriding ? ' checked' : ''}${t.available ? '' : ' disabled'}${dis}><span>This variant</span></label>
-      </div>
-      ${t.available ? '' : `<p class="hint" id="target-note">${Object.keys(sel.variant || {}).length ? 'This cell is all base values, so there is no override to make. Edits go to the base.' : 'This component has no variants yet. Edits go to the base.'}</p>`}
-      ${t.overriding && t.nonBase.length > 1 ? `<label class="flabel" for="override-axis">Override belongs to</label><select id="override-axis">${t.nonBase.map(([a, v]) => `<option value="${esc(a)}"${t.chosen[0] === a ? ' selected' : ''}>${esc(a)}=${esc(v)}</option>`).join('')}</select>` : ''}
-      ${t.overriding && t.nonBase.length === 1 ? `<p class="hint" id="override-note">Overrides ${esc(t.chosen[0])}=${esc(t.chosen[1])}.</p>` : ''}
-    </fieldset>`;
+  // ---- Where do edits go? One compact row: "Editing  Base v", with the explanation behind an info button ----
+  const explain = t.available ? (t.overriding ? `Edits go to ${esc(t.chosen[0])}=${esc(t.chosen[1])} only. Everything else keeps the base value.` : 'Edits go to the base and reach every variant that does not override them.')
+    : (Object.keys(sel.variant || {}).length ? 'This cell is all base values, so there is no override to make. Edits go to the base.' : 'This component has no variants yet. Edits go to the base.');
+  const scope = `<div class="scope"><div class="scoperow"><label class="flabel" for="scope">Editing</label>
+      <div class="fbox sel"><select id="scope" name="target"${dis}><option value="base"${t.overriding ? '' : ' selected'}>Base</option><option value="variant"${t.overriding ? ' selected' : ''}${t.available ? '' : ' disabled'}>This variant${t.available ? ` (${esc(t.nonBase.map(([a, v]) => a + '=' + v).join(', '))})` : ''}</option></select></div>
+      <button type="button" class="infobtn" id="scope-info" data-action="info" aria-expanded="${ui.info}" aria-controls="target-note" aria-label="What does this mean?" title="What does this mean?">i</button></div>
+      ${t.overriding && t.nonBase.length > 1 ? `<div class="scoperow"><label class="flabel" for="override-axis">Variant</label><div class="fbox sel"><select id="override-axis">${t.nonBase.map(([a, v]) => `<option value="${esc(a)}"${t.chosen[0] === a ? ' selected' : ''}>${esc(a)}=${esc(v)}</option>`).join('')}</select></div></div>` : ''}
+      <p class="hint info" id="target-note"${ui.info ? '' : ' hidden'}>${explain}</p>
+      ${t.overriding && t.nonBase.length === 1 ? `<span class="sr" id="override-note">Overrides ${esc(t.chosen[0])}=${esc(t.chosen[1])}.</span>` : ''}
+    </div>`;
 
   // ---- Settings (props) and Variants: the component, not the node ----
   const propRows = doc.props.map((p) => {
@@ -218,7 +326,7 @@ export function renderPanel(ctx) {
         ? `<input id="propdef-${p.name}" data-field="propdef" data-prop="${p.name}" autocomplete="off" value="${esc(p.default ?? '')}"${dis} aria-label="default of ${esc(p.name)}">`
         : `<span id="propdef-${p.name}" class="mono">${esc(p.default)} (base)</span>`;
     return `<li><div class="prop"><strong>${esc(p.name)}</strong><span class="mono">${p.type}${p.options ? ': ' + esc(p.options.join(' | ')) : ''}</span>
-      <button type="button" class="btn small" id="remove-prop-${p.name}" data-action="remove-prop" data-prop="${p.name}"${dis}>Remove</button></div>
+      <button type="button" class="x" id="remove-prop-${p.name}" data-action="remove-prop" data-prop="${p.name}" aria-label="Remove setting ${esc(p.name)}" title="Remove"${dis}>×</button></div>
       <div class="f"><span class="flabel">Default</span><div class="fbox">${def}</div></div>${err('prop-' + p.name)}${err('propdef-' + p.name)}</li>`;
   }).join('');
   const propsUi = section('props', 'Settings', `${propRows ? `<ul class="plain" id="props">${propRows}</ul>` : '<p class="hint">No settings yet.</p>'}
@@ -247,11 +355,11 @@ export function renderPanel(ctx) {
       : `<button type="button" class="btn" id="add-axis" data-action="open" data-form="axis"${dis}>+ axis</button>`}${err('add-axis')}`);
 
   el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="mono" id="sel-node">${esc(node.id)} &lt;${esc(node.tag)}&gt;${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
-    <dl class="selmeta"><dt>Variant</dt><dd id="sel-variant">${esc(variantLabel(sel.variant))}</dd><dt>Editing</dt><dd id="sel-target">${t.overriding ? `override ${esc(t.chosen[0])}=${esc(t.chosen[1])}` : 'Base'}</dd></dl>
+    <dl class="selmeta"><dt>Variant</dt><dd id="sel-variant">${esc(variantLabel(sel.variant))}</dd><dt class="sr">Editing</dt><dd class="sr" id="sel-target">${t.overriding ? `override ${esc(t.chosen[0])}=${esc(t.chosen[1])}` : 'Base'}</dd></dl>
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${layout}${sizeSec}${look}${fill}${typeSec}${content}${advanced}
+    ${layout}${sizeSec}${look}${fill}${stroke}${effects}${typeSec}${content}${advanced}
     <div class="grouphead">Component</div>${propsUi}${variantsUi}`;
 
   // swatches show the colour the field holds
@@ -317,17 +425,42 @@ function wire(ctx, el) {
     }
     return edits;
   }
+  // Compound controls (stroke, shadow, fill with alpha, per-side padding) are several inputs written as ONE css value.
+  const qv = (id) => el.querySelector('#' + CSS.escape(id))?.value.trim() ?? '';
+  const nv = (id, d = 0) => { const n = parseFloat(qv(id)); return Number.isFinite(n) ? n : d; };
+  const colorOf = (colorId, alphaId) => {
+    const c = qv(colorId), px = parseHex(c);
+    if (!c) return '';
+    return px && c.length === 9 ? c : withAlpha(px?.rgb ?? c, nv(alphaId, 100));
+  };
+  const box = (ids) => { const n = ids.map((i) => nv(i)); return n.every((x) => x === n[0]) ? n[0] : n.map((x) => `${x}px`).join(' '); };
+  function readGroup(g) {
+    if (g === 'fill') return { prop: 'background', value: colorOf('background', 'fill-a') || null };
+    if (g === 'stroke') return { prop: 'border' + ui.side, value: `${nv('stroke-w', 1)}px ${qv('stroke-s') || 'solid'} ${colorOf('stroke-color', 'stroke-a') || '#000000'}` };
+    if (g === 'shadow') return { prop: 'boxShadow', value: `${nv('shadow-x')}px ${nv('shadow-y')}px ${nv('shadow-blur')}px ${nv('shadow-spread')}px ${colorOf('shadow-color', 'shadow-a') || '#000000'}` };
+    if (g === 'pad') return { prop: 'padding', value: box(['pad-t', 'pad-r', 'pad-b', 'pad-l']) };
+    if (g === 'rad') return { prop: 'borderRadius', value: box(['rad-tl', 'rad-tr', 'rad-br', 'rad-bl']) };
+    return null;
+  }
+  const commitGroup = (g, ids) => { const r = readGroup(g); return commit(r.prop, r.value, ids ?? r.prop); };
+  const curVal = (prop) => { const s = ctx.state.selection, doc = curDoc(); if (!s || !doc) return undefined; const n = index(doc).byId.get(s.node); return (target(doc, s).overriding ? resolveStyle(doc, s.node, s.variant) : n?.style || {})[prop]; };
   async function commit(prop, raw, id) {
     const s = ctx.state.selection;
     if (!s) return;
-    const edits = styleEdits([[prop, typeof raw === 'string' ? toValue(raw) : raw]]);
+    let v = typeof raw === 'string' ? toValue(raw) : raw;
+    if (prop === 'opacity' && typeof v === 'number') v = Math.round(v) / 100; // the panel shows percent, the file holds 0..1
+    const edits = styleEdits([[prop, v]]);
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
     await run('style-' + prop, s.component, edits, { clear: [id ?? prop] });
   }
 
   el.addEventListener('input', (ev) => {
     const t = ev.target;
-    if (t.dataset.pick) { preview(t.dataset.pick, t.value); const txt = el.querySelector('#' + CSS.escape(t.dataset.pick)); if (txt) txt.value = t.value; return; }
+    if (t.dataset.pick) {
+      const txt = el.querySelector('#' + CSS.escape(t.dataset.pick)); if (txt) txt.value = t.value;
+      if (t.dataset.group) { const r = readGroup(t.dataset.group); preview(r.prop, r.value); } else preview(t.dataset.pick, t.value);
+      return;
+    }
     if (t.id && t.type !== 'checkbox' && t.type !== 'radio' && t.type !== 'color') ui.draft[t.id] = t.value;
   });
   el.addEventListener('toggle', (ev) => {
@@ -342,9 +475,15 @@ function wire(ctx, el) {
     if (!s || !doc) return;
     if (t.name === 'target') { ui.mode = t.value; rerender(); return; }
     if (t.id === 'override-axis') { ui.axis = t.value; rerender(); return; }
-    if (t.dataset.pick) { await commit(t.dataset.pick, t.value, t.dataset.pick); return; }
+    if (t.dataset.pick) { if (t.dataset.group) { const txt = el.querySelector('#' + CSS.escape(t.dataset.pick)); if (txt) txt.value = t.value; await commitGroup(t.dataset.group, t.dataset.pick); } else await commit(t.dataset.pick, t.value, t.dataset.pick); return; }
     const field = t.dataset.field;
-    if (field === 'style') await commit(t.dataset.prop, t.value, t.id);
+    if (field === 'part') await commitGroup(t.dataset.group, t.id);
+    else if (field === 'family') {
+      const name = t.value.trim(), cur = curVal('fontFamily');
+      if (name === famName(cur)) { rerender(); return; }
+      await commit('fontFamily', name ? stackFor(name, cur) : null, t.id);
+    }
+    else if (field === 'style') await commit(t.dataset.prop, t.value, t.id);
     else if (field === 'weight') { if (t.value) await commit('fontWeight', Number(t.value), t.id); }
     else if (field === 'text') await run('text', s.component, [{ op: 'set', path: `${s.node}.text`, value: t.value === '' ? null : t.value }], { clear: [t.id] });
     else if (field === 'attr') await run('attr-' + t.dataset.attr, s.component, [{ op: 'set', path: `${s.node}.@${t.dataset.attr}`, value: t.value === '' ? null : t.value }], { clear: [t.id] });
@@ -388,6 +527,24 @@ function wire(ctx, el) {
         value = r ? Math.round((prop === 'width' ? r.width : r.height) / z) : 100;
       }
       await commit(prop, value);
+      return;
+    }
+    const act = ev.target.closest('button[data-action]');
+    if (act && ['info', 'toggle-sides', 'stroke-side', 'toggle-eye', 'set-prop', 'clear-prop'].includes(act.dataset.action)) {
+      const a = act.dataset.action;
+      if (a === 'info') { ui.info = !ui.info; rerender(); }
+      else if (a === 'toggle-sides') { ui.sides[act.dataset.which] = !ui.sides[act.dataset.which]; rerender(); }
+      else if (a === 'stroke-side') { ui.side = act.dataset.side; rerender(); }
+      else if (a === 'toggle-eye') {
+        const g = act.dataset.group;
+        if (g === 'fill') { const cur = curVal('background'); if (cur === 'transparent') await commit('background', ui.lastFill ?? '#d9d9d9'); else { ui.lastFill = cur; await commit('background', 'transparent'); } }
+        else if (g === 'stroke') { const sel2 = el.querySelector('#stroke-s'); if (sel2.value === 'none') sel2.value = ui.lastStyle || 'solid'; else { ui.lastStyle = sel2.value; sel2.value = 'none'; } await commitGroup('stroke', 'stroke-s'); }
+      } else {
+        const props = act.dataset.props.split(',');
+        const main = props[0] === 'border' ? 'border' + ui.side : props[0];
+        if (a === 'set-prop') await commit(main, act.dataset.def, main);
+        else { const edits = styleEdits(props.map((p) => [p, null])); if (edits.length) await run('style-' + props[0], s.component, edits, { clear: props }); }
+      }
       return;
     }
     const al = ev.target.closest('button[data-align]');
@@ -460,7 +617,7 @@ function wire(ctx, el) {
   function preview(prop, value) {
     if (!ctx.state.selection) return;
     if (!previewed.length || previewed.prop !== prop) { restore(); previewed = cellsFor().map((n) => ({ n, was: n.style[prop] })); previewed.prop = prop; }
-    for (const p of previewed) p.n.style[prop] = css(prop, toValue(String(value)) ?? '');
+    for (const p of previewed) p.n.style[prop] = css(prop, prop === 'opacity' ? Number(value) / 100 : toValue(String(value)) ?? '');
     ctx.stage.refreshOverlays();
   }
   function restore() { for (const p of previewed) p.n.style[previewed.prop] = p.was; previewed = []; }
@@ -485,7 +642,7 @@ function wire(ctx, el) {
     const next = bump(scrub.start || '0', Math.round(dx / 2) * scrub.step * mult, scrub);
     if (next === null) return;
     scrub.input.value = next; scrub.value = next;
-    preview(scrub.prop, next);
+    if (scrub.input.dataset.group) { const r = readGroup(scrub.input.dataset.group); preview(r.prop, r.value); } else preview(scrub.prop, next);
   });
   const endScrub = async (ev) => {
     if (!scrub) return;
@@ -495,7 +652,7 @@ function wire(ctx, el) {
     ui.scrubbing = false;
     if (ev.type === 'pointercancel' || sc.value === undefined || sc.value === sc.start) { restore(); sc.input.value = sc.start; rerender(); return; }
     previewed = []; // the committed render replaces the DOM
-    await commit(sc.prop, sc.value, sc.input.id);
+    if (sc.input.dataset.group) await commitGroup(sc.input.dataset.group, sc.input.id); else await commit(sc.prop, sc.value, sc.input.id);
   };
   el.addEventListener('pointerup', endScrub);
   el.addEventListener('pointercancel', endScrub);
@@ -503,8 +660,13 @@ function wire(ctx, el) {
 }
 
 // How a field scrubs. A unitless line height (1.5) moves in 0.05s, a pixel one in 1s.
+const PARTSCRUB = Object.fromEntries([
+  ...['stroke-w', 'shadow-blur', 'pad-t', 'pad-r', 'pad-b', 'pad-l', 'rad-tl', 'rad-tr', 'rad-br', 'rad-bl'].map((k) => [k, { step: 1, min: 0 }]),
+  ...['shadow-x', 'shadow-y', 'shadow-spread'].map((k) => [k, { step: 1 }]),
+  ...['fill-a', 'stroke-a', 'shadow-a'].map((k) => [k, { step: 1, min: 0, max: 100 }]),
+]);
 function scrubOf(prop, text) {
-  const o = { ...(F[prop]?.scrub || { step: 1 }) };
+  const o = { ...(F[prop]?.scrub || PARTSCRUB[prop] || { step: 1 }) };
   if (F[prop]?.auto && !/px/.test(text) && Math.abs(parseFloat(text)) < 4) { o.step = 0.05; o.digits = 2; }
   return o;
 }
