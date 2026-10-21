@@ -221,3 +221,20 @@ body[data-gesture="move"] #stage, body[data-gesture="reorder"] #stage { cursor: 
 #panel .typehint { margin: -2px 0 0; color: var(--text-2); font-size: 11px; }
 #panel .hint { color: var(--text-2); }
 #panel .amatrix button { width: 100%; height: 100%; }
+
+/* round 6: scan in one screen */
+#inspector { --gap: 6px; }
+#panel .selhead { padding: 10px var(--gut) 8px; gap: 6px; }
+#panel .scope .hint { margin: 0; }
+#panel details.sec > summary, #panel .sec.empty { height: 32px; }
+#panel .sbody { padding-bottom: 10px; }
+#panel .contentrow { padding-bottom: 8px; }
+#panel .grouphead { padding: 10px var(--gut) 4px; }
+/* the axis arrow lives inside the matrix frame */
+#panel .amwrap { width: 96px; height: 84px; padding: 2px; box-sizing: border-box; background: var(--chrome-2); border-radius: 7px; gap: 0; align-items: stretch; }
+#panel .amwrap.row { flex-direction: column; align-items: stretch; }
+#panel .amwrap .amatrix { flex: 1; width: auto; height: auto; padding: 0; background: transparent; min-height: 0; }
+#panel .amwrap.row .axisarrow { width: auto; height: 10px; margin: 0; display: flex; justify-content: center; align-items: center; }
+#panel .amwrap.row .axisarrow svg { width: 60px; height: 8px; }
+#panel .amwrap.column .axisarrow { width: 10px; margin: 0; display: flex; align-items: center; justify-content: center; }
+#panel .amwrap.column .axisarrow svg { width: 8px; height: 60px; }

@@ -49,6 +49,10 @@ test('the panel at default width: no truncated labels, clear hierarchy, quiet in
       await L.edit('Flow', [{ op: 'set', path: 'a.maxWidth', value: 90 }]);
       await L.select('Flow', 'stage'); await L.select('Flow', 'a');
       assert.equal(await q(`!!document.querySelector('#maxWidth')`), true, 'open by itself when a limit is set');
+      await L.edit('Flow', [{ op: 'set', path: 'a.maxWidth', value: null }]);
+      await L.select('Flow', 'a');
+      await q(`document.querySelector('#limits-toggle').click()`); // back to the default for the next checks
+      await L.browser.waitFor(`!document.querySelector('#maxWidth')`);
     });
     await t.test('the alignment matrix is large, its axis arrow follows the direction, and Auto is explained as space between', async () => {
       await L.select('Flow', 'stage');
@@ -59,6 +63,34 @@ test('the panel at default width: no truncated labels, clear hierarchy, quiet in
       await L.browser.waitFor(`document.querySelector('.axisarrow')?.dataset.dir === 'column'`);
       assert.match(await q(`document.querySelector('#align-00').title`), /top to bottom/);
       assert.match(await q(`document.querySelector('#gap-auto').title`), /^Space between/);
+    });
+    await t.test('common nodes scan in one screen; the richest stay within 1.2 screens; the order follows the node kind', async () => {
+      const fit = async (c, n, v = {}) => { await L.select(c, n, v); await sleep(120); return JSON.parse(await q(`JSON.stringify({ h: document.querySelector('#inspector').scrollHeight, c: document.querySelector('#inspector').clientHeight, first: [...document.querySelectorAll('#panel details.sec, #panel .sec.empty')].map((d) => d.dataset.sec).slice(0, 3), open: [...document.querySelectorAll('#panel details.sec[open]')].map((d) => d.dataset.sec) })`)); };
+      for (const [c, n] of [['Card', 'title'], ['Card', 'image'], ['Flow', 'stage'], ['Flow', 'a']]) { const r = await fit(c, n); assert.ok(r.h <= r.c, `${c}.${n}: ${r.h} > ${r.c}`); }
+      for (const [c, n, v] of [['Card', 'card'], ['Button', 'root', { size: 'md', state: 'default' }]]) { const r = await fit(c, n, v); assert.ok(r.h <= r.c * 1.2, `${c}.${n}: ${r.h} vs ${r.c}`); }
+      assert.equal((await fit('Card', 'title')).first[0], 'type', 'text first');
+      assert.equal((await fit('Flow', 'stage')).first[0], 'layout', 'a frame starts with its layout');
+      assert.equal((await fit('Flow', 'a')).first[0], 'size', 'a plain box starts with its size');
+      assert.equal((await fit('Card', 'image')).first[0], 'size');
+      const rare = await fit('Card', 'card');
+      assert.ok(!rare.open.includes('props') && !rare.open.includes('variants') && !rare.open.includes('type') && !rare.open.includes('advanced'), `rarely used sections start closed: ${rare.open}`);
+    });
+    await t.test('a section the person opens or closes stays that way, across selections and a reload', async () => {
+      await L.select('Flow', 'stage');
+      await L.q(`document.querySelector('[data-sec=appearance] > summary').click()`);
+      await L.browser.waitFor(`!document.querySelector('[data-sec=appearance]').open`);
+      await L.select('Card', 'title'); await L.select('Flow', 'a');
+      assert.equal(await q(`document.querySelector('[data-sec=appearance]').open`), false);
+      await L.browser.goto(L.server.url);
+      await L.browser.waitFor('document.body.dataset.ready === "1"');
+      await L.select('Flow', 'a');
+      assert.equal(await q(`document.querySelector('[data-sec=appearance]').open`), false, 'remembered after a reload');
+      await L.q(`document.querySelector('[data-sec=appearance] > summary').click()`);
+    });
+    await t.test('the axis arrow sits inside the matrix frame', async () => {
+      await L.select('Flow', 'stage');
+      const r = JSON.parse(await q(`JSON.stringify((() => { const f = document.querySelector('.amwrap').getBoundingClientRect(), a = document.querySelector('.axisarrow').getBoundingClientRect(), m = document.querySelector('.amatrix').getBoundingClientRect(); return { inA: a.left >= f.left && a.right <= f.right && a.top >= f.top && a.bottom <= f.bottom, inM: m.left >= f.left && m.right <= f.right && m.top >= f.top && m.bottom <= f.bottom, bg: getComputedStyle(document.querySelector('.amwrap')).backgroundColor }; })())`));
+      assert.equal(r.inA && r.inM, true);
     });
     await t.test('Text is not offered on a frame with no text, but is on text and on nodes that set type', async () => {
       await L.select('Flow', 'stage');

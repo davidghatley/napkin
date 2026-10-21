@@ -98,6 +98,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     });
 
     await t.test('Padding per side and radius per corner write the shorthand', async () => {
+      await browser.waitFor(`!!document.querySelector('#pad-sides')`);
       await q(`document.querySelector('#pad-sides').click()`);
       await browser.waitFor(`document.querySelector('#pad-t')`);
       assert.equal(await q(`document.querySelector('#pad-r').value`), '16');
@@ -106,6 +107,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
       assert.equal(getValue(doc(), 'root.padding'), '20px 16px 8px 16px');
       await reset();
+      await browser.waitFor(`!!document.querySelector('#rad-sides')`);
       await q(`document.querySelector('#rad-sides').click()`);
       await browser.waitFor(`document.querySelector('#rad-tl')`);
       r0 = await rev();
@@ -116,6 +118,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     });
 
     await t.test('one colour field (swatch | hex | %) with the eye and minus after it; swatches have an outline', async () => {
+      await browser.waitFor(`!!document.querySelector('#background') && !!document.querySelector('#remove-fill')`);
       assert.equal(await q(`document.querySelector('#background').closest('.colorbox').contains(document.querySelector('#fill-a'))`), true);
       assert.equal(await q(`!!document.querySelector('#background').closest('.crow').querySelector('#eye-fill') && !!document.querySelector('#remove-fill')`), true);
       assert.notEqual(await q(`getComputedStyle(document.querySelector('.swatch')).boxShadow`), 'none');
@@ -165,6 +168,9 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
 
     await t.test('fonts read as a name, and a picked family keeps the fallback stack', async () => {
       await select('Card', 'card');
+      await browser.waitFor(`!!document.querySelector('[data-sec=type]')`);
+      if (!(await q(`document.querySelector('[data-sec=type]').open`))) await q(`document.querySelector('[data-sec=type] > summary').click()`); // Text starts closed on a frame
+      await browser.waitFor(`document.querySelector('[data-sec=type]').open`);
       assert.equal(await q(`document.querySelector('#fontFamily').value`), 'Georgia');
       await q(`document.querySelector('#fontFamily').focus()`);
       await browser.waitFor(`!document.querySelector('#fontpop').hidden`);

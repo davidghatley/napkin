@@ -48,6 +48,8 @@ const DESIGN = new Set([...Object.keys(F), ...ALLBORDERS, 'flexWrap', 'gridTempl
 const ALIGN = ['flex-start', 'center', 'flex-end'];
 const AL_NAME = [['top left', 'top', 'top right'], ['left', 'center', 'right'], ['bottom left', 'bottom', 'bottom right']];
 
+const keep = (k, set) => { try { localStorage.setItem(k, JSON.stringify([...set])); } catch {} };
+const recall = (k) => { try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch { return new Set(); } };
 // Panel-only state (nothing here is document state).
 const ui = {
   selKey: '',      // component|variant: the edit target resets to Base when it changes
@@ -56,8 +58,8 @@ const ui = {
   errors: {},      // key -> { text, retry?: { component, edits } }
   forms: {},       // key -> true while an inline form is open
   draft: {},       // input id -> unsaved text
-  closed: new Set(), // sections the user collapsed
-  opened: new Set(), // sections the user expanded (overrides a collapsed default)
+  closed: recall('napkin.panel.closed'), // sections the user collapsed (remembered in this browser)
+  opened: recall('napkin.panel.opened'), // sections the user expanded (overrides a collapsed default)
   advanced: false,
   sides: { pad: false, rad: false }, // per-side padding and per-corner radius expanded
   side: '',        // which border side the Stroke controls edit ('' = all)
@@ -308,13 +310,14 @@ export function renderPanel(ctx) {
     return `<div class="fld wide"><div class="fbox txt"><label class="flabel pfx" for="${prop}">${GLYPH[prop]}<span class="lt">${label}</span></label><input id="${prop}" data-field="style" data-prop="${prop}" data-text="1" autocomplete="off" spellcheck="false" value="${esc(v ?? '')}" placeholder="1fr 1fr"${dis}><span class="stepper"><button type="button" id="${key}-remove" data-action="track" data-prop="${prop}" data-dir="-1" aria-label="Remove a ${label.toLowerCase().slice(0, -1)}" title="Remove a ${label.toLowerCase().slice(0, -1)}"${dis}>−</button><button type="button" id="${key}-add" data-action="track" data-prop="${prop}" data-dir="1" aria-label="Add a ${label.toLowerCase().slice(0, -1)}" title="Add a ${label.toLowerCase().slice(0, -1)}"${dis}>+</button></span></div>${err('style-' + prop)}</div>`;
   };
   const padField = field('padding', { extra: expand('pad', padSides, 'Padding per side') });
+  const container = node.children.length > 0;
   const layout = section('layout', 'Layout',
     seg('display', 'Display', [['block', 'Block'], ['flex', 'Flex', '', /flex/], ['grid', 'Grid']])
     + (flex ? `<div class="irow dirrow">${seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]])}<button type="button" class="togbtn" id="wrap-toggle" data-action="wrap" aria-pressed="${wrapOn}" title="Wrap onto new lines when full"${dis}>${I.wrap}<span>Wrap</span></button></div>` : '')
     + (flex ? `<div class="alignrow">${matrix}<div class="stack">${field('gap', { extra: gapAuto })}${padField}</div></div>${err('align')}` : '')
     + (grid ? tracksField('gridTemplateColumns', 'Columns', 'cols') + tracksField('gridTemplateRows', 'Rows', 'rows') + row(field('gap'), padField) : '')
     + (!flex && !grid ? padField : '')
-    + (padSides ? sidesFields('pad', pb, ['Top', 'Right', 'Bottom', 'Left'], ['pad-t', 'pad-r', 'pad-b', 'pad-l'], 'Per-side editing needs px values; use the Padding field.') : ''), { open: !isText });
+    + (padSides ? sidesFields('pad', pb, ['Top', 'Right', 'Bottom', 'Left'], ['pad-t', 'pad-r', 'pad-b', 'pad-l'], 'Per-side editing needs px values; use the Padding field.') : ''), { open: container });
 
   // ---- Size and position (what this node does inside its parent) ----
   const abs = !multi && resolvedOf(node).position === 'absolute';
@@ -363,7 +366,7 @@ export function renderPanel(ctx) {
   const weightSel = `<div class="fld"><div class="fbox sel${wt.value === undefined && !wt.mixed ? ' inherited' : ''}" title="${wt.value === undefined && !wt.mixed ? 'Inherited from the parent' : ''}"><label class="flabel pfx" for="fontWeight">${L('B')}<span class="lt">Weight</span></label><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined && !wt.mixed ? `<option value="" selected>${effW ?? 400}</option>` : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select>${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`;
   const typeSec = section('type', 'Text',
     `<p class="hint typehint">Grey values come from the parent. Type a value to set one here.</p>` + field('fontFamily', { wide: true }) + row(field('fontSize'), weightSel) + row(field('lineHeight'), field('letterSpacing'))
-    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true, eff: (c) => ({ start: 'left', end: 'right', justify: 'left' }[c.textAlign] ?? c.textAlign) }) + field('color'));
+    + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true, eff: (c) => ({ start: 'left', end: 'right', justify: 'left' }[c.textAlign] ?? c.textAlign) }) + field('color'), { open: isText });
 
   // ---- Content: the text and its setting binding (near the top for a text node), image attributes ----
   let content = '';
@@ -414,7 +417,7 @@ export function renderPanel(ctx) {
           <label for="new-prop-type">Type</label><select id="new-prop-type"${dis}><option>string</option><option>boolean</option><option>enum</option></select>
           <label for="new-prop-options">Options (enum, comma separated)</label><input id="new-prop-options" autocomplete="off"${dis}>
           <div class="row2"><button type="submit" class="btn primary" id="add-prop-submit"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="prop">Cancel</button></div></form>`
-      : `<button type="button" class="btn" id="add-prop" data-action="open" data-form="prop"${dis}>+ setting</button>`}${err('add-prop')}`);
+      : `<button type="button" class="btn" id="add-prop" data-action="open" data-form="prop"${dis}>+ setting</button>`}${err('add-prop')}`, { open: false });
 
   const axisUi = axes(doc).map((a) => `<div class="axis" data-axis="${esc(a.name)}"><h3>${esc(a.name)}</h3>
       <ul class="plain chips">${a.options.map((o) => {
@@ -431,7 +434,7 @@ export function renderPanel(ctx) {
           <label for="new-axis-value">First value</label><input id="new-axis-value" placeholder="sm" autocomplete="off"${dis}>
           <label for="new-axis-base">Base value</label><input id="new-axis-base" placeholder="default" autocomplete="off"${dis}>
           <div class="row2"><button type="submit" class="btn primary" id="add-axis-submit"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="axis">Cancel</button></div></form>`
-      : `<button type="button" class="btn" id="add-axis" data-action="open" data-form="axis"${dis}>+ axis</button>`}${err('add-axis')}`);
+      : `<button type="button" class="btn" id="add-axis" data-action="open" data-form="axis"${dis}>+ axis</button>`}${err('add-axis')}`, { open: false });
 
   const vlabel = variantLabel(sel.variant);
   el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="nodename" id="sel-node">${esc(node.id)} <span class="tagname">&lt;${esc(node.tag)}&gt;</span>${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
@@ -439,7 +442,10 @@ export function renderPanel(ctx) {
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec : layout + sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + content}${advanced}
+    ${isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec
+      : node.tag === 'img' ? content + sizeSec + look + stroke + effects + layout
+      : container ? layout + sizeSec + look + fill + stroke + effects + (showType ? typeSec : '')
+      : sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + layout}${advanced}
     <div class="grouphead">Component</div>${propsUi}${variantsUi}`;
 
   for (const sw of el.querySelectorAll('.chipcolor')) {
@@ -630,7 +636,7 @@ function wire(ctx, el) {
     const d = ev.target;
     if (!d.matches?.('details.sec') || Date.now() - userToggle > 500) return;
     const id = d.dataset.sec;
-    if (id === 'advanced') ui.advanced = d.open; else if (d.open) { ui.closed.delete(id); ui.opened.add(id); } else { ui.closed.add(id); ui.opened.delete(id); }
+    if (id === 'advanced') ui.advanced = d.open; else { if (d.open) { ui.closed.delete(id); ui.opened.add(id); } else { ui.closed.add(id); ui.opened.delete(id); } keep('napkin.panel.closed', ui.closed); keep('napkin.panel.opened', ui.opened); }
   }, true);
 
   el.addEventListener('change', async (ev) => {
