@@ -1,0 +1,222 @@
+Re-run: EVIDENCE=1 node --test test/onboarding/errors.test.js
+219/219 error expressions have a next-step rule. File context and stale/invalid/read-only prefixes tested at runtime.
+
+adopt.js:11 [inline] `${file}: line ${node?.loc?.start?.line || 1}: cannot adopt: ${why}. Next: keep this file read-only; simplify that construct by hand before proposing again.`
+api.js:38 [inline] explainError(error)
+api.js:54 [api] 'a real name is required (not empty, not "unknown"): { as: "you" }'
+api.js:55 [api] 'that name is reserved'
+api.js:57 [api] `"${name}" is configured with a token in napkin.json; send it as { token }`
+api.js:71 [api] 'propose needs a running napkin canvas server: nobody could review the proposal here. Start the canvas (node src/server.js) or apply directly if you are allowed to.'
+api.js:86 [api] 'no such proposal'
+api.js:93 [api] 'the component no longer exists'
+api.js:103 [inline] explainError(error, { file: contextFile })
+api.js:109 [api] 'identity required: send "Authorization: Bearer <token>" (POST /api/session { as } gives you one)'
+api.js:112 [api] `agent "${caller}" is ${mode === 'read' ? 'read-only' : 'propose-only'} (napkin.json agents): ${action} is not allowed`
+api.js:116 [api] 'body is not JSON'
+api.js:127 [api] 'method not allowed'
+api.js:135 [api] 'body is not JSON'
+api.js:138 [api] err.message
+api.js:140 [api] 'method not allowed'
+api.js:144 [api] `component "${seg[1]}" not found`
+api.js:156 [api] err.message
+api.js:162 [api] `agent "${caller}" is read-only (napkin.json). Next: ask a write or propose agent to propose_adoption.`
+api.js:163 [api] 'propose needs a running napkin canvas server. Next: run napkin open to review an adoption.'
+api.js:165 [api] `${e.file} is already editable. Next: use apply_edits.`
+api.js:167 [api] err.message
+api.js:175 [api] 'invalid edit #0: body is not JSON'
+api.js:179 [api] `agent "${caller}" is read-only (napkin.json agents): apply_edits is not allowed (dryRun is)`
+api.js:188 [api] 'body is not JSON'
+api.js:191 [api] err.message
+api.js:194 [api] 'body is not JSON'
+api.js:197 [api] err.message
+api.js:202 [api] 'variant must be JSON like {"size":"sm"}'
+api.js:204 [api] err.message
+api.js:206 [api] 'method not allowed'
+bundle.js:68 [inline] `${file}: ${formatError(e)}. Next: fix the named import, CSS or syntax in this file, then reload.`
+cli.js:22 [inline] `unknown command ${positionals.join(' ')}. Next: run napkin --help.`
+cli.js:25 [inline] `port ${values.port} is invalid. Next: use --port 4810 or --port 0.`
+cli.js:27 [inline] `${dir} is not empty. Next: choose an empty folder for napkin init, or use napkin open ${JSON.stringify(dir)}.`
+cli.js:34 [inline] `folder ${dir} does not exist. Next: choose a repository folder or run napkin init ${JSON.stringify(dir)}.`
+cli.js:35 [inline] `${dir} is a file. Next: choose a repository folder for napkin open.`
+cli.js:38 [inline] `${dir}/napkin.json: ${e.message}. Next: fix its JSON and run napkin open again.`
+cli.js:39 [inline] `${dir}/napkin.json: components must be a folder path string. Next: set components to \"components\" and retry.`
+cli.js:41 [inline] `${components} does not exist (napkin.json). Next: create the components folder or correct the components path.`
+codecs.js:18 [inline] explainError(e.message, { file: p, next: 'fix the sidecar JSON or restore it from git, then reopen the component.' })
+codecs.js:50 [inline] explainError(`napkin opens .tsx component files, not ${basename(file)}`)
+lock.js:27 [typed] `another napkin process (pid ${pid}) is editing ${dir}; stop it, or point your tools at it (NAPKIN_URL) instead of starting a second writer`
+lock.js:48 [typed] `could not take the lock ${file}`
+lock.js:65 [typed] `another napkin process (pid ${pid}) is editing ${dir}. Next: connect to its NAPKIN_URL or stop it.`
+lock.js:69 [typed] explainError(e.message, { file: dir })
+mcp.js:53 [typed] e.message
+mcp.js:54 [inline] explainError(`napkin server answered ${probe.status}`)
+mcp.js:59 [inline] explainError(`napkin refused this agent a session: ${sess.error}`)
+mcp.js:75 [inline] explainError(`no such folder: ${dir} (set NAPKIN_DIR)`)
+mcp.js:83 [inline] explainError(sess.json.error)
+mcp.js:91 [inline] explainError('not found')
+mcp.js:116 [typed] r.json?.error ?? `HTTP ${r.status}`
+mcp.js:149 [inline] explainError(`unknown tool ${name}`)
+mcp.js:157 [json-rpc] 'parse error'
+mcp.js:168 [json-rpc] `no such resource: ${params?.uri}`
+mcp.js:173 [json-rpc] `no such prompt: ${params?.name}`
+mcp.js:182 [inline] explainError(e.message)
+mcp.js:183 [inline] explainError(e.message)
+mcp.js:186 [json-rpc] `method not found: ${method}`
+model.js:133 [typed] `value for ${path} must be finite`
+model.js:134 [typed] `value for ${path} must be a string or number`
+model.js:135 [typed] `unsafe value for ${path}`
+model.js:138 [typed] 'text must be a string'
+model.js:139 [typed] 'text must be one line, at most 500 characters'
+model.js:144 [typed] `default for ${prop.name} must be true or false`
+model.js:145 [typed] `default for ${prop.name} must be one of ${prop.options.join(', ')}`
+model.js:163 [typed] 'edits must be a non-empty array'
+model.js:167 [typed] 'not an object'
+model.js:170 [typed] `bad path "${e.path}"`
+model.js:173 [typed] `no node "${id}"`
+model.js:175 [typed] 'text cannot differ per variant; make it a setting instead'
+model.js:176 [typed] `"${id}" has child elements, so it cannot hold text`
+model.js:177 [typed] `<${node.tag}> cannot hold text`
+model.js:185 [typed] `unknown attribute "${attr}"`
+model.js:186 [typed] 'attributes cannot differ per variant'
+model.js:192 [typed] `bad property "${prop}"`
+model.js:196 [typed] 'variant must name exactly one axis, e.g. { "size": "sm" }'
+model.js:199 [typed] `no variant axis "${axis}"`
+model.js:200 [typed] `"${value}" is not a value of ${axis}`
+model.js:201 [typed] `"${value}" is the base of ${axis}; set the base style instead`
+model.js:213 [typed] `no parent "${e.parent}"`
+model.js:214 [typed] `"${e.parent}" holds text, so it cannot hold elements`
+model.js:215 [typed] `<${parent.tag}> cannot hold elements`
+model.js:217 [typed] 'node needs id and tag'
+model.js:218 [typed] `bad id "${n.id}" (letters, digits, _; starts lowercase)`
+model.js:219 [typed] `id "${n.id}" already exists`
+model.js:220 [typed] `tag "${n.tag}" is not supported`
+model.js:222 [typed] `bad property "${k}"`
+model.js:223 [typed] `<${n.tag}> cannot hold text`
+model.js:224 [typed] `unknown attribute "${k}"`
+model.js:226 [typed] `bad index ${e.index}`
+model.js:232 [typed] byId.has(e.id) ? 'cannot delete the root' : `no node "${e.id}"`
+model.js:240 [typed] `cannot move "${e.id}"`
+model.js:241 [typed] `no parent "${e.parent}"`
+model.js:242 [typed] `"${e.parent}" cannot hold elements`
+model.js:243 [typed] 'cannot move a node into itself'
+model.js:246 [typed] `bad index ${e.index}`
+model.js:252 [typed] `no node "${e.id}"`
+model.js:253 [typed] `bad id "${e.to}" (letters, digits, _; starts lowercase)`
+model.js:255 [typed] `id "${e.to}" already exists`
+model.js:261 [typed] `bad prop name "${e.name}"`
+model.js:262 [typed] `prop "${e.name}" already exists`
+model.js:263 [typed] 'type must be string, boolean or enum'
+model.js:266 [typed] 'enum needs distinct options (letters, digits, _ or -)'
+model.js:276 [typed] `no prop "${e.name}"`
+model.js:278 [typed] `"${user.id}" shows ${e.name}; unbind its text first`
+model.js:285 [typed] `no prop "${e.name}"`
+model.js:287 [typed] `variant axis ${e.name} needs a base value`
+model.js:291 [typed] `${e.name}=${e.value} has overrides; reset them before making it the base`
+model.js:297 [typed] `no node "${e.id}"`
+model.js:298 [typed] `"${e.id}" cannot hold text`
+model.js:300 [typed] `"${e.id}" is not bound to a setting`
+model.js:306 [typed] `bad prop name "${e.prop}"`
+model.js:309 [typed] `prop "${e.prop}" is not a string`
+model.js:314 [typed] `bad axis name "${e.axis}"`
+model.js:315 [typed] `bad variant value "${e.value}"`
+model.js:319 [typed] `bad base value "${base}"`
+model.js:323 [typed] `prop "${e.axis}" is not a variant axis`
+model.js:324 [typed] `${e.axis} already has "${e.value}"`
+model.js:330 [typed] `no variant axis "${e.axis}"`
+model.js:331 [typed] `${e.axis} has no "${e.value}"`
+model.js:332 [typed] `"${e.value}" is the base of ${e.axis}`
+model.js:340 [typed] `unknown op "${e.op}"`
+render-png.js:26 [typed] 'could not start Chromium (set CHROMIUM to its path)'
+render-png.js:37 [inline] explainError(msg.error.message)
+render-png.js:39 [inline] explainError('browser closed')
+render-png.js:47 [typed] r.exceptionDetails.exception?.description || r.exceptionDetails.text
+render-png.js:63 [inline] explainError(j.error.message)
+render-png.js:79 [typed] 'renderer is closed'
+render-png.js:119 [typed] `no variant axis "${axis}" (axes: ${(snap.doc ? axes(snap.doc) : []).map((x) => x.name).join(', ') || 'none'})`
+render-png.js:120 [typed] `axis "${axis}" has no value "${value}" (values: ${a.options.join(', ')})`
+render-png.js:123 [typed] `build failed: ${built?.error}`
+render-png.js:128 [typed] explainError(e.message, { file: entry.file })
+server.js:65 [http-json] 'forbidden: napkin only answers its own canvas on 127.0.0.1 or localhost'
+server.js:91 [http-json] 'body is not JSON'
+server.js:93 [http-json] 'not found'
+server.js:105 [http-json] 'not found'
+server.js:107 [http-json] r.error
+server.js:120 [http-json] 'not found'
+server.js:121 [http-json] String(err.message)
+store.js:35 [inline] broken && explainError(broken, { file })
+store.js:52 [store.apply] 'by is required: every revision names a real caller. Next: supply your session identity.'
+store.js:54 [store.apply] `stale revision: ${file} changed after the adoption proposal. Next: reject it and propose_adoption again.`
+store.js:55 [store.apply] `invalid edit #0: ${file} is already editable. Next: use apply_edits.`
+store.js:57 [store.apply] `invalid edit #0: ${file}: ${reason(e)}. Next: correct the adoption proposal.`
+store.js:63 [store.apply] `read-only: ${readOnly}`
+store.js:65 [store.apply] 'by is required: every revision names a real caller'
+store.js:68 [store.apply] `stale revision: ${baseRevision} is not a known revision (current ${revision})`
+store.js:70 [store.apply] 'invalid edit #0: edits must be an array'
+store.js:74 [store.apply] `stale revision: ${[...keys].join(', ')} changed in revision ${h.revision} (base ${baseRevision})`
+store.js:79 [store.apply] e.message
+store.js:82 [store.apply] `invalid edit #0: could not write the file (${e.message})`
+tsx/read.js:30 [typed] `${what} must be an object literal`
+tsx/read.js:32 [typed] `${what}: only plain "key: value" entries`
+tsx/read.js:34 [typed] `${what}: bad key`
+tsx/read.js:43 [typed] `${what}.${k} must be a string or number literal`
+tsx/read.js:62 [typed] 'only one props interface'
+tsx/read.js:68 [typed] 'only one exported component per file'
+tsx/read.js:71 [typed] `napkin can't edit this statement (${d?.type || stmt.type})`
+tsx/read.js:73 [typed] 'no exported component function (export function Name(...))'
+tsx/read.js:74 [typed] 'no `const base = { ... }` style object'
+tsx/read.js:75 [typed] 'no style helper `function s(node, v)`'
+tsx/read.js:81 [typed] 'the component body may only define `v` and return JSX'
+tsx/read.js:83 [typed] 'the component must return JSX'
+tsx/read.js:86 [typed] 'the component must return one JSX element'
+tsx/read.js:89 [typed] 'props must be destructured: ({ a, b = 1 }: Props)'
+tsx/read.js:98 [typed] 'props: only plain names and defaults'
+tsx/read.js:102 [typed] `default for ${name} must be a literal`
+tsx/read.js:104 [typed] 'props: no renaming'
+tsx/read.js:107 [typed] 'props interface: only plain properties'
+tsx/read.js:117 [typed] `prop ${name}: type must be string, boolean or a union of strings`
+tsx/read.js:120 [typed] `variant axis ${name} needs a default (its base value)`
+tsx/read.js:121 [typed] `default for ${name} is not one of its values`
+tsx/read.js:125 [typed] `prop ${name} is not in the props interface`
+tsx/read.js:131 [typed] `<${open.name.name || '?'}> is not a supported element`
+tsx/read.js:135 [typed] 'no spread attributes'
+tsx/read.js:138 [typed] 'data-n must be a string'
+tsx/read.js:143 [typed] "style must be s('<id>', v)"
+tsx/read.js:146 [typed] `${name} must be a string`
+tsx/read.js:148 [typed] `attribute ${name} is not supported`
+tsx/read.js:150 [typed] 'every element needs data-n="<id>"'
+tsx/read.js:151 [typed] `element ${node.id} needs style={s('${node.id}', v)}`
+tsx/read.js:152 [typed] `duplicate data-n "${node.id}"`
+tsx/read.js:157 [typed] 'one text per element'
+tsx/read.js:162 [typed] 'one text per element'
+tsx/read.js:163 [typed] 'only {stringProp} or {"text"} inside elements'
+tsx/read.js:164 [typed] 'one text per element'
+tsx/read.js:167 [typed] `${c.type} is not supported inside elements`
+tsx/read.js:169 [typed] `${node.id} mixes text and elements; wrap the text in its own element`
+tsx/read.js:178 [typed] `variants.${axis}: no variant axis prop "${axis}"`
+tsx/read.js:180 [typed] `variants.${axis}.${val}: not a value of ${axis}`
+tsx/read.js:182 [typed] `variants.${axis}.${val}.${id}: no element with that data-n`
+tsx/read.js:199 [typed] `base.${k}: no element with that data-n`
+tsx/read.js:205 [typed] `const v must list the variant axes in order: { ${axisNames.join(', ')} }`
+tsx/read.js:207 [typed] 'a component with variant axes needs `const variants = { ... }`'
+tsx/write.js:230 [inline] explainError('component has no variants object')
+tsx/write.js:241 [inline] explainError(`component name "${name}" must be PascalCase`)
+workspace.js:33 [typed] 'a caller name is required: every commit names who made it'
+workspace.js:50 [bundler-forward] r.error
+workspace.js:115 [typed] `${e.file}: sidecar writes are disabled. Next: reopen with --write-sidecars to save frame positions.`
+workspace.js:117 [typed] 'canvas x and y must be numbers'
+workspace.js:128 [typed] `component name "${name}" must be PascalCase (letters and digits, starting with a capital)`
+workspace.js:129 [typed] `root tag "${rootTag}" is not supported`
+workspace.js:130 [typed] 'this server opened a single file, so it cannot add components'
+workspace.js:134 [typed] `component "${name}" already exists`
+workspace.js:137 [typed] `component "${name}" already exists`
+workspace.js:140 [inline] explainError(`created ${name}.tsx but could not open it`)
+workspace.js:148 [typed] 'not found'
+workspace.js:150 [typed] `read-only: ${e.file}: ${r.readOnly}. Next: keep the source or propose an adoption before deleting it.`
+workspace.js:154 [inline] explainError(`deleted ${name}.tsx but the workspace did not notice`)
+workspace.js:161 [typed] 'not found'
+workspace.js:162 [typed] `${e.file}: rename needs a saved component identity. Next: reopen with --write-sidecars to rename it.`
+workspace.js:163 [typed] `component name "${newName}" must be PascalCase (letters and digits, starting with a capital)`
+workspace.js:165 [typed] `read-only: ${readOnly}`
+workspace.js:169 [typed] `component "${newName}" already exists`
+workspace.js:171 [inline] explainError('name not rewritten')
+workspace.js:172 [typed] `could not rename safely: ${err.message}`
+workspace.js:179 [inline] explainError('renamed the file but the workspace did not notice')

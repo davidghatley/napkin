@@ -6,20 +6,22 @@
 //          'added'   { component, by?, summary? }   a file appeared (snapshot via snapshot()); by/summary when napkin made it (create, rename)
 //          'removed' { component, by?, summary? }   by/summary when napkin removed it (delete, rename)
 // workspace.activity(): the last 200 { at, kind: 'change'|'added'|'removed', component, name, by, summary, revision? }
-import { readdirSync, watch, existsSync, readFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { explainError } from './errors.js';
+import { watch, existsSync, readFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { openStore } from './store.js';
 import { readSidecar, sidecarPath } from './codecs.js';
 import { createComponent, removeComponent, moveComponent, writeSidecar, removeSidecar } from './commit.js';
 import { readComponent } from './tsx/read.js';
 import { createBundler } from './bundle.js';
+import { componentFiles } from './scan.js';
 import { newComponentSource } from './tsx/write.js';
 import { TAGS, VOID } from './model.js';
 
 // create() failures: `status` is the HTTP code the server answers with (400 bad input, 409 already exists).
 export class CreateError extends Error {
-  constructor(message, status = 400) { super(message); this.status = status; }
+  constructor(message, status = 400) { super(explainError(message)); this.status = status; }
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -30,7 +32,7 @@ async function until(fn, ms = 4000) { const t0 = Date.now(); while (Date.now() -
 const canvasOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).canvas ?? { x: 0, y: 0 }; } catch { return { x: 0, y: 0 }; } };
 const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown') throw new CreateError('a caller name is required: every commit names who made it'); };
 
-export async function openWorkspace(dir, { only } = {}) {
+export async function openWorkspace(dir, { only, recursive = false, writeSidecars = true } = {}) {
   dir = resolve(dir);
   const events = new EventEmitter();
   const bundler = createBundler();
@@ -51,15 +53,15 @@ export async function openWorkspace(dir, { only } = {}) {
 
   async function add(file) {
     const stem = basename(file).replace(/\.tsx$/, '');
-    const id = readSidecar(file, stem).id;
     const origin = origins.get(file); origins.delete(file);
-    const store = await openStore(file, origin);
+    const store = await openStore(file, { ...origin, writeSidecars });
+    const id = (await store.read()).doc?.id || readSidecar(file, stem).id;
     const e = { id, file, store, name: stem };
     entries.set(id, e);
     const { doc } = await store.read();
     if (doc) e.name = doc.name;
     store.events.on('change', (c) => {
-      e.name = c.doc.name;
+      e.name = c.doc?.name || e.name;
       build(e);
       note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision });
       events.emit('change', { component: id, ...c });
@@ -81,8 +83,7 @@ export async function openWorkspace(dir, { only } = {}) {
 
   const scan = () => {
     queue = queue.then(async () => {
-      let names; try { names = readdirSync(dir); } catch { names = []; }
-      const files = names.filter((n) => n.endsWith('.tsx') && !n.startsWith('.') && (!wanted || wanted.has(n))).map((n) => join(dir, n));
+      let files; try { files = componentFiles(dir, { recursive }).filter((f) => !wanted || wanted.has(basename(f))); } catch { files = []; }
       const have = new Set([...entries.values()].map((e) => e.file));
       for (const e of [...entries.values()]) if (!files.includes(e.file)) await remove(e);
       for (const f of files) if (!have.has(f)) { try { await add(f); } catch (err) { console.error(`napkin: could not open ${f}: ${err.message}`); } }
@@ -90,7 +91,7 @@ export async function openWorkspace(dir, { only } = {}) {
     return queue;
   };
   await scan();
-  const watcher = watch(dir, () => { scan(); });
+  const watcher = watch(dir, { recursive }, () => { scan(); });
 
   const find = (idOrName) => entries.get(idOrName) || [...entries.values()].find((e) => e.name === idOrName);
   return {
@@ -111,6 +112,7 @@ export async function openWorkspace(dir, { only } = {}) {
     // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
     setCanvas(e, x, y, { by } = {}) {
       needBy(by);
+      if (!writeSidecars) throw new CreateError(`${e.file}: sidecar writes are disabled. Next: reopen with --write-sidecars to save frame positions.`, 403);
       const ok = (n) => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6; // null, strings and NaN are refused, not turned into 0
       if (!ok(x) || !ok(y)) throw new CreateError('canvas x and y must be numbers');
       const side = readSidecar(e.file, e.name);
@@ -135,7 +137,7 @@ export async function openWorkspace(dir, { only } = {}) {
       catch (err) { origins.delete(file); throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
       await scan();
       const e = find(name);
-      if (!e) throw new Error(`created ${name}.tsx but could not open it`);
+      if (!e) throw new Error(explainError(`created ${name}.tsx but could not open it`));
       return { id: e.id, name: e.name };
     },
     activity: (limit = 50) => log.slice(-limit).reverse(),
@@ -144,10 +146,12 @@ export async function openWorkspace(dir, { only } = {}) {
       needBy(by);
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
+      const r = await e.store.read();
+      if (r.readOnly) throw new CreateError(`read-only: ${e.file}: ${r.readOnly}. Next: keep the source or propose an adoption before deleting it.`, 403);
       const { id, name, file } = e;
       removals.set(file, { by, summary: `deleted ${name}` });
-      removeComponent(file); removeSidecar(sidecarPath(file));
-      if (!(await until(() => !find(id)))) throw new Error(`deleted ${name}.tsx but the workspace did not notice`);
+      removeComponent(file); if (writeSidecars) removeSidecar(sidecarPath(file));
+      if (!(await until(() => !find(id)))) throw new Error(explainError(`deleted ${name}.tsx but the workspace did not notice`));
       return { id, name };
     },
     // Rename: the file, the exported function and its Props interface; the component id stays and the revision continues.
@@ -155,23 +159,24 @@ export async function openWorkspace(dir, { only } = {}) {
       needBy(by);
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
+      if (!writeSidecars) throw new CreateError(`${e.file}: rename needs a saved component identity. Next: reopen with --write-sidecars to rename it.`, 403);
       if (typeof newName !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(newName)) throw new CreateError(`component name "${newName}" must be PascalCase (letters and digits, starting with a capital)`);
       const { readOnly, source, doc, revision } = await e.store.read();
       if (readOnly) throw new CreateError(`read-only: ${readOnly}`, 403);
       const old = doc.name;
       if (old === newName) return { id: e.id, name: newName };
-      const file = join(dir, `${newName}.tsx`);
+      const file = join(dirname(e.file), `${newName}.tsx`);
       if ([...entries.values()].some((x) => x !== e && x.name.toLowerCase() === newName.toLowerCase()) || existsSync(file)) throw new CreateError(`component "${newName}" already exists`, 409);
       const text = source.replace(new RegExp(`\\bfunction ${old}\\b`), `function ${newName}`).replace(new RegExp(`\\b${old}Props\\b`, 'g'), `${newName}Props`);
-      try { if (readComponent(text).doc.name !== newName) throw new Error('name not rewritten'); }
+      try { if (readComponent(text).doc.name !== newName) throw new Error(explainError('name not rewritten')); }
       catch (err) { throw new CreateError(`could not rename safely: ${err.message}`); }
-      const side = readFileSync(sidecarPath(e.file), 'utf8');
+      const side = JSON.stringify(readSidecar(e.file, e.name), null, 2) + '\n';
       const { id, file: oldFile } = e;
       origins.set(file, { by, summary: `renamed ${old} to ${newName}`, revision: revision + 1 });
       removals.set(oldFile, { by, summary: `renamed ${old} to ${newName}` });
-      writeSidecar(sidecarPath(file), side);
+      if (writeSidecars) writeSidecar(sidecarPath(file), side);
       moveComponent(oldFile, file, text); removeSidecar(sidecarPath(oldFile));
-      if (!(await until(() => find(id)?.file === file))) throw new Error('renamed the file but the workspace did not notice');
+      if (!(await until(() => find(id)?.file === file))) throw new Error(explainError('renamed the file but the workspace did not notice'));
       return { id, name: newName };
     },
     async settled() { await queue; await Promise.all([...entries.values()].map((e) => e.built)); },

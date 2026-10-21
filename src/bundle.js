@@ -12,15 +12,29 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // The component is the export named like the file's component, else the default export, else the first function.
 const entry = (file, name) => `
-import * as M from ${JSON.stringify(file)};
-import { createElement } from 'react';
+import { createElement, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
-const C = M[${JSON.stringify(name)}] ?? M.default ?? Object.values(M).find((x) => typeof x === 'function');
-if (!C) throw new Error('no component exported from ' + ${JSON.stringify(basename(file))});
+let M = {}, moduleError;
+try { M = await import(${JSON.stringify(file)}); } catch (error) { moduleError = error; }
+const usable = (x) => typeof x === 'function' || (x && typeof x === 'object' && x.$$typeof);
+const C = [M[${JSON.stringify(name)}], M.default, ...Object.values(M)].find(usable);
+const loadFailure = moduleError
+  ? ${JSON.stringify(file)} + ': module failed: ' + moduleError.message + '. Next: fix the module initialization or provide its required context, then reload.'
+  : !C ? 'no component exported from ' + ${JSON.stringify(file)} + '. Next: export a named or default React component.' : null;
+class Boundary extends Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() { return this.state.error ? createElement('div', { className: 'error', role: 'alert', style: { maxWidth: 420, padding: 16, whiteSpace: 'normal' } }, ${JSON.stringify(file)} + ': render failed: ' + this.state.error.message + '. Next: provide the required props or context in this component, then reload.') : this.props.children; }
+}
 export function mount(el, props = {}) {
+  if (loadFailure) {
+    const error = document.createElement('div'); error.className = 'error'; error.setAttribute('role', 'alert');
+    error.style.cssText = 'max-width:420px;padding:16px;white-space:normal'; error.textContent = loadFailure; el.append(error);
+    return () => error.remove();
+  }
   const root = createRoot(el);
-  flushSync(() => root.render(createElement(C, props)));
+  flushSync(() => root.render(createElement(Boundary, null, createElement(C, props))));
   return () => root.unmount();
 }
 `;
@@ -51,7 +65,7 @@ export function createBundler() {
         const r = await ctx.rebuild();
         return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
       } catch (e) {
-        return { ok: false, error: formatError(e), ms: performance.now() - t0 };
+        return { ok: false, error: `${file}: ${formatError(e)}. Next: fix the named import, CSS or syntax in this file, then reload.`, ms: performance.now() - t0 };
       }
     },
     async dispose(file) { const c = contexts.get(file); contexts.delete(file); await c?.dispose(); },

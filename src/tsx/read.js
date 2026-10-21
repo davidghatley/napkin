@@ -1,6 +1,7 @@
 // Read a component .tsx file in the napkin dialect (decision 0003) into a model (src/model.js).
 // Anything outside the dialect throws DialectError with the line, and the file opens read-only:
 // napkin never guesses at code it can't write back faithfully (salvage INV-06).
+import { explainError } from '../errors.js';
 import * as recast from 'recast';
 import * as tsParser from 'recast/parsers/babel-ts.js';
 import { TAGS, ATTRS } from '../model.js';
@@ -8,7 +9,7 @@ import { TAGS, ATTRS } from '../model.js';
 export class DialectError extends Error {
   constructor(node, message) {
     const line = node?.loc?.start?.line;
-    super(line ? `line ${line}: ${message}` : message);
+    super(explainError(line ? `line ${line}: ${message}` : `line 1: ${message}`, { next: "keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite." }));
     this.line = line;
   }
 }

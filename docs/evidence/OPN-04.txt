@@ -1,0 +1,143 @@
+OPN-04 — shadcn/ui dialect coverage
+Re-run: node tools/shadcn-report.js
+Source: https://github.com/shadcn-ui/ui
+Pinned commit: ba1503c64472b82256d9de95e2e62c5901a38e8b
+Scope: apps/v4/registry/new-york-v4/ui (canonical new-york-v4 UI TSX files; excludes examples, styles copies and docs)
+Editable: 0/61 (0.00%)
+Read-only: 61/61
+Unclassified: 0
+TSX SHA-256 checks unchanged: 61/61
+Repository status after scan: clean
+This measures the current dialect, not whether shadcn can render after installing its dependencies.
+Reasons below are the FIRST refusal per file; they are not a full census of unsupported constructs.
+
+Top refusal reasons:
+47: napkin can't edit this statement (FunctionDeclaration)
+14: napkin can't edit this statement (VariableDeclaration)
+
+61 TSX files: 0 editable, 61 read-only
+File | Status | Line | Reason
+accordion.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [accordion.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+alert-dialog.tsx | read-only | 9 | line 9: napkin can't edit this statement (FunctionDeclaration) [alert-dialog.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+alert.tsx | read-only | 5 | line 5: napkin can't edit this statement (VariableDeclaration) [alert.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+aspect-ratio.tsx | read-only | 5 | line 5: napkin can't edit this statement (FunctionDeclaration) [aspect-ratio.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+attachment.tsx | read-only | 8 | line 8: napkin can't edit this statement (VariableDeclaration) [attachment.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+avatar.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [avatar.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+badge.tsx | read-only | 6 | line 6: napkin can't edit this statement (VariableDeclaration) [badge.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+breadcrumb.tsx | read-only | 6 | line 6: napkin can't edit this statement (FunctionDeclaration) [breadcrumb.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+bubble.tsx | read-only | 6 | line 6: napkin can't edit this statement (FunctionDeclaration) [bubble.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+button-group.tsx | read-only | 7 | line 7: napkin can't edit this statement (VariableDeclaration) [button-group.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+button.tsx | read-only | 6 | line 6: napkin can't edit this statement (VariableDeclaration) [button.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+calendar.tsx | read-only | 18 | line 18: napkin can't edit this statement (FunctionDeclaration) [calendar.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+card.tsx | read-only | 4 | line 4: napkin can't edit this statement (FunctionDeclaration) [card.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+carousel.tsx | read-only | 33 | line 33: napkin can't edit this statement (VariableDeclaration) [carousel.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+chart.tsx | read-only | 9 | line 9: napkin can't edit this statement (VariableDeclaration) [chart.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+checkbox.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [checkbox.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+collapsible.tsx | read-only | 5 | line 5: napkin can't edit this statement (FunctionDeclaration) [collapsible.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+combobox.tsx | read-only | 16 | line 16: napkin can't edit this statement (VariableDeclaration) [combobox.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+command.tsx | read-only | 16 | line 16: napkin can't edit this statement (FunctionDeclaration) [command.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+context-menu.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [context-menu.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+dialog.tsx | read-only | 10 | line 10: napkin can't edit this statement (FunctionDeclaration) [dialog.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+direction.tsx | read-only | 6 | line 6: napkin can't edit this statement (FunctionDeclaration) [direction.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+drawer.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [drawer.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+dropdown-menu.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [dropdown-menu.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+empty.tsx | read-only | 4 | line 4: napkin can't edit this statement (FunctionDeclaration) [empty.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+field.tsx | read-only | 10 | line 10: napkin can't edit this statement (FunctionDeclaration) [field.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+form.tsx | read-only | 19 | line 19: napkin can't edit this statement (VariableDeclaration) [form.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+hover-card.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [hover-card.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+input-group.tsx | read-only | 11 | line 11: napkin can't edit this statement (FunctionDeclaration) [input-group.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+input-otp.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [input-otp.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+input.tsx | read-only | 4 | line 4: napkin can't edit this statement (FunctionDeclaration) [input.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+item.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [item.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+kbd.tsx | read-only | 3 | line 3: napkin can't edit this statement (FunctionDeclaration) [kbd.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+label.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [label.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+marker.tsx | read-only | 6 | line 6: napkin can't edit this statement (VariableDeclaration) [marker.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+menubar.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [menubar.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+message-scroller.tsx | read-only | 15 | line 15: napkin can't edit this statement (FunctionDeclaration) [message-scroller.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+message.tsx | read-only | 4 | line 4: napkin can't edit this statement (FunctionDeclaration) [message.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+native-select.tsx | read-only | 5 | line 5: napkin can't edit this statement (FunctionDeclaration) [native-select.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+navigation-menu.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [navigation-menu.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+pagination.tsx | read-only | 11 | line 11: napkin can't edit this statement (FunctionDeclaration) [pagination.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+popover.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [popover.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+progress.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [progress.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+radio-group.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [radio-group.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+resizable.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [resizable.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+scroll-area.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [scroll-area.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+select.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [select.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+separator.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [separator.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+sheet.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [sheet.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+sidebar.tsx | read-only | 28 | line 28: napkin can't edit this statement (VariableDeclaration) [sidebar.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+skeleton.tsx | read-only | 3 | line 3: napkin can't edit this statement (FunctionDeclaration) [skeleton.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+slider.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [slider.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+sonner.tsx | read-only | 13 | line 13: napkin can't edit this statement (VariableDeclaration) [sonner.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+spinner.tsx | read-only | 4 | line 4: napkin can't edit this statement (FunctionDeclaration) [spinner.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+switch.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [switch.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+table.tsx | read-only | 6 | line 6: napkin can't edit this statement (FunctionDeclaration) [table.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+tabs.tsx | read-only | 8 | line 8: napkin can't edit this statement (FunctionDeclaration) [tabs.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+textarea.tsx | read-only | 4 | line 4: napkin can't edit this statement (FunctionDeclaration) [textarea.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+toggle-group.tsx | read-only | 10 | line 10: napkin can't edit this statement (VariableDeclaration) [toggle-group.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+toggle.tsx | read-only | 8 | line 8: napkin can't edit this statement (VariableDeclaration) [toggle.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+tooltip.tsx | read-only | 7 | line 7: napkin can't edit this statement (FunctionDeclaration) [tooltip.tsx] Next: keep this file read-only, or ask propose_adoption for a reviewed dialect rewrite.
+
+Source SHA-256:
+99de242681eb43121969db02bbb102aeeb1865ef52c7635672508a58c5429085  accordion.tsx
+b3dfb83e54ed8c82071df5289e5149628bf573458fc2da2d62f93f8380041b28  alert-dialog.tsx
+d03dcae5cdb63c381c1144ca9a0c49ba0e46466967d7deb94662034042acb034  alert.tsx
+b1c157886236782cb92d8fbcd4749532aaf6d8aabefd6e157ca40358f902f407  aspect-ratio.tsx
+243feb168430d01288586d2460822e7789ffde8ebf2d0c436fa73c59c3d764e5  attachment.tsx
+0c5c48b8a1dff4fdc5ff9b6cb79cc9cd138682b7d86868068f571befe9675e88  avatar.tsx
+13a9380dfff853ee730c14a52df49f22aecd31f40f2998d7c1e7ec458b6e1650  badge.tsx
+c75fcd3d9e8470188bc0dd4b27a2b26fff3ad42b9c9c534a953dc090ae2cba33  breadcrumb.tsx
+df1e461e33e835b7f69296939c2325e8cd76941b5ec69375d80d639793c5c4e2  bubble.tsx
+a9ac862707ff8d78255f2696baf48f9a87d9e92e21eb476f8f9e9361313c1761  button-group.tsx
+79dd6f75f8136394442202d6b8b922fb269eaad0a5dba579397c9d5b41f893bb  button.tsx
+78ed2cc49dafc5bb5df7b1d4a325e5fc314237386747362e5f0761a2c539a934  calendar.tsx
+ef8305b12c3112dab42a4708b41b1ebcc042fa5ab4c20f039da8d45b09ed5059  card.tsx
+70ba30941a3adb448166ddcf8557c97734b7be09f6fd69512a6e444084365557  carousel.tsx
+35e2fa755465ef8eb8ff8b483d493204d452152e7a8863474b1a69f5d44484db  chart.tsx
+ba0ac64064e2d8fa7299d53e9e84b9a4772fef8dd4cf6170c56d3030a1d69941  checkbox.tsx
+c6598e5584f4258b5d9fefadbc5ad6a66888ad58729f4b634a0bb2d9c513188b  collapsible.tsx
+4f88734887ed6928ec7f3a78dfc814a48fb0e0c3056fd5825b72b59a61da0d8a  combobox.tsx
+319e9264567dd46f04d705028bc345470663ca5919f31292c4ec43ea5ceb9336  command.tsx
+bcde5df1ed9887bb050f0badabfb5f79912eb53bdc883dbe6c003d05914d99a4  context-menu.tsx
+2ade6074e5fad0a4eb171ead44c43d3301a3c83d186d7236fb1fdbea80ee556b  dialog.tsx
+84ae2ad658207f0e0f367978e5508cd8027cd00c29c41d3d13db21a708c3d1e6  direction.tsx
+63f04fe50a4bf29b56b0f5e2944c6efe980b895f589923659cc2e8ecc90b16c6  drawer.tsx
+d954efb735f13734751207ad22cb0cddd7f6ec53c59d16675d103dae08cb61fb  dropdown-menu.tsx
+54f529ccf72c18c4b5abd5586a7cf1f2a4c8d207aac366029d66ed095cb2965d  empty.tsx
+4a4d17fcb933513f637f9f7e2daf5d8348f7de086b29738337dec7e6dd1819a0  field.tsx
+dfa22e6614b807df60bbe7e40dd44ef74cf894b358f37c3ed356ebbeef9b4599  form.tsx
+73f59aa759656501ed615604ac3f2c04ba564acaea4529288fe3a487ad934953  hover-card.tsx
+e379899ac50d6cabc9d9eb1668f265176951c62b1fe83a6f23ee97fe8074d526  input-group.tsx
+9f81898aeaabbb104cc22ffda551a333eb22608c543c4800412e2faaa802e311  input-otp.tsx
+0c9457181f6ddc80969bcf854e92c362903a55b6e889fbef3fd85343ecc4af5b  input.tsx
+9ade8136f010284b7ec0142f52606616dd4b23798012e75a9fc6aac1fb2d792e  item.tsx
+c0c0ae6a7d1adb7749b9b34cab8f4d2f5caf333e819b64c2051e77f918d3661f  kbd.tsx
+344bde38b8531615dbf8e14af3895517c24d8ef6ce56ddeda7e2e6fe4b5d0c00  label.tsx
+036277635df058b8dc6e6dbe5cb738bc595e5035b885be42c60f904263725424  marker.tsx
+ca1a7f6775f9095183d63faadc6d4ed5ee2097139b4edeeefa60210379c47092  menubar.tsx
+9f7580a8c9a59d28c30da4974a7d17bfe3a710ee945fc72765e8721cd1a6669a  message-scroller.tsx
+64e9ae0f9d1e268b0ed7b738a53d374d273fe1e7e2dd7b35ad7417e50a9bbe6c  message.tsx
+4bdbce5575dce610fed747df4547a3d494713f4df8d28e09b3ccee62e4d72f93  native-select.tsx
+fbe81d7c358df0d21e49b03174ef53be7d66226a3dce1a97ff3d4a260ed833a3  navigation-menu.tsx
+224843c4f509e8b8c9848adefa43d1491846f0851138fa9b51cc6ba1319c5653  pagination.tsx
+3f99d3add6c9fa4f03721e81297ee10e1310785ee1d9d9d4c82a114d84ab0757  popover.tsx
+e012e1f7e6e66d11229d1233eccf91954edcd9179b418ff1d114dc651b86fd35  progress.tsx
+cfc4f99ee68be2fbbd70de3ffad82e1462d5e8e0bb0aecfd190a4f5115325862  radio-group.tsx
+aaf3ea20e8060c75dd86e06fedfca053d49f81071123ba647b5699efcbc010ea  resizable.tsx
+8b73bb9be51300079c7f561bafbe43ee10f6f464cf39c8c1b25123cd4edb94dd  scroll-area.tsx
+962830436bd0b7ee50e556f0747e277d6a86869ed27d167516346b15f26309d8  select.tsx
+ad7d5403fe337160e41dbf04147896e448ae3a747b8d06660d627d74d60021bc  separator.tsx
+ea473d38a26a9b0b879e5a13139899ad45e9782e896b3fa205c7763a6c506876  sheet.tsx
+2ba1a9b9422f4172373f4cd0587b675d2331a41f4fa68f65dab2b23ca98fd9d2  sidebar.tsx
+f51ce0fcd31e5c31437382e80ea0af94b4fc3d64221d27091d36824546780a43  skeleton.tsx
+6a531f6182de6efec2c25d30a7626b66cbf11cf52d505e47f907124934f7188e  slider.tsx
+13ccc9b0fe4248e622f83a1d3b2f0566b72b5e04162d7d0c8db8945ecc71b55f  sonner.tsx
+5d040fc49cb54c0296070644053b5a8840ddbfca89a430546bf308df3fffad65  spinner.tsx
+743676f33f823ffa8008bbd5eb94cb68e227599447d60e132a202291a395f8e4  switch.tsx
+bd1a9fc83a5a2149e504038e274bb7e5a0351af59f6896df52ac4d5b439695ac  table.tsx
+e1df6e2f95ece373ca909c1d54b8ba8cf4c47dd425c1784bbb9a01c38dd0936b  tabs.tsx
+5cafcfeeee29534f449387a16b585f5923d2faab1a0cdc50a874416b175f59ce  textarea.tsx
+45186473eaa30a966adf16e2b0aa0d16522425fda0658e2c85b8dcb1b62956ef  toggle-group.tsx
+28ae7d72730890a3ba6c668fd511c63a358ad26534c2c25d5922748d47e1fa99  toggle.tsx
+611e4305879b2773eafe76bf3c5caa69d8e47367fd97887a71634a27828f4433  tooltip.tsx
