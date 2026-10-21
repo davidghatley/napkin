@@ -13,11 +13,14 @@ import { summarize } from './summary.js';
 import { ADOPTION } from './adopt.js';
 import { classifySource } from './scan.js';
 import { staleEntries } from './stale.js';
+import { diffToEdits, undoKeys } from './undo.js';
+import { gitAttribution, primeGit } from './git.js';
 
 // Syntax errors from the parser carry loc.line but not "line N:" in the message; dialect errors already do.
 const rawReason = (e) => (e.loc?.line && !/^line \d+/.test(e.message) ? `line ${e.loc.line}: ${e.message}` : e.message);
 
-const HISTORY = 500; // revisions remembered for rebasing; older bases are "stale revision"
+const HISTORY = 500;
+const STACK = 100; // undo steps remembered per caller // revisions remembered for rebasing; older bases are "stale revision"
 
 // start: { revision, by, summary } seeds the first history entry (create and rename record themselves there).
 export async function openStore(file, start = {}) {
@@ -32,23 +35,28 @@ export async function openStore(file, start = {}) {
   let doc = null, state = null, readOnly = null;
   try { ({ doc, state } = codec.load(text, file, start)); } catch (e) { readOnly = reason(e); }
   let revision = start.revision ?? 1;
-  const history = [{ revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now() }];
+  const history = [{ revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', doc, text }];
+  const stacks = new Map(); // caller -> { undo: [{ revision, keys, edits, summary }], redo: [...] } (HIS-01: your own edits only)
+  const stackOf = (by) => { if (!stacks.has(by)) stacks.set(by, { undo: [], redo: [] }); return stacks.get(by); };
   let queue = Promise.resolve();
+  try { primeGit(file); } catch {} // remembers stash texts so a later `git stash pop` is recognised
   let broken = null; // the error of a hand edit the last good doc could not absorb (F22), else null
   const problem = (error) => { broken = error ? explainError(error, { file: displayFile }) : null; events.emit('problem', { error: broken && explainError(broken, { file: displayFile }) }); };
 
-  const commit = (next, keys, by, edits, origin) => {
+  // meta (server-internal): { summary, kind, approvedBy, undoOf, redoOf, restoreOf }; kind 'git' is a change git made.
+  const commit = (next, keys, by, edits, origin, meta = {}) => {
     doc = next; revision += 1;
-    const summary = summarize(edits), at = Date.now();
-    history.push({ revision, keys, by, summary, at });
+    const summary = meta.summary ?? summarize(edits), at = Date.now();
+    const { summary: _s, ...extra } = meta;
+    history.push({ revision, keys, by, summary, at, kind: meta.kind || (edits ? 'edit' : by), doc: next, text, ...extra });
     if (history.length > HISTORY) history.shift();
-    events.emit('change', { revision, by, edits, origin, doc, summary, at });
+    events.emit('change', { revision, by, edits, origin, doc, summary, at, source: text, ...(meta.approvedBy && { approvedBy: meta.approvedBy }), ...(meta.kind && { kind: meta.kind }) });
   };
 
   const writeFile = (t) => { writeComponent(file, t); text = t; };
 
   // dryRun: validate and produce the would-be file without writing or committing (F19).
-  function applyNow(request) {
+  function applyNow(request, meta = {}) {
     const { baseRevision, edits, by, origin, dryRun = false } = request;
     const adoption = request[ADOPTION];
     if (adoption) {
@@ -85,8 +93,71 @@ export async function openStore(file, start = {}) {
     catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }
     if (dryRun) return { ok: true, dryRun: true, revision, doc: next, source: saved.text };
     writeFile(saved.text); state = saved.state;
-    commit(next, keys, by, edits, origin);
+    commit(next, keys, by, edits, origin, meta);
+    if (meta.kind !== 'undo' && meta.kind !== 'redo') { // an ordinary edit (or a restore) can be undone, and it ends this caller's redo line
+      const st = stackOf(by);
+      st.redo.length = 0; st.undo.push({ revision, keys: undoKeys(edits), edits, summary: history.at(-1).summary });
+      if (st.undo.length > STACK) st.undo.shift();
+    }
     return { ok: true, revision, doc };
+  }
+
+  const refuse = (error, extra) => ({ ok: false, error: explainError(error, { file: displayFile }), ...extra });
+  // Someone else's later change to one of these keys makes the step unsafe: who, which revision, which keys.
+  function clash(after, keys, by, verb) {
+    for (let j = after + 1; j < history.length; j++) {
+      const h = history[j];
+      if (h.by === by) continue;
+      const hit = [...keys].filter((k) => conflicts(new Set([k]), h.keys));
+      if (hit.length) return refuse(`${verb} refused: ${h.by} changed ${hit.join(', ')} in revision ${h.revision} after your edit`, { refused: { by: h.by, revision: h.revision, keys: hit } });
+    }
+    return null;
+  }
+  const where = (rev) => history.findIndex((h) => h.revision === rev || String(h.revision) === String(rev)); // revisions are opaque: equality only (a query string arrives as text)
+
+  // HIS-01/02: undo the caller's own latest edit by writing the old values back, as a new revision by the caller.
+  function undoNow(by, origin, skip = false) {
+    if (readOnly) return refuse(`read-only: ${readOnly}`);
+    // skip: drop the step that was refused (it stays in the history, but can no longer be undone) and undo the one below it
+    const skipped = skip ? stacks.get(by)?.undo.pop() : null;
+    const top = stacks.get(by)?.undo.at(-1);
+    if (!top) return refuse('nothing to undo', skipped && { skipped: { revision: skipped.revision, summary: skipped.summary } });
+    const i = where(top.revision);
+    if (i < 1) return refuse('cannot undo: that revision is older than the history this server keeps');
+    const c = clash(i, top.keys, by, 'undo');
+    if (c) return c;
+    const inverse = diffToEdits(history[i].doc, history[i - 1].doc);
+    if (!inverse) return refuse('cannot undo: the edit cannot be reversed exactly');
+    const undone = { revision: top.revision, summary: top.summary };
+    if (!inverse.length) { stacks.get(by).undo.pop(); return { ok: true, revision, doc, noop: true, undone }; }
+    const r = applyNow({ baseRevision: revision, edits: inverse, by, origin }, { kind: 'undo', undoOf: top.revision, summary: `undo: ${top.summary}` });
+    if (!r.ok) return refuse(`cannot undo: ${r.error}`);
+    const st = stackOf(by); st.undo.pop(); st.redo.push({ ...top, undoRevision: revision });
+    return { ...r, undone, ...(skipped && { skipped: { revision: skipped.revision, summary: skipped.summary } }) };
+  }
+  function redoNow(by, origin, skip = false) {
+    if (readOnly) return refuse(`read-only: ${readOnly}`);
+    if (skip) stacks.get(by)?.redo.pop();
+    const top = stacks.get(by)?.redo.at(-1);
+    if (!top) return refuse('nothing to redo');
+    const i = where(top.undoRevision);
+    if (i < 0) return refuse('cannot redo: that revision is older than the history this server keeps');
+    const c = clash(i, top.keys, by, 'redo');
+    if (c) return c;
+    const r = applyNow({ baseRevision: revision, edits: top.edits, by, origin }, { kind: 'redo', redoOf: top.revision, summary: `redo: ${top.summary}` });
+    if (!r.ok) return refuse(`cannot redo: ${r.error}`);
+    const st = stackOf(by); st.redo.pop(); st.undo.push({ revision, keys: top.keys, edits: top.edits, summary: top.summary });
+    return { ...r, redone: { revision: top.revision, summary: top.summary } };
+  }
+  // HIS-03: make the document what it was after `target`, as ONE new revision by the caller.
+  function restoreNow(target, by, origin) {
+    if (readOnly) return refuse(`read-only: ${readOnly}`);
+    const t = history[where(target)];
+    if (!t?.doc) return refuse(`revision ${target} is not in the history this server keeps`);
+    const edits = diffToEdits(doc, t.doc);
+    if (!edits) return refuse('cannot restore: the difference cannot be written as edits exactly');
+    if (!edits.length) return { ok: true, revision, doc, noop: true };
+    return applyNow({ baseRevision: revision, edits, by, origin }, { kind: 'restore', restoreOf: target, summary: `restore to r${target}: ${t.summary}` });
   }
 
   // The directory, not the file: an atomic rename (ours or git's) replaces the inode.
@@ -103,16 +174,28 @@ export async function openStore(file, start = {}) {
       if (broken) problem(null);
       const keys = doc ? diffKeys(doc, loaded.doc) : new Set(['file']);
       text = t; state = loaded.state; readOnly = null;
-      commit(loaded.doc, keys, 'file', undefined, undefined);
+      const git = gitAttribution(file, t); // a checkout, restore or merge is "git", not "file"
+      commit(loaded.doc, keys, git ? git.by : 'file', undefined, undefined, git ? { kind: 'git', summary: git.summary } : {});
     });
   });
 
   return {
     events,
     async read() { await queue; return { revision, doc, source: text, classification, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
-    apply(req) { const p = queue.then(() => { const r = applyNow(req); if (!r.ok) r.error = explainError(r.error, { file: displayFile }); return r; }); queue = p.catch(() => {}); return p; },
+    // meta is for the server's own callers (approvedBy); HTTP bodies never reach it.
+    apply(req, meta = {}) { const p = queue.then(() => { const r = applyNow(req, { approvedBy: meta.approvedBy }); if (!r.ok) r.error = explainError(r.error, { file: displayFile }); return r; }); queue = p.catch(() => {}); return p; },
+    undo(by, origin, opts = {}) { const p = queue.then(() => undoNow(by, origin, !!opts.skip)); queue = p.catch(() => {}); return p; },
+    redo(by, origin, opts = {}) { const p = queue.then(() => redoNow(by, origin, !!opts.skip)); queue = p.catch(() => {}); return p; },
+    restore(target, by, origin) { const p = queue.then(() => restoreNow(target, by, origin)); queue = p.catch(() => {}); return p; },
+    // Everything a restore to `rev` would take back: the revisions after it, [{ revision, by, summary, kind }], oldest first; null if unknown.
+    overwrittenBy(rev) { const i = where(rev); return i < 0 ? null : history.slice(i + 1).map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, kind: h.kind })); },
+    // The newest step this caller could undo or redo: { revision, at, summary } | null (to pick a component for a global undo).
+    undoTop(by) { const t = stacks.get(by)?.undo.at(-1); return t ? { revision: t.revision, summary: t.summary, at: history[where(t.revision)]?.at ?? 0 } : null; },
+    redoTop(by) { const t = stacks.get(by)?.redo.at(-1); return t ? { revision: t.revision, summary: t.summary, at: history[where(t.undoRevision)]?.at ?? 0 } : null; },
+    // The document and file text as they were after a past revision (for preview and restore), or null.
+    at(rev) { const h = history[where(rev)]; return h?.doc ? { revision: h.revision, by: h.by, summary: h.summary, at: h.at, doc: h.doc, source: h.text } : null; },
     // Recent revisions, newest first: [{ revision, by, summary, at, keys }].
-    history(limit = 50) { return history.slice(-Math.max(1, limit)).reverse().map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, at: h.at, keys: [...h.keys] })); },
+    history(limit = 50) { return history.slice(-Math.max(1, limit)).reverse().map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, at: h.at, keys: [...h.keys], kind: h.kind, ...(h.approvedBy && { approvedBy: h.approvedBy }), ...(h.undoOf !== undefined && { undoOf: h.undoOf }), ...(h.redoOf !== undefined && { redoOf: h.redoOf }), ...(h.restoreOf !== undefined && { restoreOf: h.restoreOf }) })); },
     async close() { watcher.close(); await queue; },
   };
 }

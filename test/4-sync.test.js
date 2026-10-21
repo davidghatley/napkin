@@ -41,7 +41,7 @@ test('live sync between canvas socket, MCP agent and the file', async (t) => {
       git('restore', 'components/Card.tsx');
       const { value } = await waitFor(() => { const s = canvas.state('Card'); return getValue(s.doc, 'card.padding') === '16px' && getValue(s.doc, 'title.fontWeight') === 400 && s; }, 1000);
       t.diagnostic(`git restore -> canvas: ${(performance.now() - t0).toFixed(1)} ms`);
-      assert.ok(seen.some((c) => c.by === 'file'));
+      assert.ok(seen.some((c) => c.by === 'git' && c.summary === 'git checkout')); // git restore is attributed to git, not file (HIS-05)
       assert.ok(value);
     });
   } finally { canvas.close(); mcp.stop(); await server.stop(); }

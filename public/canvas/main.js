@@ -32,6 +32,7 @@ import { initReadOnly } from './readonly.js';
 import { initEmpty } from './empty.js';
 import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
+import { initHistoryLane } from './history-lane.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -97,6 +98,7 @@ initQuick(ctx);
 initShortcuts(ctx);
 initReadOnly(ctx);
 const nav = initNav(ctx);
+initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
 

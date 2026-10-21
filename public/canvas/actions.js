@@ -35,13 +35,22 @@ export const ACTIONS = [
   action('panel-cancel', 'Cancel field edit or scrub', 'Escape', ['Escape'], refs('panel', 'keydown')),
   action('font', 'Font menu: move / choose / close', '↑ ↓ · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('panel', 'keydown')),
   action('native', 'Controls: move focus / activate / expand section', 'Tab · Shift+Tab · Enter · Space', [], refs('panel', 'keydown')),
+  action('undo', 'Undo your last edit', 'Ctrl/Cmd+Z', ['z'], refs('history', 'keydown'), (c) => c.undo(), 'edit'),
+  action('redo', 'Redo', 'Shift+Ctrl/Cmd+Z · Ctrl+Y', ['z', 'y'], refs('history', 'keydown'), (c) => c.redo(), 'edit'),
+  action('preview-exit', 'Leave the history preview', 'Escape', ['Escape'], refs('history', 'keydown')),
+  action('drawer-close', 'Close the drawer', 'Escape (inside it)', ['Escape'], refs('drawer', 'keydown')),
+  action('open-code', 'Open the code strip', 'Status bar: Code', [], [], (c) => c.drawer.open('code')),
+  action('open-history', 'Open history', 'Status bar: History', [], [], (c) => c.drawer.open('history')),
+  action('open-inspect', 'Open inspect', 'Status bar: Inspect', [], [], (c) => c.drawer.open('inspect')),
+  action('open-assets', 'Open assets', 'Status bar: Assets', [], [], (c) => c.drawer.open('assets')),
+  action('open-changes', 'Open changes against git', 'Status bar: Changes', [], [], (c) => c.drawer.open('changes')),
   action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
   action('theme', 'Switch light or dark chrome', 'Click the theme button', [], [], () => document.querySelector('#theme-toggle').click(), 'theme'),
 ];
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
+  'drawer.js:keydown': 1, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
   'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
   'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
