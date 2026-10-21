@@ -20,6 +20,7 @@ test('static: only src/commit.js writes component files; other fs writers in src
     'codecs.js': 'sidecar .napkin.json only',
     'atomic-write.js': 'temp + fsync + rename helper that commit.js uses for sidecars (never a component .tsx)',
     'lock.js': '.napkin/lock files only',
+    'assets.js': 'image and SVG files in assets/ only (atomic temp + rename), never a component .tsx',
     'render-png.js': "its own Chromium profile in the OS temp dir",
     'server.js': 'seeds a throwaway temp folder from fixtures before the workspace opens',
   };

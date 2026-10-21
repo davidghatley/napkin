@@ -54,6 +54,21 @@ export function createBundler() {
         return { ok: false, error: formatError(e), ms: performance.now() - t0 };
       }
     },
+    // One-off bundle of `text` as if it were the content of `file` (a past revision, or the file at HEAD).
+    async buildText(file, name, text) {
+      const t0 = performance.now();
+      try {
+        const { stdin, ...rest } = options(file, name);
+        const plugin = { name: 'napkin-text', setup(b) {
+          b.onResolve({ filter: /.*/ }, (a) => (a.path === file && a.kind === 'import-statement' ? { path: file, namespace: 'napkin-text' } : null));
+          b.onLoad({ filter: /.*/, namespace: 'napkin-text' }, () => ({ contents: text, loader: 'tsx', resolveDir: dirname(file) }));
+        } };
+        const r = await esbuild.build({ ...rest, stdin, plugins: [plugin] });
+        return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
+      } catch (e) {
+        return { ok: false, error: formatError(e), ms: performance.now() - t0 };
+      }
+    },
     async dispose(file) { const c = contexts.get(file); contexts.delete(file); await c?.dispose(); },
     async close() { for (const f of [...contexts.keys()]) await this.dispose(f); },
   };

@@ -61,7 +61,7 @@ export async function openWorkspace(dir, { only } = {}) {
     store.events.on('change', (c) => {
       e.name = c.doc.name;
       build(e);
-      note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision });
+      note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision, ...(c.approvedBy && { approvedBy: c.approvedBy }) });
       events.emit('change', { component: id, ...c });
     });
     store.events.on('problem', (p) => events.emit('problem', { component: id, ...p }));
@@ -108,6 +108,13 @@ export async function openWorkspace(dir, { only } = {}) {
       return { component: e.id, name: e.name, canvas: canvasOf(e), revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
     },
     async bundle(e) { return e.built; },
+    // The bundle of a past revision's source (preview and visual diff); cached per component and revision.
+    async bundleAt(e, rev) {
+      const past = e.store.at(rev);
+      if (!past) return { ok: false, error: `revision ${rev} is not in the history this server keeps` };
+      return bundler.buildText(e.file, e.name, past.source);
+    },
+    bundleText: (e, text) => bundler.buildText(e.file, e.name, text),
     // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
     setCanvas(e, x, y, { by } = {}) {
       needBy(by);

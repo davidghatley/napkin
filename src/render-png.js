@@ -125,6 +125,14 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
       try { const png = await draw(page, { key, code: built.code, variant }); return { png, ms: performance.now() - t0 }; }
       finally { release(page); }
     },
+    // Draw an arbitrary bundle (a past revision, or the file at HEAD) for one variant: -> { png, ms }.
+    async renderCode(code, variant = {}) {
+      const t0 = performance.now();
+      const key = 'code:' + createHash('sha1').update(code).digest('hex').slice(0, 16);
+      const page = await acquire();
+      try { const png = await draw(page, { key, code, variant }); return { png, ms: performance.now() - t0 }; }
+      finally { release(page); }
+    },
     async warm() { await getBrowser(); },
     async close() { closed = true; if (browser) { const b = await browser.catch(() => null); await b?.close(); } },
   };

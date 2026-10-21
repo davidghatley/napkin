@@ -29,11 +29,16 @@ const findProp = (obj, k) => obj.properties.find((p) => keyName(p.key) === k);
 const prop = (k, v) => b.objectProperty(key(k), v);
 
 // --- object literals: base and variants ---
+// A new key goes right after the key before it in the new model's order (the end for an ordinary add), so an undo puts it back where it was.
+function place(obj, order, k, node) {
+  const prev = order.slice(0, order.indexOf(k)).reverse().find((q) => findProp(obj, q));
+  obj.properties.splice(prev === undefined ? 0 : obj.properties.indexOf(findProp(obj, prev)) + 1, 0, node);
+}
 function syncStyle(obj, before, after) {
   for (const k of Object.keys(before)) if (!(k in after)) obj.properties.splice(obj.properties.indexOf(findProp(obj, k)), 1);
   for (const [k, v] of Object.entries(after)) {
     const p = findProp(obj, k);
-    if (!p) obj.properties.push(prop(k, lit(v)));
+    if (!p) place(obj, Object.keys(after), k, prop(k, lit(v)));
     else if (literalValue(p.value) !== v) p.value = lit(v);
   }
 }
@@ -42,7 +47,7 @@ function syncNested(obj, before, after, depth) {
   for (const k of Object.keys(before)) if (!(k in after)) obj.properties.splice(obj.properties.indexOf(findProp(obj, k)), 1);
   for (const [k, v] of Object.entries(after)) {
     let p = findProp(obj, k);
-    if (!p) { p = prop(k, b.objectExpression([])); obj.properties.push(p); }
+    if (!p) { p = prop(k, b.objectExpression([])); place(obj, Object.keys(after), k, p); }
     if (depth === 0) syncStyle(p.value, before[k] || {}, v);
     else syncNested(p.value, before[k] || {}, v, depth - 1);
   }
