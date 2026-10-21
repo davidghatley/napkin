@@ -13,6 +13,7 @@ const TOOLS = [
   { name: 'list_components', description: 'List the napkin components in this folder: [{ id, name, readOnly? }].', inputSchema: { type: 'object', properties: {} } },
   { name: 'read_component', description: 'Read a component: its document tree, current revision and the TSX source text (readOnly says why a file cannot be edited).', inputSchema: { type: 'object', properties: { component: { type: 'string' } }, required: ['component'] } },
   { name: 'apply_edits', description: 'Apply a batch of edits, all or nothing, against baseRevision. Fails with "stale revision" if a property you touch changed since; read again and retry. dryRun: true validates and returns the would-be TSX source without writing.', inputSchema: { type: 'object', properties: { component: { type: 'string' }, baseRevision: {}, edits: { type: 'array', items: editSchema }, dryRun: { type: 'boolean' } }, required: ['component', 'baseRevision', 'edits'] } },
+  { name: 'create_component', description: 'Create a new component file components/<Name>.tsx (PascalCase name) with one root frame; it appears on the canvas. Returns { id, name }.', inputSchema: { type: 'object', properties: { name: { type: 'string' }, rootTag: { type: 'string' } }, required: ['name'] } },
   { name: 'add_variant', description: 'Add a value to a variant axis (creating the axis if needed, with base value "default" unless given), optionally with style overrides per node, e.g. { component: "Button", baseRevision, axis: "size", value: "xl", overrides: { root: { padding: "14px 28px" } } }.', inputSchema: { type: 'object', properties: { component: { type: 'string' }, baseRevision: {}, axis: { type: 'string' }, value: { type: 'string' }, base: { type: 'string' }, overrides: { type: 'object' }, dryRun: { type: 'boolean' } }, required: ['component', 'baseRevision', 'axis', 'value'] } },
 ];
 
@@ -31,13 +32,36 @@ async function subscribe() {
   return live;
 }
 
+// Presence (F16): say what this agent is editing while it works; clear it after a quiet moment.
+const quiet = new Map();
+function presence(component, label) {
+  const post = (l) => fetch(new URL('api/presence', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component, label: l }) }).catch(() => {});
+  clearTimeout(quiet.get(component));
+  const p = post(label);
+  quiet.set(component, setTimeout(() => post(null), Number(process.env.NAPKIN_PRESENCE_MS || 1500)));
+  return p;
+}
+function describe(name, a, compName) {
+  if (name === 'add_variant') return `agent: editing ${compName} / ${a.axis}=${a.value}`;
+  const e = a.edits?.[0];
+  const node = e?.path?.split('.')[0] || e?.id || e?.parent || e?.name;
+  const v = e?.variant ? ` / ${Object.entries(e.variant).map(([k, x]) => `${k}=${x}`).join(' ')}` : '';
+  return `agent: editing ${compName}${node ? ` · ${node}` : ''}${v}`;
+}
+
 async function callTool(name, a = {}) {
   const c = encodeURIComponent(a.component ?? '');
   if (name === 'list_components') return api('api/components');
   if (name === 'read_component') return api(`api/components/${c}`);
+  if (name === 'create_component') {
+    const r = await api('api/components', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: a.name, rootTag: a.rootTag }) });
+    if (!r.ok) throw new Error(r.error);
+    return { id: r.id, name: r.name };
+  }
   if (name === 'apply_edits' || name === 'add_variant') {
     const { origin } = await subscribe();
     const edits = name === 'add_variant' ? variantEdits(a) : a.edits;
+    if (!a.dryRun) await presence(a.component, describe(name, a, a.component));
     const r = await api(`api/components/${c}/edits`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: a.baseRevision, edits, by: 'agent', origin, dryRun: !!a.dryRun }) });
     if (!r.ok) throw new Error(r.error);
     return r.dryRun ? { dryRun: true, revision: r.revision, source: r.source } : { revision: r.revision };

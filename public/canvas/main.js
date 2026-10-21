@@ -56,6 +56,13 @@ client.onChange((f) => {
   if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { stage.render(f.component).catch(console.error); ctx.emit('added', f); }
+  else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; }
+  else if (f.type === 'presence') {
+    const sec = document.querySelector(`section.cmp[data-component="${f.component}"]`);
+    if (sec) { if (f.label) sec.dataset.presence = f.label; else delete sec.dataset.presence; }
+    const all = [...document.querySelectorAll('section.cmp[data-presence]')].map((s) => s.dataset.presence);
+    $('#presence').textContent = all.join(' · ');
+  }
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); }
 });
 

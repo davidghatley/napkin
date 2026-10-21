@@ -43,8 +43,8 @@ export async function startServer(compDir) {
 }
 
 // Scripted MCP client over stdio: newline-delimited JSON-RPC 2.0.
-export async function startMcp(napkinUrl) {
-  const proc = spawn(process.execPath, [join(ROOT, 'src', 'mcp.js')], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, NAPKIN_URL: napkinUrl } });
+export async function startMcp(napkinUrl, env = {}) {
+  const proc = spawn(process.execPath, [join(ROOT, 'src', 'mcp.js')], { stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ...env, NAPKIN_URL: napkinUrl } });
   let buf = ''; let id = 0; const pending = new Map(); const notifications = []; let stderr = '';
   proc.stderr.on('data', (d) => (stderr += d));
   proc.stdout.on('data', (d) => {

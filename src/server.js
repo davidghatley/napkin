@@ -27,6 +27,9 @@ const ws = await openWorkspace(dir, { only });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
 const broadcast = (obj) => { const f = frame(obj); for (const res of clients) res.write(f); };
+// Presence (F16): what each agent says it is editing. Agents (F21): MCP subscriptions, counted.
+const presence = new Map(); // component -> label
+let agents = 0;
 
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
@@ -55,10 +58,29 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && path === '/api/events') {
       res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       for (const e of ws.entries()) res.write(frame({ type: 'state', ...(await ws.snapshot(e)) }));
+      res.write(frame({ type: 'agents', count: agents }));
+      for (const [component, label] of presence) res.write(frame({ type: 'presence', component, label }));
       res.write(frame({ type: 'ready' }));
       clients.add(res);
-      req.on('close', () => clients.delete(res));
+      const isAgent = url.searchParams.get('by') === 'agent';
+      if (isAgent) { agents++; broadcast({ type: 'agents', count: agents }); }
+      req.on('close', () => {
+        clients.delete(res);
+        if (isAgent) { agents--; broadcast({ type: 'agents', count: agents }); }
+      });
       return;
+    }
+
+    if (req.method === 'POST' && path === '/api/presence') {
+      let body = ''; for await (const chunk of req) body += chunk;
+      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
+      const e = ws.find(String(msg?.component ?? ''));
+      if (!e) return json(res, 404, { ok: false, error: 'not found' });
+      const { component } = await ws.snapshot(e);
+      const label = typeof msg.label === 'string' && msg.label.trim() ? msg.label.slice(0, 120) : null;
+      if (label) presence.set(component, label); else presence.delete(component);
+      broadcast({ type: 'presence', component, label });
+      return json(res, 200, { ok: true });
     }
 
     // The bundle for one component; waits for the build that follows the latest revision. ?rev=N only busts caches.

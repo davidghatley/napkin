@@ -2,7 +2,7 @@
 
 Extracted 2026-10-18 from [docs/guide/](docs/guide/README.md), which turns the final landing copy (`site/copy.md`) into workflows. INTENT.md wins every disagreement. Open questions are in [docs/guide/GAPS.md](docs/guide/GAPS.md).
 
-**Status: Phase 4 started 2026-10-20 (David).** The **First build** list at the bottom is in progress. The **Build first** spike (2026-10-18) is done. File format: React TSX, decision 0003 (G1); variants: base + overrides (G3).
+**Status: Phase 4 started 2026-10-20 (David). First build done 2026-10-20 (M0–M5, 52 tests, proving demo passes).** The **Build first** spike (2026-10-18) is done. File format: React TSX, decision 0003 (G1); variants: base + overrides (G3).
 
 Proving demo (INTENT): *an agent and David edit the same component live on the canvas, and the result is a real, reusable component file.*
 
@@ -56,13 +56,13 @@ Out of the spike on purpose: tokens, versions, drawing tools, `create_component`
 
 Plan: approved by David 2026-10-20 (plan artifact "napkin First Build"). Each milestone ends with green tests and a commit.
 
-| M | Features | Done when |
-|---|---|---|
-| M0 | decision 0003, INTENT, this list | written and committed |
-| M1 | F01, F02, F03, F09 on TSX | `.tsx` load+save with no edits is byte-identical; one property change is a one-line diff; out-of-dialect files are read-only; a 200-edit fuzz keeps the file parseable and in the dialect |
-| M2 | F04, F07, F22, F23 | the canvas renders the real component (esbuild + React) for every variant; file changes and `git restore` show without reload |
-| M3 | F05, F13, F14, F15 | change the base on a 3×2 Button: all 6 update, one diff line; an override keeps its value and shows a dot; Reset to base removes it |
-| M4 | F11 (canvas side), F12 | headless Chromium draws a Card from nothing (N, F, T, I) and the file reopens identically |
-| M5 | F06, F11, F16, F19, F21 | the proving demo: David and an agent edit a Button at once (base radius + icon slot / `xl` size), both land, `examples/consumer-app` imports and renders every variant |
+| M | Features | Done when | Status |
+|---|---|---|---|
+| M0 | decision 0003, INTENT, this list | written and committed | **done** |
+| M1 | F01, F02, F03, F09 on TSX | `.tsx` load+save with no edits is byte-identical; one property change is a one-line diff; out-of-dialect files are read-only; a 200-edit fuzz keeps the file parseable and in the dialect | **done** |
+| M2 | F04, F07, F22, F23 | the canvas renders the real component (esbuild + React) for every variant; file changes and `git restore` show without reload | **done** |
+| M3 | F05, F13, F14, F15 | change the base on a 3×2 Button: all 6 update, one diff line; an override keeps its value and shows a dot; Reset to base removes it | **done** |
+| M4 | F11 (canvas side), F12 | headless Chromium draws a Card from nothing (N, F, T, I) and the file reopens identically | **done** |
+| M5 | F06, F11, F16, F19, F21 | the proving demo: David and an agent edit a Button at once (base radius + icon slot / `xl` size), both land, `examples/consumer-app` imports and renders every variant | **done** |
 
 Out of this build: tokens panel (F10), opening other repos' components (F18), same-property clash rule beyond `stale revision` (F17), in-app undo (F24), agent permissions (F25), hosting.

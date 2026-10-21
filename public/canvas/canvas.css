@@ -83,3 +83,8 @@ body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n],
 #draw-rect { position: fixed; z-index: 20; pointer-events: none; border: 1px dashed var(--select); background: #2f6df614; }
 #draw-rect[hidden] { display: none; }
 .text-edit { position: fixed; z-index: 30; padding: 0 4px; border: 2px solid var(--select); border-radius: 2px; background: #fff; }
+
+/* M5 presence and agent status */
+#agent-status { font: 12px ui-monospace, monospace; padding: 2px 8px; border-radius: 999px; background: #2d6a4f; color: #fffdf7; }
+#presence { font: 12px ui-monospace, monospace; color: #2d6a4f; }
+section.cmp[data-presence] { outline: 2px dashed #2d6a4f; outline-offset: 8px; }
