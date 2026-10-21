@@ -17,7 +17,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | CAN-01 | CAN | canvas | pass | r1 pass: drift 1e-11 px | test/12-canvas-nav.test.js | d57d328 |
 | CAN-02 | CAN | canvas | pass | r2 pass: atomic sidecar, identity | test/16-canvas-endpoint.test.js | d57d328 |
 | CAN-03 | CAN | canvas | pass | r1 pass: p95 0.8 ms; flight 282 ms | test/13-canvas-frames.test.js | d57d328 |
-| CAN-04 | CAN | canvas | critic-fail | r2 split: Sonnet tie, Codex Figma better; polish r3 | test/17-canvas-round2.test.js | 388726e |
+| CAN-04 | CAN | layout | critic-fail | r3 split: Sonnet tie, Codex Figma better; moved to layout lane | test/17-canvas-round2.test.js | 35cbf5d |
 | CAN-05 | CAN | canvas | pass | r1 pass: 1 revision per multi-edit | test/13-canvas-frames.test.js | d57d328 |
 | CAN-06 | CAN | canvas | pass | r1 blind WIN vs Figma; r2 far-zoom strip 11 px | test/17-canvas-round2.test.js | d57d328 |
 | CAN-07 | CAN | canvas | pass | r1 pass: exact at 5/30/100% | test/13-canvas-frames.test.js | d57d328 |
@@ -103,9 +103,9 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | REL-04 | REL | engine | building |  |  |  |
 | REL-05 | REL | engine | building |  |  |  |
 | FEEL-01 | FEEL | canvas | building |  |  |  |
-| FEEL-02 | FEEL | canvas | critic-fail | r2 split: Sonnet tie/narrow win, Codex Figma better; polish r3 | test/17-canvas-round2.test.js | 388726e |
+| FEEL-02 | FEEL | layout | critic-fail | r3 split: Sonnet tie, Codex Figma better; moved to layout lane | test/17-canvas-round2.test.js | 35cbf5d |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
-| FEEL-04 | FEEL | canvas | critic-fail | r2 fail: CLS 0.0003-0.01 on variant selection | test/12-canvas-nav.test.js | 388726e |
+| FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
 | FEEL-05 | FEEL | canvas | building |  |  |  |
 | SCN-1 | SCN | whole | open |  |  |  |
 | SCN-2 | SCN | whole | open |  |  |  |
@@ -137,3 +137,4 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 |---|---|---|---|---|
 | axe-core | 4.13.0 | 2026-08-05 | test-only accessibility check for FEEL-03 | canvas |
 | Inter, JetBrains Mono (vendored woff2, OFL) | @fontsource-variable 5.2.8 | 2025-09-17 | chrome typefaces that work offline; not an npm dependency | canvas |
+| 2026-10-21 mid round 2 | $103.21 today, machine-wide (Claude $93.72, Codex $9.48, Opencode $0.00); about $50 since round 1 began | ccusage@20.0.26 daily |
