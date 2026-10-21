@@ -18,6 +18,7 @@ The 18 Oct spike's JSON format, `src/format.js`, `src/edits.js`, `src/render.js`
     - `set {path, value, variant?}`, where `path` is `node.cssProp`, `node.text` or `node.@src` / `node.@alt`; `value: null` removes it; `variant: { axis: value }` writes an override;
     - `insert`, `delete`, `move`;
     - `addProp {name, type, options?, default?}`, `removeProp {name}`;
+    - `setDefault {name, value}` (changes a default in place; an enum base value must have no overrides);
     - `bindText {id, prop}` ("Make setting"; `prop: null` unbinds);
     - `addVariant {axis, value, base?}`, `removeVariant {axis, value}`.
 - **`src/tsx/read.js`:** `readComponent(text) -> { doc, ast, parts }`, or throws `DialectError` (`line N: reason`).

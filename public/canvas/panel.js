@@ -214,14 +214,7 @@ function wire(ctx, el) {
       const p = propOf(doc, t.dataset.prop);
       if (!p) return;
       const value = p.type === 'boolean' ? t.checked : t.value;
-      // There is no "set default" op: re-declare the prop, keeping bound text bound.
-      const users = [...index(doc).byId.values()].filter((n) => n.textProp === p.name);
-      const edits = [
-        ...users.map((n) => ({ op: 'bindText', id: n.id, prop: null })),
-        { op: 'removeProp', name: p.name },
-        { op: 'addProp', name: p.name, type: p.type, ...(value === '' ? {} : { default: value }) },
-        ...users.map((n) => ({ op: 'bindText', id: n.id, prop: p.name })),
-      ];
+      const edits = [{ op: 'setDefault', name: p.name, value: value === '' ? null : value }];
       await run('propdef-' + p.name, s.component, edits, { clear: [t.id] });
     }
   });

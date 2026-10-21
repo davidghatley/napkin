@@ -79,7 +79,7 @@ export function touched(edits) {
       case 'insert': keys.add(`children:${e.parent}`); keys.add(`node:${e.node?.id}`); break;
       case 'delete': keys.add(`node:${e.id}`); break;
       case 'move': keys.add(`node:${e.id}`); keys.add(`children:${e.parent}`); break;
-      case 'addProp': case 'removeProp': keys.add(`prop:${e.name}`); break;
+      case 'addProp': case 'removeProp': case 'setDefault': keys.add(`prop:${e.name}`); break;
       case 'bindText': keys.add(`${e.id}.text`); if (e.prop) keys.add(`prop:${e.prop}`); break;
       case 'addVariant': case 'removeVariant': keys.add(`prop:${e.axis}`); break;
       default: keys.add(`op:${e?.op}`);
@@ -266,6 +266,18 @@ export function applyEdits(doc, edits) {
         if (user) throw new EditError(i, `"${user.id}" shows ${e.name}; unbind its text first`);
         next.props = next.props.filter((x) => x !== p);
         delete next.variants[e.name];
+        break;
+      }
+      case 'setDefault': {
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        if (e.value === null || e.value === undefined) {
+          if (p.type === 'enum') throw new EditError(i, `variant axis ${e.name} needs a base value`);
+          delete p.default; break;
+        }
+        checkPropValue(i, p, e.value);
+        if (p.type === 'enum' && next.variants[e.name]?.[e.value]) throw new EditError(i, `${e.name}=${e.value} has overrides; reset them before making it the base`);
+        p.default = e.value;
         break;
       }
       case 'bindText': {

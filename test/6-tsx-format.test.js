@@ -160,3 +160,20 @@ test('200 random edits keep the file parseable, in the dialect, and equal to the
   }
   assert.equal(applied, 200);
 });
+
+test('setDefault changes a default in place: one-line diff, prop order kept, enum base guarded', async () => {
+  const { file, git } = repoWith('Button');
+  const store = await openStore(file);
+  try {
+    let { revision } = await store.read();
+    const r = await store.apply({ baseRevision: revision, edits: [{ op: 'setDefault', name: 'label', value: 'Buy now' }] });
+    assert.equal(r.ok, true, r.error);
+    assert.deepEqual(numstat(git), [`1\t1\tcomponents/Button.tsx`]);
+    assert.deepEqual(r.doc.props.map((p) => p.name), ['label', 'size', 'state']);
+    const base = await store.apply({ baseRevision: r.revision, edits: [{ op: 'setDefault', name: 'size', value: 'sm' }] });
+    assert.match(base.error, /size=sm has overrides/);
+    const ok = await store.apply({ baseRevision: r.revision, edits: [{ op: 'addVariant', axis: 'size', value: 'xs' }, { op: 'setDefault', name: 'size', value: 'xs' }] });
+    assert.equal(ok.ok, true, ok.error);
+    assert.equal(readComponent(readFileSync(file, 'utf8')).doc.props[1].default, 'xs');
+  } finally { await store.close(); }
+});
