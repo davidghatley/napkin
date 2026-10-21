@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { readComponent } from '../src/tsx/read.js';
 import { getValue } from '../src/model.js';
-import { tempRepo, startServer, sleep } from './helpers/harness.js';
+import { tempRepo, startServer, sleep, waitFor } from './helpers/harness.js';
 import { launchChromium } from './helpers/cdp.js';
 import { input, centerOf } from './helpers/input.js';
 
@@ -18,7 +18,14 @@ test('the design panel reads like a design tool and every control is one small e
   const doc = () => readComponent(readFileSync(fileOf('Button'), 'utf8')).doc;
   const rev = () => q(`napkin.find('Button').revision`);
   const lines = () => git('diff', '--numstat', '--', 'components/Button.tsx').trim();
-  const reset = async () => { const dirty = git('status', '--porcelain', '--', 'components/Button.tsx').trim(); const r0 = await rev(); git('checkout', '--', 'components/Button.tsx'); if (dirty) await browser.waitFor(`napkin.find('Button').revision > ${r0}`); await sleep(150); };
+  const original = readFileSync(fileOf('Button'), 'utf8');
+  // back to the committed file; waits until the server has read it and the canvas has drawn it
+  const reset = async () => {
+    git('checkout', '--', 'components/Button.tsx');
+    await waitFor(async () => (await (await fetch(new URL('api/components/Button', server.url))).json()).source === original, 4000);
+    await browser.waitFor(`document.querySelector('section[data-name="Button"]').dataset.revision === String(napkin.find('Button').revision)`);
+    await sleep(120);
+  };
   const root = `document.querySelector('section[data-name="Button"] .cell').querySelector('[data-n="root"]')`;
   try {
     await browser.goto(server.url);
@@ -82,7 +89,7 @@ test('the design panel reads like a design tool and every control is one small e
       await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
       assert.equal(getValue(doc(), 'root.flexDirection'), 'column');
       assert.equal(lines(), '1\t0\tcomponents/Button.tsx', 'one added line');
-      assert.equal(await q(`document.querySelector('#seg-flexDirection-column').getAttribute('aria-checked')`), 'true');
+      await browser.waitFor(`document.querySelector('#seg-flexDirection-column').getAttribute('aria-checked') === 'true'`);
       await reset();
       r0 = await rev();
       assert.equal(await q(`document.querySelector('#align-11').getAttribute('aria-pressed')`), 'false');
@@ -92,7 +99,7 @@ test('the design panel reads like a design tool and every control is one small e
       assert.equal(await rev(), r0 + 1, 'both properties in one batch');
       assert.equal(getValue(doc(), 'root.justifyContent'), 'flex-end');
       assert.equal(getValue(doc(), 'root.alignItems'), 'flex-end');
-      assert.equal(await q(`document.querySelector('#align-22').getAttribute('aria-pressed')`), 'true');
+      await browser.waitFor(`document.querySelector('#align-22').getAttribute('aria-pressed') === 'true'`);
       await reset();
     });
 
@@ -106,12 +113,12 @@ test('the design panel reads like a design tool and every control is one small e
       await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
       const w = getValue(doc(), 'root.width');
       assert.equal(typeof w, 'number'); assert.ok(w > 40);
-      assert.equal(await q(`document.querySelector('#size-width-fixed').getAttribute('aria-checked')`), 'true');
+      await browser.waitFor(`document.querySelector('#size-width-fixed').getAttribute('aria-checked') === 'true'`);
       r0 = await rev();
       await q(`document.querySelector('#size-width-hug').click()`);
       await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
       assert.equal(getValue(doc(), 'root.width'), 'auto');
-      assert.equal(await q(`document.querySelector('#size-width-hug').getAttribute('aria-checked')`), 'true');
+      await browser.waitFor(`document.querySelector('#size-width-hug').getAttribute('aria-checked') === 'true'`);
       await reset();
     });
 
@@ -121,7 +128,7 @@ test('the design panel reads like a design tool and every control is one small e
       await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
       assert.equal(getValue(doc(), 'root.background'), '#ff3b30');
       assert.equal(lines(), '1\t1\tcomponents/Button.tsx');
-      assert.equal(await q(`document.querySelector('#background').value`), '#ff3b30');
+      await browser.waitFor(`document.querySelector('#background').value === '#ff3b30'`);
       await reset();
     });
 

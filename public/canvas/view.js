@@ -153,9 +153,9 @@ export function createView(ctx, stageEl, worldEl) {
     }
     if (typing(ev.target) || ev.altKey) return;
     const key = ev.key;
-    if (ev.shiftKey && !ctl && (ev.code === 'Digit1' || key === '!')) { ev.preventDefault(); view.fitAll({ animate: true }); return; }
-    if (ev.shiftKey && !ctl && (ev.code === 'Digit2' || key === '@')) { ev.preventDefault(); view.fitSelection({ animate: true }); return; }
-    if (ev.shiftKey && !ctl && (ev.code === 'Digit0' || key === ')')) { ev.preventDefault(); view.zoomBy(1 / v.z, undefined, undefined, { animate: true }); return; }
+    if (ev.shiftKey && !ctl && (ev.code === 'Digit1' || key === '!' || key === '1')) { ev.preventDefault(); view.fitAll({ animate: true }); return; }
+    if (ev.shiftKey && !ctl && (ev.code === 'Digit2' || key === '@' || key === '2')) { ev.preventDefault(); view.fitSelection({ animate: true }); return; }
+    if (ev.shiftKey && !ctl && (ev.code === 'Digit0' || key === ')' || key === '0')) { ev.preventDefault(); view.zoomBy(1 / v.z, undefined, undefined, { animate: true }); return; }
     if (key === '+' || key === '=' || ev.code === 'NumpadAdd') { ev.preventDefault(); view.zoomBy(1.25); return; }
     if (key === '-' || key === '_' || ev.code === 'NumpadSubtract') { ev.preventDefault(); view.zoomBy(0.8); return; }
   });

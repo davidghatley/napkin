@@ -5,7 +5,7 @@ import { variantGrid } from '/src/model.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const KIND = { component: 'Component', node: 'Layer', action: 'Action' };
-const MAX = 14;
+const MAX = 10; // the list never scrolls
 
 export function initQuick(ctx) {
   const root = document.createElement('div');

@@ -2,7 +2,8 @@
 // legible at fit (CAN-06), and the evidence screenshots (set EVIDENCE_OUT=docs/evidence to write them).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tempRepo, startServer, sleep } from './helpers/harness.js';
@@ -35,7 +36,7 @@ test('FEEL-03 axe-core: no serious or critical violations in light or dark chrom
       await sleep(100);
       for (const [state, setup] of [
         ['nothing selected', async () => {}],
-        ['a node selected (design panel open)', async () => { const c = await centerOf(browser, node('Button', 'root')); await io.click(c.left + 5, c.y); await browser.waitFor(`napkin.state.selection?.node === 'root'`); }],
+        ['a node selected (design panel open)', async () => { const c = await centerOf(browser, node('Button', 'root')); await io.click(c.left + 2, c.y); await browser.waitFor(`napkin.state.selection?.node === 'root'`); }],
         ['quick open showing', async () => { await io.key('k', { ctrl: true }); await browser.waitFor(`!document.querySelector('#quick').hidden`); await browser.send('Input.insertText', { text: 'chip' }); await sleep(100); }],
       ]) {
         await setup();
@@ -46,6 +47,37 @@ test('FEEL-03 axe-core: no serious or critical violations in light or dark chrom
       }
       await io.key('Escape');
     }
+  } finally { await browser.close(); await server.stop(); }
+});
+
+test('FEEL-03 axe-core also passes on an empty workspace, the new-component form, the Advanced list and a rename in progress', { timeout: 60000 }, async (t) => {
+  const server = await startServer(mkdtempSync(join(tmpdir(), 'napkin-empty-')));
+  const browser = await launchChromium({ width: 1440, height: 900 });
+  const io = input(browser);
+  try {
+    await browser.goto(server.url);
+    await browser.waitFor('document.body.dataset.ready === "1"');
+    const check = async (label) => {
+      const found = await axeRun(browser);
+      const bad = found.filter((v) => v.impact === 'serious' || v.impact === 'critical');
+      t.diagnostic(`${label}: ${found.length} findings, ${bad.length} serious or critical${found.length ? ' (' + found.map((v) => `${v.id}:${v.impact}`).join(', ') + ')' : ''}`);
+      assert.deepEqual(bad, [], `${label}: ${JSON.stringify(bad, null, 1)}`);
+    };
+    await check('empty workspace');
+    await io.key('n');
+    await browser.waitFor(`document.activeElement?.id === 'new-name'`);
+    await check('new-component form open');
+    await browser.send('Input.insertText', { text: 'Badge' });
+    await io.key('Enter');
+    await browser.waitFor(`document.querySelector('section[data-name="Badge"]')?.dataset.ready === '1' && napkin.state.selection`);
+    await browser.eval(`document.querySelector('details.adv > summary').click()`);
+    await browser.eval(`document.querySelector('#add-style').click()`);
+    await browser.waitFor(`document.querySelector('#new-style-name')`);
+    await check('Advanced list with the add-property form open');
+    await browser.eval(`document.querySelector('#layers .lnode').dispatchEvent(new MouseEvent('dblclick', { bubbles: true }))`);
+    await browser.waitFor(`document.activeElement?.className === 'lrename'`);
+    await check('a layer being renamed');
+    await io.key('Escape');
   } finally { await browser.close(); await server.stop(); }
 });
 

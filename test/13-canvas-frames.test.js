@@ -69,6 +69,22 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       assert.deepEqual(JSON.parse(await q(`JSON.stringify(napkin.stage.position(napkin.find('Chip').component))`)), moved, 'a reload keeps it');
     });
 
+    await t.test('CAN-02 an empty part of the frame drags it too, and the .tsx stays byte-identical', async () => {
+      const tsx = fileOf('Card'), side = tsx.replace(/\.tsx$/, '.napkin.json');
+      const before = { tsx: sha(tsx), side: readFileSync(side, 'utf8') };
+      await io.key('!', { shift: true, code: 'Digit1' }); await sleep(400);
+      const f = await centerOf(browser, `${sec('Card')}.querySelector('.frame')`);
+      await io.drag(f.left + 8, f.top + 8, f.left + 8 + 40, f.top + 8 + 25);
+      await waitFor(() => existsSync(side) && readFileSync(side, 'utf8') !== before.side, 3000);
+      assert.equal(sha(tsx), before.tsx);
+      const a = before.side.split('\n'), b = readFileSync(side, 'utf8').split('\n');
+      assert.ok(a.filter((l, i) => l !== b[i]).length <= 2);
+      assert.equal(await q('napkin.state.selections.length'), 0, 'dragging a frame does not select');
+      const g = await centerOf(browser, `${sec('Card')}.querySelector('.frame')`);
+      await io.drag(g.left + 8, g.top + 8, g.left + 8 - 40, g.top + 8 - 25); // put it back, so it does not sit on Button
+      await sleep(300);
+    });
+
     await t.test('CAN-03 Ctrl+K: fuzzy search, Enter flies there in <= 300 ms; none with reduced motion', async () => {
       await io.key('k', { ctrl: true });
       await browser.waitFor(`!document.querySelector('#quick').hidden && document.activeElement.id === 'q-input'`);
@@ -195,8 +211,9 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
     await t.test('CAN-05 a marquee on the empty canvas selects what it covers', async () => {
       await io.key('Escape');
       const card = await centerOf(browser, `${sec('Card')}.querySelector('[data-n="card"]')`);
-      const x0 = card.left - 14, y0 = card.top - 10;
-      await io.drag(x0, y0, card.left + card.w * 0.7, card.top + card.h * 0.6);
+      const frame = await centerOf(browser, `${sec('Card')}.querySelector('.frame')`);
+      // from the empty canvas beside the frame, across into the card (inside a frame a drag moves the frame instead)
+      await io.drag(frame.left - 30, frame.top + 20, card.left + card.w * 0.7, card.top + card.h * 0.6);
       await browser.waitFor(`napkin.state.selections.length >= 2`);
       const sels = JSON.parse(await q(`JSON.stringify(napkin.state.selections.map((s) => s.node))`));
       t.diagnostic(`marquee selected: ${sels.join(', ')}`);
@@ -240,7 +257,7 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       await reload(); await sleep(200);
       await io.key('!', { shift: true, code: 'Digit1' }); await sleep(400); // earlier tests left the view anywhere
       const c = await centerOf(browser, node('Button', 'root'));
-      await io.click(c.left + 5, c.y); // the padding of the button, not its label
+      await io.click(c.left + 2, c.y); // the padding of the button, not its label
       await browser.waitFor(`napkin.state.selection?.node === 'root'`);
       const before = JSON.parse(await q('JSON.stringify(napkin.view.get())'));
       await io.key('Enter');

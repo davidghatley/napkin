@@ -328,7 +328,7 @@ export function createStage(ctx, root, world, view) {
   let mq = null;
   root.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0 || ev.pointerType === 'touch' || ctx.state.tool !== 'select' || view.isPanning()) return;
-    if (ev.target.closest('.mount [data-n], .cmp-head, #error')) return;
+    if (ev.target.closest('.mount [data-n], .cmp-head, .frame, #error')) return; // inside a frame, a drag moves the frame
     mq = { x: ev.clientX, y: ev.clientY, moved: false, additive: ev.shiftKey };
   });
   addEventListener('pointermove', (ev) => {
@@ -369,12 +369,14 @@ export function createStage(ctx, root, world, view) {
   // Drag a frame by its title; a plain click on the title selects the component's root.
   let drag = null;
   root.addEventListener('pointerdown', (ev) => {
+    // by the title, or by any empty part of the frame (never by a component's own elements)
     const head = ev.target.closest?.('.cmp-head');
-    if (!head || ev.button !== 0 || view.isPanning()) return;
-    const id = head.closest('.cmp').dataset.component, sec = sections.get(id);
+    const body = !head && ctx.state.tool === 'select' && ev.pointerType !== 'touch' && !ev.target.closest('.mount [data-n]') ? ev.target.closest?.('.frame') : null;
+    if (!(head || body) || ev.button !== 0 || view.isPanning()) return;
+    const id = (head || body).closest('.cmp').dataset.component, sec = sections.get(id);
     if (!sec?.pos) return;
     ev.preventDefault();
-    drag = { id, x: ev.clientX, y: ev.clientY, from: { ...sec.pos }, moved: false };
+    drag = { id, x: ev.clientX, y: ev.clientY, from: { ...sec.pos }, moved: false, title: !!head };
     document.body.dataset.dragging = 'frame';
   });
   addEventListener('pointermove', (ev) => {
@@ -390,7 +392,7 @@ export function createStage(ctx, root, world, view) {
     const d = drag; drag = null; delete document.body.dataset.dragging;
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
-      if (c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
+      if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
       return;
     }
     suppressClick = Date.now();

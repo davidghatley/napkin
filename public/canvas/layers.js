@@ -17,7 +17,7 @@ const canHold = (n) => !holdsText(n) && !VOID.has(n.tag);
 export function initLayers(ctx, el) {
   const expanded = new Set();          // component ids showing their nodes
   const folded = new Set();            // "component|node" rows whose children are hidden
-  let queued = false, renaming = null, dragging = null;
+  let queued = false, renaming = null, dragging = null, reveal = false;
 
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; draw(); }); } };
   const selKey = (s) => `${s.component}|${s.node}`;
@@ -41,9 +41,10 @@ export function initLayers(ctx, el) {
       })(c.doc.root, 1);
     }
     el.innerHTML = rows.join('') || '<p class="empty">No components yet. Press N to draw one.</p>';
+    if (rows.length) el.setAttribute('role', 'tree'); else el.removeAttribute('role'); // an empty tree is not a tree
     const tab = el.querySelector('.primary') || el.querySelector('.has-sel') || el.querySelector('.lrow');
     if (tab) tab.tabIndex = 0;
-    el.querySelector('.primary')?.scrollIntoView({ block: 'nearest' });
+    if (reveal) { reveal = false; el.querySelector('.primary')?.scrollIntoView({ block: 'nearest' }); } // only when the selection changed, never on an edit
   }
 
   // ---- selection from the tree ----
@@ -191,7 +192,7 @@ export function initLayers(ctx, el) {
   addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && dragging?.active) { dragging.row.classList.remove('dragging'); dragging = null; line.remove(); delete document.body.dataset.dragging; draw(); } }, true);
 
   // ---- keep in step ----
-  ctx.on('select', () => { for (const s of ctx.state.selections) expanded.add(s.component); schedule(); });
+  ctx.on('select', () => { for (const s of ctx.state.selections) expanded.add(s.component); reveal = true; schedule(); });
   for (const e of ['render', 'removed', 'added']) ctx.on(e, schedule);
   let seeded = false; // a small repo opens fully expanded, once
   ctx.on('render', () => { if (!seeded && ctx.state.components.size <= 8) { seeded = true; for (const id of ctx.state.components.keys()) expanded.add(id); } });
