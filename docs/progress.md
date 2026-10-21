@@ -138,3 +138,12 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | axe-core | 4.13.0 | 2026-08-05 | test-only accessibility check for FEEL-03 | canvas |
 | Inter, JetBrains Mono (vendored woff2, OFL) | @fontsource-variable 5.2.8 | 2025-09-17 | chrome typefaces that work offline; not an npm dependency | canvas |
 | 2026-10-21 mid round 2 | $103.21 today, machine-wide (Claude $93.72, Codex $9.48, Opencode $0.00); about $50 since round 1 began | ccusage@20.0.26 daily |
+
+## Lead rulings during the build (within David's go-ahead)
+
+- FMT-03: prettier "default config" means default plus `singleQuote: true`, because the dialect (decision 0003) and every fixture use single quotes.
+- LAY-03: one `gridArea: 'row / col'` line per placement meets "1 line per placement".
+- LAY-04: a pin change may write several inset lines in one revision (pinning is a compound change).
+- LAY-06: the grid quantizes positions in parent-local coordinates at any zoom; edge and centre snaps within 4 screen px take priority.
+- Blind bars: two judges from different model families (Sonnet, Codex). Codex runs twice with the image order swapped; a verdict that flips counts as a tie. A row passes only when both judges give a win or tie.
+- 0005 amendment: with an `agents` key in napkin.json, unlisted names default to read; Host/Origin guard on every route.
