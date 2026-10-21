@@ -8,6 +8,9 @@ import { basename, dirname, join } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { codecFor } from './codecs.js';
 
+// Syntax errors from the parser carry loc.line but not "line N:" in the message; dialect errors already do.
+const reason = (e) => (e.loc?.line && !/^line \d+/.test(e.message) ? `line ${e.loc.line}: ${e.message}` : e.message);
+
 const HISTORY = 500; // revisions remembered for rebasing; older bases are "stale revision"
 
 export async function openStore(file) {
@@ -17,10 +20,12 @@ export async function openStore(file) {
   let text = readFileSync(file, 'utf8');
   // A file napkin can't read fully opens read-only, with the reason (decision 0003, INV-06).
   let doc = null, state = null, readOnly = null;
-  try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = e.message; }
+  try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = reason(e); }
   let revision = 1;
   const history = [{ revision, keys: new Set() }];
   let queue = Promise.resolve();
+  let broken = null; // the error of a hand edit the last good doc could not absorb (F22), else null
+  const problem = (error) => { broken = error; events.emit('problem', { error }); };
 
   const commit = (next, keys, by, edits, origin) => {
     doc = next; revision += 1;
@@ -61,8 +66,9 @@ export async function openStore(file) {
     if (name && name !== basename(file)) return;
     queue = queue.then(() => {
       let t; try { t = readFileSync(file, 'utf8'); } catch { return; }
-      if (t === text) return;
-      let loaded; try { loaded = codec.load(t, file); } catch (e) { events.emit('problem', { error: e.message }); return; } // half-written or broken: keep the last good doc
+      if (t === text) { if (broken) problem(null); return; } // back to the last good text (e.g. git restore)
+      let loaded; try { loaded = codec.load(t, file); } catch (e) { problem(reason(e)); return; } // half-written or broken: keep the last good doc
+      if (broken) problem(null);
       const keys = doc ? diffKeys(doc, loaded.doc) : new Set(['file']);
       text = t; state = loaded.state; readOnly = null;
       commit(loaded.doc, keys, 'file', undefined, undefined);
@@ -71,7 +77,7 @@ export async function openStore(file) {
 
   return {
     events,
-    async read() { await queue; return readOnly ? { revision, doc, readOnly } : { revision, doc }; },
+    async read() { await queue; return { revision, doc, source: text, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
     apply(req) { const p = queue.then(() => applyNow(req)); queue = p.catch(() => {}); return p; },
     async close() { watcher.close(); await queue; },
   };
