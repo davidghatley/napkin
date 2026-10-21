@@ -2,16 +2,16 @@
 
 Live status of every DREAM.md criterion. Updated by the lead (Claude, Opus) after each critic verdict and merge. Status: open / building / critic-fail / pass / unverifiable.
 
-Lanes are groups of areas that share files, so parallel builders don't collide. Round 1 lanes: core, engine, agents, canvas.
+Lanes are groups of areas that share files, so parallel builders don't collide. Round 1 lanes: files, engine, agents, canvas.
 
 | ID | Area | Lane | Status | Last critic verdict | Evidence | Commit |
 |---|---|---|---|---|---|---|
-| INV-01 | INV | core | building |  |  |  |
-| INV-02 | INV | core | building |  |  |  |
-| INV-03 | INV | core | building |  |  |  |
-| INV-04 | INV | core | building |  |  |  |
-| INV-05 | INV | core | building |  |  |  |
-| INV-06 | INV | core | building |  |  |  |
+| INV-01 | INV | files | building |  |  |  |
+| INV-02 | INV | files | building |  |  |  |
+| INV-03 | INV | files | building |  |  |  |
+| INV-04 | INV | files | building |  |  |  |
+| INV-05 | INV | files | building |  |  |  |
+| INV-06 | INV | files | building |  |  |  |
 | CAN-01 | CAN | canvas | building |  |  |  |
 | CAN-02 | CAN | canvas | building |  |  |  |
 | CAN-03 | CAN | canvas | building |  |  |  |
@@ -64,7 +64,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | HIS-01 | HIS | history | open |  |  |  |
 | HIS-02 | HIS | history | open |  |  |  |
 | HIS-03 | HIS | history | open |  |  |  |
-| HIS-04 | HIS | core | building |  |  |  |
+| HIS-04 | HIS | files | building |  |  |  |
 | HIS-05 | HIS | history | open |  |  |  |
 | AST-01 | AST | inspect | open |  |  |  |
 | AST-02 | AST | inspect | open |  |  |  |
@@ -83,20 +83,20 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-06 | PRF | engine | building |  |  |  |
 | PRF-07 | PRF | engine | building |  |  |  |
 | PRF-08 | PRF | engine | building |  |  |  |
-| FMT-01 | FMT | core | building |  |  |  |
-| FMT-02 | FMT | core | building |  |  |  |
-| FMT-03 | FMT | core | building |  |  |  |
-| FMT-04 | FMT | core | building |  |  |  |
-| FMT-05 | FMT | core | building |  |  |  |
-| FMT-06 | FMT | core | building |  |  |  |
-| FMT-07 | FMT | core | building |  |  |  |
+| FMT-01 | FMT | files | building |  |  |  |
+| FMT-02 | FMT | files | building |  |  |  |
+| FMT-03 | FMT | files | building |  |  |  |
+| FMT-04 | FMT | files | building |  |  |  |
+| FMT-05 | FMT | files | building |  |  |  |
+| FMT-06 | FMT | files | building |  |  |  |
+| FMT-07 | FMT | files | building |  |  |  |
 | ONB-01 | ONB | onboarding | open |  |  |  |
 | ONB-02 | ONB | onboarding | open |  |  |  |
 | ONB-03 | ONB | onboarding | open |  |  |  |
 | ONB-04 | ONB | onboarding | open |  |  |  |
 | ONB-05 | ONB | onboarding | open |  |  |  |
-| REL-01 | REL | core | building |  |  |  |
-| REL-02 | REL | core | building |  |  |  |
+| REL-01 | REL | files | building |  |  |  |
+| REL-02 | REL | files | building |  |  |  |
 | REL-03 | REL | engine | building |  |  |  |
 | REL-04 | REL | engine | building |  |  |  |
 | REL-05 | REL | engine | building |  |  |  |
@@ -115,7 +115,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 
 | Round | Started | Lanes | Builders | Result |
 |---|---|---|---|---|
-| 1 | 2026-10-21 | core, engine, agents, canvas | Sonnet (core, agents, canvas), Codex (engine) | running |
+| 1 | 2026-10-21 | files, engine, agents, canvas | Sonnet (files, agents, canvas), Codex (engine) | running |
 
 ## New dependencies
 
