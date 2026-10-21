@@ -1,0 +1,3 @@
+Re-run: EVIDENCE=1 node --test test/onboarding/open.test.js
+3/3 nested TSX files classified: 1 editable, 2 read-only.
+All 7 repository files SHA-256 unchanged after open, bundle, session, refused sidecar write and shutdown. Zero added paths.

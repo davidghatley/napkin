@@ -26,7 +26,7 @@ export function initNav(ctx) {
     if (node && c.doc && !byIdHas(c, node)) node = null; // a link to a node that is not there focuses the component only
     if (node && c.doc) {
       ctx.select({ component: focused, node, variant: firstVariant(c) });
-    } else if (!ctx.state.selections.some((s) => s.component === focused)) {
+    } else if (c.doc && !ctx.state.selections.some((s) => s.component === focused)) {
       ctx.select({ component: focused, node: c.doc.root.id, variant: firstVariant(c) });
     }
     setHash('#' + encodeURIComponent(c.name) + (ctx.state.selection?.component === focused ? '/' + encodeURIComponent(ctx.state.selection.node) : ''));

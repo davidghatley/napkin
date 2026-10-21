@@ -4,21 +4,89 @@ From napkin sketch to real components: a Paper-like design canvas tuned for comp
 
 Early days. The contract is in [INTENT.md](INTENT.md); how it fits the other projects is in [STACK.md](STACK.md).
 
-## First build (2026-10-20)
-A local canvas for **real React components**. Every `*.tsx` in a folder is a component in the napkin dialect ([decision 0003](docs/decisions/0003-tsx-dialect.md)): plain React with typed props, a `base` style per element and `variants` that hold only overrides. Any React app imports these files as they are. You on the canvas and your agents over MCP edit the same files live, and edits from a text editor, `git restore` or a branch switch show up too.
+## Quickstart
 
-![The proving demo: the agent adds an xl size while David changes the base radius and draws an icon slot](docs/demo/demo-3-after.png)
+Use Node.js 26 or newer and npm. From the root of this checkout, run:
 
-**The proving demo** (`npm run demo`, [log](docs/demo/demo-log.txt), [diff](docs/demo/demo-diff.txt)): David and an agent edit one Button at once. David changes the base radius in the panel and draws an icon slot with `I`; the agent calls `add_variant` for an `xl` size. Both land in `Button.tsx` (15 lines added, 2 removed), the canvas shows "agent: editing Button / size=xl" while it works, and a separate plain React app ([examples/consumer-app](examples/consumer-app/)) renders all 8 Buttons with both changes.
-
-```console
-npm test                              # format, edit path, MCP, live sync, rendering, panel, drawing, the demo, the canvas (nav, frames, quick open, layers, panel, axe)
-npm run demo                          # the proving demo in headless Chromium; writes docs/demo/
-npm start                             # canvas at http://127.0.0.1:4810/ on a temp copy of fixtures/ (the repo is not edited)
-node src/server.js --dir components --port 4810    # your own folder of components, edited in place
-NAPKIN_URL=http://127.0.0.1:4810/ npm run mcp      # MCP for an agent: list_components, read_component, apply_edits (dryRun), add_variant, create_component
-node examples/consumer-app/build.mjs <components dir> [out]   # a plain React app that imports Button
+<!-- quickstart:start -->
+```sh
+npm ci
+node src/cli.js init ./my-napkin
+node src/cli.js open ./my-napkin
 ```
+<!-- quickstart:end -->
+
+If npm prints an `allowScripts` warning for esbuild, use `npm rebuild esbuild` if the build cannot start; napkin does not need any new dependency.
+
+Open the printed canvas address in your browser. It starts at **http://127.0.0.1:4810/**,
+or the next free port. The starter `Welcome.tsx` is already on the canvas. Press **N**
+to create another component; **F**, **T**, and **I** draw inside it. Press **?** for
+all shortcuts or **Ctrl/Cmd+K** to find a component, layer, or action. Stop with Ctrl+C.
+
+The checkout also provides `npx napkin init ./another-napkin` and
+`npx napkin open ./another-napkin`; nothing needs publishing or a global install.
+`init` creates an empty project and prints connection details; `open` starts the server.
+
+Both commands print a ready-to-paste **`.mcp.json`** object for Claude Code.
+Paste it into your agent project's `.mcp.json`, then restart Claude Code. It uses
+`node`, the absolute path to this checkout's `src/mcp.js`, and the running canvas's
+`NAPKIN_URL` with `NAPKIN_AGENT=claude`. If an occupied port moves the server,
+use the snippet from `open`. Keep the canvas running while reviewing proposals.
+
+Every component is a real React TSX file your app can import directly. There is
+no export step and no napkin runtime dependency. Edits in a text editor or from
+an agent appear live. The dialect is described in [decision 0003](docs/decisions/0003-tsx-dialect.md).
+
+## Open an existing repository
+
+```sh
+node src/cli.js open /path/to/your/repo
+```
+
+Without a `napkin.json`, napkin scans every `.tsx` below that folder, skipping
+`node_modules`, `dist`, `build`, and `.git`. The report lists editable files and
+read-only files with all blocking constructs and their lines. The address prints
+before scanning finishes; components and scan progress stream into the canvas,
+and offscreen previews bundle when brought into view. The pinned shadcn reports
+are in `docs/evidence/OPN-04.txt` (canonical UI) and `OPN-04-full.txt` (all 3,674
+TSX files); `node tools/shadcn-report.js --archive <pinned .tar.gz>` reruns the full census. Opening, classifying and rendering write
+**no files in that repository**. The single-writer lock lives in the OS temporary
+folder. In foreign repositories, frame positions persist only with `--write-sidecars`. Otherwise positions last only for the session; pass `--write-sidecars` to allow
+`.napkin/lock` and position sidecars in the repository. A `napkin.json` project
+uses its `components` folder (configure another relative path with `"components"`).
+
+Read-only files still render with their default props. Missing imports, CSS or
+context produce an error in that component's frame. napkin does not install a
+repository's dependencies or invent its providers. `Ctrl/Cmd+K` finds nested files too.
+
+To adopt a simple read-only file, ask the agent to call
+`propose_adoption { "component": "Greeting" }`. The proposal contains the source
+and a diff; inspect it through `GET /api/proposals`. Accept or reject it through
+`POST /api/proposals/<id>/accept` or `/reject`, with your session bearer token
+(from `POST /api/session { "as": "you" }`). Reject writes nothing. Accept goes
+through the revision-checked store and the single commit path. A hand edit after
+the proposal makes acceptance stale. Conversion currently supports synchronous,
+named functions with string or boolean literal prop defaults containing intrinsic JSX and literal inline or constant style objects;
+class names, hooks, imports with runtime effects, dynamic children, significant
+text whitespace, and other unsupported behavior are refused with reasons.
+
+An editable file changes only after an explicit edit; a read-only file changes
+only after you accept an adoption. To keep a repository entirely untouched,
+review the canvas and do not issue edits or accept proposals.
+
+## Development
+
+```sh
+npm test
+npm start
+npm run demo
+```
+
+`npm start` opens a disposable copy of the fixtures. Tests use random server
+ports and CPU Chromium; install Chromium or set `CHROMIUM` to its executable
+for browser tests. The [proving demo](docs/demo/demo-log.txt) shows simultaneous
+human and agent edits landing in the same Button component.
+
 **On the canvas:**
 - Pan with the wheel or Space-drag, zoom with Ctrl/⌘-wheel, pinch or `+` `-` (5% to 800%); `⇧1` fits everything, `⇧2` the selection, `⇧0` is 100%. Drag a frame by its title to place it (the position is saved in the `.napkin.json` beside the file).
 - `⌘K` jumps to any component, layer or action. `Enter` focuses the selected component, `Esc` comes back; `#Button/label` in the address deep-links.
@@ -31,6 +99,6 @@ node examples/consumer-app/build.mjs <components dir> [out]   # a plain React ap
 
 A file napkin can't read fully opens read-only with a badge, and napkin never rewrites it.
 
-**Not in this build:** a tokens panel, opening other repos' components, Figma/HTML import, undo inside napkin (use git), hosting. See FEATURES.md.
+**Not in this build:** a tokens panel, Figma/HTML import, hosting. See FEATURES.md.
 
 Contract the tests rely on: [test/CONTRACT.md](test/CONTRACT.md). Decisions: [docs/decisions/](docs/decisions/).

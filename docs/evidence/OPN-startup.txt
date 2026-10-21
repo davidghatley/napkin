@@ -1,0 +1,7 @@
+OPN startup — complete pinned shadcn TSX tree (3674 files)
+Commit: ba1503c64472b82256d9de95e2e62c5901a38e8b
+Sources: pinned codeload archive, TSX files materialized through src/commit.js; no dependencies installed.
+Command: node src/cli.js open <tree> --port 0
+Address printed: 183.9 ms (bar: 2000 ms)
+The process was stopped after the address; no preview bundles were requested.
+Full classification: OPN-04-full.txt

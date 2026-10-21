@@ -1,3 +1,4 @@
+import { explainError } from './errors.js';
 // The component model (napkin/1, decision 0003) and its one edit path (F02).
 // A model is what napkin reads out of a component .tsx file:
 //   { format: 'napkin/1', name, props, root, variants }
@@ -10,7 +11,7 @@
 
 export class EditError extends Error {
   constructor(index, message) {
-    super(`invalid edit #${index}: ${message}`);
+    super(explainError(`invalid edit #${index}: ${message}`, { next: "read the component and /api/guide, correct edit #" + index + ", and retry." }));
     this.index = index;
   }
 }
@@ -336,7 +337,7 @@ export function applyEdits(doc, edits) {
         break;
       }
       default:
-        throw new EditError(i, `unknown op "${e.op}"`);
+        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename`);
     }
   });
   return next;
