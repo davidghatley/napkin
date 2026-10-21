@@ -125,8 +125,8 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
 
     await t.test('absent fill, stroke and shadow are chips in one Add row, not empty sections', async () => {
       await select('Card', 'title');
-      assert.equal(await q(`document.querySelectorAll('.addrow .addchip').length`), 3);
-      assert.equal(await q(`!!document.querySelector('[data-sec=fill]')`), false);
+      assert.equal(await q(`document.querySelectorAll('.sec.empty .addbtn').length`), 3, 'Fill, Stroke and Shadow are settled headers with a + at the end');
+      assert.equal(await q(`document.querySelector('[data-sec=fill]').tagName`), 'DIV', 'a header, not an empty section to open');
       assert.equal(await q(`[...document.querySelectorAll('details.sec')].slice(0, 1).map((d) => d.dataset.sec)[0]`), 'type', 'a text node starts with Text');
       assert.equal(await q(`document.querySelector('[data-sec=layout]').open`), false, 'Layout starts collapsed on a text node');
       await select('Button', 'root', { size: 'md', state: 'default' });
@@ -152,7 +152,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
 
     await t.test('width and height are one row each, and "Auto" has no unit', async () => {
       assert.equal(await q(`document.querySelector('#width').closest('.sizerow').contains(document.querySelector('#size-width-fixed'))`), true);
-      assert.equal(await q(`!!document.querySelector('#width').closest('.fbox').querySelector('.unit')`), false);
+      assert.equal(await q(`document.querySelector('#width').closest('.fbox').classList.contains('computed')`), true, 'an auto size shows what the browser made of it, quietly');
       assert.equal(await q(`document.querySelector('#width').placeholder`), 'Auto');
     });
 

@@ -124,7 +124,10 @@ export function createStage(ctx, root, world, view) {
       fig.className = 'cell'; fig.dataset.variant = JSON.stringify(variant);
       const mount = document.createElement('div'); mount.className = 'mount';
       const cap = document.createElement('figcaption'); cap.textContent = variantLabel(variant);
-      fig.append(mount, cap);
+      const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.title = 'Drag to preview another width. Double-click to reset.';
+      const pw = c.preview?.[JSON.stringify(variant)];
+      if (pw) { mount.style.width = `${pw}px`; fig.dataset.pw = String(pw); }
+      fig.append(mount, cap, grip);
       try { unmounts.push(mod.mount(mount, variant)); }
       catch (e) { mount.innerHTML = '<div class="error"></div>'; mount.firstChild.textContent = `render failed: ${e.message}`; }
       return fig;
@@ -158,6 +161,17 @@ export function createStage(ctx, root, world, view) {
     sec.size = { w: sec.frame.offsetWidth, h: sec.frame.offsetHeight };
     sec.el.style.setProperty('--w', `${sec.size.w}px`); sec.el.style.setProperty('--h', `${sec.size.h}px`);
   }
+  // preview widths (LAY-11) came in from the sidecar: put them on the cells
+  function applyPreview(id) {
+    const sec = sections.get(id), pv = ctx.state.components.get(id)?.preview || {};
+    if (!sec) return;
+    for (const cell of sec.el.querySelectorAll('.cell')) {
+      const w = pv[cell.dataset.variant], mount = cell.querySelector('.mount');
+      if (w) { mount.style.width = `${w}px`; cell.dataset.pw = String(w); } else { mount.style.width = ''; delete cell.dataset.pw; }
+    }
+    measure(sec); refreshOverlays();
+  }
+  ctx.on('preview', (f) => applyPreview(f.component));
   function moveTo(id, x, y) {
     const sec = sections.get(id);
     if (!sec) return;
@@ -236,6 +250,7 @@ export function createStage(ctx, root, world, view) {
     place(hoverBox, hoverEl && !sels.some((s) => selectedElement(s) === hoverEl) ? hoverEl : null, undefined, base);
     drawMeasure(base);
     selectBox.dataset.count = String(sels.length);
+    ctx.emit('overlays', {});
   }
 
   // Alt: distance between the selection and the hovered node, in canvas pixels (what the component's CSS sees).
@@ -430,7 +445,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    reveal, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
+    reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

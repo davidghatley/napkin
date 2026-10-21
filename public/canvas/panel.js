@@ -5,6 +5,10 @@
 // (several selected nodes = one revision). The panel never writes files. Text typed into a field survives a
 // rebuild (ui.draft) until it is saved.
 import { index, axes, resolveStyle, propOf } from '/src/model.js';
+import { isFlex, isGrid, mainProp, sizeMode, sizePatch, pinPatch, pinsOf, tracks, placementOf, placePatch } from '/src/layout.js';
+import { parseColor, formatColor, fileSpace, documentColors, colorsIn } from '/src/color.js';
+import { openColorPicker } from './colorpop.js';
+import { cssSize, relRect } from './geom.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 export const variantLabel = (v) => Object.entries(v || {}).map(([k, x]) => `${k}=${x}`).join(' · ') || 'default';
@@ -22,17 +26,25 @@ const F = {
   padding: { label: 'Padding', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
   width: { label: 'Width', unit: 'px', scrub: { step: 1, min: 0 } },
   height: { label: 'Height', unit: 'px', scrub: { step: 1, min: 0 } },
+  minWidth: { label: 'Min W', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: 'None' },
+  maxWidth: { label: 'Max W', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: 'None' },
+  minHeight: { label: 'Min H', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: 'None' },
+  maxHeight: { label: 'Max H', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: 'None' },
+  left: { label: 'Left', unit: 'px', scrub: { step: 1 }, placeholder: 'Auto' },
+  right: { label: 'Right', unit: 'px', scrub: { step: 1 }, placeholder: 'Auto' },
+  top: { label: 'Top', unit: 'px', scrub: { step: 1 }, placeholder: 'Auto' },
+  bottom: { label: 'Bottom', unit: 'px', scrub: { step: 1 }, placeholder: 'Auto' },
   opacity: { label: 'Opacity', unit: '%', pct: true, scrub: { step: 1, min: 0, max: 100 }, placeholder: '100' },
-  borderRadius: { label: 'Corner radius', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
-  color: { label: 'Text color', color: true, placeholder: 'Inherit' },
-  fontFamily: { label: 'Font', placeholder: 'Inherit' },
-  fontSize: { label: 'Size', unit: 'px', scrub: { step: 1, min: 1 } },
-  lineHeight: { label: 'Line height', scrub: { step: 1, min: 0 }, auto: true, placeholder: 'Auto' },
-  letterSpacing: { label: 'Letter spacing', unit: 'px', scrub: { step: 0.1, min: -20, digits: 1 }, placeholder: '0' },
+  borderRadius: { label: 'Radius', unit: 'px', scrub: { step: 1, min: 0 }, placeholder: '0' },
+  color: { label: 'Text color', color: true, placeholder: 'Inherit', eff: true, inherit: true },
+  fontFamily: { label: 'Font', placeholder: 'Inherit', eff: true, inherit: true },
+  fontSize: { label: 'Size', unit: 'px', scrub: { step: 1, min: 1 }, eff: true, inherit: true },
+  lineHeight: { label: 'Line height', scrub: { step: 1, min: 0 }, auto: true, placeholder: 'Auto', eff: true, inherit: true },
+  letterSpacing: { label: 'Spacing', unit: 'px', scrub: { step: 0.1, min: -20, digits: 1 }, placeholder: '0', eff: true, inherit: true },
 };
 const WEIGHTS = [300, 400, 500, 600, 700, 800];
 const ALLBORDERS = ['border', 'borderTop', 'borderRight', 'borderBottom', 'borderLeft'];
-const DESIGN = new Set([...Object.keys(F), ...ALLBORDERS, 'boxShadow', 'background', 'display', 'flexDirection', 'justifyContent', 'alignItems', 'fontWeight', 'textAlign']);
+const DESIGN = new Set([...Object.keys(F), ...ALLBORDERS, 'flexWrap', 'gridTemplateColumns', 'gridTemplateRows', 'position', 'gridArea', 'gridColumn', 'gridRow', 'boxShadow', 'background', 'display', 'flexDirection', 'justifyContent', 'alignItems', 'fontWeight', 'textAlign']);
 const ALIGN = ['flex-start', 'center', 'flex-end'];
 const AL_NAME = [['top left', 'top', 'top right'], ['left', 'center', 'right'], ['bottom left', 'bottom', 'bottom right']];
 
@@ -79,18 +91,12 @@ const I = {
   right: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h12M7 8h7M4 12h10" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>',
   eye: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8 12.200 12.500 8 12.500 1.500 8 1.500 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="1.8" fill="currentColor"/></svg>',
   eyeoff: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M1.5 8s2.3-4.5 6.5-4.5S14.5 8 14.5 8 12.200 12.500 8 12.500 1.500 8 1.500 8zM2.500 13.500l11-11" fill="none" stroke="currentColor" stroke-width="1.300" stroke-linecap="round"/></svg>',
+  wrap: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 4h9a2.500 2.500 0 0 1 0 5H6M8 7l-2 2 2 2" fill="none" stroke="currentColor" stroke-width="1.300" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   sides: '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2.500 6V2.500H6M10 2.500h3.500V6M13.500 10v3.500H10M6 13.500H2.500V10" fill="none" stroke="currentColor" stroke-width="1.300" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   reset: '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3.5 7.5a4.5 4.5 0 1 1 1.3 3.2M3.5 3.5v4h4" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
 };
 
 // ---- values that are several words in CSS but one idea in the panel ----
-const parseHex = (v) => {
-  const m = typeof v === 'string' && v.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i);
-  if (!m) return null;
-  let h = m[1]; if (h.length === 3) h = [...h].map((c) => c + c).join('');
-  return { rgb: '#' + h.slice(0, 6).toLowerCase(), a: h.length === 8 ? Math.round(parseInt(h.slice(6), 16) * 100 / 255) : 100 };
-};
-const withAlpha = (rgb, a) => (a >= 100 || !/^#[0-9a-f]{6}$/i.test(rgb) ? rgb : rgb + Math.round(Math.max(0, a) * 255 / 100).toString(16).padStart(2, '0'));
 const topSplit = (s, sep) => { const out = []; let d = 0, cur = ''; for (const ch of s) { if (ch === '(') d++; if (ch === ')') d--; if (d === 0 && (sep === ',' ? ch === ',' : /\s/.test(ch))) { if (cur) out.push(cur); cur = ''; } else cur += ch; } if (cur) out.push(cur); return out; };
 function parseBorder(v) {
   if (v === undefined || v === null) return null;
@@ -114,6 +120,12 @@ function parseBox(v) {
   const n = t.map(parseFloat);
   return [n[0], n[1] ?? n[0], n[2] ?? n[0], n[3] ?? n[1] ?? n[0]];
 }
+// A colour spelt in the format the file already uses (hex stays hex, rgb() stays rgb()).
+function inFormat(text, space) {
+  let out = String(text);
+  for (const c of colorsIn(text)) { const p = parseColor(c); if (p && p.space !== space) out = out.replace(c, formatColor(p, space, p)); }
+  return out;
+}
 // Font stacks read as a name, not as code: "Georgia, serif" shows Georgia.
 const famName = (v) => String(v ?? '').split(',')[0].trim().replace(/^["']|["']$/g, '');
 const GENERIC = ['system-ui', 'sans-serif', 'serif', 'monospace', 'cursive'];
@@ -131,6 +143,22 @@ function stackFor(name, current) {
   const q = /\s/.test(name) ? '"' + name + '"' : name;
   return tail ? q + ', ' + tail : q + ', ' + (/mono|code|courier/i.test(name) ? 'monospace' : /times|georgia|serif/i.test(name) && !/sans/i.test(name) ? 'serif' : 'sans-serif');
 }
+
+// ---- glyphs that sit inside fields (the human label stays beside them) ----
+const G = (d) => `<svg class="gl" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const L = (t) => `<span class="gl gt" aria-hidden="true" data-g="${t}"></span>`; // the letter is drawn by CSS, so it never becomes part of the label's text
+const GLYPH = {
+  width: L('W'), height: L('H'), left: L('L'), right: L('R'), top: L('T'), bottom: L('B'), minWidth: L('≥'), maxWidth: L('≤'), minHeight: L('≥'), maxHeight: L('≤'),
+  gap: G('M2 2v8M10 2v8M4.500 6h3M5.500 4.500 4 6l1.500 1.500M6.500 4.500 8 6 6.500 7.500'),
+  padding: G('M1.500 1.500h9v9h-9zM4 4h4v4H4z'),
+  borderRadius: G('M2 10V6a4 4 0 0 1 4-4h4'),
+  opacity: G('M6 1.500c2 2.500 3.500 4 3.500 5.500a3.500 3.500 0 0 1-7 0C2.500 5.500 4 4 6 1.500z'),
+  fontSize: L('Aa'), fontFamily: L('Ff'),
+  lineHeight: G('M2 2.500h8M2 9.500h8M6 4v4M4.500 5.500 6 4l1.500 1.500M4.500 6.500 6 8l1.500-1.500'),
+  letterSpacing: G('M1.500 2v8M10.500 2v8M3.500 6h5M5 4.500 3.500 6 5 7.500M7 4.500 8.500 6 7 7.500'),
+  color: L('A'), gridTemplateColumns: G('M2 2v8M6 2v8M10 2v8'), gridTemplateRows: G('M2 2h8M2 6h8M2 10h8'),
+  col: G('M3 2v8M9 2v8'), row: G('M2 3h8M2 9h8'),
+};
 
 export function renderPanel(ctx) {
   const el = document.querySelector('#panel');
@@ -158,168 +186,197 @@ export function renderPanel(ctx) {
   const focus = document.activeElement && el.contains(document.activeElement) ? { id: document.activeElement.id, s: document.activeElement.selectionStart, e: document.activeElement.selectionEnd } : null;
   const dis = comp.readOnly ? ' disabled' : '';
   const t = target(doc, sel);
-  const { byId } = index(doc);
+  const { byId, parentOf } = index(doc);
   const nodes = ctx.state.selections.filter((s) => s.component === sel.component).map((s) => byId.get(s.node)).filter(Boolean);
   const multi = nodes.length > 1;
-  const isText = nodes.length === 1 && node.tag !== 'img' && !node.children.length && (node.text !== undefined || !!node.textProp); // a text node: Layout and Size start collapsed
+  const isText = nodes.length === 1 && node.tag !== 'img' && !node.children.length && (node.text !== undefined || !!node.textProp);
   const resolvedOf = (n) => (t.overriding ? resolveStyle(doc, n.id, sel.variant) : n.style || {});
-  // One value for the control, or "mixed" when the selected nodes disagree.
+  const parent = parentOf.get(node.id);
+  const parentStyle = parent ? resolveStyle(doc, parent.id, sel.variant) : undefined;
+  const selEl = ctx.stage?.selectedElement(sel);
+  const cs = selEl?.isConnected ? getComputedStyle(selEl) : null;
+  const zoom = ctx.state.zoom || 1;
+  const space = fileSpace(doc);
   const val = (prop) => {
     const vals = nodes.map((n) => resolvedOf(n)[prop]);
     const first = vals[0];
     return { value: first, mixed: vals.some((v) => v !== first) };
   };
+  // The value the browser shows for a property nobody set (shown quietly, never a blank box)
+  const eff = (prop) => {
+    if (!cs) return null;
+    if (prop === 'fontSize') return Math.round(parseFloat(cs.fontSize) * 10) / 10;
+    if (prop === 'fontFamily') return famName(cs.fontFamily);
+    if (prop === 'lineHeight') return cs.lineHeight === 'normal' ? null : Math.round(parseFloat(cs.lineHeight) * 10) / 10;
+    if (prop === 'letterSpacing') return cs.letterSpacing === 'normal' ? 0 : Math.round(parseFloat(cs.letterSpacing) * 100) / 100;
+    if (prop === 'color') { const p = parseColor(cs.color); return p ? formatColor({ ...p, a: 1 }, space, p) : null; }
+    if (prop === 'width' || prop === 'height') { const r = selEl.getBoundingClientRect(); return Math.round((prop === 'width' ? r.width : r.height) / zoom); }
+    return null;
+  };
   const overOf = (prop) => (t.overriding ? nodes.flatMap((n) => overridesOf(doc, t.nonBase, n.id, prop)) : []);
+  const isOver = (prop) => overOf(prop).length > 0;
+  // override dot + Reset, kept on the row (inside the field's right end)
   const tags = (prop, label) => {
     const over = overOf(prop);
     if (!over.length) return '';
     const where = esc([...new Set(over.map(([a, v]) => `${a}=${v}`))].join(', '));
     return `<span class="dot" id="dot-${prop}" role="img" aria-label="${esc(label)} is overridden in ${where}" title="Overridden in ${where}"></span><button type="button" class="reset" id="reset-${prop}" data-action="reset" data-prop="${prop}" aria-label="Reset ${esc(label)} to base" title="Reset to base"${dis}>${I.reset}</button>`;
   };
-  const isOver = (prop) => overOf(prop).length > 0;
 
-  // A text/number field with a label (drag it to scrub), a unit and the override dot.
-  // Numbers are filled wells you can scrub; text is an outlined box. Units show only when the value is a plain number.
+  // A field: [glyph label | value | unit] in one well. Three looks: a value (set here), an inherited / computed value (quiet), a placeholder.
   const field = (prop, o = {}) => {
     const f = { ...F[prop], ...o }, { value, mixed } = val(prop);
-    const shown = value === undefined || mixed ? '' : f.pct ? String(Math.round(Number(value) * 100)) : pxless(value, f.unit);
-    const unit = f.unit && shown !== '' && NUMBER.test(shown) && !mixed ? `<span class="unit" aria-hidden="true">${f.unit}</span>` : '';
-    const labelAttrs = f.scrub ? `class="flabel scrub" data-scrub="${prop}" title="Drag to change"` : 'class="flabel"';
-    const sw = f.color ? `<label class="swatch"><input type="color" id="pick-${prop}" data-pick="${prop}" aria-label="Pick ${esc(f.label.toLowerCase())}"${dis}><span class="chipcolor" data-color="${esc(shown)}"></span></label>` : '';
-    const list = prop === 'fontFamily' ? ' aria-haspopup="listbox" data-picker="font"' : '';
-    return `<div class="f${isOver(prop) ? ' overridden' : ''}"><label ${labelAttrs} for="${prop}">${esc(f.label)}</label>
-      <div class="fbox ${f.scrub ? 'num' : 'txt'}${f.color ? ' hascolor' : ''}">${sw}<input id="${prop}" data-field="${prop === 'fontFamily' ? 'family' : 'style'}" data-prop="${prop}" data-step="${f.scrub?.step ?? ''}"${f.scrub ? '' : ' data-text="1"'}${f.pct ? ' data-pct="1"' : ''}${list} autocomplete="off" spellcheck="false" value="${esc(prop === 'fontFamily' ? famName(shown) : shown)}" placeholder="${mixed ? 'Mixed' : f.placeholder ?? ''}"${mixed ? ' data-mixed="1"' : ''}${dis}>${unit}</div>
-      <div class="ftags">${o.extra || ''}${tags(prop, f.label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
-  };
-  // A segmented control: one CSS property, a few values.
-  const seg = (prop, label, opts, { aria, iconOnly } = {}) => {
-    const { value, mixed } = val(prop);
-    return `<div class="f${isOver(prop) ? ' overridden' : ''}"><span class="flabel" id="lbl-${prop}">${esc(label)}</span>
-      <div class="seg" role="radiogroup" aria-labelledby="lbl-${prop}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span${iconOnly ? ' class="sr"' : ''}>${esc(text)}</span></button>`).join('')}</div>
-      <div class="ftags">${tags(prop, label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
-  };
-  // Width or height on ONE row: the mode (Hug / Fill / Fixed) and the value. The unit only shows when the size is a number.
-  const sizeMode = (v) => (v === undefined || v === 'auto' || v === 'fit-content' || v === 'max-content' ? 'hug' : v === '100%' ? 'fill' : typeof v === 'number' || /^-?\d+(\.\d+)?px$/.test(String(v)) ? 'fixed' : 'custom');
-  const size = (prop) => {
-    const { value, mixed } = val(prop), mode = mixed ? '' : sizeMode(value);
-    const shown = value === undefined || mixed ? '' : pxless(value, 'px');
+    let shown = value === undefined || mixed ? '' : f.pct ? String(Math.round(Number(value) * 100)) : pxless(value, f.unit);
+    let kind = '';
+    if (shown === '' && !mixed && f.eff) { const e = eff(prop); if (e !== null && e !== undefined && e !== '') { shown = String(e); kind = f.inherit ? 'inherited' : 'computed'; } }
     const isNum = NUMBER.test(shown);
-    const opts = [['hug', 'Hug'], ['fill', 'Fill'], ['fixed', 'Fixed']];
+    const mark = kind === 'inherited' && !isNum ? '<span class="inh" title="Inherited from the parent">inherited</span>'
+      : kind === 'inherited' ? '<span class="inh arrow" title="Inherited from the parent" aria-label="inherited">↑</span>'
+      : f.unit && shown !== '' && isNum && !mixed ? `<span class="unit" aria-hidden="true">${f.unit}</span>` : '';
+    const lab = f.scrub ? `class="flabel scrub pfx" data-scrub="${prop}" title="Drag to change ${esc(f.label.toLowerCase())}"` : 'class="flabel pfx"';
+    const sw = f.color ? `<button type="button" class="swatch" id="swatch-${prop}" data-swatch="${prop}" aria-label="Pick ${esc(f.label.toLowerCase())}"${dis}><span class="chipcolor" data-color="${esc(shown)}"></span></button>` : '';
+    const list = prop === 'fontFamily' ? ' aria-haspopup="listbox" data-picker="font"' : '';
+    return `<div class="fld${isOver(prop) ? ' overridden' : ''}${f.wide ? ' wide' : ''}"><div class="fbox ${f.scrub ? 'num' : 'txt'}${f.color ? ' hascolor' : ''}${kind ? ' ' + kind : ''}"><label ${lab} for="${prop}">${GLYPH[prop] ?? ''}<span class="lt">${esc(f.label)}</span></label>${sw}<input id="${prop}" data-field="${prop === 'fontFamily' ? 'family' : 'style'}" data-prop="${prop}" data-step="${f.scrub?.step ?? ''}"${f.scrub ? '' : ' data-text="1"'}${f.pct ? ' data-pct="1"' : ''}${list}${kind ? ' data-eff="1"' : ''} autocomplete="off" spellcheck="false" value="${esc(prop === 'fontFamily' ? famName(shown) : shown)}" placeholder="${mixed ? 'Mixed' : f.placeholder ?? ''}"${mixed ? ' data-mixed="1"' : ''}${dis}>${mark}${o.extra || ''}${tags(prop, f.label)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
+  };
+  const row = (...cells) => `<div class="irow n${cells.length}">${cells.join('')}</div>`;
+  const seg = (prop, label, opts, { aria, iconOnly, map } = {}) => {
+    const { value, mixed } = val(prop);
+    return `<div class="fld full${isOver(prop) ? ' overridden' : ''}"><div class="seg" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span${iconOnly ? ' class="sr"' : ''}>${esc(text)}</span></button>`).join('')}</div>${tags(prop, label)}${err('style-' + prop)}${err('reset-' + prop)}</div>`;
+  };
+  const sizeRow = (prop) => {
+    const n0 = nodes[0], style = resolvedOf(n0);
+    const { value, mixed } = val(prop), mode = mixed ? '' : sizeMode(style, parentStyle, prop);
+    let shown = value === undefined || mixed ? '' : pxless(value, 'px'), kind = '';
+    if (!NUMBER.test(shown) && !mixed) { const e = eff(prop); if (e !== null) { shown = String(e); kind = 'computed'; } }
     const name = prop === 'width' ? 'Width' : 'Height';
-    return `<div class="f sizerow${isOver(prop) ? ' overridden' : ''}"><label class="flabel scrub" data-scrub="${prop}" for="${prop}" title="Drag to change ${name.toLowerCase()}">${name[0]}<span class="sr">${name.slice(1)}</span></label>
-      <div class="seg sizeseg" role="radiogroup" aria-label="${name} sizing">${opts.map(([m, text]) => `<button type="button" role="radio" id="size-${prop}-${m}" aria-checked="${mode === m}" data-size="${prop}" data-mode="${m}" title="${m === 'hug' ? 'Hug contents (auto)' : m === 'fill' ? 'Fill the parent (100%)' : 'Fixed size in px'}"${dis}><span>${text}</span></button>`).join('')}</div>
-      <div class="fbox num"><input id="${prop}" data-field="style" data-prop="${prop}" data-step="1" autocomplete="off" spellcheck="false" value="${esc(shown)}" placeholder="${mixed ? 'Mixed' : mode === 'fill' ? '100%' : 'Auto'}" aria-label="${name}"${mixed ? ' data-mixed="1"' : ''}${dis}>${isNum && !mixed ? '<span class="unit" aria-hidden="true">px</span>' : ''}</div>
-      <div class="ftags">${tags(prop, name)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
+    const fillTip = parentStyle && isFlex(parentStyle) ? (prop === mainProp(parentStyle) ? 'Fill: flex: 1 (shares the space left)' : 'Fill: align-self: stretch') : 'Fill the parent (100%)';
+    const opts = [['hug', 'Hug', 'Hug contents (auto)'], ['fill', 'Fill', fillTip], ['fixed', 'Fixed', 'Fixed size in px']];
+    return `<div class="fld sizerow${isOver(prop) ? ' overridden' : ''}"><label class="flabel scrub pfx" data-scrub="${prop}" for="${prop}" title="Drag to change ${name.toLowerCase()}">${GLYPH[prop]}<span class="sr">${name}</span></label>
+      <div class="seg sizeseg" role="radiogroup" aria-label="${name} sizing">${opts.map(([m, text, tip]) => `<button type="button" role="radio" id="size-${prop}-${m}" aria-checked="${mode === m}" data-size="${prop}" data-mode="${m}" title="${tip}"${dis}><span>${text}</span></button>`).join('')}</div>
+      <div class="fbox num${kind ? ' ' + kind : ''}"><input id="${prop}" data-field="style" data-prop="${prop}" data-step="1"${kind ? ' data-eff="1"' : ''} autocomplete="off" spellcheck="false" value="${esc(mode === 'fill' && !kind ? shown : shown)}" placeholder="${mixed ? 'Mixed' : 'Auto'}" aria-label="${name}"${mixed ? ' data-mixed="1"' : ''}${dis}>${NUMBER.test(shown) && !mixed ? '<span class="unit" aria-hidden="true">px</span>' : ''}${tags(prop, name)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
-  const section = (id, title, body, { open = true } = {}) => `<details class="sec" data-sec="${id}"${(ui.closed.has(id) ? false : ui.opened.has(id) ? true : open) ? ' open' : ''}><summary>${title}</summary><div class="sbody">${body}</div></details>`;
+  const section = (id, title, body, { open = true, action = '' } = {}) => `<details class="sec" data-sec="${id}"${(ui.closed.has(id) ? false : ui.opened.has(id) ? true : open) ? ' open' : ''}><summary>${title}${action}</summary><div class="sbody">${body}</div></details>`;
   const has = (prop) => nodes.some((n) => resolvedOf(n)[prop] !== undefined);
-  // An optional section (fill, stroke, shadow): present = its own section; absent = a chip in one "Add" row, so empty sections take no room.
-  const addChips = [];
-  const addBtn = (id, label, props, def) => `<button type="button" class="addchip" id="add-${id}" data-action="set-prop" data-props="${props.join(',')}" data-def="${esc(def)}" aria-label="Add ${label.toLowerCase()}" title="Add ${label.toLowerCase()}"${dis}>+ ${label}</button>`;
+  // Fill, Stroke, Shadow: always a settled header with a + at its end; the body appears once there is one.
+  const plus = (id, label, props, def) => `<button type="button" class="addbtn" id="add-${id}" data-action="set-prop" data-props="${props.join(',')}" data-def="${esc(inFormat(def, space))}" aria-label="Add ${label.toLowerCase()}" title="Add ${label.toLowerCase()}"${dis}><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>`;
   const optSection = (id, title, props, present, body, def, { force = false, always = '' } = {}) => {
-    if (!present && !force) { addChips.push(addBtn(id, title, props, def)); return ''; }
-    return section(id, title, (present ? body : `<div class="none"><span class="hint">None on this side.</span>${addBtn(id, title, props, def)}</div>`) + always);
+    if (!present && !force) return `<div class="sec empty" data-sec="${id}"><span class="sectitle">${title}</span>${plus(id, title, props, def)}</div>`;
+    return section(id, title, (present ? body : `<div class="none"><span class="hint">None on this side.</span>${plus(id, title, props, def)}</div>`) + always, {});
   };
-  // swatch | hex | opacity % in ONE field, then the eye and a minus at the row's end (like Figma's fill row).
   const colorRow = (group, idBase, value, { eye, alphaId, remove } = {}) => {
-    const px = parseHex(value);
-    const hex = px ? px.rgb : value ?? '';
-    return `<div class="crow"><div class="fbox txt hascolor colorbox"><label class="swatch"><input type="color" id="pick-${idBase}" data-pick="${idBase}" data-group="${group}" aria-label="Pick colour"${dis}><span class="chipcolor" data-color="${esc(hex)}"></span></label>
-      <input id="${idBase}" data-field="part" data-group="${group}" data-part="c" data-text="1" autocomplete="off" spellcheck="false" value="${esc(hex)}" placeholder="None" aria-label="Colour"${dis}>
-      <span class="vdiv" aria-hidden="true"></span><input class="alpha" id="${alphaId}" data-field="part" data-group="${group}" data-part="a" data-step="1" data-prop="${alphaId}" autocomplete="off" value="${px ? px.a : 100}" aria-label="Opacity"${px ? '' : ' disabled'}${dis}><span class="unit" aria-hidden="true">%</span></div>
+    const px = parseColor(value);
+    const shownColor = px ? formatColor({ ...px, a: 1 }, px.space, px) : value ?? '';
+    const alpha = px ? Math.round((px.a ?? 1) * 100) : 100;
+    return `<div class="crow"><div class="fbox txt hascolor colorbox"><button type="button" class="swatch" id="pick-btn-${idBase}" data-swatch="${idBase}" data-group="${group}" aria-label="Open the colour picker"${dis}><span class="chipcolor" data-color="${esc(value ?? '')}"></span></button><input type="color" class="nativepick" id="pick-${idBase}" data-pick="${idBase}" data-group="${group}" tabindex="-1" aria-label="Pick colour"${dis}>
+      <input id="${idBase}" data-field="part" data-group="${group}" data-part="c" data-text="1" autocomplete="off" spellcheck="false" value="${esc(shownColor)}" placeholder="None" aria-label="Colour"${dis}>
+      <span class="vdiv" aria-hidden="true"></span><input class="alpha" id="${alphaId}" data-field="part" data-group="${group}" data-part="a" data-step="1" data-prop="${alphaId}" autocomplete="off" value="${alpha}" aria-label="Opacity"${px ? '' : ' disabled'}${dis}><span class="unit" aria-hidden="true">%</span></div>
       ${eye ? `<button type="button" class="rowbtn" id="eye-${group}" data-action="toggle-eye" data-group="${group}" aria-pressed="${!eye.off}" aria-label="${eye.off ? 'Show' : 'Hide'} ${group}" title="${eye.off ? 'Show' : 'Hide'}"${dis}>${eye.off ? I.eyeoff : I.eye}</button>` : '<span></span>'}
       ${remove ? `<button type="button" class="rowbtn" id="remove-${remove.id}" data-action="clear-prop" data-props="${remove.props.join(',')}" aria-label="Remove ${group}" title="Remove"${dis}>−</button>` : ''}</div>`;
   };
-  const part = (group, id, label, value, o = {}) => `<div class="f"><label class="flabel scrub" data-scrub="${id}" title="Drag to change" for="${id}">${label}</label><div class="fbox num"><input id="${id}" data-field="part" data-group="${group}" data-part="${o.part ?? id}" data-prop="${id}" data-step="${o.step ?? 1}" autocomplete="off" spellcheck="false" value="${esc(value ?? '')}" placeholder="${o.ph ?? '0'}"${dis}>${value !== '' && value !== undefined ? '<span class="unit" aria-hidden="true">px</span>' : ''}</div></div>`;
-  const linkBtn = (which, on, label) => `<button type="button" class="linkbtn" id="${which}-sides" data-action="toggle-sides" data-which="${which}" aria-pressed="${on}" aria-label="${label}" title="${label}"${dis}>${I.sides}</button>`;
+  const part = (group, id, label, value, o = {}) => `<div class="fld"><div class="fbox num"><label class="flabel scrub pfx" data-scrub="${id}" title="Drag to change" for="${id}">${o.glyph ?? ''}<span class="lt">${label}</span></label><input id="${id}" data-field="part" data-group="${group}" data-part="${o.part ?? id}" data-prop="${id}" data-step="${o.step ?? 1}" autocomplete="off" spellcheck="false" value="${esc(value ?? '')}" placeholder="${o.ph ?? '0'}"${dis}>${value !== '' && value !== undefined ? '<span class="unit" aria-hidden="true">px</span>' : ''}</div></div>`;
+  const expand = (which, on, label) => `<button type="button" class="linkbtn" id="${which}-sides" data-action="toggle-sides" data-which="${which}" aria-pressed="${on}" aria-label="${label}" title="${label}"${dis}>${I.sides}</button>`;
   const boxOf = (prop) => { const { value, mixed } = val(prop); return mixed ? null : parseBox(value); };
 
-  // ---- Layout ----
+  // ---- Layout (what this node does to its children) ----
   const disp = val('display').value;
-  const isFlex = /flex/.test(String(disp)), isGrid = disp === 'grid';
+  const flex = /flex/.test(String(disp)), grid = disp === 'grid';
   const dir = val('flexDirection').value === 'column' ? 'column' : 'row';
   const justify = val('justifyContent'), alignI = val('alignItems');
-  const matrix = isFlex ? `<div class="amatrix" role="group" aria-label="Alignment">${[0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => {
+  const between = !justify.mixed && justify.value === 'space-between';
+  const wrapOn = val('flexWrap').value === 'wrap';
+  const matrix = flex ? `<div class="amatrix${between ? ' dist' : ''}" role="group" aria-label="Alignment">${[0, 1, 2].flatMap((r) => [0, 1, 2].map((c) => {
     const [mainI, crossI] = dir === 'row' ? [c, r] : [r, c];
-    const on = !justify.mixed && !alignI.mixed && (justify.value ?? 'flex-start') === ALIGN[mainI] && alignI.value === ALIGN[crossI];
+    const on = !alignI.mixed && !justify.mixed && alignI.value === ALIGN[crossI] && (between ? true : (justify.value ?? 'flex-start') === ALIGN[mainI]);
     return `<button type="button" id="align-${r}${c}" data-align="${mainI},${crossI}" aria-pressed="${on}" aria-label="Align ${AL_NAME[r][c]}" title="Align ${AL_NAME[r][c]}"${dis}><i></i></button>`;
   })).join('')}</div>` : '';
   const padSides = ui.sides.pad, radSides = ui.sides.rad;
   const pb = padSides ? boxOf('padding') : null, rb = radSides ? boxOf('borderRadius') : null;
   const sidesFields = (group, b, labels, ids, unsupported) => (b
-    ? `<div class="pair sides">${ids.map((id, i) => part(group, id, labels[i], String(b[i]), { part: String(i) })).join('')}</div>`
+    ? `<div class="irow n2 sides">${ids.map((id, i) => part(group, id, labels[i], String(b[i]), { part: String(i), glyph: GLYPH.padding })).join('')}</div>`
     : `<p class="hint">${unsupported}</p>`);
+  const gapAuto = `<button type="button" class="minibtn" id="gap-auto" data-action="gap-auto" aria-pressed="${between}" title="Space between: spread the children and ignore the gap"${dis}>Auto</button>`;
+  const tracksField = (prop, label, key) => {
+    const v = val(prop).value;
+    return `<div class="fld wide"><div class="fbox txt"><label class="flabel pfx" for="${prop}">${GLYPH[prop]}<span class="lt">${label}</span></label><input id="${prop}" data-field="style" data-prop="${prop}" data-text="1" autocomplete="off" spellcheck="false" value="${esc(v ?? '')}" placeholder="1fr 1fr"${dis}><span class="stepper"><button type="button" id="${key}-remove" data-action="track" data-prop="${prop}" data-dir="-1" aria-label="Remove a ${label.toLowerCase().slice(0, -1)}" title="Remove a ${label.toLowerCase().slice(0, -1)}"${dis}>−</button><button type="button" id="${key}-add" data-action="track" data-prop="${prop}" data-dir="1" aria-label="Add a ${label.toLowerCase().slice(0, -1)}" title="Add a ${label.toLowerCase().slice(0, -1)}"${dis}>+</button></span></div>${err('style-' + prop)}</div>`;
+  };
+  const padField = field('padding', { extra: expand('pad', padSides, 'Padding per side') });
   const layout = section('layout', 'Layout',
     seg('display', 'Display', [['block', 'Block'], ['flex', 'Flex', '', /flex/], ['grid', 'Grid']])
-    + (isFlex ? seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]]) : '')
-    + (isFlex ? `<div class="alignrow"><div class="f stackf"><span class="flabel" id="lbl-align">Align</span>${matrix}</div><div class="stack">${field('gap')}${field('padding', { extra: linkBtn('pad', padSides, 'Padding per side') })}</div></div>${err('align')}`
-      : (isGrid ? field('gap') : '') + field('padding', { extra: linkBtn('pad', padSides, 'Padding per side') }))
+    + (flex ? `<div class="irow dirrow">${seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]])}<button type="button" class="togbtn" id="wrap-toggle" data-action="wrap" aria-pressed="${wrapOn}" title="Wrap onto new lines when full"${dis}>${I.wrap}<span>Wrap</span></button></div>` : '')
+    + (flex ? `<div class="alignrow">${matrix}<div class="stack">${field('gap', { extra: gapAuto })}${padField}</div></div>${err('align')}` : '')
+    + (grid ? tracksField('gridTemplateColumns', 'Columns', 'cols') + tracksField('gridTemplateRows', 'Rows', 'rows') + row(field('gap'), padField) : '')
+    + (!flex && !grid ? padField : '')
     + (padSides ? sidesFields('pad', pb, ['Top', 'Right', 'Bottom', 'Left'], ['pad-t', 'pad-r', 'pad-b', 'pad-l'], 'Per-side editing needs px values; use the Padding field.') : ''), { open: !isText });
-  const sizeSec = section('size', 'Size', size('width') + size('height'), { open: !isText });
-  const look = section('appearance', 'Appearance', field('opacity') + field('borderRadius', { extra: linkBtn('rad', radSides, 'Radius per corner') })
-    + (radSides ? sidesFields('rad', rb, ['Top left', 'Top right', 'Bottom right', 'Bottom left'], ['rad-tl', 'rad-tr', 'rad-br', 'rad-bl'], 'Per-corner editing needs px values; use the Corner radius field.') : ''));
-  // Fill
+
+  // ---- Size and position (what this node does inside its parent) ----
+  const abs = !multi && resolvedOf(node).position === 'absolute';
+  const gridChild = parentStyle && isGrid(parentStyle);
+  const cell = gridChild ? placementOf(resolvedOf(node)) : null;
+  const pins = abs ? pinsOf(resolvedOf(node)) : null;
+  const pinSeg = (axis, items) => `<div class="fld full"><div class="seg pins" role="radiogroup" aria-label="${axis === 'h' ? 'Horizontal' : 'Vertical'} pin">${items.map(([m, text, tip]) => `<button type="button" role="radio" id="pin-${axis}-${m}" aria-checked="${pins[axis] === m}" data-pin="${axis}" data-mode="${m}" title="${tip}"${dis}>${text}</button>`).join('')}</div></div>`;
+  const inset = (p) => { const v = val(p).value; return v === undefined ? '' : field(p, { eff: false }); };
+  const sizeSec = section('size', 'Size',
+    sizeRow('width') + sizeRow('height')
+    + row(field('minWidth'), field('maxWidth')) + row(field('minHeight'), field('maxHeight'))
+    + (parent ? `<div class="fld full"><div class="seg" role="radiogroup" aria-label="Position"><button type="button" role="radio" id="seg-position-auto" aria-checked="${!abs}" data-position="auto" title="Part of the layout flow"${dis}>In flow</button><button type="button" role="radio" id="seg-position-absolute" aria-checked="${abs}" data-position="absolute" title="Pinned inside the parent (position: absolute)"${dis}>Absolute</button></div></div>` : '')
+    + (abs ? pinSeg('h', [['min', 'Left', 'Pin to the left edge'], ['max', 'Right', 'Pin to the right edge'], ['both', 'Left + right', 'Pin both sides: stretches'], ['center', 'Centre', 'Centre horizontally']]) + pinSeg('v', [['min', 'Top', 'Pin to the top edge'], ['max', 'Bottom', 'Pin to the bottom edge'], ['both', 'Top + bottom', 'Pin both sides: stretches'], ['center', 'Centre', 'Centre vertically']])
+      + row(field('left', { eff: false }), field('right', { eff: false })) + row(field('top', { eff: false }), field('bottom', { eff: false })) : '')
+    + (gridChild ? row(`<div class="fld"><div class="fbox num"><label class="flabel pfx" for="grid-col">${GLYPH.col}<span class="lt">Column</span></label><input id="grid-col" data-field="cell" data-axis="col" autocomplete="off" value="${cell.col ?? ''}" placeholder="Auto"${dis}></div></div>`, `<div class="fld"><div class="fbox num"><label class="flabel pfx" for="grid-row">${GLYPH.row}<span class="lt">Row</span></label><input id="grid-row" data-field="cell" data-axis="row" autocomplete="off" value="${cell.row ?? ''}" placeholder="Auto"${dis}></div></div>`) : ''), { open: !isText });
+  void inset;
+
+  // ---- Appearance: only what applies ----
+  const look = section('appearance', 'Appearance', isText ? field('opacity') : row(field('opacity'), field('borderRadius', { extra: expand('rad', radSides, 'Radius per corner') }))
+    + (!isText && radSides ? sidesFields('rad', rb, ['Top left', 'Top right', 'Bottom right', 'Bottom left'], ['rad-tl', 'rad-tr', 'rad-br', 'rad-bl'], 'Per-corner editing needs px values; use the Radius field.') : ''));
   const bgv = val('background');
   const fillOff = bgv.value === 'transparent';
   const fill = optSection('fill', 'Fill', ['background'], has('background'),
-    `<div class="f colorf${isOver('background') ? ' overridden' : ''}">${colorRow('fill', 'background', bgv.mixed ? '' : String(fillOff ? ui.lastFill ?? '#d9d9d9' : bgv.value ?? ''), { eye: { off: fillOff }, alphaId: 'fill-a', remove: { id: 'fill', props: ['background'] } })}<div class="ftags">${tags('background', 'Fill')}</div>${err('style-background')}${err('reset-background')}</div>`, '#d9d9d9');
-  // Stroke (border): colour, opacity, width and style compose ONE css line: border, or one side of it
+    `<div class="fld full colorf${isOver('background') ? ' overridden' : ''}">${colorRow('fill', 'background', bgv.mixed ? '' : String(fillOff ? ui.lastFill ?? '#d9d9d9' : bgv.value ?? ''), { eye: { off: fillOff }, alphaId: 'fill-a', remove: { id: 'fill', props: ['background'] } })}${tags('background', 'Fill')}${err('style-background')}${err('reset-background')}</div>`, '#d9d9d9');
   const sideProp = 'border' + ui.side;
   const bv = val(sideProp), bp = parseBorder(bv.value);
   const strokeOff = bp?.s === 'none';
   const strokeProps = ui.side ? [sideProp] : ALLBORDERS;
   const sideIcon = (v) => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-width="1"/>${{ '': '<rect x="3" y="3" width="10" height="10" rx="1" fill="none" stroke="currentColor" stroke-width="1.8"/>', Top: '<path d="M3 3h10" stroke="currentColor" stroke-width="2.2"/>', Right: '<path d="M13 3v10" stroke="currentColor" stroke-width="2.2"/>', Bottom: '<path d="M3 13h10" stroke="currentColor" stroke-width="2.2"/>', Left: '<path d="M3 3v10" stroke="currentColor" stroke-width="2.2"/>' }[v]}</svg>`;
-  const strokeSides = `<div class="f"><span class="flabel" id="lbl-side">Sides</span><div class="seg small icons" role="radiogroup" aria-labelledby="lbl-side">${[['', 'All sides'], ['Top', 'Top'], ['Right', 'Right'], ['Bottom', 'Bottom'], ['Left', 'Left']].map(([v, name]) => `<button type="button" role="radio" title="${name}" aria-label="${name}" id="side-${v || 'all'}" aria-checked="${ui.side === v}" data-action="stroke-side" data-side="${v}">${sideIcon(v)}</button>`).join('')}</div></div>`;
+  const strokeSides = `<div class="fld full"><div class="seg small icons" role="radiogroup" aria-label="Sides">${[['', 'All sides'], ['Top', 'Top'], ['Right', 'Right'], ['Bottom', 'Bottom'], ['Left', 'Left']].map(([v, name]) => `<button type="button" role="radio" title="${name}" aria-label="${name}" id="side-${v || 'all'}" aria-checked="${ui.side === v}" data-action="stroke-side" data-side="${v}">${sideIcon(v)}</button>`).join('')}</div></div>`;
   const stroke = optSection('stroke', 'Stroke', strokeProps, strokeProps.some(has),
-    `<div class="f colorf${isOver(sideProp) ? ' overridden' : ''}">${colorRow('stroke', 'stroke-color', bp ? bp.c : '', { eye: { off: strokeOff }, alphaId: 'stroke-a', remove: { id: 'stroke', props: strokeProps } })}<div class="ftags">${tags(sideProp, 'Stroke')}</div>${err('style-' + sideProp)}${err('reset-' + sideProp)}</div>
-     <div class="pair">${part('stroke', 'stroke-w', 'Width', bp ? String(bp.w) : '', { part: 'w', ph: '1' })}<div class="f"><label class="flabel" for="stroke-s">Style</label><div class="fbox sel"><select id="stroke-s" data-field="part" data-group="stroke" data-part="s"${dis}>${['solid', 'dashed', 'dotted', 'none'].map((s) => `<option${bp?.s === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div></div></div>
-`, '1px solid #1f2937', { force: !!ui.side, always: strokeSides });
-  // Effects: one drop shadow = x y blur spread colour, ONE css line
+    `<div class="fld full colorf${isOver(sideProp) ? ' overridden' : ''}">${colorRow('stroke', 'stroke-color', bp ? bp.c : '', { eye: { off: strokeOff }, alphaId: 'stroke-a', remove: { id: 'stroke', props: strokeProps } })}${tags(sideProp, 'Stroke')}${err('style-' + sideProp)}${err('reset-' + sideProp)}</div>
+     <div class="irow n2">${part('stroke', 'stroke-w', 'Width', bp ? String(bp.w) : '', { part: 'w', ph: '1', glyph: GLYPH.padding })}<div class="fld"><div class="fbox sel"><label class="flabel pfx" for="stroke-s"><span class="lt">Style</span></label><select id="stroke-s" data-field="part" data-group="stroke" data-part="s"${dis}>${['solid', 'dashed', 'dotted', 'none'].map((s) => `<option${bp?.s === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div></div></div>`, '1px solid #1f2937', { force: !!ui.side, always: strokeSides });
   const sv = val('boxShadow'), sp = parseShadow(sv.value);
   const effects = optSection('effects', 'Shadow', ['boxShadow'], has('boxShadow'),
-    sp || sv.value === undefined || sv.mixed ? `<div class="f colorf${isOver('boxShadow') ? ' overridden' : ''}">${colorRow('shadow', 'shadow-color', sp ? sp.c : '', { alphaId: 'shadow-a', remove: { id: 'effects', props: ['boxShadow'] } })}<div class="ftags">${tags('boxShadow', 'Shadow')}</div>${err('style-boxShadow')}${err('reset-boxShadow')}</div>
-      <div class="pair">${part('shadow', 'shadow-x', 'X', sp ? String(sp.x) : '', { part: 'x' })}${part('shadow', 'shadow-y', 'Y', sp ? String(sp.y) : '', { part: 'y' })}</div>
-      <div class="pair">${part('shadow', 'shadow-blur', 'Blur', sp ? String(sp.b) : '', { part: 'b' })}${part('shadow', 'shadow-spread', 'Spread', sp ? String(sp.s) : '', { part: 's' })}</div>`
-      : `<p class="hint">This shadow has several layers or an inset; edit it as text.</p><div class="f"><label class="flabel" for="boxShadow">CSS</label><div class="fbox txt"><input id="boxShadow" data-field="style" data-prop="boxShadow" data-text="1" value="${esc(sv.value)}"${dis}></div>${err('style-boxShadow')}</div>`,
+    sp || sv.value === undefined || sv.mixed ? `<div class="fld full colorf${isOver('boxShadow') ? ' overridden' : ''}">${colorRow('shadow', 'shadow-color', sp ? sp.c : '', { alphaId: 'shadow-a', remove: { id: 'effects', props: ['boxShadow'] } })}${tags('boxShadow', 'Shadow')}${err('style-boxShadow')}${err('reset-boxShadow')}</div>
+      <div class="irow n2">${part('shadow', 'shadow-x', 'X', sp ? String(sp.x) : '', { part: 'x', glyph: GLYPH.left })}${part('shadow', 'shadow-y', 'Y', sp ? String(sp.y) : '', { part: 'y', glyph: GLYPH.top })}</div>
+      <div class="irow n2">${part('shadow', 'shadow-blur', 'Blur', sp ? String(sp.b) : '', { part: 'b' })}${part('shadow', 'shadow-spread', 'Spread', sp ? String(sp.s) : '', { part: 's' })}</div>`
+      : `<p class="hint">This shadow has several layers or an inset; edit it as text.</p><div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="boxShadow"><span class="lt">CSS</span></label><input id="boxShadow" data-field="style" data-prop="boxShadow" data-text="1" value="${esc(sv.value)}"${dis}></div>${err('style-boxShadow')}</div>`,
     '0px 2px 6px 0px #00000040');
   const wt = val('fontWeight');
+  const effW = cs ? Number(cs.fontWeight) : null;
+  const weightSel = `<div class="fld"><div class="fbox sel${wt.value === undefined && !wt.mixed ? ' inherited' : ''}"><label class="flabel pfx" for="fontWeight">${L('B')}<span class="lt">Weight</span></label><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined && !wt.mixed ? `<option value="" selected>${effW ?? 400} · inherited</option>` : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select>${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`;
   const typeSec = section('type', 'Text',
-    field('fontFamily') + `<div class="pair">${field('fontSize')}${(() => `<div class="f"><label class="flabel" for="fontWeight">Weight</label><div class="fbox sel"><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined ? '<option value="" selected>Inherit</option>' : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select></div><div class="ftags">${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`)()}</div>`
-    + `<div class="pair">${field('lineHeight')}${field('letterSpacing')}</div>`
+    field('fontFamily', { wide: true }) + row(field('fontSize'), weightSel) + row(field('lineHeight'), field('letterSpacing'))
     + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true }) + field('color'));
 
-  const addRow = addChips.length ? `<div class="addrow"><span class="flabel">Add</span>${addChips.join('')}</div>` : '';
-
-  // ---- Content: text, setting binding, image attributes ----
+  // ---- Content: the text and its setting binding (near the top for a text node), image attributes ----
   let content = '';
   const single = nodes.length === 1;
   if (single && node.tag === 'img') {
-    content = section('content', 'Image', `<div class="f"><label class="flabel" for="src">Source</label><div class="fbox"><input id="src" data-field="attr" data-attr="src" autocomplete="off" value="${esc(node.attrs?.src ?? '')}"${dis}></div>${err('attr-src')}</div>
-      <div class="f"><label class="flabel" for="alt">Alt text</label><div class="fbox"><input id="alt" data-field="attr" data-attr="alt" autocomplete="off" value="${esc(node.attrs?.alt ?? '')}"${dis}></div>${err('attr-alt')}</div>`);
+    content = section('content', 'Image', `<div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="src"><span class="lt">Source</span></label><input id="src" data-field="attr" data-attr="src" autocomplete="off" value="${esc(node.attrs?.src ?? '')}"${dis}></div>${err('attr-src')}</div>
+      <div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="alt"><span class="lt">Alt text</span></label><input id="alt" data-field="attr" data-attr="alt" autocomplete="off" value="${esc(node.attrs?.alt ?? '')}"${dis}></div>${err('attr-alt')}</div>`);
   } else if (single && !node.children.length) {
     const bound = node.textProp;
-    content = section('content', 'Content', `${bound
-      ? `<p class="shows" id="shows">shows <code>${esc(bound)}</code> <button type="button" class="btn" id="unbind" data-action="unbind"${dis}>Unbind</button></p>`
-      : `<div class="f"><label class="flabel" for="text">Text</label><div class="fbox"><input id="text" data-field="text" autocomplete="off" value="${esc(node.text ?? '')}"${dis}></div></div>
-         ${ui.forms.bind
-           ? `<form data-submit="bind" class="inline"><label for="bind-prop">Setting name</label><input id="bind-prop" autocomplete="off" value="${esc(ui.draft['bind-prop'] ?? (/^[a-z][a-zA-Z0-9]*$/.test(node.id) ? node.id : 'text'))}"${dis}><div class="row2"><button type="submit" class="btn primary" id="bind-submit"${dis}>Bind</button><button type="button" class="btn" data-action="close" data-form="bind">Cancel</button></div></form>`
-           : `<button type="button" class="btn" id="make-setting" data-action="open" data-form="bind"${dis}>Make setting</button>`}`}
-      ${err('text')}${err('bind')}`);
+    content = `<div class="contentrow" data-sec="content">${bound
+      ? `<p class="shows" id="shows">shows <code>${esc(bound)}</code> <button type="button" class="btn small" id="unbind" data-action="unbind"${dis}>Unbind</button></p>`
+      : `<div class="fld full textrow"><div class="fbox txt"><label class="flabel pfx" for="text">${L('T')}<span class="lt">Text</span></label><input id="text" data-field="text" autocomplete="off" value="${esc(node.text ?? '')}"${dis}></div>${ui.forms.bind ? '' : `<button type="button" class="btn small" id="make-setting" data-action="open" data-form="bind" title="Let the component's user change this text"${dis}>Make setting</button>`}</div>
+         ${ui.forms.bind ? `<form data-submit="bind" class="inline"><label for="bind-prop">Setting name</label><input id="bind-prop" autocomplete="off" value="${esc(ui.draft['bind-prop'] ?? (/^[a-z][a-zA-Z0-9]*$/.test(node.id) ? node.id : 'text'))}"${dis}><div class="row2"><button type="submit" class="btn primary" id="bind-submit"${dis}>Bind</button><button type="button" class="btn" data-action="close" data-form="bind">Cancel</button></div></form>` : ''}`}${err('text')}${err('bind')}</div>`;
   }
 
-  // ---- Advanced: every CSS property the design controls don't cover ----
-  const resolvedAll = nodes.length ? resolvedOf(nodes[0]) : {};
   const extra = [...new Set(nodes.flatMap((n) => Object.keys(resolvedOf(n))))].filter((p) => !DESIGN.has(p));
   const advRow = (prop) => {
     const { value, mixed } = val(prop), shown = value === undefined ? '' : String(value);
-    return `<div class="f${isOver(prop) ? ' overridden' : ''}"><label class="flabel mono" for="${prop}">${esc(prop)}</label><div class="fbox"><input id="${prop}" data-field="style" data-prop="${prop}" data-text="1" autocomplete="off" spellcheck="false" value="${esc(shown)}" placeholder="${mixed ? 'Mixed' : ''}"${dis}></div><div class="ftags">${tags(prop, prop)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
+    return `<div class="fld full${isOver(prop) ? ' overridden' : ''}"><div class="fbox txt"><label class="flabel pfx mono" for="${prop}"><span class="lt">${esc(prop)}</span></label><input id="${prop}" data-field="style" data-prop="${prop}" data-text="1" autocomplete="off" spellcheck="false" value="${esc(shown)}" placeholder="${mixed ? 'Mixed' : ''}"${dis}>${tags(prop, prop)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   const advanced = `<details class="sec adv" data-sec="advanced"${ui.advanced ? ' open' : ''}><summary>Advanced: all CSS</summary><div class="sbody">${extra.map(advRow).join('')}
     ${ui.forms.style ? `<form data-submit="add-style" class="inline"><label for="new-style-name">Property</label><input id="new-style-name" placeholder="boxShadow" autocomplete="off"${dis}><label for="new-style-value">Value</label><input id="new-style-value" autocomplete="off"${dis}><div class="row2"><button type="submit" class="btn primary" id="add-style-submit"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="style">Cancel</button></div></form>`
     : `<button type="button" class="btn" id="add-style" data-action="open" data-form="style"${dis}>+ property</button>`}${err('add-style')}</div></details>`;
-  void resolvedAll;
 
-  // ---- Where do edits go? One compact row: "Editing  Base v", with the explanation behind an info button ----
   const explain = t.available ? (t.overriding ? `Edits go to ${esc(t.chosen[0])}=${esc(t.chosen[1])} only. Everything else keeps the base value.` : 'Edits go to the base and reach every variant that does not override them.')
     : (Object.keys(sel.variant || {}).length ? 'This cell is all base values, so there is no override to make. Edits go to the base.' : 'This component has no variants yet. Edits go to the base.');
   const scope = `<div class="scope"><div class="scoperow"><label class="flabel" for="scope">Editing</label>
@@ -330,7 +387,6 @@ export function renderPanel(ctx) {
       ${t.overriding && t.nonBase.length === 1 ? `<span class="sr" id="override-note">Overrides ${esc(t.chosen[0])}=${esc(t.chosen[1])}.</span>` : ''}
     </div>`;
 
-  // ---- Settings (props) and Variants: the component, not the node ----
   const propRows = doc.props.map((p) => {
     const def = p.type === 'boolean'
       ? `<input type="checkbox" id="propdef-${p.name}" data-field="propdef" data-prop="${p.name}"${p.default ? ' checked' : ''}${dis} aria-label="default of ${esc(p.name)}">`
@@ -339,7 +395,7 @@ export function renderPanel(ctx) {
         : `<span id="propdef-${p.name}" class="mono">${esc(p.default)} (base)</span>`;
     return `<li><div class="prop"><strong>${esc(p.name)}</strong><span class="mono">${p.type}${p.options ? ': ' + esc(p.options.join(' | ')) : ''}</span>
       <button type="button" class="x" id="remove-prop-${p.name}" data-action="remove-prop" data-prop="${p.name}" aria-label="Remove setting ${esc(p.name)}" title="Remove"${dis}>×</button></div>
-      <div class="f"><span class="flabel">Default</span><div class="fbox">${def}</div></div>${err('prop-' + p.name)}${err('propdef-' + p.name)}</li>`;
+      <div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="propdef-${p.name}"><span class="lt">Default</span></label>${def}</div></div>${err('prop-' + p.name)}${err('propdef-' + p.name)}</li>`;
   }).join('');
   const propsUi = section('props', 'Settings', `${propRows ? `<ul class="plain" id="props">${propRows}</ul>` : '<p class="hint">No settings yet.</p>'}
     ${ui.forms.prop
@@ -366,24 +422,26 @@ export function renderPanel(ctx) {
           <div class="row2"><button type="submit" class="btn primary" id="add-axis-submit"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="axis">Cancel</button></div></form>`
       : `<button type="button" class="btn" id="add-axis" data-action="open" data-form="axis"${dis}>+ axis</button>`}${err('add-axis')}`);
 
-  el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="mono" id="sel-node">${esc(node.id)} &lt;${esc(node.tag)}&gt;${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
-    <dl class="selmeta"><dt>Variant</dt><dd id="sel-variant">${esc(variantLabel(sel.variant))}</dd><dt class="sr">Editing</dt><dd class="sr" id="sel-target">${t.overriding ? `override ${esc(t.chosen[0])}=${esc(t.chosen[1])}` : 'Base'}</dd></dl>
+  const vlabel = variantLabel(sel.variant);
+  el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="nodename" id="sel-node">${esc(node.id)} <span class="tagname">&lt;${esc(node.tag)}&gt;</span>${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
+    <div class="selmeta"><span class="metacap">Variant</span><span class="vchip" id="sel-variant">${esc(vlabel)}</span><span class="sr" id="sel-target">${t.overriding ? `override ${esc(t.chosen[0])}=${esc(t.chosen[1])}` : 'Base'}</span></div>
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${isText ? typeSec + look + fill + stroke + effects + addRow + layout + sizeSec : layout + sizeSec + look + fill + stroke + effects + addRow + typeSec}${content}${advanced}
+    ${isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec : layout + sizeSec + look + fill + stroke + effects + typeSec + content}${advanced}
     <div class="grouphead">Component</div>${propsUi}${variantsUi}`;
 
-  // swatches show the colour the field holds
   for (const sw of el.querySelectorAll('.chipcolor')) {
     const v = sw.dataset.color;
     sw.style.background = v || 'transparent';
-    const pick = sw.parentElement.querySelector('input');
     const probe = getComputedStyle(sw).backgroundColor;
     const m = probe.match(/\d+(\.\d+)?/g);
-    if (m && m.length >= 3 && !/^rgba\(0, 0, 0, 0\)$/.test(probe)) pick.value = '#' + m.slice(0, 3).map((x) => Math.round(Number(x)).toString(16).padStart(2, '0')).join('');
+    const pick = sw.parentElement.parentElement.querySelector('input[type=color]');
+    if (pick && m && m.length >= 3 && !/^rgba\(0, 0, 0, 0\)$/.test(probe)) pick.value = '#' + m.slice(0, 3).map((x) => Math.round(Number(x)).toString(16).padStart(2, '0')).join('');
     sw.parentElement.classList.toggle('empty', !v);
   }
+  const textColor = el.querySelector('#swatch-color .chipcolor');
+  if (textColor && !textColor.dataset.color) { textColor.parentElement.classList.remove('empty'); textColor.style.background = cs?.color ?? 'transparent'; }
   for (const [id, v] of Object.entries(ui.draft)) {
     const f = el.querySelector('#' + CSS.escape(id));
     if (f && 'value' in f && f.type !== 'checkbox') f.value = v;
@@ -419,10 +477,10 @@ function wire(ctx, el) {
   }
 
   // One property for every selected node, written to the base or to the chosen override: one batch.
-  function styleEdits(props) {
+  function styleEdits(props, nodeIds = selNodes()) {
     const s = ctx.state.selection, doc = curDoc(), tg = target(doc, s), edits = [];
     for (const [prop, value] of props) {
-      for (const node of selNodes()) {
+      for (const node of nodeIds) {
         const edit = { op: 'set', path: `${node}.${prop}`, value };
         if (tg.overriding) {
           if (value === null) {
@@ -441,9 +499,12 @@ function wire(ctx, el) {
   const qv = (id) => el.querySelector('#' + CSS.escape(id))?.value.trim() ?? '';
   const nv = (id, d = 0) => { const n = parseFloat(qv(id)); return Number.isFinite(n) ? n : d; };
   const colorOf = (colorId, alphaId) => {
-    const c = qv(colorId), px = parseHex(c);
+    const c = qv(colorId);
     if (!c) return '';
-    return px && c.length === 9 ? c : withAlpha(px?.rgb ?? c, nv(alphaId, 100));
+    const p = parseColor(c);
+    if (!p) return c; // a name, a var(): written as typed
+    const a = p.a < 1 ? p.a : Math.min(100, Math.max(0, nv(alphaId, 100))) / 100; // an alpha typed into the colour itself wins
+    return formatColor({ ...p, a }, p.space, p);
   };
   const box = (ids) => { const n = ids.map((i) => nv(i)); return n.every((x) => x === n[0]) ? n[0] : n.map((x) => `${x}px`).join(' '); };
   function readGroup(g) {
@@ -465,6 +526,73 @@ function wire(ctx, el) {
     const edits = styleEdits([[prop, v]]);
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
     await run('style-' + prop, s.component, edits, { clear: [id ?? prop] });
+  }
+
+  // ---- what a node's own box and its parent look like right now (for Fill, pins and grid cells) ----
+  function nodeInfo(id) {
+    const s = ctx.state.selection, doc = curDoc(), { byId, parentOf } = index(doc), n = byId.get(id), par = parentOf.get(id);
+    const tg = target(doc, s);
+    const styleOf = (x) => (tg.overriding ? resolveStyle(doc, x.id, s.variant) : x.style || {});
+    return { node: n, parent: par, style: n ? styleOf(n) : {}, parentStyle: par ? resolveStyle(doc, par.id, s.variant) : undefined, el: ctx.stage.cellElement(s.component, id, s.variant), parentEl: par ? ctx.stage.cellElement(s.component, par.id, s.variant) : null };
+  }
+  const relOf = (info) => relRect(info.el, info.parentEl, ctx.state.zoom || 1);
+  async function setPosition(mode) {
+    const s = ctx.state.selection, id = s.node, info = nodeInfo(id);
+    if (!info.parent || !info.el || !info.parentEl) return;
+    const edits = [];
+    if (mode === 'absolute') {
+      const { rect, parent } = relOf(info);
+      const patch = pinPatch({ h: 'min', v: 'min' }, rect, parent, info.style);
+      for (const [k, v] of Object.entries(patch)) edits.push(...styleEdits([[k, v]], [id]));
+      const ps = info.parent.style?.position;
+      if (!ps || ps === 'static') edits.push(...styleEdits([['position', 'relative']], [info.parent.id]));
+    } else {
+      for (const k of ['position', 'left', 'right', 'top', 'bottom']) if (info.style[k] !== undefined) edits.push(...styleEdits([[k, null]], [id]));
+      if (/^(translate\(-50%, -50%\)|translateX\(-50%\)|translateY\(-50%\))$/.test(String(info.style.transform))) edits.push(...styleEdits([['transform', null]], [id]));
+    }
+    if (edits.length) await run('style-position', s.component, edits, { clear: ['position'] });
+  }
+  async function setPin(axis, mode) {
+    const s = ctx.state.selection, id = s.node, info = nodeInfo(id);
+    if (!info.el || !info.parentEl) return;
+    const { rect, parent } = relOf(info);
+    const pins = { ...pinsOf(info.style), [axis]: mode };
+    const patch = pinPatch(pins, rect, parent, info.style);
+    const edits = Object.entries(patch).flatMap(([k, v]) => styleEdits([[k, v]], [id]));
+    if (edits.length) await run('style-position', s.component, edits);
+  }
+  async function setCell(axis, text, id) {
+    const s = ctx.state.selection, info = nodeInfo(s.node), cur = placementOf(info.style);
+    const n = text === '' ? null : parseInt(text, 10);
+    if (text !== '' && !(n >= 1)) { delete ui.draft[id]; rerender(); return; }
+    const next = { ...cur, [axis]: n };
+    const edits = next.col === null && next.row === null
+      ? ['gridArea', 'gridColumn', 'gridRow'].filter((k) => info.style[k] !== undefined).flatMap((k) => styleEdits([[k, null]], [s.node]))
+      : Object.entries(placePatch(info.style, next.col ?? 1, next.row ?? 1)).flatMap(([k, v]) => styleEdits([[k, v]], [s.node]));
+    await run('style-grid', s.component, edits, { clear: [id] });
+  }
+
+  // ---- the colour picker: opens from a swatch, previews in the DOM, writes one edit per gesture ----
+  const ALPHA_OF = { background: 'fill-a', 'stroke-color': 'stroke-a', 'shadow-color': 'shadow-a' };
+  function openSwatch(btn) {
+    const prop = btn.dataset.swatch, group = btn.dataset.group, doc = curDoc();
+    if (!doc || btn.disabled) return;
+    const value = group ? colorOf(prop, ALPHA_OF[prop]) : (curVal(prop) ?? btn.querySelector('.chipcolor')?.style.background ?? '');
+    const cur = parseColor(String(value));
+    const setInputs = (text) => {
+      const p = parseColor(text);
+      if (!p || !group) return;
+      const ci = el.querySelector('#' + CSS.escape(prop)), ai = el.querySelector('#' + CSS.escape(ALPHA_OF[prop]));
+      if (ci) { ci.value = formatColor({ ...p, a: 1 }, p.space, p); ui.draft[prop] = ci.value; }
+      if (ai) { ai.value = String(Math.round((p.a ?? 1) * 100)); ui.draft[ALPHA_OF[prop]] = ai.value; }
+    };
+    ui.picking = true;
+    openColorPicker({
+      anchor: btn, value: String(value), space: cur?.space ?? fileSpace(doc), label: group ? `${group} colour` : 'Text colour', swatches: documentColors(doc),
+      onPreview: (text) => { setInputs(text); const sw = btn.querySelector('.chipcolor'); if (sw) sw.style.background = text; if (group) { const r = readGroup(group); preview(r.prop, r.value); } else preview(prop, text); },
+      onCommit: async (text) => { restore(); if (group) { setInputs(text); await commitGroup(group, prop); } else await commit(prop, text, prop); },
+      onClose: () => { ui.picking = false; restore(); },
+    });
   }
 
   el.addEventListener('input', (ev) => {
@@ -501,6 +629,7 @@ function wire(ctx, el) {
       if (name === famName(cur)) { rerender(); return; }
       await commit('fontFamily', name ? stackFor(name, cur) : null, t.id);
     }
+    else if (field === 'cell') await setCell(t.dataset.axis, t.value.trim(), t.id);
     else if (field === 'style') await commit(t.dataset.prop, t.value, t.id);
     else if (field === 'weight') { if (t.value) await commit('fontWeight', Number(t.value), t.id); }
     else if (field === 'text') await run('text', s.component, [{ op: 'set', path: `${s.node}.text`, value: t.value === '' ? null : t.value }], { clear: [t.id] });
@@ -532,25 +661,45 @@ function wire(ctx, el) {
   el.addEventListener('click', async (ev) => {
     const s = ctx.state.selection, doc = curDoc();
     if (!s || !doc) return;
+    const sw = ev.target.closest('button[data-swatch]');
+    if (sw) { openSwatch(sw); return; }
     const seg = ev.target.closest('button[data-seg]');
-    if (seg) { await commit(seg.dataset.seg, seg.dataset.val); return; }
+    if (seg) {
+      if (seg.dataset.seg === 'display' && seg.dataset.val === 'grid' && curVal('gridTemplateColumns') === undefined) {
+        await run('style-display', s.component, styleEdits([['display', 'grid'], ['gridTemplateColumns', '1fr 1fr']]), { clear: ['display'] }); // a grid with no columns looks like a plain column
+        return;
+      }
+      await commit(seg.dataset.seg, seg.dataset.val); return;
+    }
     const sz = ev.target.closest('button[data-size]');
     if (sz) {
-      const prop = sz.dataset.size, mode = sz.dataset.mode;
-      let value = mode === 'hug' ? 'auto' : mode === 'fill' ? '100%' : null;
-      if (mode === 'fixed') {
-        const n = ctx.stage.selectedElement(s);
-        const z = ctx.state.zoom || 1;
-        const r = n?.getBoundingClientRect();
-        value = r ? Math.round((prop === 'width' ? r.width : r.height) / z) : 100;
+      const prop = sz.dataset.size, mode = sz.dataset.mode, z = ctx.state.zoom || 1;
+      const edits = [];
+      for (const id of selNodes()) {
+        const info = nodeInfo(id);
+        const r = info.el?.getBoundingClientRect();
+        const box = r && info.el ? cssSize(info.el, r.width / z, r.height / z) : null;
+        const px = box ? (prop === 'width' ? box.w : box.h) : 100;
+        for (const [k, v] of Object.entries(sizePatch(info.style, info.parentStyle, prop, mode, px))) edits.push(...styleEdits([[k, v]], [id]));
       }
-      await commit(prop, value);
+      if (edits.length) await run('style-' + prop, s.component, edits, { clear: [prop] });
       return;
     }
+    const pos = ev.target.closest('button[data-position]');
+    if (pos) { await setPosition(pos.dataset.position); return; }
+    const pin = ev.target.closest('button[data-pin]');
+    if (pin) { await setPin(pin.dataset.pin, pin.dataset.mode); return; }
     const act = ev.target.closest('button[data-action]');
-    if (act && ['info', 'toggle-sides', 'stroke-side', 'toggle-eye', 'set-prop', 'clear-prop'].includes(act.dataset.action)) {
+    if (act && ['info', 'toggle-sides', 'stroke-side', 'toggle-eye', 'set-prop', 'clear-prop', 'gap-auto', 'wrap', 'track'].includes(act.dataset.action)) {
       const a = act.dataset.action;
-      if (a === 'info') { ui.info = !ui.info; rerender(); }
+      if (a === 'gap-auto') { const j = curVal('justifyContent'); if (j === 'space-between') await commit('justifyContent', ui.lastJustify && ui.lastJustify !== 'space-between' ? ui.lastJustify : null); else { ui.lastJustify = j; await commit('justifyContent', 'space-between'); } }
+      else if (a === 'wrap') await commit('flexWrap', curVal('flexWrap') === 'wrap' ? null : 'wrap');
+      else if (a === 'track') {
+        const prop = act.dataset.prop, list = tracks(curVal(prop) ?? ''), d = Number(act.dataset.dir);
+        if (d > 0) list.push(list.at(-1) ?? '1fr'); else list.pop();
+        await commit(prop, list.length ? list.join(' ') : null, prop);
+      }
+      else if (a === 'info') { ui.info = !ui.info; rerender(); }
       else if (a === 'toggle-sides') { ui.sides[act.dataset.which] = !ui.sides[act.dataset.which]; rerender(); }
       else if (a === 'stroke-side') { ui.side = act.dataset.side; rerender(); }
       else if (a === 'toggle-eye') {
@@ -568,7 +717,7 @@ function wire(ctx, el) {
     const al = ev.target.closest('button[data-align]');
     if (al) {
       const [mainI, crossI] = al.dataset.align.split(',').map(Number);
-      const edits = styleEdits([['justifyContent', ALIGN[mainI]], ['alignItems', ALIGN[crossI]]]);
+      const edits = styleEdits(curVal('justifyContent') === 'space-between' ? [['alignItems', ALIGN[crossI]]] : [['justifyContent', ALIGN[mainI]], ['alignItems', ALIGN[crossI]]]); // space-between stays until Auto is turned off
       await run('align', s.component, edits);
       return;
     }

@@ -17,6 +17,7 @@
 //                                           | 'tool' | 'view' ({x,y,z}) | 'layout' | 'moved' ({component,x,y}) | 'focus' ({component|null})
 //   ctx.emit(event, payload)                for modules that raise their own events
 //   ctx.view / ctx.stage / ctx.nav          viewport, stage and focus APIs
+//   ctx.ops                                 wrap / unwrap / duplicate / copy / paste (edit-ops.js); ctx.handles: direct manipulation (handles.js)
 //
 // Page conventions (the tests rely on these): body[data-ready="1"] once every component has drawn;
 // #revision = the revision of the component drawn last; section.cmp[data-component][data-revision][data-ready]
@@ -29,6 +30,8 @@ import { initTools } from './tools.js';
 import { initLayers } from './layers.js';
 import { initQuick } from './quick.js';
 import { initNav } from './nav.js';
+import { initEditOps } from './edit-ops.js';
+import { initHandles } from './handles.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -86,9 +89,11 @@ const view = createView(ctx, $('#stage'), $('#world'));
 const stage = createStage(ctx, $('#stage'), $('#world'), view);
 Object.assign(ctx, { view, stage });
 initTools(ctx);
+initEditOps(ctx);
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
 const nav = initNav(ctx);
+initHandles(ctx);
 ctx.on('select', () => renderPanel(ctx));
 ctx.on('render', ({ component, revision }) => { $('#revision').textContent = revision; renderPanel(ctx); counts(); });
 
@@ -114,6 +119,7 @@ client.onChange((f) => {
   if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { stage.render(f.component).catch(console.error); ctx.emit('added', f); }
+  else if (f.type === 'preview') { ctx.emit('preview', f); }
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; }
   else if (f.type === 'presence') {

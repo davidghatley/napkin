@@ -41,14 +41,14 @@ export function initLayers(ctx, el) {
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
         const k = `${c.component}|${n.id}`, kids = n.children.length, isFolded = folded.has(k);
-        rows.push(`<div class="lrow lnode${n.style?.visibility === 'hidden' ? ' hidden-node' : ''}${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${anc.has(k) ? ' anc' : ''}" title="${esc(n.id)} · ${esc(n.tag)}${n.textProp ? ' · shows ' + esc(n.textProp) : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--d:${depth}"><span class="lgrip" aria-hidden="true">⠿</span><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp ? ` · ${esc(n.textProp)}` : ''}</span><button type="button" class="leye" tabindex="-1" data-action="eye" aria-pressed="${n.style?.visibility === 'hidden'}" aria-label="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'} ${esc(n.id)}" title="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'}">${n.style?.visibility === 'hidden' ? ICON.eyeoff : ICON.eye}</button><button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(n.id)}" title="More">⋯</button></div>`);
+        rows.push(`<div class="lrow lnode${n.style?.visibility === 'hidden' ? ' hidden-node' : ''}${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${anc.has(k) ? ' anc' : ''}" title="${esc(n.tag)}${n.textProp ? ' · shows ' + esc(n.textProp) : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--d:${depth}"><span class="lgrip" aria-hidden="true">⠿</span><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp && n.textProp !== n.id ? ` · ${esc(n.textProp)}` : ''}</span><button type="button" class="leye" tabindex="-1" data-action="eye" aria-pressed="${n.style?.visibility === 'hidden'}" aria-label="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'} ${esc(n.id)}" title="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'}">${n.style?.visibility === 'hidden' ? ICON.eyeoff : ICON.eye}</button><button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(n.id)}" title="More">⋯</button></div>`);
         if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
       })(c.doc.root, 1);
     }
     el.innerHTML = rows.join('') || '<p class="empty">No components yet. Press N to draw one.</p>';
     if (rows.length) el.setAttribute('role', 'tree'); else el.removeAttribute('role'); // an empty tree is not a tree
     const tab = el.querySelector('.primary') || el.querySelector('.has-sel') || el.querySelector('.lrow');
-    if (tab) tab.tabIndex = 0;
+    if (tab) { tab.tabIndex = 0; tab.querySelectorAll('.leye, .lmore').forEach((b) => { b.tabIndex = 0; }); } // reachable by Tab from the row; shown while the row has focus
     if (focusKey) {
       const f = [...el.querySelectorAll('.lrow')].find((r) => rowKey(r) === focusKey);
       if (f) { f.tabIndex = 0; f.focus({ preventScroll: true }); }
@@ -101,34 +101,22 @@ export function initLayers(ctx, el) {
   function openMenu(btn) {
     const row = btn.closest('.lrow'), c = ctx.state.components.get(row.dataset.component);
     const isRoot = c?.doc?.root.id === row.dataset.node, ro = !!c?.readOnly;
-    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${ro ? ' disabled title="This file is read-only"' : ''}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${ro || isRoot ? ` disabled title="${isRoot ? "The root can't be duplicated" : 'This file is read-only'}"` : ''}>Duplicate${isRoot ? '<small>The root can’t be duplicated</small>' : ''}</button><button type="button" role="menuitem" data-do="delete"${ro || isRoot ? ` disabled title="${isRoot ? "The root can't be deleted" : 'This file is read-only'}"` : ''}>Delete${isRoot ? '<small>The root can’t be deleted</small>' : '<kbd>⌫</kbd>'}</button>`;
+    const hid = (c?.doc && index(c.doc).byId.get(row.dataset.node)?.style?.visibility === 'hidden');
+    const off = (why) => (ro || why ? ` disabled title="${why || 'This file is read-only'}"` : '');
+    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${off('')}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${off(isRoot ? "The root can't be duplicated" : '')}>Duplicate<kbd>⌘D</kbd>${isRoot ? '<small>The root can’t be duplicated</small>' : ''}</button><button type="button" role="menuitem" data-do="copy"${isRoot ? ' disabled title="The root can\'t be copied"' : ''}>Copy<kbd>⌘C</kbd></button><button type="button" role="menuitem" data-do="hide"${off('')}>${hid ? 'Show' : 'Hide'}</button><button type="button" role="menuitem" data-do="delete"${off(isRoot ? "The root can't be deleted" : '')}>Delete${isRoot ? '<small>The root can’t be deleted</small>' : '<kbd>⌫</kbd>'}</button>`;
     const r = btn.getBoundingClientRect();
-    Object.assign(menu.style, { left: `${r.right - 150}px`, top: `${r.bottom + 4}px` });
+    Object.assign(menu.style, { left: `${r.right - 164}px`, top: `${r.bottom + 4}px` });
     menu.dataset.component = row.dataset.component; menu.dataset.node = row.dataset.node;
     menu.hidden = false; menu.querySelector('button:not(:disabled)')?.focus();
-  }
-  async function duplicate(component, id) {
-    const c = ctx.state.components.get(component), { byId, parentOf } = index(c.doc), n = byId.get(id), parent = parentOf.get(id);
-    if (!parent) return;
-    const used = new Set(byId.keys()), ops = [];
-    const fresh = (b) => { let i = 2; while (used.has(`${b}${i}`)) i++; used.add(`${b}${i}`); return `${b}${i}`; };
-    const clone = (x, pid, at) => {
-      const nid = fresh(x.id.replace(/\d+$/, '') || x.id);
-      ops.push({ op: 'insert', parent: pid, index: at, node: { id: nid, tag: x.tag, style: { ...x.style }, ...(x.text !== undefined ? { text: x.text } : {}), ...(x.attrs ? { attrs: { ...x.attrs } } : {}) } });
-      if (x.textProp) ops.push({ op: 'bindText', id: nid, prop: x.textProp });
-      x.children.forEach((ch, i) => clone(ch, nid, i));
-      return nid;
-    };
-    const top = clone(n, parent.id, parent.children.findIndex((q) => q.id === id) + 1);
-    const r = await ctx.sendEdits(component, ops);
-    if (r.ok) ctx.select({ component, node: top, variant: ctx.state.selection?.variant ?? {} });
   }
   menu.addEventListener('click', async (ev) => {
     const b = ev.target.closest('button[data-do]');
     if (!b) return;
     const { component, node } = menu.dataset; closeMenu();
     if (b.dataset.do === 'rename') { const r = el.querySelector(`.lrow[data-component="${CSS.escape(component)}"][data-node="${CSS.escape(node)}"]`); if (r) startRename(r); }
-    else if (b.dataset.do === 'duplicate') await duplicate(component, node);
+    else if (b.dataset.do === 'duplicate') await ctx.ops.duplicate();
+    else if (b.dataset.do === 'copy') { try { document.execCommand('copy'); } catch {} ctx.hint('Copied. Paste into any component with ⌘V'); }
+    else if (b.dataset.do === 'hide') await ctx.ops.hide();
     else if (b.dataset.do === 'delete') await ctx.sendEdits(component, [{ op: 'delete', id: node }]);
   });
   menu.addEventListener('keydown', (ev) => {
