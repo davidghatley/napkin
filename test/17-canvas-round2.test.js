@@ -25,7 +25,8 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
   const reset = async (n = 'Button') => {
     git('checkout', '--', `components/${n}.tsx`);
     await waitFor(async () => (await (await fetch(new URL(`api/components/${n}`, server.url))).json()).source === original[n], 4000);
-    await browser.waitFor(`document.querySelector('section[data-name="${n}"]').dataset.revision === String(napkin.find('${n}').revision)`);
+    const now = (await (await fetch(new URL(`api/components/${n}`, server.url))).json()).revision; // the page must show exactly the revision the server holds now
+    await browser.waitFor(`document.querySelector('section[data-name="${n}"]').dataset.revision === '${now}' && napkin.find('${n}').revision === '${now}'`);
     await sleep(150);
   };
   const select = async (n, node, variant = {}) => { await q(`napkin.select({ component: napkin.find('${n}').component, node: '${node}', variant: ${JSON.stringify(variant)} })`); await browser.waitFor(`document.querySelector('#sel-node')?.textContent.startsWith('${node}')`); await sleep(100); };

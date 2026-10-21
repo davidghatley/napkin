@@ -26,7 +26,8 @@ test('the design panel reads like a design tool and every control is one small e
   const reset = async () => {
     git('checkout', '--', 'components/Button.tsx');
     await waitFor(async () => (await (await fetch(new URL('api/components/Button', server.url))).json()).source === original, 4000);
-    await browser.waitFor(`document.querySelector('section[data-name="Button"]').dataset.revision === String(napkin.find('Button').revision)`);
+    const now = (await (await fetch(new URL('api/components/Button', server.url))).json()).revision; // the page must show exactly the revision the server holds now
+    await browser.waitFor(`document.querySelector('section[data-name="Button"]').dataset.revision === '${now}' && napkin.find('Button').revision === '${now}'`);
     await sleep(120);
   };
   const root = `document.querySelector('section[data-name="Button"] .cell').querySelector('[data-n="root"]')`;
@@ -126,6 +127,7 @@ test('the design panel reads like a design tool and every control is one small e
     });
 
     await t.test('a colour swatch picks a colour and writes one property', async () => {
+      await browser.waitFor(`!!document.querySelector('#pick-background')`); // (the panel redraws a moment after a reset)
       const r0 = await rev();
       await q(`(() => { const p = document.querySelector('#pick-background'); p.value = '#ff3b30'; p.dispatchEvent(new Event('input', { bubbles: true })); p.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
       await settled('Button', r0 + 1);
