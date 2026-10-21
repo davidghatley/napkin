@@ -34,6 +34,7 @@ export function saveAsset(dir, bytes, ext) {
   bytes = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
   if (!bytes.length) throw new AssetError('the image is empty. Next: send the image bytes.');
   if (bytes.length > MAX_BYTES) throw new AssetError(`the image is ${bytes.length} bytes; the limit is ${MAX_BYTES}. Next: send a smaller image.`, 413);
+  if (ext === 'svg' && /<script|\son\w+\s*=|<foreignObject|javascript:/i.test(bytes.toString('utf8'))) throw new AssetError('the SVG has a script, an event handler or a foreignObject, so napkin will not store it. Next: remove them and paste again.', 415);
   if (!looksLike(bytes, ext)) throw new AssetError(`the bytes are not a ${ext} image. Next: check the file type and send it again.`);
   const sha8 = createHash('sha256').update(bytes).digest('hex').slice(0, 8);
   const name = `${sha8}.${ext === 'jpeg' ? 'jpg' : ext}`;

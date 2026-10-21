@@ -35,7 +35,7 @@ test('the design panel reads like a design tool and every control is one small e
     await sleep(150);
 
     await t.test('labels are human words, in sections, with units', async () => {
-      assert.equal(await q(`document.querySelector('label[for=borderRadius]').textContent`), 'Corner radius');
+      assert.equal(await q(`document.querySelector('label[for=borderRadius]').textContent`), 'Radius');
       assert.equal(await q(`document.querySelector('label[for=fontSize]').textContent`), 'Size');
       assert.equal(await q(`document.querySelector('label[for=lineHeight]').textContent`), 'Line height');
       assert.deepEqual(JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('details.sec > summary')].map((s) => s.textContent))`)).slice(0, 6), ['Layout', 'Size', 'Appearance', 'Fill', 'Stroke', 'Text']);
