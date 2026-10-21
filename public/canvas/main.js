@@ -7,6 +7,7 @@
 //     tool:       'select',                                // set by initTools (M4 adds more)
 //   }
 //   ctx.select(selection | null)            sets state.selection and emits 'select'
+//   ctx.fetch(path, init)                   fetch carrying the page's session token (identity "you"); needed for any /api write
 //   ctx.sendEdits(component, edits)         POST a batch on that component's current revision -> { ok, revision, doc } | { ok: false, error }
 //   ctx.on(event, cb) -> off()              events: 'select' (selection) | 'change' (frame) | 'problem' (frame) | 'added' | 'removed' | 'render' ({ component, revision }) | 'tool'
 //   ctx.emit(event, payload)                for modules that raise their own events
@@ -25,6 +26,7 @@ const client = await connectCanvas(location.origin + '/');
 const handlers = new Map();
 const ctx = {
   state: { components: new Map(), selection: null, tool: 'select' },
+  fetch: (path, init) => client.fetch(path, init), // fetch with this page's session (identity "you"); use for any /api write
   select(selection) { ctx.state.selection = selection; ctx.emit('select', selection); },
   async sendEdits(component, edits) {
     const c = ctx.state.components.get(component);
