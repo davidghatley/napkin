@@ -76,13 +76,13 @@ test('a rejected batch changes nothing; a stale edit is refused; edits to differ
   try {
     const before = readFileSync(file, 'utf8');
     const { revision } = await store.read();
-    const bad = await store.apply({ baseRevision: revision, edits: [{ op: 'set', path: 'root.gap', value: 4 }, { op: 'set', path: 'nope.gap', value: 4 }] });
+    const bad = await store.apply({ baseRevision: revision, by: 'test', edits: [{ op: 'set', path: 'root.gap', value: 4 }, { op: 'set', path: 'nope.gap', value: 4 }] });
     assert.match(bad.error, /^invalid edit #1/);
     assert.equal(readFileSync(file, 'utf8'), before);
     const a = await store.apply({ baseRevision: revision, by: 'canvas', edits: [{ op: 'set', path: 'root.borderRadius', value: 9 }] });
     const b = await store.apply({ baseRevision: revision, by: 'agent', edits: [{ op: 'addVariant', axis: 'size', value: 'xl' }] });
     assert.equal(a.ok && b.ok, true, a.error || b.error);
-    const stale = await store.apply({ baseRevision: revision, edits: [{ op: 'set', path: 'root.borderRadius', value: 3 }] });
+    const stale = await store.apply({ baseRevision: revision, by: 'test', edits: [{ op: 'set', path: 'root.borderRadius', value: 3 }] });
     assert.match(stale.error, /^stale revision/);
     const { doc } = readComponent(readFileSync(file, 'utf8'));
     assert.equal(doc.root.style.borderRadius, 9);
@@ -99,7 +99,7 @@ test('a file outside the dialect opens read-only and is never rewritten', async 
   try {
     const r = await store.read();
     assert.match(r.readOnly, /line \d+: the component body may only define `v` and return JSX/);
-    const w = await store.apply({ baseRevision: r.revision, edits: [{ op: 'set', path: 'root.gap', value: 1 }] });
+    const w = await store.apply({ baseRevision: r.revision, by: 'test', edits: [{ op: 'set', path: 'root.gap', value: 1 }] });
     assert.match(w.error, /^read-only: /);
     assert.equal(readFileSync(file, 'utf8'), hand);
   } finally { await store.close(); }
@@ -146,13 +146,13 @@ test('setDefault changes a default in place: one-line diff, prop order kept, enu
   const store = await openStore(file);
   try {
     let { revision } = await store.read();
-    const r = await store.apply({ baseRevision: revision, edits: [{ op: 'setDefault', name: 'label', value: 'Buy now' }] });
+    const r = await store.apply({ baseRevision: revision, by: 'test', edits: [{ op: 'setDefault', name: 'label', value: 'Buy now' }] });
     assert.equal(r.ok, true, r.error);
     assert.deepEqual(numstat(git), [`1\t1\tcomponents/Button.tsx`]);
     assert.deepEqual(r.doc.props.map((p) => p.name), ['label', 'size', 'state']);
-    const base = await store.apply({ baseRevision: r.revision, edits: [{ op: 'setDefault', name: 'size', value: 'sm' }] });
+    const base = await store.apply({ baseRevision: r.revision, by: 'test', edits: [{ op: 'setDefault', name: 'size', value: 'sm' }] });
     assert.match(base.error, /size=sm has overrides/);
-    const ok = await store.apply({ baseRevision: r.revision, edits: [{ op: 'addVariant', axis: 'size', value: 'xs' }, { op: 'setDefault', name: 'size', value: 'xs' }] });
+    const ok = await store.apply({ baseRevision: r.revision, by: 'test', edits: [{ op: 'addVariant', axis: 'size', value: 'xs' }, { op: 'setDefault', name: 'size', value: 'xs' }] });
     assert.equal(ok.ok, true, ok.error);
     assert.equal(readComponent(readFileSync(file, 'utf8')).doc.props[1].default, 'xs');
   } finally { await store.close(); }

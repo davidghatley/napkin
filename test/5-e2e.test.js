@@ -60,7 +60,7 @@ test('person on the canvas and agent over MCP edit the Card together', { timeout
     log('canvas', `shows padding 28px and title weight 600 (revision ${rev}, settled ${ms} ms after both edits)`);
     const notices = agent.notifications.filter((n) => n.method === 'notifications/napkin/change');
     for (const n of notices) log('agent', `change notice: revision ${n.params.revision} by ${n.params.by}${n.params.edits ? ' ' + JSON.stringify(n.params.edits) : ''}`);
-    assert.ok(notices.some((n) => n.params.by === 'canvas'), 'agent heard about the person\'s edit');
+    assert.ok(notices.some((n) => n.params.by === 'you'), 'agent heard about the person\'s edit');
 
     const onDisk = readComponent(readFileSync(file, 'utf8')).doc;
     assert.equal(getValue(onDisk, 'card.padding'), '28px');

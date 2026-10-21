@@ -10,6 +10,7 @@ import { join, basename } from 'node:path';
 import { openStore } from '../../src/store.js';
 import { makeOutOfDialect, OUT_OF_DIALECT } from '../helpers/corpus.js';
 import { ROOT, startServer, startMcp } from '../helpers/harness.js';
+import { session } from '../helpers/agents.js';
 
 const sha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
 const EDIT = [{ op: 'set', path: 'root.gap', value: 3 }];
@@ -47,6 +48,7 @@ test('INV-04: 50 out-of-dialect files: read-only with a line number, every write
   await t.test('server: HTTP edits, MCP apply_edits and add_variant, and create_component over an existing name all refuse', async () => {
     const server = await startServer(dir);
     const mcp = await startMcp(server.url);
+    const token = await session(server.url, 'david');
     try {
       const list = await (await fetch(new URL('api/components', server.url))).json();
       assert.equal(list.length, 50);
@@ -54,7 +56,7 @@ test('INV-04: 50 out-of-dialect files: read-only with a line number, every write
       let http = 0, viaMcp = 0, variant = 0, create = 0;
       for (const c of cases) {
         const stem = basename(c.file, '.tsx');
-        const r = await fetch(new URL(`api/components/${stem}/edits`, server.url), { method: 'POST', body: JSON.stringify({ baseRevision: 'x', edits: EDIT, by: 'test' }) });
+        const r = await fetch(new URL(`api/components/${stem}/edits`, server.url), { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ baseRevision: 'x', edits: EDIT }) });
         const body = await r.json();
         assert.equal(r.status, 409, c.name);
         assert.match(body.error, /^read-only: line \d+: /, c.name); http++;
@@ -64,7 +66,7 @@ test('INV-04: 50 out-of-dialect files: read-only with a line number, every write
         const v = await mcp.call('add_variant', { component: stem, baseRevision: 'x', axis: 'size', value: 'xl' });
         assert.equal(v.isError, true, c.name);
         assert.match(v.text, /^read-only: line \d+: /, c.name); variant++;
-        const cr = await fetch(new URL('api/components', server.url), { method: 'POST', body: JSON.stringify({ name: stem }) });
+        const cr = await fetch(new URL('api/components', server.url), { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ name: stem }) });
         assert.equal(cr.status, 409, `${c.name}: create over an existing file`); create++;
       }
       console.log(`INV-04: refused ${http} HTTP edits, ${viaMcp} MCP apply_edits, ${variant} MCP add_variant, ${create} create_component over an existing name`);

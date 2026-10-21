@@ -199,7 +199,7 @@ test('FMT-06: a new component through the workspace gets a minimal sidecar too',
   copyFileSync(fixture('Card'), join(dir, 'Card.tsx'));
   const ws = await openWorkspace(dir);
   try {
-    const { id } = await ws.create('Badge');
+    const { id } = await ws.create('Badge', 'div', { by: 'david' });
     const text = readFileSync(join(dir, 'Badge.napkin.json'), 'utf8');
     assert.deepEqual(Object.keys(JSON.parse(text)), ['canvas', 'id']);
     assert.equal(JSON.parse(text).id, id);

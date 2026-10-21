@@ -3,7 +3,7 @@
 //   load(text, file) -> { doc, state }          throws on unreadable files
 //   save(state, before, after) -> { text, state }
 import { readFileSync, existsSync } from 'node:fs';
-import { writeAtomic } from './atomic.js';
+import { writeSidecar as commitSidecar, createSidecar } from './commit.js';
 import { basename } from 'node:path';
 import * as model from './model.js';
 import { readComponent } from './tsx/read.js';
@@ -15,12 +15,12 @@ import { writeComponent } from './tsx/write.js';
 const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v);
 export const sidecarText = (side) => JSON.stringify(sortKeys(side), null, 2) + '\n';
 export function sidecarPath(file) { return file.replace(/\.tsx$/, '.napkin.json'); }
-export function writeSidecar(file, side) { writeAtomic(sidecarPath(file), sidecarText(side)); }
+export function writeSidecar(file, side) { commitSidecar(sidecarPath(file), sidecarText(side)); }
 export function readSidecar(file, name) {
   const p = sidecarPath(file);
   if (existsSync(p)) return JSON.parse(readFileSync(p, 'utf8'));
   const side = { id: `cmp_${name.replace(/[A-Z]/g, (c, i) => (i ? '_' : '') + c.toLowerCase())}_${Math.random().toString(36).slice(2, 8)}`, canvas: { x: 0, y: 0 } };
-  try { writeAtomic(p, sidecarText(side), { exclusive: true }); }
+  try { createSidecar(p, sidecarText(side)); }
   catch (e) { if (e.code === 'EEXIST') return JSON.parse(readFileSync(p, 'utf8')); throw e; }
   return side;
 }

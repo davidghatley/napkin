@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openStore } from '../../src/store.js';
 import { tempRepo, startServer, fixture } from '../helpers/harness.js';
+import { session } from '../helpers/agents.js';
 
 const SET = (v) => [{ op: 'set', path: 'root.gap', value: v }];
 
@@ -48,7 +49,7 @@ test('HIS-04: the same bytes have the same revision in different folders; conten
 
 test('HIS-04: through a real server restart: the pre-restart revision commits; after a change made while it was down it is stale', async () => {
   const { compDir, fileOf } = tempRepo(['Card']);
-  const api = (server, path, init) => fetch(new URL(path, server.url), init).then((r) => r.json());
+  const api = async (server, path, init = {}) => { const token = await session(server.url, 'david'); return fetch(new URL(path, server.url), { ...init, headers: { ...(init.body && { 'content-type': 'application/json' }), authorization: `Bearer ${token}` } }).then((r) => r.json()); };
   let server = await startServer(compDir);
   const held = (await api(server, 'api/components/Card')).revision;
   const first = await api(server, 'api/components/Card/edits', { method: 'POST', body: JSON.stringify({ baseRevision: held, edits: [{ op: 'set', path: 'title.fontSize', value: '30px' }], by: 'canvas' }) });

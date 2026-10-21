@@ -10,19 +10,20 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ROOT, tempRepo, startServer, startMcp, sleep } from '../helpers/harness.js';
+import { session } from '../helpers/agents.js';
 
 const SPY = join(ROOT, 'test', 'helpers', 'fs-spy.mjs');
 const readLog = (f) => (existsSync(f) ? readFileSync(f, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
-// After the merge the only writer is src/commit.js; on this branch it is src/store.js (applyNow, createComponentFile).
-const WRITER = /(?:src\/store\.js|src\/commit\.js)/;
-const classify = (e) => (/at (?:Object\.)?applyNow \(file:\/\/.*\/src\/(?:store|commit)\.js/.test(e.stack) ? 'apply' : /at createComponentFile \(file:\/\/.*\/src\/(?:store|commit)\.js/.test(e.stack) ? 'create' : 'outside');
+// The only writer is src/commit.js: writeComponent (called from store.apply) and createComponent (a new file, exclusive).
+const classify = (e) => (/at writeComponent \(file:\/\/.*\/src\/commit\.js/.test(e.stack) && /at applyOnce \(file:\/\/.*\/src\/store\.js/.test(e.stack) ? 'apply' : /at createComponent \(file:\/\/.*\/src\/commit\.js/.test(e.stack) ? 'create' : 'outside');
 
 test('INV-05: .tsx writes by a running server come only from store.apply (and createComponentFile for a new file)', async () => {
   const { compDir, fileOf } = tempRepo(['Card', 'Button']);
   const logFile = join(mkdtempSync(join(tmpdir(), 'napkin-spy-')), 'writes.jsonl');
   const server = await startServer(compDir, { execArgv: ['--import', SPY], env: { NAPKIN_SPY_LOG: logFile } });
   const mcp = await startMcp(server.url);
-  const api = async (path, init) => (await fetch(new URL(path, server.url), init)).json();
+  const token = await session(server.url, 'david');
+  const api = async (path, init = {}) => (await fetch(new URL(path, server.url), { ...init, headers: { ...(init.body && { 'content-type': 'application/json' }), authorization: `Bearer ${token}` } })).json();
   try {
     const rev = async (c) => (await api(`api/components/${c}`)).revision;
     // HTTP, three edits to different files and properties
@@ -88,12 +89,12 @@ await fs.promises.writeFile(${JSON.stringify(join(dir, 'E.tsx'))}, 'z');
   assert.ok(entries.every((e) => classify(e) === 'outside'));
 });
 
-test('INV-05: static check: only src/atomic.js writes files; everything else in src/ calls writeAtomic or createComponentFile', () => {
-  const WRITERS = /\b(writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|createWriteStream|cpSync|truncateSync|linkSync|symlinkSync|unlinkSync|unlink|rmSync|rm|rmdirSync|writeSync|ftruncateSync)\s*\(/;
-  // atomic.js is the only module that writes component or sidecar files; lock.js only creates and removes the lock file under .napkin/.
-  const ALLOWED = ['src/atomic.js', 'src/lock.js'];
+test('INV-05: static check: only src/atomic.js, src/commit.js and src/lock.js touch files; everything else calls commit.js', () => {
+  const WRITERS = /(?<![\w.])(?:(?:fs|promises)\.)?(writeFileSync|writeFile|appendFileSync|appendFile|renameSync|rename|copyFileSync|copyFile|createWriteStream|cpSync|truncateSync|linkSync|symlinkSync|unlinkSync|unlink|rmSync|rm|rmdirSync|writeSync|ftruncateSync)\s*\(/;
+  // atomic.js does the writing and commit.js is the only caller for component and sidecar files (it also removes them); lock.js only creates and removes the lock file under .napkin/.
+  const ALLOWED = ['src/atomic.js', 'src/commit.js', 'src/lock.js', 'src/render-png.js']; // render-png only removes its own temporary Chromium profile folder
   const offenders = [];
-  const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith('.js') && !ALLOWED.some((a) => p.endsWith(a))) readFileSync(p, 'utf8').split('\n').forEach((l, i) => { if (WRITERS.test(l.replace(/\/\/.*/, ''))) offenders.push(`${p.slice(ROOT.length + 1)}:${i + 1}: ${l.trim()}`); }); } };
+  const walk = (d) => { for (const e of readdirSync(d, { withFileTypes: true })) { const p = join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith('.js') && !ALLOWED.some((a) => p.endsWith(a))) readFileSync(p, 'utf8').split('\n').forEach((l, i) => { if (!/async rename\(/.test(l) && WRITERS.test(l.replace(/\/\/.*/, ''))) offenders.push(`${p.slice(ROOT.length + 1)}:${i + 1}: ${l.trim()}`); }); } };
   walk(join(ROOT, 'src'));
   assert.deepEqual(offenders, []);
 });

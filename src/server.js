@@ -9,9 +9,10 @@ import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { openWorkspace, CreateError } from './workspace.js';
+import { openWorkspace } from './workspace.js';
+import { createApi } from './api.js';
 import { acquireLock, LockError } from './lock.js';
-import { createComponentFile } from './store.js';
+import { createComponent } from './commit.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -21,13 +22,12 @@ if (args.file) { dir = dirname(resolve(args.file)); only = resolve(args.file); }
 else if (args.dir) dir = resolve(args.dir);
 else { // a throwaway copy of the fixtures, so playing with the canvas never edits the repo
   dir = mkdtempSync(join(tmpdir(), 'napkin-fixtures-'));
-  for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) createComponentFile(join(dir, f), readFileSync(join(ROOT, 'fixtures', d, f), 'utf8'));
+  for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) createComponent(join(dir, f), readFileSync(join(ROOT, 'fixtures', d, f), 'utf8'));
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}`); process.exit(1); }
-// One server per folder (REL-02): a second one names the first one's PID and exits.
-let lock;
-try { lock = acquireLock(dir); } catch (e) { if (e instanceof LockError) { console.error(e.message); process.exit(1); } throw e; }
+let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
+try { lock = acquireLock(dir); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
 const ws = await openWorkspace(dir, { only });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
@@ -36,14 +36,15 @@ const broadcast = (obj) => { const f = frame(obj); for (const res of clients) re
 const presence = new Map(); // component -> label
 let agents = 0;
 
+const api = createApi(ws, { broadcast, dir });
 ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
-ws.events.on('added', async ({ component }) => {
+ws.events.on('added', async ({ component, by, summary }) => {
   const e = ws.find(component);
-  if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)) });
+  if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)), ...(by && { by, summary }) });
 });
 
 const json = (res, code, body) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
@@ -54,7 +55,13 @@ const send = (res, file) => {
   res.end(readFileSync(join(ROOT, file)));
 };
 
+// Only this machine's own canvas may talk to us: Host must be loopback on our port, and Origin (when a browser sends one) the canvas's own origin.
+// This stops a web page open in your browser (or a DNS-rebinding name) from writing. It is not a defence against programs running as you.
+const allowedHost = (h) => { const p = server.address()?.port; return h === `127.0.0.1:${p}` || h === `localhost:${p}`; };
+const guard = (req) => allowedHost(req.headers.host) && (req.headers.origin === undefined || req.headers.origin === `http://${req.headers.host}` || allowedHost(req.headers.origin.replace(/^http:\/\//, '')) && req.headers.origin.startsWith('http://'));
+
 const server = createServer(async (req, res) => {
+  if (!guard(req)) return json(res, 403, { ok: false, error: 'forbidden: napkin only answers its own canvas on 127.0.0.1 or localhost' });
   const url = new URL(req.url, 'http://x');
   const path = url.pathname;
   try {
@@ -100,40 +107,20 @@ const server = createServer(async (req, res) => {
       return res.end(r.code);
     }
 
-    if (req.method === 'POST' && path === '/api/components') {
-      let body = ''; for await (const chunk of req) body += chunk;
-      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
-      try { return json(res, 201, { ok: true, ...(await ws.create(msg?.name, msg?.rootTag)) }); }
-      catch (err) { if (err instanceof CreateError) return json(res, err.status, { ok: false, error: err.message }); throw err; }
+    // Components, edits, proposals, history, search, render, guide (src/api.js).
+    if (path.startsWith('/api/')) {
+      let body = ''; if (req.method !== 'GET' && req.method !== 'HEAD') for await (const chunk of req) body += chunk;
+      const token = /^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1];
+      const r = await api.handle({ method: req.method, path, query: url.searchParams, body, token });
+      if (r?.png) { res.writeHead(r.status, { 'content-type': 'image/png', 'cache-control': 'no-store', 'x-napkin-render-ms': r.ms.toFixed(1) }); return res.end(r.png); }
+      if (r) return json(res, r.status, r.json);
     }
-    if (req.method === 'GET' && path === '/api/components') return json(res, 200, await ws.summary());
-    const m = path.match(/^\/api\/components\/([^/]+)(\/edits|\/canvas)?$/);
-    const e = m && ws.find(decodeURIComponent(m[1]));
-    if (!e) return json(res, 404, { ok: false, error: 'not found' });
-    if (req.method === 'GET' && !m[2]) {
-      const { component, revision, doc, source, readOnly } = await ws.snapshot(e);
-      return json(res, 200, { component, revision, doc, source, ...(readOnly && { readOnly }) });
-    }
-    if (req.method === 'POST' && m[2] === '/canvas') { // moving a component writes the sidecar only
-      let body = ''; for await (const chunk of req) body += chunk;
-      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
-      const r = await e.store.moveCanvas(msg?.x, msg?.y);
-      return json(res, r.ok ? 200 : 400, r);
-    }
-    if (req.method === 'POST' && m[2] === '/edits') {
-      let body = ''; for await (const chunk of req) body += chunk;
-      let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'invalid edit #0: body is not JSON' }); }
-      const result = await e.store.apply(msg);
-      return json(res, result.ok ? 200 : 409, result);
-    }
-    json(res, 405, { ok: false, error: 'method not allowed' });
+    json(res, 404, { ok: false, error: 'not found' });
   } catch (err) { console.error(err); json(res, 500, { ok: false, error: String(err.message) }); }
 });
 
 server.listen(Number(args.port), '127.0.0.1', () => {
-  const url = `http://127.0.0.1:${server.address().port}/`;
-  lock.update({ url });
-  console.log(`napkin canvas: ${url}`);
+  console.log(`napkin canvas: http://127.0.0.1:${server.address().port}/`);
 });
-const stop = () => { for (const c of clients) c.end(); server.close(); ws.close().then(() => { lock.release(); process.exit(0); }); };
+const stop = () => { for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
 process.on('SIGTERM', stop); process.on('SIGINT', stop);

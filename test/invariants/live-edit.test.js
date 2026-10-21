@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { tempRepo, startServer, sleep } from '../helpers/harness.js';
+import { session } from '../helpers/agents.js';
 import { connectCanvas } from '../../src/canvas-client.js';
 import { readComponent } from '../../src/tsx/read.js';
 
@@ -15,7 +16,8 @@ test('FMT-07: hand edits show up as revisions within 1 s while canvas edits keep
   const file = fileOf('Button');
   const server = await startServer(compDir);
   const canvas = await connectCanvas(server.url, { by: 'canvas' });
-  const api = (path, init) => fetch(new URL(path, server.url), init).then((r) => r.json());
+  const token = await session(server.url, 'david');
+  const api = (path, init = {}) => fetch(new URL(path, server.url), { ...init, headers: { ...(init.body && { 'content-type': 'application/json' }), authorization: `Bearer ${token}` } }).then((r) => r.json());
   const ROUNDS = 12;
   const PROPS = ['margin', 'padding', 'color', 'gap', 'width', 'height', 'top', 'left', 'right', 'bottom', 'opacity', 'zIndex']; // one property per round: no round edits a key an earlier round's canvas edit still has in flight
   const latencies = [];

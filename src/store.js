@@ -1,22 +1,22 @@
-// The store: ONE process owns each component file. It keeps the document and a revision in memory,
-// plus a short history of which keys each revision changed. Every writer (canvas, agent, file) goes
-// through apply(), which is serialised by a promise queue. External writes (git restore, an editor)
-// are picked up by a directory watcher (and a slow poll as a safety net) and become a new revision
-// with by "file".
+// The store: ONE process owns each component file. It keeps the document and a revision in memory, plus a history of
+// which keys each revision changed, who made it and what it was. Every writer (canvas, agent, file) goes through
+// apply(), which is serialised by a promise queue. External writes (git restore, an editor) are picked up by a
+// directory watcher (and a slow poll as a safety net) and become a new revision with by "file".
 //
-// Revisions are content hashes (HIS-04): the first 16 hex digits of the sha256 of the file's bytes.
-// They survive a server restart: a client holding a revision from before the restart can still commit
-// when the file has not changed since. Treat them as opaque strings.
+// Revisions are content hashes (HIS-04): the first 16 hex digits of the sha256 of the file's bytes. They survive a server
+// restart: a client holding a revision from before the restart can still commit when the file has not changed since.
+// Clients treat them as opaque strings.
 //
-// This module is the only place a component .tsx is written (INV-05): applyNow() for edits, and
-// createComponentFile() for a brand-new file. Both go through writeAtomic (REL-01).
+// Every component file is written by src/commit.js (INV-05): writeComponent for an edit, createComponent for a new file.
 import { readFileSync, watch } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { writeComponent } from './commit.js';
 import { codecFor, readSidecar, writeSidecar } from './codecs.js';
-import { writeAtomic, cleanStaleTmp } from './atomic.js';
-import { writeFileAtomic } from './atomic-write.js';
+import { cleanStaleTmp } from './atomic.js';
+import { summarize } from './summary.js';
+import { staleEntries } from './stale.js';
 
 // Syntax errors from the parser carry loc.line but not "line N:" in the message; dialect errors already do.
 // Every reason names a line (INV-04); a file-level problem with no line of its own says line 1.
@@ -30,10 +30,9 @@ const POLL_MS = 400; // safety net for a missed file-system event; FMT-07 wants 
 
 export const revisionOf = (text) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 
-// A new component file. Exclusive: never replaces a file that exists. Throws an error with code EEXIST then.
-export function createComponentFile(file, text) { writeAtomic(file, text, { exclusive: true }); }
-
-export async function openStore(file) {
+// start: { by, summary } seeds the first history entry (create and rename record themselves there). (start.revision is
+// ignored: a revision is the hash of the bytes, so a renamed file simply has the revision of its new text.)
+export async function openStore(file, start = {}) {
   const codec = codecFor(file);
   const { applyEdits, touched, conflicts, diffKeys, EditError } = codec;
   const events = new EventEmitter();
@@ -43,16 +42,17 @@ export async function openStore(file) {
   let doc = null, state = null, readOnly = null;
   try { ({ doc, state } = codec.load(text, file)); } catch (e) { readOnly = reason(e); }
   let revision = revisionOf(text);
-  const history = [{ revision, keys: new Set() }];
+  const history = [{ revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now() }];
   let queue = Promise.resolve();
   let broken = null; // the error of a hand edit the last good doc could not absorb (F22), else null
   const problem = (error) => { broken = error; events.emit('problem', { error }); };
 
   const commit = (next, keys, by, edits, origin) => {
     doc = next; revision = revisionOf(text);
-    history.push({ revision, keys });
+    const summary = summarize(edits), at = Date.now();
+    history.push({ revision, keys, by, summary, at });
     if (history.length > HISTORY) history.shift();
-    events.emit('change', { revision, by, edits, origin, doc });
+    events.emit('change', { revision, by, edits, origin, doc, summary, at });
   };
 
   // Look at the file on disk. If someone else changed it, that becomes a revision (by "file") first.
@@ -77,21 +77,26 @@ export async function openStore(file) {
     }
     return { ok: false, error: 'stale revision: the file kept changing on disk while saving; read it again and retry' };
   }
+
   // dryRun: validate and produce the would-be file without writing or committing (F19).
-  function applyOnce({ baseRevision, edits, by = 'unknown', origin, dryRun = false }) {
+  function applyOnce({ baseRevision, edits, by, origin, dryRun = false }) {
     // A hand edit that landed a moment ago must not be overwritten: take it in before judging this batch.
     const disk = absorbDisk();
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
     if (disk) return { ok: false, error: `read-only: the file on disk is not valid right now (${disk}); fix or restore it, then try again` };
+    // every revision names a real caller (AGT-05); a dry run makes none
+    if (!dryRun && (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown')) return { ok: false, error: 'by is required: every revision names a real caller' };
+    const safeTouched = (e) => { try { return touched(e); } catch { return new Set(); } };
     // The last time this revision was current: an edit based on content that came back (A, B, A) is based on A.
     let at = -1;
     for (let i = history.length - 1; i >= 0; i--) if (history[i].revision === baseRevision) { at = i; break; }
-    if (at < 0) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})` };
+    if (at < 0) return { ok: false, error: `stale revision: ${baseRevision} is not a known revision (current ${revision})`, currentRevision: revision, stale: staleEntries({ doc, edits, keys: safeTouched(edits), history, baseAt: 0 }), oldestRevision: history[0].revision, changedKeys: [...new Set(history.slice(1).flatMap((h) => [...h.keys]))].slice(0, 200) };
     let keys;
     try { keys = touched(edits); } catch { return { ok: false, error: 'invalid edit #0: edits must be an array' }; }
     for (const h of history.slice(at + 1)) {
       if (conflicts(keys, h.keys)) {
-        return { ok: false, error: `stale revision: ${[...keys].join(', ')} changed in revision ${h.revision} (base ${baseRevision})` };
+        const stale = staleEntries({ doc, edits, keys, history, baseAt: at });
+        return { ok: false, error: `stale revision: ${[...keys].join(', ')} changed in revision ${h.revision} (base ${baseRevision})`, currentRevision: revision, stale };
       }
     }
     let next;
@@ -101,10 +106,10 @@ export async function openStore(file) {
     try { saved = codec.save(state, doc, next); }
     catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }
     if (dryRun) return { ok: true, dryRun: true, revision, doc: next, source: saved.text };
-    if (saved.text !== text) {
+    if (saved.text !== text) { // a batch that changes nothing leaves the file (and its mtime) alone
       // a hand edit may land after our last look at the file: check again just before the rename, and start over if it did
-      writeFileAtomic(file, saved.text, { check: () => { let now; try { now = readFileSync(file, 'utf8'); } catch { return; } if (now !== text) throw new Raced(); } });
-    } // a batch that changes nothing leaves the file (and its mtime) alone
+      writeComponent(file, saved.text, { check: () => { let now; try { now = readFileSync(file, 'utf8'); } catch { return; } if (now !== text) throw new Raced(); } });
+    }
     text = saved.text; state = saved.state;
     commit(next, keys, by, edits, origin);
     return { ok: true, revision, doc };
@@ -134,6 +139,8 @@ export async function openStore(file) {
     async read() { await queue; return { revision, doc, source: text, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
     apply(req) { const p = queue.then(() => applyNow(req)); queue = p.catch(() => {}); return p; },
     moveCanvas(x, y) { const p = queue.then(() => moveCanvas(x, y)); queue = p.catch(() => {}); return p; },
+    // Recent revisions, newest first: [{ revision, by, summary, at, keys }].
+    history(limit = 50) { return history.slice(-Math.max(1, limit)).reverse().map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, at: h.at, keys: [...h.keys] })); },
     async close() { clearInterval(poll); watcher.close(); await queue; },
   };
 }

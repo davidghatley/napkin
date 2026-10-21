@@ -8,7 +8,7 @@ import { join } from 'node:path';
 // The lock file's name is an implementation detail (this branch: .napkin/server.lock; the agents lane: .napkin/lock).
 // Tests find it by looking in .napkin/ for a file with "lock" in its name.
 import { readdirSync } from 'node:fs';
-const lockPath = (dir) => join(dir, '.napkin', readdirSync(join(dir, '.napkin')).find((n) => /lock/.test(n)) ?? 'server.lock');
+const lockPath = (dir) => join(dir, '.napkin', readdirSync(join(dir, '.napkin')).filter((n) => /lock/.test(n)).sort((a, b) => a.length - b.length)[0] ?? 'lock');
 import { ROOT, tempRepo, startServer, sleep } from '../helpers/harness.js';
 
 // Runs a second server to its end (it should exit by itself); resolves { code, output }.
@@ -28,8 +28,7 @@ test('REL-02: a second server on the same folder refuses to start and names the 
   try {
     const second = await runServer(compDir);
     assert.equal(second.code, 1);
-    assert.match(second.output, new RegExp(`already open in another napkin server \\(pid ${first.proc.pid}`));
-    assert.match(second.output, /http:\/\/127\.0\.0\.1:\d+/, 'and says where it is');
+    assert.match(second.output, new RegExp(`another napkin process \\(pid ${first.proc.pid}\\) is editing`));
     assert.doesNotMatch(second.output, /napkin canvas:/, 'it did not start');
     // the first one is untouched
     assert.equal((await (await fetch(new URL('api/components', first.url))).json()).length, 1);
@@ -47,21 +46,21 @@ test('REL-02: a lock left by a dead process (kill -9) is taken over', async () =
   const dead = first.proc.pid;
   first.proc.kill('SIGKILL');
   await new Promise((r) => first.proc.once('exit', r));
-  assert.equal(JSON.parse(readFileSync(lockPath(compDir), 'utf8')).pid, dead, 'the stale lock is still there');
+  assert.equal(parseInt(readFileSync(lockPath(compDir), 'utf8'), 10), dead, 'the stale lock is still there');
   const next = await startServer(compDir);
   try {
-    assert.equal(JSON.parse(readFileSync(lockPath(compDir), 'utf8')).pid, next.proc.pid);
+    assert.equal(parseInt(readFileSync(lockPath(compDir), 'utf8'), 10), next.proc.pid);
   } finally { await next.stop(); }
 });
 
-test('REL-02: an unreadable lock file counts as stale; a lock with a live PID that is not napkin still blocks', async () => {
+test('REL-02: an unreadable lock file counts as stale; a lock naming any live PID still blocks', async () => {
   const { compDir } = tempRepo(['Card']);
   mkdirSync(join(compDir, '.napkin'), { recursive: true });
   const probe = await startServer(compDir); const lp = lockPath(compDir); probe.proc.kill('SIGKILL'); await new Promise((r) => probe.proc.once('exit', r));
   writeFileSync(lp, '{ not json');
   const a = await startServer(compDir);
   await a.stop();
-  writeFileSync(lp, JSON.stringify({ pid: process.pid }));
+  writeFileSync(lp, `${process.pid}\n`);
   const b = await runServer(compDir);
   assert.equal(b.code, 1);
   assert.match(b.output, new RegExp(`pid ${process.pid}`));

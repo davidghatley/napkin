@@ -14,7 +14,7 @@ test('scripted MCP client: list, read (with source), apply_edits changes the fil
   try {
     assert.ok(mcp.init.result?.capabilities?.tools, 'initialize advertises tools');
     const tools = (await mcp.request('tools/list', {})).result.tools.map((t) => t.name).sort();
-    assert.deepEqual(tools, ['add_variant', 'apply_edits', 'create_component', 'list_components', 'read_component']);
+    assert.deepEqual(tools, ['add_variant', 'apply_edits', 'create_component', 'delete_component', 'list_components', 'read_component', 'rename_component', 'render_component', 'search', 'subscribe']);
     const list = await mcp.call('list_components');
     assert.deepEqual(list.data.map((c) => c.name).sort(), ['Button', 'Card']);
     assert.ok(list.data.every((c) => /^cmp_/.test(c.id) && !c.readOnly));

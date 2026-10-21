@@ -10,6 +10,7 @@ import { newComponentSource } from '../src/tsx/write.js';
 import { connectCanvas } from '../src/canvas-client.js';
 import { tempRepo, startServer, fixture, sleep } from './helpers/harness.js';
 import { launchChromium } from './helpers/cdp.js';
+import { session } from './helpers/agents.js';
 
 test('esbuild bundles both fixtures and a fresh component; a rebuild is well under 100 ms', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-bundle-'));
@@ -152,7 +153,7 @@ test('the canvas follows the files: grid, live edits, broken edits, branch switc
       const c = list.find((x) => x.name === 'Counter');
       assert.match(c.readOnly, /./);
       const before = readFileSync(join(compDir, 'Counter.tsx'), 'utf8');
-      const r = await (await fetch(new URL(`api/components/${c.id}/edits`, server.url), { method: 'POST', body: JSON.stringify({ baseRevision: 1, edits: [{ op: 'set', path: 'count.color', value: 'red' }], by: 'test' }) })).json();
+      const r = await (await fetch(new URL(`api/components/${c.id}/edits`, server.url), { method: 'POST', headers: { authorization: `Bearer ${await session(server.url, 'test')}` }, body: JSON.stringify({ baseRevision: 1, edits: [{ op: 'set', path: 'count.color', value: 'red' }] }) })).json();
       assert.equal(r.ok, false);
       assert.match(r.error, /^read-only:/);
       assert.equal(readFileSync(join(compDir, 'Counter.tsx'), 'utf8'), before);
