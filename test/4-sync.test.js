@@ -32,7 +32,7 @@ test('live sync between canvas socket, MCP agent and the file', async (t) => {
       const { value } = await waitFor(() => mcp.notifications.find((n) => n.method === 'notifications/napkin/change' && n.params.revision === r.revision), 1000);
       t.diagnostic(`canvas -> agent: ${(value.at - t0).toFixed(1)} ms`);
       assert.ok(value.at - t0 < 1000);
-      assert.equal(value.params.by, 'canvas');
+      assert.equal(value.params.by, 'you');
       assert.equal(value.params.component, canvas.state('Card').component);
       assert.match(readFileSync(file, 'utf8'), /padding: '24px'/);
     });

@@ -413,7 +413,7 @@ export function createStage(ctx, root, world, view) {
     if (c) c.canvas = { ...pos };
     auto.delete(d.id);
     try {
-      const r = await fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
+      const r = await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     } catch (e) { document.querySelector('#error').textContent = `could not save the position: ${e.message}`; }
     ctx.emit('moved', { component: d.id, ...pos });

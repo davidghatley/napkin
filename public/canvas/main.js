@@ -11,6 +11,7 @@
 //   ctx.select(selection | null)            one selection (or none); emits 'select'
 //   ctx.selectMany(list)                    several (same component); the last is the primary
 //   ctx.toggle(selection)                   shift-click: add or remove one
+//   ctx.fetch(path, init)                   fetch carrying the page's session token (identity "you"); needed for any /api write
 //   ctx.sendEdits(component, edits)         POST a batch on that component's current revision -> { ok, revision, doc } | { ok: false, error }
 //   ctx.on(event, cb) -> off()              events: 'select' | 'change' (frame) | 'problem' (frame) | 'added' | 'removed' | 'render' ({ component, revision })
 //                                           | 'tool' | 'view' ({x,y,z}) | 'layout' | 'moved' ({component,x,y}) | 'focus' ({component|null})
@@ -53,6 +54,7 @@ const ctx = {
     else if (cur.length && cur[0].component !== sel.component) { ctx.selectMany([sel]); ctx.hint('Selection stays within one component'); }
     else ctx.selectMany([...cur, sel]);
   },
+  fetch: (path, init) => client.fetch(path, init), // fetch with this page's session (identity "you"); use for any /api write
   async sendEdits(component, edits) {
     const c = ctx.state.components.get(component);
     const r = await client.sendEdits(component, c.revision, edits);

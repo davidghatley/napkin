@@ -167,7 +167,7 @@ body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; 
 .problem, .build-error { margin: 0; max-width: 420px; white-space: normal; padding: 5px 9px; border-radius: 6px; background: #e5484d1c; border: 1px solid #e5484d55; font: 11px/1.4 var(--mono); color: var(--measure); }
 .problem:empty, .build-error:empty { display: none; }
 
-.frame { position: relative; background: var(--frame); color: var(--frame-ink); border-radius: 12px; box-shadow: var(--frame-shadow); padding: 26px 30px 30px; width: max-content; }
+.frame { font: initial; letter-spacing: normal; font-feature-settings: normal; -webkit-font-smoothing: auto; /* components render as in an app, not in the chrome's type */ position: relative; background: var(--frame); color: var(--frame-ink); border-radius: 12px; box-shadow: var(--frame-shadow); padding: 26px 30px 30px; width: max-content; }
 .matrix { display: grid; grid-template-columns: repeat(var(--gcols, 1), max-content); gap: 44px 56px; align-items: start; }
 .matrix[data-axes="0"] { padding: 6px; }
 .group { display: flex; flex-direction: column; gap: 6px; }
