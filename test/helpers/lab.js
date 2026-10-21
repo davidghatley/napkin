@@ -79,3 +79,13 @@ export async function lab(files, { width = 1440, height = 900, theme } = {}) {
   };
   return api;
 }
+
+// How many lines differ between two texts (added + removed, as a multiset): a one-line edit is 2, a one-line addition is 1.
+export function changedLines(a, b) {
+  const count = (t) => { const m = new Map(); for (const l of t.split('\n')) m.set(l, (m.get(l) || 0) + 1); return m; };
+  const A = count(a), B = count(b);
+  let added = 0, removed = 0;
+  for (const [l, n] of B) added += Math.max(0, n - (A.get(l) || 0));
+  for (const [l, n] of A) removed += Math.max(0, n - (B.get(l) || 0));
+  return { added, removed };
+}

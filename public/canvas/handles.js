@@ -100,6 +100,7 @@ export function initHandles(ctx) {
 
   // ------------------------------------------------------------------------------------------ gesture plumbing
   let frame = 0, pending = null, lastEv = null;
+  const stats = []; // the main-thread cost of each gesture frame (ms), kept for the performance check (LAY-05)
   function begin(kind, ev, extra) {
     g = { kind, x0: ev.clientX, y0: ev.clientY, moved: false, info: current(), ...extra };
     if (!g.info) { g = null; return false; }
@@ -114,7 +115,7 @@ export function initHandles(ctx) {
     if (!g.moved) { g.moved = true; g.start?.(); }
     ev.preventDefault();
     pending = ev;
-    if (!frame) frame = requestAnimationFrame(() => { frame = 0; if (g && pending) g.move(pending); });
+    if (!frame) frame = requestAnimationFrame(() => { frame = 0; if (g && pending) { const t0 = performance.now(); g.move(pending); stats.push(performance.now() - t0); if (stats.length > 4000) stats.shift(); } });
   }
   async function onUp(ev) {
     if (!g) return;
@@ -122,16 +123,16 @@ export function initHandles(ctx) {
     const cur = g; 
     if (cur.moved) { cur.move(ev); }
     cleanup();
-    if (cur.moved) { swallowClick = Date.now(); await cur.end?.(ev); }
+    if (cur.moved) { swallowClick = Date.now(); try { await cur.end?.(ev); } finally { g = null; } } else g = null;
     schedule();
   }
-  function onCancel() { if (!g) return; const cur = g; cleanup(); cur.undo?.(); schedule(); }
+  function onCancel() { if (!g) return; const cur = g; cleanup(); cur.undo?.(); g = null; schedule(); }
   function onKey(ev) { if (ev.key === 'Escape' && g) { ev.preventDefault(); ev.stopPropagation(); onCancel(); } }
   function cleanup() {
     removeEventListener('pointermove', onMove, true); removeEventListener('pointerup', onUp, true); removeEventListener('pointercancel', onCancel, true); removeEventListener('keydown', onKey, true);
     layer.classList.remove('busy'); delete document.body.dataset.gesture;
     layer.querySelectorAll('.hdl-guide, .hdl-line, .hdl-cellhl, .hdl-chip, .hdl-ghost').forEach((n) => n.remove());
-    g = null; pending = null;
+    pending = null;
   }
   let swallowClick = 0;
   document.addEventListener('click', (ev) => { if (swallowClick && Date.now() - swallowClick < 400) { swallowClick = 0; ev.stopPropagation(); ev.preventDefault(); } }, true);
@@ -300,6 +301,7 @@ export function initHandles(ctx) {
       const r0 = info.el.getBoundingClientRect();
       const parentStyle = info.parent ? resolved(info, info.parent) : null;
       g.mode = style.position === 'absolute' && info.parentEl ? 'abs' : parentStyle && isGrid(parentStyle) ? 'grid' : 'flow';
+      if (g.mode === 'abs') g.rel0 = relRect(info.el, info.parentEl, z);
       const ccs = getComputedStyle(info.el); g.baseLeft = num(ccs.left); g.baseTop = num(ccs.top);
       g.r0 = r0; g.style = style; g.parentStyle = parentStyle; g.targets = targetsFor(info);
       g.wasOp = info.el.style.opacity; g.wasPE = info.el.style.pointerEvents; g.wasLeft = info.el.style.left; g.wasTop = info.el.style.top;
@@ -336,7 +338,7 @@ export function initHandles(ctx) {
       const res = g.result;
       if (!res || res.noop || (g.mode === 'flow' && !res.parent) || (g.mode === 'grid' && !res.col)) { restoreMove(); return; }
       if (g.mode === 'abs') {
-        const { rect, parent } = relRect(info.el, info.parentEl, zoom());
+        const { rect, parent } = g.rel0; // where it was before the preview moved it
         const patch = pinPatch(pinsOf(g.style), { x: rect.x + res.dx, y: rect.y + res.dy, w: rect.w, h: rect.h }, parent, g.style);
         for (const k of ['width', 'height']) if (g.style[k] === undefined) delete patch[k]; // a drag only moves
         const edits = patchEdits(info.node.id, patch, g.style);
@@ -365,7 +367,9 @@ export function initHandles(ctx) {
     let tEl = under && cell.contains(under) ? under : info.parentEl;
     let tNode = info.byId.get(tEl.dataset.n);
     if (!tNode) return null;
-    if (!holds(tNode)) { tEl = tEl.parentElement.closest('[data-n]'); tNode = tEl && info.byId.get(tEl.dataset.n); if (!tNode) return null; }
+    // an element with nothing in it is a box to sit beside, unless the pointer is in its middle; text and images are never containers
+    const mid = (e) => { const r = e.getBoundingClientRect(); return Math.abs(x - (r.left + r.width / 2)) < r.width * 0.18 && Math.abs(y - (r.top + r.height / 2)) < r.height * 0.18; };
+    if (!holds(tNode) || (!tNode.children.length && tEl !== info.parentEl && !mid(tEl))) { tEl = tEl.parentElement.closest('[data-n]'); tNode = tEl && info.byId.get(tEl.dataset.n); if (!tNode) return null; }
     for (let p = tNode; p; p = info.parentOf.get(p.id)) if (p.id === info.node.id) return null; // not into itself
     const style = resolved(info, tNode), col = !isFlex(style) || isColumn(style);
     const kids = [...tEl.children].filter((k) => k.dataset?.n && k !== info.el);
@@ -441,7 +445,7 @@ export function initHandles(ctx) {
     await ctx.fetch(`/api/components/${encodeURIComponent(id)}/preview`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ variant: JSON.parse(cell.dataset.variant), width: null }) });
   }, true);
 
-  const api = { draw, busy: () => !!g, gesture: () => g?.kind ?? null };
+  const api = { draw, busy: () => !!g, gesture: () => g?.kind ?? null, stats };
   ctx.handles = api;
   return api;
 }
