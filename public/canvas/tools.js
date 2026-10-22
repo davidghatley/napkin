@@ -26,9 +26,9 @@ function newNode(tool, id, size) {
     const [w, h] = size || [];
     return { id, tag: 'div', style: { display: 'flex', flexDirection: 'column', gap: 8, padding: 8, boxSizing: 'border-box', border: '1px dashed #9a927f', minWidth: MIN.frame[0], minHeight: MIN.frame[1], ...(size && { width: Math.max(w, MIN.frame[0]), height: Math.max(h, MIN.frame[1]) }) } };
   }
-  if (tool === 'text') return { id, tag: 'span', text: 'Text' };
+  if (tool === 'text') return { id, tag: 'span', text: 'Text', style: { boxSizing: 'border-box' } };
   const [w, h] = size || [64, 64];
-  return { id, tag: 'img', attrs: { src: '', alt: '' }, style: { display: 'block', width: Math.max(w, MIN.image[0]), height: Math.max(h, MIN.image[1]), backgroundColor: '#e4dccb' } };
+  return { id, tag: 'img', attrs: { src: '', alt: '' }, style: { boxSizing: 'border-box', display: 'block', width: Math.max(w, MIN.image[0]), height: Math.max(h, MIN.image[1]), backgroundColor: '#e4dccb' } };
 }
 
 // A readable id that is free in the component: frame1, frame2, text1, image1 ...

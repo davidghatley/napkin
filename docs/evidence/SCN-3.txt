@@ -1,0 +1,10 @@
+SCN-3 re-run after the cell-isolation fix (decision 0012). test/fidelity/s3-end-to-end.test.js
+ProfileCard.tsx written by napkin: 42 lines; width 280px: true; setting title: true; Button instance: true
+Copy usage: "import { ProfileCard } from \"./ProfileCard\";\n\n<ProfileCard title=\"Ada Lovelace\" />"
+root on the canvas at [420,140]
+button rect canvas [436,182,248,37,182,684,219,436] app [24,50,248,37,50,272,87,24]
+canvas clip 280 x 95 px; plain React app 280 x 95 px (W is the outer size: new elements are border-box)
+pixels differing by more than 2/255: 0 of 26600; not bit-identical: 2 (antialiasing on rounded corners)
+computed colour of the title in canvas: rgb(0, 0, 0); in the app: rgb(0, 0, 0)
+box-sizing in canvas: border-box; in the app: border-box
+VERDICT: pixel-identical at 100%

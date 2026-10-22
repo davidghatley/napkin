@@ -48,7 +48,7 @@ export function initPresence(ctx) {
   document.body.append(tip);
   const showTip = () => {
     const names = [...roster.keys()];
-    const rows = names.map((n) => { const p = live.get(n)?.frame; return h('div', { class: 'tip-row', style: `--c:${roster.get(n).color}` }, h('i'), h('span', { text: n }), p ? h('em', { text: `editing ${ctx.state.components.get(p.component)?.name ?? ''}${p.node ? ' · ' + p.node : ''}` }) : null); });
+    const rows = names.map((n) => { const p = live.get(n)?.frame; return h('div', { class: 'tip-row', style: `--nk-c:${roster.get(n).color}` }, h('i'), h('span', { text: n }), p ? h('em', { text: `editing ${ctx.state.components.get(p.component)?.name ?? ''}${p.node ? ' · ' + p.node : ''}` }) : null); });
     tip.replaceChildren(h('div', {}, h('b', { text: names.length ? `${names.length} agent${names.length === 1 ? '' : 's'}` : 'No agents connected' }), names.length ? null : h('span', { text: ' · just you' })), ...rows);
     const r = stack.getBoundingClientRect();
     tip.hidden = false;
@@ -62,7 +62,7 @@ export function initPresence(ctx) {
     const names = [...roster.keys()], shown = names.slice(0, 4);
     stack.replaceChildren(...[
       h('span', { class: 'av you', 'data-agent': 'you', text: 'Y', title: 'You' }),
-      ...shown.map((n) => [h('span', { class: 'av', 'data-agent': n, 'data-live': live.has(n) ? '1' : '0', style: `--c:${roster.get(n).color};--ink:${roster.get(n).ink}`, text: initial(n) }),
+      ...shown.map((n) => [h('span', { class: 'av', 'data-agent': n, 'data-live': live.has(n) ? '1' : '0', style: `--nk-c:${roster.get(n).color};--nk-ink:${roster.get(n).ink}`, text: initial(n) }),
         names.length <= 2 ? h('span', { class: 'av-name', 'data-agent': n, text: n }) : null]).flat(), // one or two agents: the name is written out, no hover needed
       names.length > 4 ? h('span', { class: 'av more', text: `+${names.length - 4}` }) : null].filter(Boolean));
     stack.dataset.names = names.length <= 2 ? '1' : '0';
@@ -95,8 +95,8 @@ export function initPresence(ctx) {
       const slot = placed.get(el) ?? 0; placed.set(el, slot + 1);
       const r = el.getBoundingClientRect();
       box.style.display = 'block';
-      box.style.setProperty('--c', col.color); box.style.setProperty('--ink', col.ink);
-      box.style.setProperty('--off', `${2 + slot * 4}px`); box.style.setProperty('--slot', String(slot));
+      box.style.setProperty('--nk-c', col.color); box.style.setProperty('--nk-ink', col.ink);
+      box.style.setProperty('--nk-off', `${2 + slot * 4}px`); box.style.setProperty('--nk-slot', String(slot));
       // tags of nested or adjacent nodes land on each other: lift this one by a tag row until it is clear of the tags already drawn
       const tw = box.querySelector('.ptag').offsetWidth, tx = r.left - base.left - (2 + slot * 4) - 2;
       let lift = 0;
@@ -105,7 +105,7 @@ export function initPresence(ctx) {
         if (!tags.some((o) => tx < o.x1 && tx + tw > o.x0 && y1 - 19 < o.y1 && y1 > o.y0)) { tags.push({ x0: tx, x1: tx + tw, y0: y1 - 19, y1 }); break; }
         lift++;
       }
-      box.style.setProperty('--lift', String(lift)); box.dataset.lift = String(lift);
+      box.style.setProperty('--nk-lift', String(lift)); box.dataset.lift = String(lift);
       box.style.width = `${r.width}px`; box.style.height = `${r.height}px`;
       box.style.transform = `translate(${r.left - base.left}px, ${r.top - base.top}px)`;
       box.dataset.component = f.component; box.dataset.node = f.node ?? ''; box.dataset.slot = String(slot);
@@ -127,8 +127,8 @@ export function initPresence(ctx) {
     // remove boxes of agents that cleared
     for (const el of layer.querySelectorAll('.pbox')) if (!live.has(el.dataset.agent)) el.remove();
     trailSvg.replaceChildren(...lines.map((l) => {
-      if (l.kind === 'rect') { const e = document.createElementNS(svgNS, 'rect'); e.setAttribute('x', l.x - 2); e.setAttribute('y', l.y - 2); e.setAttribute('width', l.w + 4); e.setAttribute('height', l.h + 4); e.setAttribute('rx', 3); e.style.setProperty('--c', l.c); e.style.opacity = l.op; return e; }
-      const e = document.createElementNS(svgNS, 'line'); e.setAttribute('x1', l.a[0]); e.setAttribute('y1', l.a[1]); e.setAttribute('x2', l.b[0]); e.setAttribute('y2', l.b[1]); e.style.setProperty('--c', l.c); e.style.opacity = l.op; return e;
+      if (l.kind === 'rect') { const e = document.createElementNS(svgNS, 'rect'); e.setAttribute('x', l.x - 2); e.setAttribute('y', l.y - 2); e.setAttribute('width', l.w + 4); e.setAttribute('height', l.h + 4); e.setAttribute('rx', 3); e.style.setProperty('--nk-c', l.c); e.style.opacity = l.op; return e; }
+      const e = document.createElementNS(svgNS, 'line'); e.setAttribute('x1', l.a[0]); e.setAttribute('y1', l.a[1]); e.setAttribute('x2', l.b[0]); e.setAttribute('y2', l.b[1]); e.style.setProperty('--nk-c', l.c); e.style.opacity = l.op; return e;
     }));
     layer.dataset.trail = String(lines.filter((l) => l.kind === 'line').length);
     if (animating && !rafId) rafId = requestAnimationFrame(paint);

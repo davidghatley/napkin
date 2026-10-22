@@ -75,7 +75,7 @@ export function createStage(ctx, root, world, view) {
     const [across, down, ...rest] = ax;
     let groups = [{}];
     for (const a of rest) groups = groups.flatMap((g) => a.options.map((o) => ({ ...g, [a.name]: o })));
-    matrix.style.setProperty('--gcols', String(Math.max(1, Math.min(groups.length, Math.ceil(Math.sqrt(groups.length))))));
+    matrix.style.setProperty('--nk-gcols', String(Math.max(1, Math.min(groups.length, Math.ceil(Math.sqrt(groups.length))))));
     for (const g of groups) {
       const group = document.createElement('div');
       group.className = 'group'; group.dataset.group = JSON.stringify(g);
@@ -85,7 +85,7 @@ export function createStage(ctx, root, world, view) {
       t.innerHTML = `<span class="gchips">${chips}</span><span class="ghint"><i>${esc(across.name)}</i> →${down ? ` <i>${esc(down.name)}</i> ↓` : ''}</span>`;
       group.append(t);
       const grid = document.createElement('div');
-      grid.className = 'mgrid'; grid.style.setProperty('--cols', across.options.length);
+      grid.className = 'mgrid'; grid.style.setProperty('--nk-cols', across.options.length);
       grid.dataset.rows = down ? '1' : '0';
       const head = (cls, text, base) => { const d = document.createElement('div'); d.className = cls + (base ? ' is-base' : ''); d.innerHTML = `<span>${esc(text)}</span>`; return d; };
       if (down) { const corner = document.createElement('div'); corner.className = 'corner'; grid.append(corner); }
@@ -184,7 +184,7 @@ export function createStage(ctx, root, world, view) {
   function measure(sec) {
     if (sec.culled) return;
     sec.size = { w: sec.frame.offsetWidth, h: sec.frame.offsetHeight };
-    sec.el.style.setProperty('--w', `${sec.size.w}px`); sec.el.style.setProperty('--h', `${sec.size.h}px`);
+    sec.el.style.setProperty('--nk-w', `${sec.size.w}px`); sec.el.style.setProperty('--nk-h', `${sec.size.h}px`);
   }
   // preview widths (LAY-11) came in from the sidecar: put them on the cells
   function applyPreview(id) {
@@ -309,7 +309,7 @@ export function createStage(ctx, root, world, view) {
     removeGhost(key);
     const el = document.createElement('section');
     el.className = 'ghost-new'; el.dataset.proposal = key; el.setAttribute('role', 'status');
-    el.style.setProperty('--c', color || 'var(--accent)'); el.style.setProperty('--ink', ink || 'var(--on-accent)');
+    el.style.setProperty('--nk-c', color || 'var(--nk-accent)'); el.style.setProperty('--nk-ink', ink || 'var(--nk-on-accent)');
     const head = document.createElement('div'); head.className = 'gn-head';
     const f = document.createElement('span'); f.className = 'gn-flag'; f.textContent = flag; f.title = flag; head.append(f);
     const frame = document.createElement('div'); frame.className = 'frame gn-frame';
@@ -330,7 +330,7 @@ export function createStage(ctx, root, world, view) {
     g.size = { w: frame.offsetWidth, h: frame.offsetHeight };
     g.pos = ghostSlot(key, g.size);
     el.style.left = `${g.pos.x}px`; el.style.top = `${g.pos.y}px`; el.style.visibility = '';
-    el.style.setProperty('--w', `${g.size.w}px`);
+    el.style.setProperty('--nk-w', `${g.size.w}px`);
     return el;
   }
   // The layout moved on (first pack, a new component): ghosts take the first free slot again.
@@ -363,7 +363,7 @@ export function createStage(ctx, root, world, view) {
   function place(box, target, label, base) {
     if (!target?.isConnected || target.closest('[data-cull]')) { box.style.display = 'none'; return; }
     const r = target.getBoundingClientRect();
-    box.style.setProperty('--w', `${r.width}px`); box.style.setProperty('--h', `${r.height}px`); // children are placed with transforms from these, so a new size never shifts layout
+    box.style.setProperty('--nk-w', `${r.width}px`); box.style.setProperty('--nk-h', `${r.height}px`); // children are placed with transforms from these, so a new size never shifts layout
     Object.assign(box.style, { display: 'block', transform: `translate(${r.left - base.left}px, ${r.top - base.top}px)`, width: `${r.width}px`, height: `${r.height}px` });
     if (label !== undefined) box.dataset.label = label;
   }

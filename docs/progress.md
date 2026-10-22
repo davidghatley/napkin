@@ -106,34 +106,34 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | FEEL-02 | FEEL | layout | needs-david | 6 rounds: Sonnet tie; Codex prefers Figma help imagery in both orders | test/23-layout-panel.test.js | a4a87dd |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
-| FEEL-05 | FEEL | canvas | pass | walk 1: completed keyboard-only, but 86 Tabs to Radius (WPC-07) | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
+| FEEL-05 | FEEL | canvas | pass | walk 1 pass; keys critic: 15 keys keyboard-only, diff 1 line | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
 | SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
 | SCN-2 | SCN | whole | pass | critic walk cold: accept 3/4, rejected value in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
-| SCN-3 | SCN | whole | critic-pass | critic cold walk: 280x95 canvas and app, 2 px <=2/255 (antialiased corner) | docs/evidence/SCN-3.txt | b96f89d |
+| SCN-3 | SCN | whole | pass | critic cold walk: 280x95 canvas and app; merged | docs/evidence/SCN-3.txt | 5707a23 |
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
-| WPC-01 | WPC | fidelity | critic-pass | critic: 83-node adversarial component 0 px diff; S3 280x95 both | test/fidelity/cell-isolation.test.js | b96f89d |
-| WPC-02 | WPC | fidelity | building | critic: computed styles match, but editor custom properties leak into cells and ghosts lack tokens: fixing | test/fidelity/cell-isolation.test.js | b96f89d |
+| WPC-01 | WPC | fidelity | pass | critic pass; merged, suite 555/560 0 fail | test/fidelity/cell-isolation.test.js | 5707a23 |
+| WPC-02 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/cell-isolation.test.js | 5707a23 |
 | WPC-03 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
 | WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
 | WPC-06 | WPC | files | pass | critic pass r2: portable ids, .napkin self-ignores, 0 new files until a move; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
-| WPC-07 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-08 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-07 | WPC | keys | building | critic: 5 keys for rad/pad/gap; fill/stroke colour, settings, shadow unreachable: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-08 | WPC | keys | critic-pass | critic: Ctrl+K Badge Enter selects root (7 keys) | test/keys/keys.test.js | c5f48be |
 | WPC-09 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-10 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/history/ui-inspect.test.js | 5c8f4a9 |
-| WPC-11 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-11 | WPC | keys | building | critic: dark demo chips 1.58:1 and 2.45:1: fixing | docs/evidence/walk-1/ | c5f48be |
 | WPC-12 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents-ui/propose-create.test.js | 0085d7f |
-| WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-16 | WPC | fidelity | building | critic: wrong line when a save mixes a valid edit and a break; Next: hint names parser line: fixing | test/fidelity/broken-line.test.js | b96f89d |
+| WPC-13 | WPC | keys | building | critic: works by mouse; Undo not keyboard-activatable; text color dot dead: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-14 | WPC | keys | building | critic: banner/network/EACCES leaks; invalid values written silently: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-15 | WPC | keys | building | critic: 1440 ok; 1280x720 toolbar overlaps Jump to: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-16 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/broken-line.test.js | 5707a23 |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
-| WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
-| WPC-20 | WPC | agents | open | agents2 critic: Pending proposals (incl. create) vanish on server restart; the agent is not told and its MCP session then fails 'identity required' until restarted. Proposals survive a restart, or the agent gets a dropped event and its session recovers | /tmp/claude-1000/critic-agents2/ |  |
-| WPC-21 | WPC | agents | open | agents2 critic: A name clash with a pending create shows only on Accept; the row has no warning and the agent isn't told. The row marks the clash as soon as it exists; the agent gets an event | /tmp/claude-1000/critic-agents2/ |  |
-| WPC-22 | WPC | agents | open | agents2 critic: Create-proposal ghost is hidden until Show ghost, and then an empty dashed box in the top-left with no preview; tray text truncated ('Toolt…', 'no'). Ghost frame shows the would-be component, placed like a new frame, visible on arrival | /tmp/claude-1000/critic-agents2/ |  |
+| WPC-19 | WPC | agents | critic-pass | critic: ~170 interleaved races, 0 lost | test/agents/agents3.test.js | 6d5fce2 |
+| WPC-20 | WPC | agents | critic-pass | critic: restart + 15 kill -9 rounds, 0 lost; follow-ups: no trace in opened repos, tmp sweep, fresh MCP gets missed answers | test/agents/agents3.test.js | 6d5fce2 |
+| WPC-21 | WPC | agents | critic-pass | critic: clash marked before Accept (API, file, rename); agent told; never overwrites | test/agents-ui/agents3.test.js | 6d5fce2 |
+| WPC-22 | WPC | agents | critic-pass | critic: ghost on arrival, placed like a new frame; follow-up: several ghosts all in view, full name in flag | docs/evidence/agents3-ghost.png | 6d5fce2 |
 
 ## Rounds
 

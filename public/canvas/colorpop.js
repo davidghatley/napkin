@@ -42,7 +42,7 @@ export function openColorPicker(opts) {
     $('#cp-sv .cp-knob').style.cssText = `left:${hsv.s * 100}%;top:${(1 - hsv.v) * 100}%;background:${formatColor({ ...c, a: 1 }, 'hex')}`;
     $('#cp-hue .cp-knob').style.left = `${(hsv.h / 360) * 100}%`;
     const rgb = formatColor({ ...c, a: 1 }, 'hex');
-    $('#cp-alpha').style.setProperty('--c', rgb);
+    $('#cp-alpha').style.setProperty('--nk-c', rgb);
     $('#cp-alpha .cp-knob').style.left = `${c.a * 100}%`;
     fields(force);
   }
