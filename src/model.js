@@ -132,6 +132,8 @@ export function diffKeys(before, after) {
   for (const name of new Set([...before.props, ...after.props].map((p) => p.name))) {
     if (!same(propOf(before, name), propOf(after, name))) keys.add(`prop:${name}`);
   }
+  const order = (d) => d.props.map((p) => p.name).filter((n) => propOf(before, n) && propOf(after, n));
+  if (order(before).join() !== order(after).join()) for (const n of order(after)) keys.add(`prop:${n}`); // props reordered
   const flat = (doc) => {
     const m = new Map();
     for (const [axis, vals] of Object.entries(doc.variants)) for (const [val, nodes] of Object.entries(vals))

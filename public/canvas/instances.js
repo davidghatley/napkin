@@ -46,7 +46,7 @@ function instanceRows(ctx, doc, node, comp, dis) {
   const given = node.instance.props;
   const rows = target.doc.props.filter((p) => p.type !== 'node').map((p) => {
     const v = given[p.name], linked = v && typeof v === 'object' ? v.prop : null;
-    const mine = doc.props.filter((q) => q.type !== 'node' && kindOf(q) === kindOf(p));
+    const mine = doc.props.filter((q) => q.type !== 'node' && kindOf(q) === kindOf(p) && (p.type !== 'enum' || (q.type === 'enum' && q.options.join() === p.options.join())));
     const id = `inst-${esc(p.name)}`;
     let ctl;
     if (linked) ctl = `<div class="fbox txt"><label class="flabel pfx"><span class="lt">${esc(p.name)}</span></label><span class="linked" id="${id}">from <code>${esc(linked)}</code></span></div>`;
@@ -54,7 +54,7 @@ function instanceRows(ctx, doc, node, comp, dis) {
     else if (p.type === 'enum') ctl = `<div class="fbox sel"><label class="flabel pfx" for="${id}"><span class="lt">${esc(p.name)}</span></label><select id="${id}" data-inst="value" data-prop="${esc(p.name)}" data-kind="string"${dis}><option value="">Default (${esc(p.default)})</option>${p.options.map((o) => `<option value="${esc(o)}"${v === o ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
     else ctl = `<div class="fbox ${p.type === 'number' ? 'num' : 'txt'}"><label class="flabel pfx" for="${id}"><span class="lt">${esc(p.name)}</span></label><input id="${id}" data-inst="value" data-prop="${esc(p.name)}" data-kind="${p.type}" value="${esc(v ?? '')}" placeholder="${esc(p.default ?? '')}" autocomplete="off"${dis}></div>`;
     const link = mine.length ? `<div class="fbox sel plink"><label class="flabel pfx" for="${id}-link"><span class="lt">Setting</span></label><select id="${id}-link" data-inst="link" data-prop="${esc(p.name)}"${dis}><option value="">A value</option>${mine.map((q) => `<option value="${esc(q.name)}"${linked === q.name ? ' selected' : ''}>${esc(q.name)}</option>`).join('')}</select></div>` : '';
-    return `<div class="irow">${ctl}</div>${link ? `<div class="irow plinkrow">${link}</div>` : ''}`;
+    return `<div class="fld full">${ctl}</div>${link ? `<div class="fld full plinkrow">${link}</div>` : ''}`;
   }).join('');
   const others = siblingsOf(ctx, comp).filter((c) => c.name !== node.instance.component);
   const keep = (c) => { const kept = Object.entries(given).filter(([k, v]) => { const tp = propOf(c.doc, k); return tp && instancePropFits(doc, v, tp); }).map(([k]) => k); return { kept, dropped: Object.keys(given).filter((k) => !kept.includes(k)) }; };

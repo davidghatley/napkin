@@ -75,7 +75,9 @@ export function initMatrix(ctx) {
         btn.setAttribute('aria-label', `${collapsed ? 'Expand' : 'Collapse'} group ${Object.entries(gv).map(([a, v]) => `${a} ${v}`).join(', ')}`);
         btn.textContent = collapsed ? '▸' : '▾';
         const n = [...g.querySelectorAll('.cell:not(.mhide)')].length;
-        title.dataset.count = collapsed ? `${n} hidden` : '';
+        let cnt = title.querySelector('.gcount');
+        if (!cnt) { cnt = document.createElement('span'); cnt.className = 'gcount'; title.querySelector('.gchips')?.append(cnt); }
+        cnt.textContent = collapsed ? `${n} cells` : '';
       }
       // headers and columns inside the group
       const grid = g.querySelector('.mgrid');
