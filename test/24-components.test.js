@@ -109,7 +109,7 @@ test('refusals: unknown component, unknown prop, wrong kind, import cycle, itsel
     await refuse(panel, [{ op: 'set', path: 'body.@slot', value: 'title' }], /not a slot prop/);
     await refuse(panel, [{ op: 'set', path: 'cta.color', value: 'red' }], /another component/);
     await refuse(panel, [{ op: 'insertInstance', parent: 'cta', id: 'x', component: 'Button' }], /cannot hold elements/);
-    await refuse(panel, [{ op: 'removeProp', name: 'badge' }], /uses badge/);
+    await refuse(panel, [{ op: 'removeProp', name: 'badge' }], /shown only when badge; clear its condition first/);
     // a cycle: Panel uses Button, so Button may not use Panel
     await refuse(button, [{ op: 'insertInstance', parent: 'root', id: 'back', component: 'Panel' }], /import cycle/);
     assert.throws(() => applyEdits(readComponent(read('Panel')).doc, [{ op: 'insertInstance', parent: 'root', id: 'x', component: 'panel' }]), EditError);

@@ -398,7 +398,10 @@ export function applyEdits(doc, edits) {
         const p = propOf(next, e.name);
         if (!p) throw new EditError(i, `no prop "${e.name}"`);
         const user = [...byId.values()].find((n) => n.textProp === e.name || n.slot === e.name || n.when === e.name || Object.values(n.instance?.props || {}).some((v) => v?.prop === e.name));
-        if (user) throw new EditError(i, `"${user.id}" uses ${e.name} (text, slot, condition or an instance prop); free it first`);
+        if (user) {
+          const how = user.textProp === e.name ? ['shows', 'unbind its text first'] : user.slot === e.name ? ['holds', 'clear its slot first'] : user.when === e.name ? ['is shown only when', 'clear its condition first'] : ['passes', 'remove that instance prop first'];
+          throw new EditError(i, `"${user.id}" ${how[0]} ${e.name}; ${how[1]}`);
+        }
         next.props = next.props.filter((x) => x !== p);
         delete next.variants[e.name];
         break;
