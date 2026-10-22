@@ -43,9 +43,16 @@ export function createView(ctx, stageEl, worldEl) {
   }
   function placeGrid() {
     const { x, y, z } = v, gs = 24 * z;
-    if (gs !== gridSize || box.width !== gridW || box.height !== gridH) { gridSize = gs; gridW = box.width; gridH = box.height; Object.assign(grid.style, { width: `${box.width + 2 * gs}px`, height: `${box.height + 2 * gs}px`, backgroundSize: `${gs}px ${gs}px` }); }
+    if (gs !== gridSize || box.width !== gridW || box.height !== gridH) { gridSize = gs; gridW = box.width; gridH = box.height; Object.assign(grid.style, { width: `${2 * box.width + 2 * gs}px`, height: `${2 * box.height + 2 * gs}px`, backgroundSize: `${gs}px ${gs}px` }); }
     grid.style.transform = `translate3d(${((x % gs) + gs) % gs - gs}px, ${((y % gs) + gs) % gs - gs}px, 0)`; // (it starts one tile up and left of the stage, so the dots reach every edge)
-    gridHidden = false;
+    gridHidden = false; grid.style.transformOrigin = '';
+  }
+  // In a zoom gesture the dots are scaled by transform from the pitch they were drawn at (the element is twice the stage, so a zoom out still covers it) and redrawn at the real pitch on settle.
+  function scaleGrid() {
+    const { x, y, z } = v, gs = 24 * z, r = gs / gridSize;
+    gridHidden = true;
+    grid.style.transform = `translate3d(${((x % gs) + gs) % gs - gs}px, ${((y % gs) + gs) % gs - gs}px, 0) scale(${r})`;
+    grid.style.transformOrigin = '0 0';
   }
   function apply(gesture = false) {
     const { x, y, z } = v;
@@ -53,7 +60,7 @@ export function createView(ctx, stageEl, worldEl) {
     if (gesture && z !== labelZ) labelsStale = true; else labels();
     // (not custom properties: a custom property set on #stage is inherited by every element under it, and each pan event would restyle them all)
     stageEl.style.backgroundPosition = `${x}px ${y}px`; // (kept for readers of the stage style; the dots are drawn by #grid)
-    if (gesture && 24 * z !== gridSize && gridSize) { if (!gridHidden) gridHidden = true; const g = gridSize; grid.style.transform = `translate3d(${((x % g) + g) % g - g}px, ${((y % g) + g) % g - g}px, 0)`; } // (a zoom gesture: the dots keep their pitch and are moved by transform only, then redrawn at the new pitch when it settles: resizing or hiding them repaints a layer at every step)
+    if (gesture && 24 * z !== gridSize && gridSize) scaleGrid();
     else placeGrid();
     ctx.state.zoom = z; if (z !== rasterZ) { rasterZ = z; zoomedSinceRaster = true; }
     if (!document.body.classList.contains('moving')) document.body.classList.add('moving'); clearTimeout(movingTimer); movingTimer = setTimeout(settle, 160);
@@ -68,6 +75,8 @@ export function createView(ctx, stageEl, worldEl) {
   }
   view.labelScale = (z) => Math.round(clamp(1 / z, 1, 16) * 20) / 20; // the title scale for a zoom, as labels() quantises it
   view.settledLabelScale = () => Number(worldEl.dataset.lf || 1);
+  view.labelScaleLs = (z) => Math.round(clamp(1 / z, 1, 3.2) * 20) / 20;
+  view.settledLabelScaleLs = () => Number(worldEl.dataset.ls || 1);
   view.get = () => ({ ...v });
   function set(next, { animate = false, duration = 220, anchor = null, gesture = false } = {}) {
     next = { x: next.x, y: next.y, z: clamp(next.z, MIN_Z, MAX_Z) };

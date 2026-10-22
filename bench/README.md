@@ -75,32 +75,22 @@ SOAK=1 node --test test/engine/bench.test.js     # 60 s soak, writes REL-04-60s 
   scaled to stay inside the grid for the same reason.)
   Floor on this machine, five-second runs: raw p95 16.9 ms CPU (0 frames >= 25 ms), 16.9 to 17.0 ms GPU (1
   frame >= 25 ms), with 51 to 66 chromium processes alive and a load average of 0.5 to 2.9.
-  State at the last commit, three consecutive runs each, CPU raster (all three FAIL on some scenario):
-  `pan` raw p95 17.1 to 19.1 ms against a bar of 17.9 (passes 2 of 3; 0 to 1 frames of 300 at 25 ms or
-  more); `pan+zoom` 17.7 to 18.2 ms (passes 1 of 3 on the p95 bar, 0.7 to 1.0% of frames at 25 ms or more);
-  `sweep+zoom` 20.2 to 20.7 ms, 1.0 to 2.7% (fails the p95 bar; the 2% share fails in one run); `overview`
-  17.4 to 20.7 ms, 0 to 0.7%, 2 to 4 dropped frames, 4 to 12 long tasks (longest 24 to 27 ms). GPU raster
-  (three runs, floor 17.2 to 19.0 ms because it is noisier): `pan` 18.5 to 19.4 ms, `pan+zoom` 18.8 to 20.1
-  ms, `sweep+zoom` 20.2 to 21.3 ms (1.7 to 2.3% of frames at 25 ms or more), `overview` 20.8 to 22.3 ms, 1.7 to
-  3.4%. GPU raster is no better than CPU raster here.
-  Why zoom steps were late, and what fixed it: each zoom step made the compositor re-rasterise the page
-  (about 100 raster tasks per step, counted in a trace; the 1,500-element page needed none). Three things
-  changed raster at every step: the selection, hover and handle overlays (boxes in the page's root layer,
-  resized or moved at every step: about 30 tasks; now each is a layer of its own, `will-change: transform`,
-  scaled by transform in a gesture, not resized); the dot grid (hidden and shown again, then resized: about
-  9; now moved by transform at its old pitch and redrawn on settle); and the titles (restyled and laid out
-  at every step: about 33; now only when a title is more than 1.4x off its size). That took the count to
-  about 31 per step, which is the frames un-culled by the zoom (real content). Titles can be up to 1.4x off
-  during a gesture; the dots keep their old pitch until it settles. The status bar's percentage and the
-  hover and handle layers cost 2 to 3 tasks each and were left.
-  Still failing: the sweep, where un-culling and rasterising frames at 25 px per event keeps raw p95 about
-  3 ms above the floor.
-  Tradeoffs the pan and zoom path accepts: during a gesture the `--nk-ls` scale of the in-frame chips and
-  axis labels waits for the view to settle (160 ms idle), so they can be the wrong size while you keep
-  moving; titles are kept readable by setting their scale on the few titles on screen; frames outside 0.12
-  viewport are not drawn until they come inside it (and are invisible, not blank white, until then); a zoom
-  gesture un-culls nothing until it settles; the dot grid is hidden while zooming and redrawn on settle; the
-  settle itself is one 20 to 40 ms task (title and label restyle).
+  State at the last commit, three consecutive CPU runs (FAIL on the p95 bar in most scenarios; GPU not re-run
+  after the correctness fixes below): `pan` raw p95 17.95 to 18.68 ms against a bar of 17.9, 0.7 to 1.7% of
+  frames at 25 ms or more; `pan+zoom` 17.4 to 22.2 ms, 0.3 to 1.7%; `sweep+zoom` 21.1 to 23.5 ms, 1.7 to
+  3.4%; `overview` 21.8 to 22.6 ms, 0.7 to 1.7%. Fixes that made the canvas correct during a gesture cost
+  about 2 to 4 ms of raw p95 in the zoom runs against the previous commit (2be2653: pan+zoom 17.7 to 18.2).
+  What a gesture does now: the world moves by transform; frames that come into view (pan or zoom) are drawn
+  within a frame (nothing is taken out until the gesture settles; frames more than a viewport away are
+  `visibility: hidden`); titles and every label scale (`--nk-lf`, `--nk-ls`) are set on the frames on screen
+  as soon as they are 1.4x off, so they are never more than 1.4x wrong (a transform, so nothing shifts), and
+  go back to the world's value on settle; the overlay boxes are layers of their own, positioned and sized at
+  1x (the outline and pills are not stretched); the handles are drawn again at every zoom step and moved with
+  the world on a pan; the dot grid is scaled by transform from its drawn pitch and redrawn on settle. Tests:
+  `test/engine/pan-gesture.test.js` (no blank frame in view, labels within 1.4x, handles in place, CLS).
+  What the earlier raster work found: each zoom step used to re-rasterise the page (about 100 raster tasks);
+  the overlay boxes in the root layer, the grid and the titles were the causes (now about 31, the frames the
+  zoom un-culls).
 - `PRF-05`/`PRF-06` apply 2,000 real `store.apply` edits to a 200-component workspace and time
   the incremental esbuild rebuild and the whole apply-to-bundle path. Edit #1 and #2000 are kept.
 - `PRF-07` samples the server's `VmRSS` and the page's live JS heap after an explicit GC.

@@ -102,8 +102,8 @@ export function initHandles(ctx) {
   for (const e of ['overlays', 'select', 'render', 'tool']) ctx.on(e, schedule);
   ctx.on('view', (v) => {
     if (!v.gesture || !drawnAt) { gesturing = false; schedule(); return; }
-    gesturing = true;
-    if (v.z === drawnAt.z) layer.style.transform = `translate(${v.x - drawnAt.x}px, ${v.y - drawnAt.y}px)`; else layer.style.visibility = 'hidden';
+    if (v.z === drawnAt.z) { gesturing = true; layer.style.transform = `translate(${v.x - drawnAt.x}px, ${v.y - drawnAt.y}px)`; } // a pan: the handles move with the world
+    else { gesturing = false; schedule(); } // a zoom: they are drawn again at the new size, in the next frame (the geometry is read from a world that has not changed layout)
   });
   ctx.on('viewsettle', () => { if (gesturing) { gesturing = false; schedule(); } });
 

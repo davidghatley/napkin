@@ -38,7 +38,7 @@ export function createStage(ctx, root, world, view) {
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
   const selectedElement = (sel) => (sel ? cellElement(sel.component, sel.node, sel.variant) : null);
-  const live = (id) => { const sec = sections.get(id); if (sec?.culled) { sec.culled = false; delete sec.el.dataset.cull; } if (sec?.pending) { sec.follow = true; render(id, true).catch(console.error); } return sec; };
+  const live = (id) => { const sec = sections.get(id); if (sec?.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; } if (sec?.pending) { sec.follow = true; render(id, true).catch(console.error); } return sec; };
 
   // ---------------------------------------------------------------------------------------------- sections
   function section(id) {
@@ -377,11 +377,11 @@ export function createStage(ctx, root, world, view) {
     for (const box of [selectBox, hoverBox, ...extras]) {
       const c = box.style.display === 'block' && cached.get(box);
       if (!c) continue;
-      // The box keeps the width and height it was drawn with and is scaled by transform: a changed size repaints the overlay layer, and with it
-      // about 100 raster tasks per zoom step (PRF-04). The full refresh on settle draws it at its size.
-      const sx = c.bw ? c.w * v.z / c.bw : 1, sy = c.bh ? c.h * v.z / c.bh : 1;
-      box.style.transform = `translate(${c.x * v.z + v.x + c.dx}px, ${c.y * v.z + v.y + c.dy}px)${sx === 1 && sy === 1 ? '' : ` scale(${sx}, ${sy})`}`;
-      box.style.transformOrigin = '0 0';
+      // Positioned and sized from the geometry cached in canvas units, at 1x: the outline and the pills are not stretched. (The boxes are layers of their own,
+      // so resizing one repaints only itself.)
+      const w = c.w * v.z, h = c.h * v.z;
+      box.style.transform = `translate(${c.x * v.z + v.x + c.dx}px, ${c.y * v.z + v.y + c.dy}px)`;
+      if (w !== c.bw || h !== c.bh) { c.bw = w; c.bh = h; box.style.setProperty('--nk-w', `${w}px`); box.style.setProperty('--nk-h', `${h}px`); box.style.width = `${w}px`; box.style.height = `${h}px`; }
     }
   }
   function refreshOverlays() {
@@ -448,30 +448,31 @@ export function createStage(ctx, root, world, view) {
   function cull() {
     cullQueued = false;
     const mode = cullMode; cullMode = 'exact';
-    if (sections.size <= CULL_AFTER) { for (const sec of sections.values()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; } return; }
-    if (mode === 'zoom') return; // a zoom gesture changes what is in view faster than frames can be drawn: they are brought exact when it settles
+    if (sections.size <= CULL_AFTER) { for (const sec of sections.values()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; } return; }
     const { x, y, z } = view.get(), b = view.stageBox();
     const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
     const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
-    const near = box(NEAR), wide = box(WIDE); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
+    const near = box(NEAR), wide = box(WIDE), far = box(1); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
     const ahead = [];
     for (const [id, sec] of sections) {
       if (sec.pending && visible(sec)) render(id, true).catch(console.error);
       if (!sec.pos || !sec.size.w) continue;
       let off;
-      if (mode === 'pan') {
+      if (mode !== 'exact') { // a gesture (pan or zoom): nothing is taken out, what comes into view is drawn within a frame
         off = sec.culled;
         if (sec.culled) { if (!out(near, sec)) { off = false; trickle = true; } else if (!out(wide, sec)) ahead.push(sec); }
       } else off = !keep.has(id) && out(near, sec);
-      if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else delete sec.el.dataset.cull; }
+      if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else { delete sec.el.dataset.cull; delete sec.el.dataset.far; } }
+      if (mode === 'exact' && sec.culled) { if (out(far, sec)) sec.el.dataset.far = '1'; else delete sec.el.dataset.far; }
     }
-    if (mode === 'pan' && trickle) {
+    if (mode !== 'exact') titlesNow(view.get()); // frames just drawn get their label scales now
+    if (mode !== 'exact' && trickle) {
       const cy = (-y + b.height / 2) / z;
       ahead.sort((p, q) => Math.abs(p.pos.y - cy) - Math.abs(q.pos.y - cy));
-      for (const sec of ahead.slice(0, 4)) { sec.culled = false; delete sec.el.dataset.cull; }
+      for (const sec of ahead.slice(0, 4)) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; }
       if (ahead.length > 4) queueCull('pan'); else trickle = false;
-    } else if (mode !== 'pan') trickle = false;
+    } else if (mode === 'exact') trickle = false;
   }
   const RANK = { zoom: 0, pan: 1, exact: 2 };
   const queueCull = (mode = 'exact') => { if (!cullQueued) cullMode = mode; else if (RANK[mode] > RANK[cullMode]) cullMode = mode; if (!cullQueued) { cullQueued = true; requestAnimationFrame(cull); } };
@@ -482,22 +483,23 @@ export function createStage(ctx, root, world, view) {
     queueCull(v.gesture ? (v.z !== was ? 'zoom' : 'pan') : 'exact');
   });
   // Titles keep a readable size during a gesture: the world's title scale waits for the view to settle, so the titles on screen (a handful) get theirs now, on the element.
-  const TITLE_STEP = 1.4, titled = new Set();
+  // Labels keep a bounded size during a gesture: the world's title and label scales wait for the view to settle, so the frames on screen (a handful) get theirs on
+  // the element as soon as a scale is more than LABEL_STEP off, and give it back on settle. (A transform, not layout: nothing shifts.)
+  const LABEL_STEP = 1.4, titled = new Set();
   function titlesNow(v) {
-    const lf = view.labelScale(v.z), settled = view.settledLabelScale();
-    if (lf === settled && !titled.size) return;
+    const lf = view.labelScale(v.z), ls = view.labelScaleLs(v.z), slf = view.settledLabelScale(), sls = view.settledLabelScaleLs();
+    if (lf === slf && ls === sls && !titled.size) return;
     const b = view.stageBox(), m = 0.25;
     const x0 = (-v.x - b.width * m) / v.z, x1 = (b.width * (1 + m) - v.x) / v.z, y0 = (-v.y - b.height * m) / v.z, y1 = (b.height * (1 + m) - v.y) / v.z;
+    const off = (a, h) => Math.max(a / h, h / a) >= LABEL_STEP;
     for (const sec of sections.values()) {
       if (sec.culled || !sec.pos || !sec.size.w) continue;
       if (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 * lf > y1 || sec.pos.y + sec.size.h < y0) continue;
-      const have = sec.headLf ?? settled;
-      if (Math.max(lf / have, have / lf) < TITLE_STEP) continue; // a title is restyled, laid out and re-rastered each time: only when it is off by more than this
-      const head = sec.el.querySelector('.cmp-head');
-      if (head) { head.style.setProperty('--nk-lf', String(lf)); sec.headLf = lf; titled.add(sec); }
+      if (off(lf, sec.headLf ?? slf)) { const head = sec.el.querySelector('.cmp-head'); if (head) { head.style.setProperty('--nk-lf', String(lf)); sec.headLf = lf; titled.add(sec); } }
+      if (off(ls, sec.chipLs ?? sls)) { sec.el.style.setProperty('--nk-ls', String(ls)); sec.chipLs = ls; titled.add(sec); }
     }
   }
-  ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.headLf = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
+  ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.el.style.removeProperty('--nk-ls'); sec.headLf = undefined; sec.chipLs = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
   ctx.on('select', () => {
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
