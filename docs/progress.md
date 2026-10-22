@@ -131,6 +131,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | When | ccusage total | Note |
 |---|---|---|
 | 2026-10-21 start of round 1 | $53.19 today, machine-wide (Claude $47.57, Codex $5.62, Opencode $0.00) | ccusage@20.0.26 daily; includes other sessions on this machine |
+| 2026-10-22, after the agents-ui merge | $276.43 total since 2026-10-21, machine-wide ($8.06 so far on 10-22) | same command; Opencode free models $0.00 |
 
 ## New dependencies (merged)
 
