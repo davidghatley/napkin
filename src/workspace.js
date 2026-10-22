@@ -18,7 +18,7 @@ import { readComponent } from './tsx/read.js';
 import { createBundler } from './bundle.js';
 import { componentFiles, formatReport } from './scan.js';
 import { newComponentSource, writeComponent } from './tsx/write.js';
-import { TAGS, VOID, index, extractPlan, applyEdits, EditError } from './model.js';
+import { TAGS, VOID, index, extractPlan, applyEdits, EditError, nodeOfEdit } from './model.js';
 import { openTokens } from './tokens.js';
 
 // create() failures: `status` is the HTTP code the server answers with (400 bad input, 409 already exists).
@@ -190,7 +190,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       refresh(e);
       // everything that shows this component inside it is bundled again (a component that was never drawn yet is only marked)
       for (const d of dependents(file)) refresh(d, e.name);
-      note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision, ...(c.approvedBy && { approvedBy: c.approvedBy }) });
+      note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision, how: c.kind || 'edit', ...(nodeOfEdit(c.edits?.[0]) && { node: nodeOfEdit(c.edits[0]) }), ...(c.approvedBy && { approvedBy: c.approvedBy }) });
       events.emit('change', { component: id, ...c });
     });
     store.events.on('problem', (p) => events.emit('problem', { component: id, ...p }));

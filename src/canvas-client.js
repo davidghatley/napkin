@@ -6,7 +6,7 @@
 //   c.onChange(cb)          cb(frame) for every frame after the first state: change | problem | added | removed | build;
 //                           frames carry `component`, and `mine: true` for edits this client sent
 //   c.sendEdits(component, baseRevision, edits)   same result shape as store.apply
-export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {}) {
+export async function connectCanvas(baseUrl, { by = 'you', identify = true, name } = {}) {
   const origin = Math.random().toString(36).slice(2);
   const ctrl = new AbortController();
   const listeners = [];
@@ -18,7 +18,7 @@ export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {
 
   // Who is writing is decided by the server from this token, not from the request body.
   const tokenP = identify ? fetch(new URL('api/session', baseUrl), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: by }) }).then((r) => r.json()).then((j) => j.token) : Promise.resolve(undefined);
-  const res = await fetch(new URL(`api/events?by=${encodeURIComponent(by)}`, baseUrl), { signal: ctrl.signal, headers: { accept: 'text/event-stream' } });
+  const res = await fetch(new URL(`api/events?by=${encodeURIComponent(by)}${name ? `&name=${encodeURIComponent(name)}` : ''}`, baseUrl), { signal: ctrl.signal, headers: { accept: 'text/event-stream' } });
   const apply = (msg) => {
     if (msg.type === 'state' || msg.type === 'added') comps.set(msg.component, { seq: 1, component: msg.component, name: msg.name, path: msg.path, canvas: msg.canvas, preview: msg.preview, revision: msg.revision, doc: msg.doc, readOnly: msg.readOnly, problem: msg.problem, slots: msg.slots });
     else if (msg.type === 'slots') { const c = comps.get(msg.component); if (c) c.slots = msg.slots; }

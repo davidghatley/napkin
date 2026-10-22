@@ -469,6 +469,7 @@ function wire(ctx, el) {
       clear.forEach((id) => delete ui.draft[id]);
       close.forEach((f) => delete ui.forms[f]);
       setTimeout(rerender, 0); // the SSE render redraws; redraw now too in case this batch changed no visible state
+    } else if (r.stale?.length) { delete ui.errors[key]; rerender(); // clash.js shows a chip with both values
     } else {
       ui.errors[key] = { text: r.error, retry: /^stale revision/.test(r.error) ? { component, edits, opts: { clear, close } } : null };
       rerender();
