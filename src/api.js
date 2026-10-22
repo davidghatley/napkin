@@ -40,7 +40,7 @@ export const agentPermission = (dir, name) => { const c = agentsConfig(dir); ret
 const res = (status, json) => ({ status, json });
 const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error), ...extra });
 
-export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose = true } = {}) {
+export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}) } = {}) {
   const sessions = new Map(); // token -> name
   const proposals = new Map(); // id -> proposal
   const renderer = createRenderer();
@@ -50,7 +50,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     for (const p of [...proposals.values()]) if (p.component === component) { proposals.delete(p.id); broadcast({ type: 'proposal-resolved', id: p.id, component, status: 'rejected', reason: 'component removed' }); }
   });
 
-  const publicProposal = (p) => p;
+  const publicProposal = (p) => ({ ...p, ...colorOf(p.by) }); // + the agent's presence colour (color, ink) so the tray and the feed match the outline
   // A session for a name. Names listed with a token in napkin.json need it; the name "*" cannot be claimed.
   function session(as, token) {
     const name = typeof as === 'string' ? as.trim().slice(0, 40) : '';
@@ -77,16 +77,44 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     const p = {
       id: 'prp_' + randomBytes(5).toString('hex'), component: e.id, name: e.name,
       baseRevision: msg.baseRevision, currentRevision: dry.revision, edits: msg.edits, by: msg.by,
-      summary: summarize(msg.edits), at: Date.now(), doc: dry.doc, source: dry.source,
+      summary: summarize(msg.edits), lines: msg.edits.map((x) => summarize([x])), at: Date.now(), doc: dry.doc, source: dry.source,
     };
     proposals.set(p.id, p);
     broadcast({ type: 'proposal', component: e.id, proposal: p });
     return res(200, { ok: true, proposed: true, proposal: { id: p.id, component: p.component, baseRevision: p.baseRevision, by: p.by, summary: p.summary } });
   }
 
-  async function resolve(id, action, by) {
+  // Accept or reject some of a proposal's edits: only: [0, 2] (indexes into its edits). Each part must be valid alone, because the rest
+  // stays proposed on the new revision; edits that depend on each other (insert, then set on it) are taken together.
+  async function resolvePart(p, action, by, only) {
+    const e = ws.find(p.component);
+    if (!e) { proposals.delete(p.id); return fail(404, 'the component no longer exists'); }
+    const keep = p.edits.filter((_, i) => !only.includes(i)), take = p.edits.filter((_, i) => only.includes(i));
+    for (const [name, part] of [['those edits', take], ['the other edits', keep]]) {
+      const d = await e.store.apply({ baseRevision: p.baseRevision, edits: part, by: p.by, dryRun: true });
+      if (!d.ok && !/^stale revision/.test(d.error)) return fail(409, `${name} cannot stand alone: ${d.error} Next: ${action} all of the proposal, or pick edits that do not depend on each other.`);
+    }
+    let revision;
+    if (action === 'accept') {
+      const r = await e.store.apply({ baseRevision: p.baseRevision, edits: take, by: p.by }, { approvedBy: by });
+      if (!r.ok) return res(409, { ...r, proposal: p.id });
+      revision = r.revision; p.baseRevision = r.revision;
+    }
+    p.edits = keep; p.lines = keep.map((x) => summarize([x])); p.summary = summarize(keep);
+    const dry = await e.store.apply({ baseRevision: p.baseRevision, edits: keep, by: p.by, dryRun: true });
+    if (dry.ok) { p.currentRevision = dry.revision; p.doc = dry.doc; p.source = dry.source; }
+    p.updated = true;
+    broadcast({ type: 'proposal', component: p.component, proposal: p });
+    return res(200, { ok: true, status: action === 'accept' ? 'accepted' : 'rejected', ...(revision !== undefined && { revision }), remaining: keep.length });
+  }
+
+  async function resolve(id, action, by, only) {
     const p = proposals.get(id);
     if (!p) return fail(404, `no such proposal "${id}"`);
+    if (only !== undefined) {
+      if (p.adoption || !Array.isArray(only) || !only.length || only.some((i) => !Number.isInteger(i) || i < 0 || i >= p.edits.length) || new Set(only).size !== only.length) return fail(400, `only must list distinct edit numbers from 0 to ${p.edits.length - 1} (an adoption is taken whole)`);
+      if (only.length < p.edits.length) return resolvePart(p, action, by, only);
+    }
     if (action === 'reject') {
       proposals.delete(id);
       broadcast({ type: 'proposal-resolved', id, component: p.component, status: 'rejected', by });
@@ -150,7 +178,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       return fail(405, 'method not allowed');
     }
     if (seg[0] === 'guide' && method === 'GET') return res(200, { ok: true, guide: GUIDE });
-    if (seg[0] === 'activity' && method === 'GET') return res(200, { ok: true, activity: ws.activity(Number(query.get('limit') || 50)) });
+    if (seg[0] === 'activity' && method === 'GET') return res(200, { ok: true, activity: ws.activity(Number(query.get('limit') || 50)).map((a) => ({ ...a, ...colorOf(a.by) })) });
     if (seg[0] === 'search' && method === 'GET') return res(200, await search(ws, query.get('q')));
 
     // Undo and redo your own edits (HIS-01, HIS-02). No component named: the newest step of the caller's across all components.
@@ -186,7 +214,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
         const c = query.get('component'), e = c && ws.find(c);
         return res(200, [...proposals.values()].filter((p) => !c || (e && p.component === e.id)).map(publicProposal));
       }
-      if (method === 'POST' && seg.length === 3 && (seg[2] === 'accept' || seg[2] === 'reject')) { const g = guard(`${seg[2]} a proposal`); return g || resolve(seg[1], seg[2], caller); }
+      if (method === 'POST' && seg.length === 3 && (seg[2] === 'accept' || seg[2] === 'reject')) { const g = guard(`${seg[2]} a proposal`); if (g) return g; const m = msgOf(); return resolve(seg[1], seg[2], caller, m?.only); }
       return fail(405, 'method not allowed');
     }
 
@@ -333,5 +361,5 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     return fail(405, 'method not allowed');
   }
 
-  return { handle, proposals, renderer, session, async close() { await renderer.close(); } };
+  return { handle, proposals, renderer, session, identify, async close() { await renderer.close(); } };
 }

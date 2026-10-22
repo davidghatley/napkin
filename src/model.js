@@ -106,6 +106,16 @@ export function touched(edits) {
 }
 
 const nodeOf = (k) => (k.startsWith('node:') ? k.slice(5) : k.startsWith('children:') ? k.slice(9) : k.startsWith('prop:') ? k : k.split('.')[0]);
+// The node an edit is about (for presence, the activity feed and "focus this change"); null when it is about the component as a whole.
+export function nodeOfEdit(e) {
+  if (!e || typeof e !== 'object') return null;
+  if (e.op === 'set') return typeof e.path === 'string' ? e.path.split('.')[0] || null : null;
+  if (e.op === 'insert') return e.node?.id ?? e.parent ?? null;
+  if (e.op === 'rename') return e.to ?? e.id ?? null;
+  if (e.op === 'delete' || e.op === 'move' || e.op === 'bindText') return e.id ?? null;
+  return null;
+}
+
 export function conflicts(a, b) {
   for (const k of a) if (b.has(k)) return true;
   const whole = (s) => new Set([...s].filter((k) => k.startsWith('node:')).map(nodeOf));
