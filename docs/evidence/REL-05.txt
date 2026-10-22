@@ -1,7 +1,7 @@
 REL-05
-PASS: all 40 components / 224 cells repainted 667 ms after the checkout (bar <= 2000).
+PASS: all 40 components / 224 cells repainted 685 ms after the checkout (bar <= 2000).
 
 Re-run: node bench/perf.js --id REL-05
-Measured: 2026-10-22T05:43:00.217Z
+Measured: 2026-10-22T07:39:55.703Z
 v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
 Raw samples and method: docs/evidence/REL-05.json

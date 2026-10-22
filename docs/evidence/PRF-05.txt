@@ -1,7 +1,7 @@
 PRF-05
-PASS: p50 6.3 ms, p95 7.9 ms rebuild (bar <= 50 ms), 2,000 rebuilds.
+PASS: p50 6.8 ms, p95 8.3 ms rebuild (bar <= 50 ms), 2,000 rebuilds.
 
 Re-run: node bench/perf.js --id PRF-05
-Measured: 2026-10-22T05:42:57.726Z
+Measured: 2026-10-22T07:39:14.800Z
 v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
 Raw samples and method: docs/evidence/PRF-05.json
