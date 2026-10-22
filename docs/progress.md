@@ -80,7 +80,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-01 | PRF | engine | pass | critic p50 1097; merged p50 1105 ms | docs/evidence/PRF-01.txt | da57ab8 |
 | PRF-02 | PRF | engine | pass | critic p95 <=99.5; merged p95 82.8 ms (thin margin) | docs/evidence/PRF-02.txt | da57ab8 |
 | PRF-03 | PRF | engine | pass | critic p95 87.6; merged 87.6 ms | docs/evidence/PRF-03.txt | da57ab8 |
-| PRF-04 | PRF | engine | building | critic: literal raw p95 fails even on a trivial page (~18.2 ms, CPU raster jitter); whole-vsync reading passes; bench too thin (3 comps on screen, selection off-screen), titles wrong mid-gesture: fixing | docs/evidence/PRF-04.txt | d41ac7d |
+| PRF-04 | PRF | engine | building | critic 6820539: FAIL. 3 runs: raw p95 17.2-19.1 ms all scenarios; whole-vsync p95 16.67 but run 3 pan 3.4% missed (>2%); bench has 1 of 200 comps on screen (column layout), pan swing ~300 px; trivial page reads raw 16.87 (floor not reproduced): fixing | docs/evidence/PRF-04.txt | 6820539 |
 | PRF-05 | PRF | engine | pass | merged p95 8.3 ms | docs/evidence/PRF-05.txt | da57ab8 |
 | PRF-06 | PRF | engine | pass | merged ratio 0.477 | docs/evidence/PRF-06.txt | da57ab8 |
 | PRF-07 | PRF | engine | pass | merged 109 MB / 17 MB heap | docs/evidence/PRF-07.txt | da57ab8 |
