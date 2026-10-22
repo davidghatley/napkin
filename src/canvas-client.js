@@ -13,6 +13,8 @@
 // Frames: { type: 'connection', connected: false|true } on every loss and return.
 // Writes are never replayed. While the stream is down, or if the request is cut off, sendEdits answers
 // { ok: false, error: 'stale revision: ...' }: the caller reads the component again before retrying (the edit may have landed).
+import { explainError } from './errors.js';
+
 export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {}) {
   const origin = Math.random().toString(36).slice(2);
   const ctrl = new AbortController();
@@ -24,11 +26,11 @@ export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {
   const first = new Promise((r) => (resolveFirst = r));
 
   // Who is writing is decided by the server from this token, not from the request body.
-  const newSession = () => (identify ? fetch(new URL('api/session', baseUrl), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: by }), signal: ctrl.signal }).then((r) => r.json()).then((j) => j.token) : Promise.resolve(undefined));
+  const newSession = () => (identify ? fetch(new URL('api/session', baseUrl), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: by }), signal: ctrl.signal }).then((r) => r.json()).then((j) => j.token, () => undefined) : Promise.resolve(undefined)); // (no token when the server cannot be reached: writes are then refused by the server, and a reconnect asks again)
   let tokenP = newSession();
   const stream = () => fetch(new URL(`api/events?by=${encodeURIComponent(by)}`, baseUrl), { signal: ctrl.signal, headers: { accept: 'text/event-stream' } });
   const initial = await stream();
-  if (!initial.ok) throw new Error(`event stream: HTTP ${initial.status}`);
+  if (!initial.ok) throw new Error(`event stream: HTTP ${initial.status}. Next: check that the napkin server is running at this address, then reload.`);
 
   const emit = (msg) => {
     const f = { ...msg, mine: msg.origin === origin };
@@ -55,7 +57,7 @@ export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {
       if (!p) emit({ type: 'added', ...c, by: 'file', origin: 'reconnect' });
       else {
         if (p.revision !== c.revision || p.readOnly !== c.readOnly || JSON.stringify(p.doc) !== JSON.stringify(c.doc)) emit({ type: 'change', component: id, revision: c.revision, doc: c.doc, by: 'file', origin: 'reconnect' });
-        if (p.problem !== c.problem) emit({ type: 'problem', component: id, error: c.problem || null });
+        if (p.problem !== c.problem) emit({ type: 'problem', component: id, error: c.problem ? explainError(c.problem) : null });
         if (JSON.stringify(p.canvas) !== JSON.stringify(c.canvas)) emit({ type: 'canvas', component: id, canvas: c.canvas });
         if (JSON.stringify(p.preview) !== JSON.stringify(c.preview)) emit({ type: 'preview', component: id, preview: c.preview });
       }
@@ -74,7 +76,7 @@ export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {
       let reader;
       try {
         if (!response) response = await stream();
-        if (!response.ok) throw new Error(`event stream: HTTP ${response.status}`);
+        if (!response.ok) throw new Error(`event stream: HTTP ${response.status}. Next: check that the napkin server is running at this address.`);
         reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
         const incoming = new Map(), held = []; let buf = '';
         const again = ready; // a reconnect: collect the whole snapshot first, then compare it with what the page has

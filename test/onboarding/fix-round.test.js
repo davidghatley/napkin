@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createComponent } from '../../src/commit.js';
@@ -99,6 +99,9 @@ test('OPN: offscreen previews bundle on reveal, and refreshed errors keep real f
   const s = await cli(dir), b = await launchChromium({ width: 1440, height: 960 });
   try {
     await b.goto(s.url); await b.waitFor('napkin.state.components.size === 60 && document.body.dataset.ready === "1"');
+    // A frame far from the view that changes waits to be revealed. (Whether any are waiting right after load depends on how fast the page draws them, so make one wait.)
+    await b.eval('napkin.view.set({ x: 80, y: 120, z: 1 }); true');
+    writeFileSync(join(dir, 'Item59.tsx'), `export function Item59() { return <div style={{ width: 450, height: 240 }}>Preview 59, edited</div>; }`);
     await b.waitFor('[...napkin.stage.sections.values()].some(s => s.pending)');
     const pending = await b.eval('[...napkin.stage.sections.entries()].filter(([,s]) => s.pending).map(([id]) => id)');
     assert.ok(pending.length > 0);

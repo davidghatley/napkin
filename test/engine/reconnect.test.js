@@ -1,6 +1,6 @@
 // REL-03: after a server restart the page reconnects (<= 2 s). An edit that was in flight when the connection broke
 // is reported stale, never silently lost. Writes are never replayed by the client.
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -10,6 +10,8 @@ import { launchChromium } from '../helpers/cdp.js';
 import { evidence } from '../helpers/agents.js';
 import { connectCanvas } from '../../src/canvas-client.js';
 
+const lines = [];
+after(() => evidence('REL-03', `REL-03: ${lines.join('\n')}\n\nRe-run: EVIDENCE=1 node --test test/engine/reconnect.test.js\nMeasured: ${new Date().toISOString()}; ${process.version}; Chromium page and Node client against a real server restarted on its own port.`));
 const freePort = () => new Promise((res) => { const s = createServer(); s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => res(port)); }); });
 const setLabel = (file, text) => writeFileSync(file, readFileSync(file, 'utf8').replace(/title = '[^']*'/, `title = '${text}'`));
 const defaultOf = (doc, name) => doc.props.find((p) => p.name === name)?.default;
@@ -50,7 +52,19 @@ test('the client reconnects within 2 s of a restart, tells what changed meanwhil
   const ok = await client.sendEdits(comp, client.state(comp).revision, [{ op: 'setDefault', name: 'title', value: 'Back again' }]);
   assert.equal(ok.ok, true, ok.error);
   assert.match(readFileSync(fileOf('Card'), 'utf8'), /title = 'Back again'/);
-  evidence('REL-03-node', `Node client: reconnected ${ms.toFixed(0)} ms after the restarted server printed its address (bar <= 2000 ms). Offline write answered "${refused.error.slice(0, 40)}..." and left the file untouched; the hand edit made while down arrived as one change frame; the first write after reconnecting was accepted.`);
+  // five more restarts for a distribution
+  const times = [ms];
+  for (let i = 0; i < 5; i++) {
+    await server.stop();
+    await waitFor(() => !client.connected(), 3000);
+    server = await startServer(compDir, { port });
+    const s0 = performance.now();
+    await waitFor(() => client.connected(), 2000, 5);
+    times.push(performance.now() - s0);
+  }
+  const worst = Math.max(...times);
+  assert.ok(worst <= 2000, `slowest of ${times.length} reconnects: ${worst.toFixed(0)} ms`);
+  lines.push(`Node client: ${times.length} server restarts on the same port, reconnected ${times.map((x) => x.toFixed(0)).join(', ')} ms after the new server printed its address (bar <= 2000 ms; worst ${worst.toFixed(0)} ms). A write while the server was down answered "${refused.error.slice(0, 40)}..." and left the file untouched; a hand edit made during the outage arrived as exactly one change frame; the first write after reconnecting (new session token) was accepted.`);
 });
 
 test('an edit that landed but whose reply was lost is reported stale, never lost or applied twice', async (t) => {
@@ -72,7 +86,7 @@ test('an edit that landed but whose reply was lost is reported stale, never lost
   const again = await client.sendEdits(comp, base, [{ op: 'setDefault', name: 'title', value: 'Landed' }]);
   assert.equal(again.ok, false);
   assert.match(again.error, /stale revision/);
-  evidence('REL-03-lost-reply', 'An edit whose reply was cut after the server applied it: the client answered "stale revision ... may have landed", the file holds the edit exactly once, the canvas state caught up through the event stream, and a resend on the old base is stale.');
+  lines.push('An edit whose reply was cut after the server applied it: the client answered "stale revision ... may have landed", the file holds the edit exactly once, the canvas state caught up through the event stream, and a resend on the old base is stale (0 silent losses).');
 });
 
 test('the page shows the loss, reconnects, repaints what changed while it was away, and can edit again', async (t) => {
@@ -97,5 +111,5 @@ test('the page shows the loss, reconnects, repaints what changed while it was aw
   const r = await b.eval(`(async () => { const c = napkin.find('Card'); const r = await napkin.sendEdits(c.component, [{ op: 'setDefault', name: 'title', value: 'Edited by the reconnected page' }]); return r.ok ? 'ok' : r.error })()`);
   assert.equal(r, 'ok');
   assert.match(readFileSync(fileOf('Card'), 'utf8'), /Edited by the reconnected page/);
-  evidence('REL-03-page', `Chromium page: connection state went lost then ok; the hand edit made during the outage was painted ${ms.toFixed(0)} ms after the restarted server printed its address (bar <= 2000 ms); the page's next edit was accepted.`);
+  lines.push(`Chromium page: the connection state went lost, then ok; the hand edit made during the outage was painted ${ms.toFixed(0)} ms after the restarted server printed its address (bar <= 2000 ms); the page's next edit was accepted.`);
 });
