@@ -10,7 +10,7 @@ import { readComponent } from '../src/tsx/read.js';
 import { tsxCodec } from '../src/codecs.js';
 import { applyEdits, EditError, checkInstances } from '../src/model.js';
 import { openWorkspace } from '../src/workspace.js';
-import { ROOT } from './helpers/harness.js';
+import { ROOT, startServer } from './helpers/harness.js';
 import { renderHtml } from './helpers/ssr.js';
 
 const DATA = join(ROOT, 'test', 'data', '0004');
@@ -208,6 +208,29 @@ test('extractComponent: two files in a fixed order; a failure in the second roll
   void git;
 });
 
+test('extractComponent: when the second file cannot be written the first is removed, and nothing else changed', async () => {
+  for (const how of ['refused', 'threw']) {
+    const { dir, git, text } = folder(['Button', 'Panel']);
+    const ws = await openWorkspace(dir);
+    try {
+      const e = ws.find('Panel'), real = e.store.apply.bind(e.store), before = text('Panel');
+      e.store.apply = async (req) => {
+        if (req.edits?.[0]?.op !== 'extractComponent') return real(req);
+        return how === 'refused' ? { ok: false, error: 'the host file said no' } : Promise.reject(new Error('disk full'));
+      };
+      await assert.rejects(ws.extractComponent('Panel', { id: 'body', name: 'Content', by: 'test' }), /said no|disk full/);
+      assert.equal(existsSync(join(dir, 'Content.tsx')), false, `${how}: the new file is gone`);
+      assert.equal(existsSync(join(dir, 'Content.napkin.json')), false, `${how}: so is its sidecar`);
+      assert.equal(text('Panel'), before, `${how}: the host file is untouched`);
+      assert.equal(git('status', '--porcelain', '--', '*.tsx').trim(), '', `${how}: git sees no change`);
+      assert.equal(ws.find('Content'), undefined, `${how}: the workspace forgot it`);
+      e.store.apply = real;
+      const ok = await ws.extractComponent('Panel', { id: 'body', name: 'Content', by: 'test' }); // and a retry works
+      assert.equal(ok.name, 'Content');
+    } finally { await ws.close(); }
+  }
+});
+
 test('slot previews live in the sidecar, never in the .tsx', async () => {
   const { dir, text } = folder();
   const ws = await openWorkspace(dir);
@@ -222,4 +245,28 @@ test('slot previews live in the sidecar, never in the .tsx', async () => {
     ws.setSlotPreview(e, 'children', null, { by: 'test' });
     assert.equal(JSON.parse(readFileSync(join(dir, 'Panel.napkin.json'), 'utf8')).slots, undefined);
   } finally { await ws.close(); }
+});
+
+test('the HTTP routes: graph, slot preview and extract need an identity, refuse junk in plain words, and do their work', async () => {
+  const { dir, text } = folder(['Button', 'Panel']);
+  const server = await startServer(dir);
+  const { token } = await (await fetch(new URL('api/session', server.url), { method: 'POST', body: JSON.stringify({ as: 'you' }) })).json();
+  const call = async (method, path, body, auth = true) => { const r = await fetch(new URL(path, server.url), { method, headers: auth ? { authorization: `Bearer ${token}` } : {}, body: body === undefined ? undefined : JSON.stringify(body) }); return [r.status, await r.json()]; };
+  try {
+    const [gs, g] = await call('GET', 'api/components/Panel/graph');
+    assert.equal(gs, 200); assert.deepEqual(g.uses, ['Button']); assert.deepEqual((await call('GET', 'api/components/Button/graph'))[1].usedBy, ['Panel']);
+    assert.equal((await call('POST', 'api/components/Panel/slot-preview', { prop: 'children', text: 'x' }, false))[0], 401, 'no identity, no write');
+    assert.equal((await call('POST', 'api/components/Panel/slot-preview', { prop: 'title', text: 'x' }))[0] >= 400, true);
+    const [ps, p] = await call('POST', 'api/components/Panel/slot-preview', { prop: 'children', text: 'hello' });
+    assert.equal(ps, 200); assert.deepEqual(p.slots, { children: 'hello' });
+    assert.equal(JSON.parse(readFileSync(join(dir, 'Panel.napkin.json'), 'utf8')).slots.children, 'hello');
+    assert.equal((await call('POST', 'api/components/Panel/extract', { id: 'body', name: 'lower' }))[0], 400);
+    assert.equal((await call('POST', 'api/components/Panel/extract', { id: 'body', name: 'Content' }, false))[0], 401);
+    const [es, ex] = await call('POST', 'api/components/Panel/extract', { id: 'body', name: 'Content' });
+    assert.equal(es, 201, JSON.stringify(ex)); assert.equal(ex.name, 'Content');
+    assert.match(text('Panel'), /import \{ Content \} from '\.\/Content';/);
+    assert.equal(readComponent(text('Content')).doc.root.slot, 'children');
+    const [ds, d] = await call('DELETE', 'api/components/Content');
+    assert.ok(ds >= 400 && /used by|Panel/.test(JSON.stringify(d)), 'a used component cannot be deleted: ' + JSON.stringify(d));
+  } finally { await server.stop(); }
 });
