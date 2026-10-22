@@ -106,7 +106,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | FEEL-02 | FEEL | layout | needs-david | 6 rounds: Sonnet tie; Codex prefers Figma help imagery in both orders | test/23-layout-panel.test.js | a4a87dd |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
-| FEEL-05 | FEEL | canvas | pass | walk 1: completed keyboard-only, but 86 Tabs to Radius (WPC-07) | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
+| FEEL-05 | FEEL | canvas | pass | walk 1 pass; keys critic: 15 keys keyboard-only, diff 1 line | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
 | SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
 | SCN-2 | SCN | whole | pass | critic walk cold: accept 3/4, rejected value in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
 | SCN-3 | SCN | whole | critic-pass | critic cold walk: 280x95 canvas and app, 2 px <=2/255 (antialiased corner) | docs/evidence/SCN-3.txt | b96f89d |
@@ -118,15 +118,15 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
 | WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
 | WPC-06 | WPC | files | pass | critic pass r2: portable ids, .napkin self-ignores, 0 new files until a move; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
-| WPC-07 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-08 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-07 | WPC | keys | building | critic: 5 keys for rad/pad/gap; fill/stroke colour, settings, shadow unreachable: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-08 | WPC | keys | critic-pass | critic: Ctrl+K Badge Enter selects root (7 keys) | test/keys/keys.test.js | c5f48be |
 | WPC-09 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-10 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/history/ui-inspect.test.js | 5c8f4a9 |
-| WPC-11 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-11 | WPC | keys | building | critic: dark demo chips 1.58:1 and 2.45:1: fixing | docs/evidence/walk-1/ | c5f48be |
 | WPC-12 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents-ui/propose-create.test.js | 0085d7f |
-| WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-13 | WPC | keys | building | critic: works by mouse; Undo not keyboard-activatable; text color dot dead: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-14 | WPC | keys | building | critic: banner/network/EACCES leaks; invalid values written silently: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-15 | WPC | keys | building | critic: 1440 ok; 1280x720 toolbar overlaps Jump to: fixing | docs/evidence/walk-1/ | c5f48be |
 | WPC-16 | WPC | fidelity | building | critic: wrong line when a save mixes a valid edit and a break; Next: hint names parser line: fixing | test/fidelity/broken-line.test.js | b96f89d |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
