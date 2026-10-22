@@ -307,3 +307,4 @@ Tests: `test/agents-ui/` (`presence-server`, `presence`, `proposals`, `activity`
 - **Blank host**: `src/render-png.js` draws into a page with no CSS. Inspect says `browser default` for an inherited value nothing declares.
 - **Broken-file banner**: names the first line the hand edit changed, and "The parser stopped at line N." when the parser gave up later (`withEditedLine` in `src/store.js`); the message keeps the form `... has a syntax error at line N; fix it ...`.
 - **S3 end to end**: `EVIDENCE=1 node --test test/fidelity/s3-end-to-end.test.js` writes `docs/evidence/SCN-3.txt`. Take pictures with the selection cleared: handles are chrome.
+- **Border-box on creation**: `newComponentSource` roots and the Frame/Text/Image tools write `boxSizing: 'border-box'`; the panel shows `#boxhint-width` for a content-box element with padding or border. HTML paste output is unchanged.

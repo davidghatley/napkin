@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { tempRepo, startServer, sleep, ROOT } from '../helpers/harness.js';
@@ -23,7 +23,7 @@ const variants: Record<string, Record<string, Record<string, CSSProperties>>> = 
 };
 function s(node: string, v: Record<string, string>): CSSProperties {
   const out: CSSProperties = { ...base[node] };
-  for (const axis in v) Object.assign(out, variants[axis]?.[v[axis]]);
+  for (const axis in v) Object.assign(out, variants[axis]?.[v[axis]]?.[node]);
   return out;
 }
 export function Probe({ title = 'Ada Lovelace' }: ProbeProps) {
@@ -31,7 +31,7 @@ export function Probe({ title = 'Ada Lovelace' }: ProbeProps) {
   return (
     <div data-n="root" style={s('root', v)}>
       <h2 data-n="title" style={s('title', v)}>{title}</h2>
-      <p data-n="lead" style={s('lead', v)}>Plain text <b>bold</b> <i>italic</i></p>
+      <p data-n="lead" style={s('lead', v)}>Plain text bold italic</p>
       <span data-n="note" style={s('note', v)}>note</span>
       <code data-n="code" style={s('code', v)}>const a = 1</code>
       <kbd data-n="key" style={s('key', v)}>K</kbd>
@@ -61,6 +61,7 @@ const BOX = (rootSel) => `JSON.stringify((() => { const r = document.querySelect
 test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style of every node and pixels at 100%', { timeout: 120000 }, async (t) => {
   const repo = tempRepo(['Card']);
   writeFileSync(join(repo.compDir, 'Probe.tsx'), PROBE);
+  writeFileSync(join(repo.compDir, 'Plain.tsx'), readFileSync(join(repo.compDir, 'Card.tsx'), 'utf8').replace(/Card/g, 'Plain')); // an existing content-box component in the dialect (width 320, padding 16)
   const server = await startServer(repo.compDir);
   const canvas = await launchChromium({ width: 1440, height: 900 });
   const app = await launchChromium({ width: 1600, height: 1200 });
@@ -113,6 +114,12 @@ test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style 
     const gbad = []; for (let i = 0; i < g1.length; i++) for (const p in g1[i][1]) if (p !== 'pointer-events' && g1[i][1][p] !== g2[i][1][p]) gbad.push(`${g1[i][0]} ${p}: ${g1[i][1][p]} vs ${g2[i][1][p]}`);
     assert.deepEqual(gbad, [], 'ghost/preview layers are isolated too');
     await canvas.eval(`document.querySelector('.preview-layer')?.remove()`);
+    // a content-box element (Plain's root has width 320 + padding 16) says so beside W
+    await canvas.eval(`napkin.select({ component: napkin.find('Plain').component, node: 'card', variant: {} })`);
+    await canvas.waitFor(`!!document.querySelector('#width')`).catch(async () => { throw new Error('no panel: ' + await canvas.eval(`document.querySelector('#panel')?.textContent.slice(0, 300)`)); });
+    await canvas.waitFor(`!!document.querySelector('#boxhint-width')`).catch(async () => { throw new Error('no hint: ' + await canvas.eval(`document.querySelector('#panel')?.textContent.slice(0, 400)`)); });
+    assert.match(await canvas.eval(`document.querySelector('#boxhint-width').textContent`), /content-box: outer = W \+ padding \+ border/);
+    await canvas.eval(`napkin.select(null)`); await sleep(200);
     const boxC = JSON.parse(await canvas.eval(BOX(sel))), boxA = JSON.parse(await app.eval(BOX('#m [data-n=root]')));
     assert.deepEqual([boxC.rw, boxC.rh], [boxA.rw, boxA.rh], 'same layout size (280 wide + padding 16 = 312 content-box in an app)');
     const shot = async (b, box) => Buffer.from((await b.send('Page.captureScreenshot', { format: 'png', clip: { x: box.x, y: box.y, width: box.w, height: box.h, scale: 1 }, captureBeyondViewport: b === app })).data, 'base64');

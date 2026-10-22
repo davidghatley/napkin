@@ -22,3 +22,6 @@ Why not a shadow root per cell: it isolates both ways with no selector disciplin
 - A component that relied on the editor's border-box reset now draws bigger, exactly as it does in its app. That is the intended correction.
 - Pixel equality holds to 2/255 per channel, not bit for bit: antialiasing on a rounded corner can land one level apart between the composited canvas layer and a plain page.
 - Screenshots in the canvas must be taken with the selection cleared; the selection handles are editor chrome drawn over the cell.
+
+## Follow-up ruling (lead, 2026-10-22): W and H are the outer size for what napkin creates
+With the leak gone, a content-box element draws at width + padding + border, as in an app. So elements napkin creates (new component root, Frame, Text and Image tools) get `boxSizing: 'border-box'` in their own base style: W/H in the panel is the rendered outer size on the canvas and in a plain app alike. Existing components are not rewritten; for a content-box element with padding or border the panel shows `content-box: outer = W + padding + border` beside W (`#boxhint-width`). HTML paste is left alone: it must keep drawing exactly what the pasted HTML drew (LAY-10), so a pasted width plus padding stays content-box and gets the hint.

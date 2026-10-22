@@ -31,6 +31,7 @@ test('SCN-3: a Card drawn in napkin, copied as usage into a plain React app, is 
     ]) { const r = JSON.parse(await send(edits)); assert.ok(r.ok !== false, JSON.stringify(r)); }
     await sleep(500);
     const src = readFileSync(repo.fileOf('ProfileCard'), 'utf8');
+    assert.match(src, /boxSizing: 'border-box'/, 'a new component root is border-box');
     log.push(`ProfileCard.tsx written by napkin: ${src.split('\n').length} lines; width 280px: ${/280px/.test(src)}; setting title: ${/title\??: string/.test(src)}; Button instance: ${/<Button data-n="button"/.test(src)}`);
     // Inspect > Copy usage
     await canvas.eval(`napkin.select({ component: napkin.find('ProfileCard').component, node: '${rid}', variant: {} })`);
@@ -60,11 +61,13 @@ test('SCN-3: a Card drawn in napkin, copied as usage into a plain React app, is 
     if (process.env.FIDELITY_OUT) { writeFileSync(`${process.env.FIDELITY_OUT}/s3-canvas.png`, pc); writeFileSync(`${process.env.FIDELITY_OUT}/s3-app.png`, pa); }
     log.push(`button rect canvas ${await canvas.eval(`JSON.stringify([...document.querySelector(${JSON.stringify(sel)} + ' button').getBoundingClientRect().toJSON ? Object.values(document.querySelector(${JSON.stringify(sel)} + ' button').getBoundingClientRect().toJSON()) : []])`)} app ${await app.eval(`JSON.stringify(Object.values(document.querySelector('#m button').getBoundingClientRect().toJSON()))`)}`);
     const d = await pixelDiff(app, pc, pa);
-    log.push(`canvas clip ${cb.rw} x ${cb.rh} px; plain React app ${ab.rw} x ${ab.rh} px (critic walk 1: 280 vs 312)`);
+    log.push(`canvas clip ${cb.rw} x ${cb.rh} px; plain React app ${ab.rw} x ${ab.rh} px (W is the outer size: new elements are border-box)`);
     log.push(`pixels differing by more than ${TOL}/255: ${d.n} of ${d.total}; not bit-identical: ${d.exact} (antialiasing on rounded corners)`);
     log.push(`computed colour of the title in canvas: ${await canvas.eval(`getComputedStyle(document.querySelector(${JSON.stringify(sel)} + ' [data-n=text1]')).color`)}; in the app: ${await app.eval(`getComputedStyle(document.querySelector('#m [data-n=text1]')).color`)}`);
     log.push(`box-sizing in canvas: ${await canvas.eval(`getComputedStyle(document.querySelector(${JSON.stringify(sel)})).boxSizing`)}; in the app: ${await app.eval(`getComputedStyle(document.querySelector('#m > *')).boxSizing`)}`);
     evidence('SCN-3', `SCN-3 re-run after the cell-isolation fix (decision 0012). test/fidelity/s3-end-to-end.test.js\n${log.join('\n')}\nVERDICT: ${cb.rw === ab.rw && cb.rh === ab.rh && d.n === 0 ? 'pixel-identical at 100%' : 'NOT identical'}`);
+    assert.equal(cb.rw, 280, 'Fixed width 280 is the outer size: 280 px on the canvas');
+    assert.equal(ab.rw, 280, 'and 280 px in a plain app');
     assert.equal(cb.rw, ab.rw, 'same width');
     assert.equal(cb.rh, ab.rh, 'same height');
     assert.equal(d.n, 0, `0 px differ: ${JSON.stringify(d.ex)} ${log.join(' | ')}`);
