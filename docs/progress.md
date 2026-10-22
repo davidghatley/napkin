@@ -118,15 +118,15 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
 | WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
 | WPC-06 | WPC | files | pass | critic pass r2: portable ids, .napkin self-ignores, 0 new files until a move; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
-| WPC-07 | WPC | keys | building | critic: 5 keys for rad/pad/gap; fill/stroke colour, settings, shadow unreachable: fixing | docs/evidence/walk-1/ | c5f48be |
-| WPC-08 | WPC | keys | critic-pass | critic: Ctrl+K Badge Enter selects root (7 keys) | test/keys/keys.test.js | c5f48be |
+| WPC-07 | WPC | keys | building | critic r2: Cmd-K reaches ordinary props in <=5 keys; settings defaults, add-prop, variant axes/values, fill/stroke eye+remove, Insert not indexed (11-39 keys): round 3 | docs/evidence/walk-1/ | bb22830 |
+| WPC-08 | WPC | keys | critic-pass | critic r2: Ctrl+K Badge Enter = 7 keys, selects root | test/keys/keys.test.js | bb22830 |
 | WPC-09 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-10 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/history/ui-inspect.test.js | 5c8f4a9 |
-| WPC-11 | WPC | keys | building | critic: dark demo chips 1.58:1 and 2.45:1: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-11 | WPC | keys | critic-pass | critic r2: demo 72 text nodes, min 3.48 light / 3.40 dark, 0 below 3:1 | docs/evidence/walk-1/ | bb22830 |
 | WPC-12 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents-ui/propose-create.test.js | 0085d7f |
-| WPC-13 | WPC | keys | building | critic: works by mouse; Undo not keyboard-activatable; text color dot dead: fixing | docs/evidence/walk-1/ | c5f48be |
-| WPC-14 | WPC | keys | building | critic: banner/network/EACCES leaks; invalid values written silently: fixing | docs/evidence/walk-1/ | c5f48be |
-| WPC-15 | WPC | keys | building | critic: 1440 ok; 1280x720 toolbar overlaps Jump to: fixing | docs/evidence/walk-1/ | c5f48be |
+| WPC-13 | WPC | keys | critic-pass | critic r2: Undo by Enter restores disk; 99 hit-tested dot activations, 0 fail; old dead dot = folded Text section | docs/evidence/walk-1/ | bb22830 |
+| WPC-14 | WPC | keys | critic-pass | critic r2: syntax, connection, read-only, invalid and stale messages plain; disk untouched; minor wording notes | docs/evidence/walk-1/ | bb22830 |
+| WPC-15 | WPC | keys | critic-pass | critic r2: 1280x720 and 1440x900, both themes, 3 selections: 0 clipped, ellipsis, overlap | docs/evidence/walk-1/ | bb22830 |
 | WPC-16 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/broken-line.test.js | 5707a23 |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
