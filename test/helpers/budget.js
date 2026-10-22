@@ -6,7 +6,7 @@ import { index } from '../../src/model.js';
 
 const nprops = (o) => Object.keys(o || {}).length;
 // (a leaf with text is 3 lines the way napkin writes it: prettier puts the text of a two-attribute element on its own line)
-const hasText = (n) => n.text !== undefined || !!n.textProp;
+const hasText = (n) => n.text !== undefined || !!n.textProp || !!n.slot;
 export const jsxLines = (n) => (n.children.length ? 2 + n.children.reduce((a, c) => a + jsxLines(c), 0) : hasText(n) ? 3 : 1);
 const subtree = (n) => [n, ...n.children.flatMap(subtree)];
 // base: one block per node that has styles
@@ -15,6 +15,8 @@ export const baseLines = (doc) => [...index(doc).byId.values()].reduce((a, n) =>
 export const variantLines = (doc) => Object.values(doc.variants || {}).reduce((a, vals) => a + 2 + Object.values(vals).reduce((b, nodes) => b + 2 + Object.values(nodes).reduce((c, st) => c + 2 + nprops(st), 0), 0), 0);
 const axes = (doc) => doc.props.filter((p) => p.type === 'enum').map((p) => p.name);
 const pos = (n) => Math.max(n, 0);
+// the `ReactNode` specifier comes with the first slot prop and goes with the last one
+const nodeSpec = (b, a) => b.props.some((p) => p.type === 'node') !== a.props.some((p) => p.type === 'node');
 
 
 // --- what the layout must be, worked out from the models and prettier's 80 columns, never from the text napkin printed ---
@@ -23,7 +25,7 @@ const indentOfElement = (text, id) => {
   const lines = text.split(/\r?\n/);
   const at = lines.findIndex((l) => l.includes(`data-n="${id}"`));
   if (at < 0) return '';
-  return (/^\s*<\w+ /.test(lines[at]) ? lines[at] : lines[at - 1]).match(/^\s*/)[0];
+  return (/^\s*(<\w+ |\{\w+ && <\w+ )/.test(lines[at]) ? lines[at] : lines[at - 1]).match(/^\s*/)[0];
 };
 // Where an element sits, worked out from the text BEFORE the edit: an element that exists keeps its indentation; a new one is one
 // step inside its parent (the step this file uses from `return` to its root element).
@@ -41,16 +43,18 @@ function indentOfNode(ctx, doc, id) {
 }
 const hasContent = (n) => n.children.length > 0 || hasText(n);
 // Lines an element's opening tag takes: 1, or one per attribute plus the two ends when `<tag attrs>` does not fit.
+const instVal = (v) => (typeof v === 'string' ? `"${v}"` : v && typeof v === 'object' ? `{${v.prop}}` : `{${v}}`);
+const openText = (node) => node.instance ? `<${node.tag} data-n="${node.id}"` + Object.entries(node.instance.props).map(([k, v]) => ` ${k}=${instVal(v)}`).join('') + ' />' : `<${node.tag} data-n="${node.id}" style={s('${node.id}', v)}` + ['src', 'alt'].filter((k) => node.attrs?.[k] !== undefined).map((k) => ` ${k}="${node.attrs[k]}"`).join('') + (hasContent(node) ? '>' : ' />');
 function predictTagLines(node, indent) {
-  const attrs = 2 + ['src', 'alt'].filter((k) => node.attrs?.[k] !== undefined).length;
-  const open = `<${node.tag} data-n="${node.id}" style={s('${node.id}', v)}` + ['src', 'alt'].filter((k) => node.attrs?.[k] !== undefined).map((k) => ` ${k}="${node.attrs[k]}"`).join('') + (hasContent(node) ? '>' : ' />');
+  const attrs = node.instance ? 1 + Object.keys(node.instance.props).length : 2 + ['src', 'alt'].filter((k) => node.attrs?.[k] !== undefined).length;
+  const open = openText(node);
   return indent.length + open.length > WIDTH ? attrs + 2 : 1;
 }
 const predictExtra = (ctx, doc, node) => predictTagLines(node, indentOfNode(ctx, doc, node.id)) - 1;
 // Lines an element and its whole subtree take in the text napkin writes for a new or rebuilt element.
 function predictElementLines(ctx, doc, node) {
   const tag = predictTagLines(node, indentOfNode(ctx, doc, node.id));
-  if (node.children.length) return tag + 1 + node.children.reduce((a, c) => a + predictElementLines(ctx, doc, c), 0);
+  if (node.children.length) return tag + 1 + node.children.reduce((a, c) => a + predictWrapped(ctx, doc, c), 0);
   return hasText(node) ? tag + 2 : tag;
 }
 // The signature: one line when `export function Name({ a, b = 'x' }: NameProps) {` fits, else one prop per line. A layout a person
@@ -86,7 +90,7 @@ export function tagLines(text, id) {
   const lines = text.split(/\r?\n/);
   const at = lines.findIndex((l) => l.includes(`data-n="${id}"`));
   if (at < 0) return 1;
-  if (/^\s*<\w+ /.test(lines[at])) return 1;
+  if (/^\s*(<\w+ |\{\w+ && <\w+ )/.test(lines[at])) return 1;
   let end = at;
   while (end < lines.length && !/^\s*\/?>$/.test(lines[end])) end++;
   return end - at + 2; // `<tag`, the attributes, and the closing `>` or `/>`
@@ -97,6 +101,7 @@ export function elementLines(text, id) {
   const lines = text.split(/\r?\n/);
   const at = lines.findIndex((l) => l.includes(`data-n="${id}"`));
   if (at < 0) return 1;
+  if (/^\s*\{\w+ && <.*\}$/.test(lines[at])) return 1; // `{flag && <x />}` on one line
   const start = /^\s*<\w+ /.test(lines[at]) ? at : at - 1;
   const indent = lines[start].match(/^\s*/)[0];
   let j = start;
@@ -107,6 +112,27 @@ export function elementLines(text, id) {
     if (j > start && lines[j].match(/^\s*/)[0] === indent && /^<\//.test(t.trim())) return j - start + 1; // closing tag at the same indent
   }
   return 1;
+}
+// 2 when the element sits inside `{flag && (` ... `)}` (the wrapper's own two lines), else 0.
+export function wrapExtra(text, id) {
+  const lines = text.split(/\r?\n/);
+  const at = lines.findIndex((l) => l.includes(`data-n="${id}"`));
+  if (at < 0) return 0;
+  const start = /^\s*<\w+ /.test(lines[at]) ? at : at - 1;
+  return /&& \($/.test(lines[start - 1] || '') ? 2 : 0;
+}
+// Lines of element `id` with its wrapper, in the text before the edit.
+const withWrap = (text, id) => elementLines(text, id) + wrapExtra(text, id);
+// Lines of a node with its `{flag && ...}` wrapper as napkin lays it out: one line when it all fits, else the element lines + 2.
+function predictWrapped(ctx, doc, node) {
+  const L = predictElementLines(ctx, doc, node);
+  if (!node.when) return L;
+  let indent = indentOfNode(ctx, doc, node.id);
+  if (ctx.textBefore.includes(`data-n="${node.id}"`) && wrapExtra(ctx.textBefore, node.id)) indent = indent.slice(0, indent.length - unitOfText(ctx.textBefore).length); // (the element sits one step inside its wrapper)
+  const one = L === 1 && !hasContent(node) && indent.length + `{${node.when} && ${openText(node)}}`.length <= WIDTH;
+  if (one) return 1;
+  if (!node.children.length && !hasContent(node)) return 2 + predictTagLines(node, indent + unitOfText(ctx.textBefore)); // (the element moves one step in: its own tag may stop fitting)
+  return L + 2;
 }
 // Lines the interface member `name` takes: 1, or more when a long union of values is split one per line.
 export function memberLines(text, name) {
@@ -162,8 +188,11 @@ function blockLines(text, id) {
 }
 // A hand-written object with no trailing comma: appending an entry also changes the line before it (a comma).
 const commaless = (text) => /[^,;{\s]\r?\n\s*\}[,;]?\r?\n/.test(text);
+// `import { X } from './X';` lines come and go with the first and last use of a component
+const usedComponents = (doc) => new Set([...index(doc).byId.values()].filter((n) => n.instance).map((n) => n.instance.component));
 export function budget(edit, before, after, ctx) {
-  const b = budgetWithSlack(edit, before, after, ctx);
+  const b0 = budgetWithSlack(edit, before, after, ctx), ub = usedComponents(before), ua = usedComponents(after);
+  const b = { add: b0.add + [...ua].filter((c) => !ub.has(c)).length, del: b0.del + [...ub].filter((c) => !ua.has(c)).length };
   const A = index(before).byId;
   const appends = (edit.op === 'set' && edit.value !== null && !edit.path.split('.')[1].startsWith('@') && edit.path.split('.')[1] !== 'text' && (edit.variant ? before.variants?.[Object.keys(edit.variant)[0]]?.[Object.values(edit.variant)[0]]?.[edit.path.split('.')[0]]?.[edit.path.split('.')[1]] === undefined : A.get(edit.path.split('.')[0])?.style[edit.path.split('.')[1]] === undefined))
     || (edit.op === 'insert' && Object.keys(edit.node.style || {}).length > 0);
@@ -199,9 +228,21 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
   switch (edit.op) {
     case 'set': {
       const [id, prop] = edit.path.split('.');
-      if (prop.startsWith('@')) return { add: 1 + predictExtra(ctx, after, Z.get(id)), del: tagLines(ctx.textBefore, id) }; // a tag that crosses 80 columns changes layout
-      if (prop === 'text') { // changing text is one line; adding or clearing it turns `<x />` into three lines or back
+      if (prop === '@when') { // the element gets or loses its wrapper: one line when it all fits, else the element is indented inside `{flag && (` ... `)}`
+        const nb = withWrap(ctx.textBefore, id), keep = elementLines(ctx.textBefore, id);
+        let na = predictWrapped(ctx, after, Z.get(id));
+        if (keep > 1) na = Math.max(na, edit.value ? keep + 2 : keep); // an element a person laid out over several lines keeps its layout
+        return { add: na, del: nb };
+      }
+      if ((prop.startsWith('prop:') || (prop.startsWith('@') && prop !== '@slot' && prop !== '@when')) && Z.get(id).when) { // inside `{flag && ...}` the wrapper changes form when the tag stops (or starts) fitting on the line
+        const was = wrapExtra(ctx.textBefore, id) > 0, na = predictWrapped(ctx, after, Z.get(id));
+        if (was !== (na > 1)) return { add: na, del: withWrap(ctx.textBefore, id) };
+      }
+      if (prop.startsWith('prop:')) return { add: 1 + predictExtra(ctx, after, Z.get(id)), del: tagLines(ctx.textBefore, id) }; // an instance's prop: its tag line (or the whole tag when the layout changes)
+      if (prop.startsWith('@') && prop !== '@slot') return { add: 1 + predictExtra(ctx, after, Z.get(id)), del: tagLines(ctx.textBefore, id) }; // a tag that crosses 80 columns changes layout
+      if (prop === 'text' || prop === '@slot') { // changing text is one line; adding or clearing it turns `<x />` into three lines or back
         const had = hasText(A.get(id)), has = hasText(Z.get(id));
+        if (Z.get(id).when && had !== has) return { add: predictWrapped(ctx, after, Z.get(id)), del: withWrap(ctx.textBefore, id) };
         return { add: had && has ? 1 : has ? 3 + predictExtra(ctx, after, Z.get(id)) : 1 + predictExtra(ctx, after, Z.get(id)), del: had && has ? 1 : had ? 3 + extraTag(ctx.textBefore, id) : 1 };
       }
       if (edit.variant) {
@@ -215,20 +256,29 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
     }
     case 'renameProp': case 'renameVariant': { // only the lines that name it (and the parameter list, if the new name makes it break or fit on one line)
       const n = namingLines(ctx.textBefore, edit.name ?? edit.value);
+      // a longer or shorter name can make a `{flag && <x />}` line (or an instance tag) stop fitting, or fit again
+      let flipAdd = 0, flipDel = 0;
+      if (edit.op === 'renameProp') for (const z of Z.values()) {
+        if (z.children.length || hasText(z) || !(z.when === edit.to || (z.instance && Object.values(z.instance.props).some((v) => v && v.prop === edit.to)))) continue;
+        const d = predictWrapped(ctx, after, z) - withWrap(ctx.textBefore, z.id);
+        flipAdd += pos(d); flipDel += pos(-d);
+      }
+      if (flipAdd || flipDel) return pA === pB ? { add: n + flipAdd, del: n + flipDel } : { add: n + pA - 1 + flipAdd, del: n + pB - 1 + flipDel };
       return pA === pB ? { add: n, del: n } : { add: n + pA - 1, del: n + pB - 1 };
     }
     case 'rename': { const n = namingLines(ctx.textBefore, edit.id); return { add: n, del: n }; } // a node id: every line that names it (data-n, base key, override keys)
     case 'setDefault': return pc; // one line, or the whole parameter list when it now fits on one line (or no longer does)
-    case 'addProp': return { add: 1 + pc.add, del: pc.del }; // an interface member + the parameter list
-    case 'removeProp': return { add: pc.add, del: 1 + pc.del };
+    case 'addProp': { const r = { add: 1 + pc.add, del: pc.del }; return nodeSpec(before, after) ? { add: r.add + 1, del: r.del + 1 } : r; } // (+ the `ReactNode` word in the react import) // an interface member + the parameter list
+    case 'removeProp': { const r = { add: pc.add, del: 1 + pc.del }; return nodeSpec(before, after) ? { add: r.add + 1, del: r.del + 1 } : r; }
     case 'bindText': {
       if (edit.prop === null) return hasText(Z.get(edit.id)) ? { add: 1, del: 1 } : { add: 1, del: 3 }; // unbinding a setting with no default leaves an empty element
-      const line = hasText(A.get(edit.id)) ? { add: 1, del: 1 } : { add: 3 + predictExtra(ctx, after, Z.get(edit.id)), del: 1 }; // the element: its text line, or `<x />` becoming three lines
+      const line = hasText(A.get(edit.id)) ? { add: 1, del: 1 } : Z.get(edit.id).when ? { add: predictWrapped(ctx, after, Z.get(edit.id)), del: withWrap(ctx.textBefore, edit.id) } : { add: 3 + predictExtra(ctx, after, Z.get(edit.id)), del: 1 }; // the element: its text line, or `<x />` becoming three lines
       const fresh = !before.props.some((p) => p.name === edit.prop);
       return fresh ? { add: line.add + 1 + pc.add, del: line.del + pc.del } : line; // (+ a new prop: interface member and parameter list)
     }
     case 'addVariant': {
       const fresh = !before.props.some((p) => p.name === edit.axis);
+      if (!fresh && memberLines(ctx.textBefore, edit.axis) > 1) return { add: 2, del: 1 }; // a union written one value per line: the new value's line, and the old last line loses its `;`
       if (!fresh) { const m = layoutCost(memberLines(ctx.textBefore, edit.axis), predictMember(ctx.textBefore, after, edit.axis)); return m; } // the union line (split when long)
       return { add: 2 + pc.add, del: 1 + pc.del }; // fresh axis: interface member, parameters, `const v` line
     }
@@ -240,25 +290,32 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
       const axisModel = gone ? 2 + Object.values(before.variants?.[edit.axis] || {}).reduce((a, v) => a + 2 + nodesModel(v), 0) : 0;
       const actual = blockLines(ctx.textBefore, edit.value) + (gone ? blockLines(ctx.textBefore, edit.axis) : 0);
       const gone2 = pos(-dV) + Math.max(0, actual - valueModel - axisModel + (gone ? valueModel : 0)); // (+ comment lines written inside the removed blocks)
+      if (!gone && mB > 1) return { add: 2, del: 2 + gone2 }; // (a value's line in a one-per-line union)
       return gone ? { add: pc.add + 1, del: mB + 1 + pc.del + gone2 } : { add: layoutCost(mB, mA).add, del: layoutCost(mB, mA).del + gone2 };
     }
     case 'insert': {
       const parentLeaf = wasLeaf(before, edit.parent);
       const sub = predictElementLines(ctx, after, Z.get(edit.node.id));
+      if (parentLeaf && Z.get(edit.parent).when) return { add: predictWrapped(ctx, after, Z.get(edit.parent)) - 1 + sub + pos(dB), del: withWrap(ctx.textBefore, edit.parent) + pos(-dB) };
       return { add: sub + (parentLeaf ? 2 + predictExtra(ctx, after, Z.get(edit.parent)) : 0) + pos(dB), del: (parentLeaf ? 1 : 0) + pos(-dB) };
     }
     case 'delete': {
       const parent = index(before).parentOf.get(edit.id);
-      const sub = elementLines(ctx.textBefore, edit.id);
+      const sub = withWrap(ctx.textBefore, edit.id);
       const nowLeaf = parent.children.length === 1;
-      return { add: nowLeaf ? 1 + predictExtra(ctx, after, Z.get(parent.id)) : 0, del: sub + (nowLeaf ? 2 + extraTag(ctx.textBefore, parent.id) : 0) + pos(-dB) + pos(-dV) + Math.max(0, subtreeIds(A.get(edit.id)).reduce((a, i) => a + blockLines(ctx.textBefore, i) - modelBlockLines(before, i), 0)) }; // (+ comment lines written inside the removed blocks)
+      const leafWhen = nowLeaf && Z.get(parent.id).when;
+      return { add: leafWhen ? predictWrapped(ctx, after, Z.get(parent.id)) : nowLeaf ? 1 + predictExtra(ctx, after, Z.get(parent.id)) : 0, del: (leafWhen ? withWrap(ctx.textBefore, parent.id) : sub + (nowLeaf ? 2 + extraTag(ctx.textBefore, parent.id) : 0)) + pos(-dB) + pos(-dV) + Math.max(0, subtreeIds(A.get(edit.id)).reduce((a, i) => a + blockLines(ctx.textBefore, i) - modelBlockLines(before, i), 0)) }; // (+ comment lines written inside the removed blocks)
     }
     case 'move': {
       const n = A.get(edit.id), from = index(before).parentOf.get(edit.id);
-      const sub = elementLines(ctx.textBefore, edit.id);
+      const sub = withWrap(ctx.textBefore, edit.id);
       const fromLeaf = from.children.length === 1 && from.id !== edit.parent;
       const toLeaf = wasLeaf(before, edit.parent) && from.id !== edit.parent;
-      return { add: sub + (toLeaf ? 2 + predictExtra(ctx, after, Z.get(edit.parent)) : 0) + (fromLeaf ? 1 + predictExtra(ctx, after, Z.get(from.id)) : 0), del: sub + (fromLeaf ? 2 + extraTag(ctx.textBefore, from.id) : 0) + (toLeaf ? 1 : 0) };
+      const toWhen = toLeaf && Z.get(edit.parent).when, fromWhen = fromLeaf && Z.get(from.id).when;
+      const addTo = toWhen ? predictWrapped(ctx, after, Z.get(edit.parent)) : sub + (toLeaf ? 2 + predictExtra(ctx, after, Z.get(edit.parent)) : 0);
+      const addFrom = fromWhen ? predictWrapped(ctx, after, Z.get(from.id)) : fromLeaf ? 1 + predictExtra(ctx, after, Z.get(from.id)) : 0;
+      const delFrom = fromWhen ? withWrap(ctx.textBefore, from.id) - sub : fromLeaf ? 2 + extraTag(ctx.textBefore, from.id) : 0;
+      return { add: addTo + addFrom, del: sub + delFrom + (toLeaf ? 1 : 0) };
     }
     default: return { add: Infinity, del: Infinity };
   }

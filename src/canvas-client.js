@@ -37,9 +37,10 @@ export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {
     if (!ready) { early.push(f); return; }
     for (const cb of [...listeners]) cb(f);
   };
-  const snapshot = (m, seq = 1) => ({ seq, component: m.component, name: m.name, path: m.path, canvas: m.canvas, preview: m.preview, revision: m.revision, doc: m.doc, readOnly: m.readOnly, problem: m.problem });
+  const snapshot = (m, seq = 1) => ({ seq, component: m.component, name: m.name, path: m.path, canvas: m.canvas, preview: m.preview, revision: m.revision, doc: m.doc, readOnly: m.readOnly, problem: m.problem, slots: m.slots });
   const apply = (msg) => {
     if (msg.type === 'added') comps.set(msg.component, snapshot(msg));
+    else if (msg.type === 'slots') { const c = comps.get(msg.component); if (c) c.slots = msg.slots; }
     else if (msg.type === 'canvas') { const c = comps.get(msg.component); if (c) c.canvas = msg.canvas; }
     else if (msg.type === 'preview') { const c = comps.get(msg.component); if (c) c.preview = msg.preview; }
     else if (msg.type === 'change') { const c = comps.get(msg.component); if (c) Object.assign(c, { seq: (c.seq || 1) + 1, revision: msg.revision, doc: msg.doc, name: msg.doc?.name || c.name, readOnly: msg.doc ? undefined : c.readOnly }); else comps.set(msg.component, { component: msg.component, name: msg.doc?.name || msg.component, revision: msg.revision, doc: msg.doc }); }

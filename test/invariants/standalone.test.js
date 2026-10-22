@@ -22,9 +22,9 @@ function folder() {
   return { dir, files: readdirSync(dir).filter((f) => f.endsWith('.tsx')).map((f) => join(dir, f)), corpus };
 }
 
-test('INV-06: 0 napkin imports in 43 components; the only import is `import type { CSSProperties } from "react"`', () => {
-  const { files } = folder();
-  assert.equal(files.length, 43);
+test('INV-06: 0 napkin imports in 45 components; they import react and their sibling components (decision 0004), nothing else', () => {
+  const { dir, files } = folder();
+  assert.equal(files.length, 45);
   const imports = new Set();
   for (const f of files) {
     const text = readFileSync(f, 'utf8');
@@ -33,7 +33,10 @@ test('INV-06: 0 napkin imports in 43 components; the only import is `import type
     assert.doesNotMatch(text, /\brequire\(|\bimport\(/, f);
   }
   console.log(`INV-06: imports found across ${files.length} components: ${[...imports].join(', ')}; napkin imports: 0`);
-  assert.deepEqual([...imports], ['react']);
+  const siblings = [...imports].filter((i) => i !== 'react');
+  assert.ok(siblings.length > 0, 'the corpus really uses other components');
+  for (const i of siblings) assert.ok(/^\.\/[A-Z]\w*$/.test(i) && files.includes(join(dir, `${i.slice(2)}.tsx`)), `${i} is a sibling component file`);
+  assert.ok(imports.has('react'));
 });
 
 test('INV-06: the consumer app builds against the components and its bundle has no napkin code', async () => {
@@ -49,7 +52,8 @@ test('INV-06: the consumer app builds against the components and its bundle has 
     const { build } = await import('esbuild');
     const r = await build({ entryPoints: [f], bundle: true, write: false, format: 'esm', jsx: 'automatic', external: ['react', 'react/jsx-runtime'], logLevel: 'silent', metafile: true });
     const inputs = Object.keys(r.metafile.inputs);
-    assert.deepEqual(inputs.filter((i) => !i.endsWith(f.split('/').pop())), [], `${f} pulls in only itself`);
+    const stray = inputs.filter((i) => !/\/[A-Z]\w*\.tsx$/.test(i) || !i.includes('napkin-standalone-')); // only component files from the folder, no napkin code
+    assert.deepEqual(stray, [], `${f} pulls in only components from its folder`);
   }
 });
 
@@ -64,7 +68,7 @@ test('INV-06: tsc --strict passes over the components and the consumer app', () 
   const shimDir = mkdtempSync(join(tmpdir(), 'napkin-shim-'));
   copyFileSync(app, join(shimDir, 'App.tsx'));
   writeFileSync(join(shimDir, 'App.tsx'), readFileSync(app, 'utf8').replace("'@components/Button'", JSON.stringify(comps.find((f) => f.endsWith('/Button.tsx')).replace(/\.tsx$/, ''))));
-  const ta = typecheck([join(shimDir, 'App.tsx')]);
+  const ta = typecheck([join(shimDir, 'App.tsx'), join(ROOT, 'examples', 'consumer-app', 'assets.d.ts')]);
   console.log(`INV-06: tsc --strict over examples/consumer-app/App.tsx: ${ta.ok ? '0 errors' : ta.output}`);
   assert.equal(ta.ok, true, ta.output);
 });

@@ -35,7 +35,12 @@ import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
 import { initHandles } from './handles.js';
+import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
+import { initMatrix } from './matrix.js';
+import { initPlay } from './play.js';
+import { initInstances } from './instances.js';
+import { initSlots } from './slots.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -103,7 +108,13 @@ initShortcuts(ctx);
 initReadOnly(ctx);
 const nav = initNav(ctx);
 initHandles(ctx);
+initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
+initPlay(ctx); // CMP-09: P makes the cells live
+initInstances(ctx); // CMP-04, 06..08: composition
+initSlots(ctx); // CMP-05: slot drop zones
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
+await initTokens(ctx); // token source, theme preview and Tokens drawer
+ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
 
@@ -136,11 +147,14 @@ function note(c) {
 client.onChange((f) => {
   sync(f.component);
   if (f.type === 'progress') { ctx.state.progress = f; $('#scan-progress').textContent = f.done ? '' : `Scanning components… ${f.scanned} / ${f.total}`; ctx.emit('progress', f); }
+  else if (f.type === 'tokens') { ctx.emit('tokens', f); }
   else if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'preview') { ctx.emit('preview', f); }
   else if (f.type === 'connection') { document.body.dataset.connection = f.connected ? 'ok' : 'lost'; ctx.emit('connection', f); }
+  else if (f.type === 'slots') { stage.render(f.component, true).catch(console.error); }
+  else if (f.type === 'build') { if (f.cause && f.ok) stage.render(f.component, true).catch(console.error); } // a component this one shows was edited: draw it again
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; }
   else if (f.type === 'presence') {

@@ -1,0 +1,3 @@
+Re-run: EVIDENCE=1 node --test test/tokens/consumer.test.js
+3/3 PNGs byte-identical (0 differing pixels), actual examples/consumer-app build with imported token CSS and bound Button.
+No napkin runtime import in component or app.

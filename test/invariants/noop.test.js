@@ -3,7 +3,7 @@
 // formatting such as tabs, CRLF, double quotes and comments). Checked at the codec and through the store.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, mkdtempSync, copyFileSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, copyFileSync, statSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, basename } from 'node:path';
@@ -15,7 +15,7 @@ import { makeCorpus } from '../helpers/corpus.js';
 import { ROOT } from '../helpers/harness.js';
 
 const sha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
-const fixtures = readdirSync(join(ROOT, 'fixtures')).map((n) => fixture(n));
+const fixtures = readdirSync(join(ROOT, 'fixtures')).map((n) => fixture(n)).filter((f) => existsSync(f));
 
 // A change that is not a change: set the first styled property of the root to the value it has.
 function nothing(doc) {

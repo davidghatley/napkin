@@ -111,6 +111,13 @@ export function locate(ast) {
   return parts;
 }
 
+// The JSDoc comment right above an interface member is the prop's description (one line; several lines are joined with spaces).
+function descriptionOf(m) {
+  const c = [...(m.leadingComments || [])].reverse().find((x) => x.type === 'CommentBlock' && x.value.startsWith('*'));
+  if (!c) return '';
+  return c.value.replace(/^\*/, '').split('\n').map((l) => l.replace(/^\s*\*?\s?/, '').trim()).filter(Boolean).join(' ');
+}
+
 function readProps(parts) {
   const props = [];
   const defaults = new Map();
@@ -131,12 +138,19 @@ function readProps(parts) {
     let prop;
     if (t?.type === 'TSStringKeyword') prop = { name, type: 'string' };
     else if (t?.type === 'TSBooleanKeyword') prop = { name, type: 'boolean' };
+    else if (t?.type === 'TSNumberKeyword') prop = { name, type: 'number' };
+    else if (t?.type === 'TSTypeReference' && t.typeName?.name === 'ReactNode' && !t.typeParameters) prop = { name, type: 'node' };
     else if (t?.type === 'TSUnionType' && t.types.every((x) => x.type === 'TSLiteralType' && x.literal.type === 'StringLiteral')) {
       prop = { name, type: 'enum', options: t.types.map((x) => x.literal.value) };
     } else if (t?.type === 'TSLiteralType' && t.literal.type === 'StringLiteral') {
       prop = { name, type: 'enum', options: [t.literal.value] };
-    } else throw new DialectError(m, `prop ${name}: type must be string, boolean or a union of strings`);
+    } else throw new DialectError(m, `prop ${name}: type must be string, number, boolean, ReactNode or a union of strings`);
     if (defaults.has(name)) prop.default = defaults.get(name);
+    const note = descriptionOf(m);
+    if (note) prop.description = note;
+    if (prop.type === 'node' && defaults.has(name)) throw new DialectError(m, `${name} is a ReactNode slot and cannot have a default`);
+    if (prop.type === 'number' && defaults.has(name) && typeof defaults.get(name) !== 'number') throw new DialectError(m, `default for ${name} must be a number`);
+    if (prop.type === 'boolean' && defaults.has(name) && typeof defaults.get(name) !== 'boolean') throw new DialectError(m, `default for ${name} must be true or false`);
     if (prop.type === 'enum') {
       if (!defaults.has(name)) throw new DialectError(m, `variant axis ${name} needs a default (its base value)`);
       if (!prop.options.includes(prop.default)) throw new DialectError(m, `default for ${name} is not one of its values`);
@@ -147,8 +161,53 @@ function readProps(parts) {
   return props;
 }
 
-function readNode(el, props, seen) {
+// Names imported as `import { Name } from './Name';` in this file: the components an instance may use.
+function instanceImports(parts) {
+  const out = new Set();
+  for (const imp of parts.imports || []) {
+    const m = /^\.\/([A-Z][A-Za-z0-9]*)$/.exec(imp.source.value);
+    if (!m || imp.importKind === 'type') continue;
+    if (imp.specifiers.length === 1 && imp.specifiers[0].type === 'ImportSpecifier' && imp.specifiers[0].imported.name === m[1] && imp.specifiers[0].local.name === m[1]) out.add(m[1]);
+    else throw new DialectError(imp, `napkin reads only \`import { ${m[1]} } from './${m[1]}';\` for a sibling component`);
+  }
+  return out;
+}
+const INSTANCE_RESERVED = new Set(['key', 'ref', 'style', 'className', 'id']);
+function instanceValue(a, props) {
+  if (a.value === null) return true; // <Button disabled />
+  if (a.value.type === 'StringLiteral') return a.value.value;
+  const x = a.value.expression;
+  const lit = x && literalValue(x);
+  if (lit !== undefined) return lit;
+  if (x?.type === 'Identifier' && props.some((p) => p.name === x.name)) return { prop: x.name };
+  throw new DialectError(a, `${a.name.name} must be a text, a number, {true}, {false} or one of this component's props`);
+}
+function readInstance(el, props, seen, imports) {
+  const open = el.openingElement, name = open.name.name;
+  const node = { id: null, tag: name, style: {}, children: [], instance: { component: name, props: {} } };
+  for (const a of open.attributes) {
+    if (a.type !== 'JSXAttribute') throw new DialectError(a, 'no spread attributes');
+    const key = a.name.name;
+    if (key === 'data-n') {
+      if (a.value?.type !== 'StringLiteral') throw new DialectError(a, 'data-n must be a string');
+      node.id = a.value.value;
+    } else if (key === 'style') throw new DialectError(a, `<${name}> is another component, so it has no style of its own`);
+    else if (INSTANCE_RESERVED.has(key) || typeof key !== 'string') throw new DialectError(a, `attribute ${key} is not supported on a component`);
+    else node.instance.props[key] = instanceValue(a, props);
+  }
+  if (!node.id) throw new DialectError(el, 'every element needs data-n="<id>"');
+  if (seen.has(node.id)) throw new DialectError(el, `duplicate data-n "${node.id}"`);
+  seen.add(node.id);
+  if (el.children.some((c) => !(c.type === 'JSXText' && !c.value.trim()) && !(c.type === 'JSXExpressionContainer' && c.expression.type === 'JSXEmptyExpression'))) throw new DialectError(el, `<${name}> cannot have children here (instances are self-closing)`);
+  return node;
+}
+
+function readNode(el, props, seen, imports = new Set()) {
   const open = el.openingElement;
+  if (open.name.type === 'JSXIdentifier' && /^[A-Z]/.test(open.name.name)) {
+    if (!imports.has(open.name.name)) throw new DialectError(el, `<${open.name.name}> is not a supported element; to use another component add \`import { ${open.name.name} } from './${open.name.name}';\``);
+    return readInstance(el, props, seen, imports);
+  }
   if (open.name.type !== 'JSXIdentifier' || !TAGS.has(open.name.name)) throw new DialectError(el, `<${open.name.name || '?'}> is not a supported element`);
   const node = { id: null, tag: open.name.name, style: {}, children: [] };
   let styled = false;
@@ -181,13 +240,24 @@ function readNode(el, props, seen) {
       const x = c.expression;
       if (x.type === 'JSXEmptyExpression') continue;
       if (x.type === 'StringLiteral') { if (node.text !== undefined) throw new DialectError(c, 'one text per element'); node.text = x.value; continue; }
-      if (x.type !== 'Identifier' || !props.some((p) => p.name === x.name && p.type === 'string')) throw new DialectError(c, 'only {stringProp} or {"text"} inside elements');
-      if (node.textProp || node.text !== undefined) throw new DialectError(c, 'one text per element');
+      if (x.type === 'LogicalExpression' && x.operator === '&&') { // {flag && <el ... />}: shown only while a true/false prop is true
+        let right = x.right; while (right?.type === 'ParenthesizedExpression') right = right.expression;
+        const flag = x.left.type === 'Identifier' && props.find((p) => p.name === x.left.name && p.type === 'boolean');
+        if (!flag || right?.type !== 'JSXElement') throw new DialectError(c, 'only {flag && <element ... />} where flag is a true/false prop');
+        const child = readNode(right, props, seen, imports);
+        child.when = flag.name;
+        node.children.push(child);
+        continue;
+      }
+      const slotProp = x.type === 'Identifier' && props.find((p) => p.name === x.name && p.type === 'node');
+      if (slotProp) { if (node.slot || node.textProp || node.text !== undefined) throw new DialectError(c, 'one text or slot per element'); node.slot = x.name; continue; }
+      if (x.type !== 'Identifier' || !props.some((p) => p.name === x.name && p.type === 'string')) throw new DialectError(c, 'only {stringProp}, {slotProp} (a ReactNode prop), {flag && <element />} or {"text"} inside elements');
+      if (node.textProp || node.slot || node.text !== undefined) throw new DialectError(c, 'one text per element');
       node.textProp = x.name;
-    } else if (c.type === 'JSXElement') node.children.push(readNode(c, props, seen));
+    } else if (c.type === 'JSXElement') node.children.push(readNode(c, props, seen, imports));
     else throw new DialectError(c, `${({ JSXSpreadChild: 'a spread child', JSXFragment: 'a fragment (<>...</>)' })[c.type] || 'this kind of child'} is not supported inside elements`);
   }
-  if ((node.text !== undefined || node.textProp) && node.children.length) throw new DialectError(el, `${node.id} mixes text and elements; wrap the text in its own element`);
+  if ((node.text !== undefined || node.textProp || node.slot) && node.children.length) throw new DialectError(el, `${node.id} mixes text (or a slot) and elements; wrap the text in its own element`);
   return node;
 }
 
@@ -224,7 +294,9 @@ export function readComponent(text) {
   checkHelper(parts);
   const props = readProps(parts);
   const seen = new Set();
-  const root = readNode(parts.jsx, props, seen);
+  const imports = instanceImports(parts);
+  if (props.some((p) => p.type === 'node') && !parts.imports.some((i) => i.source.value === 'react' && i.specifiers.some((x) => x.imported?.name === 'ReactNode'))) throw new DialectError(parts.iface || parts.fnStmt, "a ReactNode prop needs `import type { CSSProperties, ReactNode } from 'react';`");
+  const root = readNode(parts.jsx, props, seen, imports);
   const base = Object.fromEntries(objectEntries(parts.base, 'base').map(([k, v]) => [k, styleObject(v, `base.${k}`)]));
   for (const k of Object.keys(base)) if (!seen.has(k)) throw new DialectError(parts.base, `base.${k}: no element with that data-n`);
   (function fill(n) { n.style = base[n.id] || {}; n.children.forEach(fill); })(root);

@@ -1,0 +1,9 @@
+Date: 2026-10-21T23:01:19.365Z
+Node: v26.8.2; CPU Chromium (--disable-gpu), 1440x900.
+Corpus: bench/corpus.js, 200 components, 1200 mounted cells, every background bound to accent.
+Viewport: fit all, 200 unculled component frames; all 1200 cells' computed colours verified, including offscreen frames.
+Measurement: browser performance.now() through full getComputedStyle verification of all 1200 cells and two requestAnimationFrame callbacks (includes paint).
+Re-run: node bench/tokens.js
+TOK-04: 10 samples ms: 62.30, 56.60, 53.50, 58.30, 60.50, 56.80, 73.00, 70.00, 55.60, 59.30
+p50 59.30 ms; p95 73.00 ms; max 73.00 ms; bar < 300 ms.
+All 1,200 computed background colours verified on every switch; component source unchanged.

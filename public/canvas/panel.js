@@ -9,8 +9,13 @@ import { isFlex, isGrid, mainProp, sizeMode, sizePatch, pinPatch, pinsOf, tracks
 import { parseColor, formatColor, fileSpace, documentColors, colorsIn } from '/src/color.js';
 import { openColorPicker } from './colorpop.js';
 import { cssSize, relRect } from './geom.js';
+import { settingsBody, wireProps } from './props.js';
+import { composeBody } from './instances.js';
+import { variantsBody, sourcesBody, overriddenCount, wireVariants } from './variants.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// the components parts (props.js, variants.js) clear a field's unsaved text once it is saved
+export const forgetDraft = (id) => { delete ui.draft[id]; };
 export const variantLabel = (v) => Object.entries(v || {}).map(([k, x]) => `${k}=${x}`).join(' · ') || 'default';
 
 const NUMBER = /^-?\d+(\.\d+)?$/;
@@ -166,6 +171,7 @@ const GLYPH = {
 export function renderPanel(ctx) {
   const el = document.querySelector('#panel');
   wire(ctx, el);
+  wireProps(ctx, el); wireVariants(ctx, el);
   if (ui.scrubbing) return;
   const sel = ctx.state.selection;
   const comp = sel && ctx.state.components.get(sel.component);
@@ -404,40 +410,13 @@ export function renderPanel(ctx) {
       ${t.overriding && t.nonBase.length === 1 ? `<span class="sr" id="override-note">Overrides ${esc(t.chosen[0])}=${esc(t.chosen[1])}.</span>` : ''}
     </div>`;
 
-  const propRows = doc.props.map((p) => {
-    const def = p.type === 'boolean'
-      ? `<input type="checkbox" id="propdef-${p.name}" data-field="propdef" data-prop="${p.name}"${p.default ? ' checked' : ''}${dis} aria-label="default of ${esc(p.name)}">`
-      : p.type === 'string'
-        ? `<input id="propdef-${p.name}" data-field="propdef" data-prop="${p.name}" autocomplete="off" value="${esc(p.default ?? '')}"${dis} aria-label="default of ${esc(p.name)}">`
-        : `<span id="propdef-${p.name}" class="mono">${esc(p.default)} (base)</span>`;
-    return `<li><div class="prop"><strong>${esc(p.name)}</strong><span class="mono">${p.type}${p.options ? ': ' + esc(p.options.join(' | ')) : ''}</span>
-      <button type="button" class="x" id="remove-prop-${p.name}" data-action="remove-prop" data-prop="${p.name}" aria-label="Remove setting ${esc(p.name)}" title="Remove"${dis}>×</button></div>
-      <div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="propdef-${p.name}"><span class="lt">Default</span></label>${def}</div></div>${err('prop-' + p.name)}${err('propdef-' + p.name)}</li>`;
-  }).join('');
-  const propsUi = section('props', 'Settings', `${propRows ? `<ul class="plain" id="props">${propRows}</ul>` : '<p class="hint">No settings yet.</p>'}
-    ${ui.forms.prop
-      ? `<form data-submit="add-prop" class="inline"><label for="new-prop-name">Name</label><input id="new-prop-name" autocomplete="off"${dis}>
-          <label for="new-prop-type">Type</label><select id="new-prop-type"${dis}><option>string</option><option>boolean</option><option>enum</option></select>
-          <label for="new-prop-options">Options (enum, comma separated)</label><input id="new-prop-options" autocomplete="off"${dis}>
-          <div class="row2"><button type="submit" class="btn primary" id="add-prop-submit"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="prop">Cancel</button></div></form>`
-      : `<button type="button" class="btn" id="add-prop" data-action="open" data-form="prop"${dis}>+ setting</button>`}${err('add-prop')}`, { open: false });
-
-  const axisUi = axes(doc).map((a) => `<div class="axis" data-axis="${esc(a.name)}"><h3>${esc(a.name)}</h3>
-      <ul class="plain chips">${a.options.map((o) => {
-        const isBase = o === a.default;
-        return `<li><span>${esc(o)}</span>${isBase ? '<span class="badge">base</span>' : ''}<button type="button" class="x" id="remove-value-${a.name}-${o}" data-action="remove-value" data-axis="${esc(a.name)}" data-value="${esc(o)}"${isBase ? ` disabled title="${esc(o)} is the base of ${esc(a.name)}, so it can't be removed" aria-label="Remove ${esc(o)} (it is the base, so it can't be removed)"` : ` aria-label="Remove ${esc(o)}"`}${dis}>×</button></li>`;
-      }).join('')}</ul>
-      ${ui.forms['value:' + a.name]
-        ? `<form data-submit="add-value" data-axis="${esc(a.name)}" class="inline"><label for="new-value-${a.name}">New ${esc(a.name)} value</label><input id="new-value-${a.name}" autocomplete="off"${dis}><div class="row2"><button type="submit" class="btn primary" id="add-value-submit-${a.name}"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="value:${esc(a.name)}">Cancel</button></div></form>`
-        : `<button type="button" class="btn small" id="add-value-${a.name}" data-action="open" data-form="value:${esc(a.name)}"${dis}>+ value</button>`}
-      ${err('axis-' + a.name)}</div>`).join('');
-  const variantsUi = section('variants', 'Variants', `${axisUi || '<p class="hint">No variant axes yet.</p>'}
-    ${ui.forms.axis
-      ? `<form data-submit="add-axis" class="inline"><label for="new-axis-name">Axis name</label><input id="new-axis-name" placeholder="size" autocomplete="off"${dis}>
-          <label for="new-axis-value">First value</label><input id="new-axis-value" placeholder="sm" autocomplete="off"${dis}>
-          <label for="new-axis-base">Base value</label><input id="new-axis-base" placeholder="default" autocomplete="off"${dis}>
-          <div class="row2"><button type="submit" class="btn primary" id="add-axis-submit"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="axis">Cancel</button></div></form>`
-      : `<button type="button" class="btn" id="add-axis" data-action="open" data-form="axis"${dis}>+ axis</button>`}${err('add-axis')}`, { open: false });
+  const propsUi = section('props', 'Settings', settingsBody(doc, dis, err), { open: false });
+  const nOver = overriddenCount(doc, { node: node.id, variant: sel.variant });
+  const hasOverrides = Object.values(doc.variants || {}).some((vals) => Object.values(vals).some((nodesOf) => nodesOf[node.id]));
+  // CMP-03: where each value of the selected element comes from. Part of Variants (open while this cell overrides something).
+  const sourcesBlock = multi || node.instance || !hasOverrides ? '' : `<div class="srcblock" id="sources-block" data-sec="sources"><div class="metacap">Where each value comes from</div>${sourcesBody(doc, { node: node.id, variant: sel.variant }, dis)}</div>`;
+  const variantsUi = section('variants', `Variants${nOver ? ` <span class="srcbadge" id="sources-count">${nOver} from variants</span>` : ''}`, sourcesBlock + variantsBody(doc, dis, err), { open: nOver > 0 });
+  const composeUi = multi ? '' : section('compose', 'Composition', composeBody(ctx, doc, node, comp, dis), { open: !!(node.instance || node.slot || node.when) });
 
   const vlabel = variantLabel(sel.variant);
   el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="nodename" id="sel-node">${esc(node.id)} <span class="tagname">&lt;${esc(node.tag)}&gt;</span>${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
@@ -445,11 +424,11 @@ export function renderPanel(ctx) {
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec
+    ${node.instance ? '' : isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec
       : node.tag === 'img' ? content + sizeSec + look + stroke + effects + layout
       : container ? layout + sizeSec + look + fill + stroke + effects + (showType ? typeSec : '')
-      : sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + layout}${advanced}
-    <div class="grouphead">Component</div>${propsUi}${variantsUi}`;
+      : sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + layout}${node.instance ? '' : advanced}
+    ${composeUi}${propsUi}${variantsUi}`;
 
   for (const sw of el.querySelectorAll('.chipcolor')) {
     const v = sw.dataset.color;
@@ -466,6 +445,7 @@ export function renderPanel(ctx) {
     const f = el.querySelector('#' + CSS.escape(id));
     if (f && 'value' in f && f.type !== 'checkbox') f.value = v;
   }
+  ctx.tokens?.decorate(el, prop => prop === 'stroke-color' ? { value: bp?.c, mixed: bv.mixed } : prop === 'shadow-color' ? { value: sp?.c, mixed: sv.mixed } : val(prop), (prop, value) => ctx.panelCommit(prop, value));
   if (focus?.id) {
     const f = el.querySelector('#' + CSS.escape(focus.id));
     if (f) { f.focus({ preventScroll: true }); try { f.setSelectionRange(focus.s, focus.e); } catch {} }
@@ -549,6 +529,8 @@ function wire(ctx, el) {
   async function commit(prop, raw, id) {
     const s = ctx.state.selection;
     if (!s) return;
+    if (prop === 'stroke-color') { const p = parseBorder(curVal('border' + ui.side)); if (p) return commit('border' + ui.side, `${p.w}px ${p.s} ${raw}`, prop); }
+    if (prop === 'shadow-color') { const p = parseShadow(curVal('boxShadow')); if (p) return commit('boxShadow', `${p.x}px ${p.y}px ${p.b}px ${p.s}px ${raw}`, prop); }
     let v = typeof raw === 'string' ? toValue(raw) : raw;
     if (prop === 'opacity' && typeof v === 'number') v = Math.round(v) / 100; // the panel shows percent, the file holds 0..1
     else if (typeof v === 'number' && F[prop]?.unit === 'px' && /^-?\d*\.?\d+px$/.test(String(curVal(prop)))) v = `${v}px`; // keep '16px' a string, as the file had it
@@ -556,6 +538,8 @@ function wire(ctx, el) {
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
     return run('style-' + prop, s.component, edits, { clear: [id ?? prop] });
   }
+
+  ctx.panelCommit = commit;
 
   // ---- what a node's own box and its parent look like right now (for Fill, pins and grid cells) ----
   function nodeInfo(id) {

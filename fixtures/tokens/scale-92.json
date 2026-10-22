@@ -1,0 +1,550 @@
+{
+  "name": "Product system \u00b7 92 tokens",
+  "color": {
+    "themes": [
+      {
+        "id": "light"
+      },
+      {
+        "id": "dark"
+      }
+    ],
+    "tokens": [
+      {
+        "name": "neutral-100",
+        "value": {
+          "light": "#fafafa",
+          "dark": "#171717"
+        },
+        "usage": "Neutral palette step 100."
+      },
+      {
+        "name": "neutral-200",
+        "value": {
+          "light": "#f5f5f5",
+          "dark": "#404040"
+        },
+        "usage": "Neutral palette step 200."
+      },
+      {
+        "name": "neutral-300",
+        "value": {
+          "light": "#e5e5e5",
+          "dark": "#737373"
+        },
+        "usage": "Neutral palette step 300."
+      },
+      {
+        "name": "neutral-400",
+        "value": {
+          "light": "#d4d4d4",
+          "dark": "#a3a3a3"
+        },
+        "usage": "Neutral palette step 400."
+      },
+      {
+        "name": "neutral-500",
+        "value": {
+          "light": "#a3a3a3",
+          "dark": "#d4d4d4"
+        },
+        "usage": "Neutral palette step 500."
+      },
+      {
+        "name": "neutral-600",
+        "value": {
+          "light": "#737373",
+          "dark": "#e5e5e5"
+        },
+        "usage": "Neutral palette step 600."
+      },
+      {
+        "name": "neutral-700",
+        "value": {
+          "light": "#404040",
+          "dark": "#f5f5f5"
+        },
+        "usage": "Neutral palette step 700."
+      },
+      {
+        "name": "neutral-800",
+        "value": {
+          "light": "#171717",
+          "dark": "#fafafa"
+        },
+        "usage": "Neutral palette step 800."
+      },
+      {
+        "name": "blue-100",
+        "value": {
+          "light": "#eff6ff",
+          "dark": "#1e3a8a"
+        },
+        "usage": "Blue palette step 100."
+      },
+      {
+        "name": "blue-200",
+        "value": {
+          "light": "#dbeafe",
+          "dark": "#1d4ed8"
+        },
+        "usage": "Blue palette step 200."
+      },
+      {
+        "name": "blue-300",
+        "value": {
+          "light": "#bfdbfe",
+          "dark": "#3b82f6"
+        },
+        "usage": "Blue palette step 300."
+      },
+      {
+        "name": "blue-400",
+        "value": {
+          "light": "#93c5fd",
+          "dark": "#60a5fa"
+        },
+        "usage": "Blue palette step 400."
+      },
+      {
+        "name": "blue-500",
+        "value": {
+          "light": "#60a5fa",
+          "dark": "#93c5fd"
+        },
+        "usage": "Blue palette step 500."
+      },
+      {
+        "name": "blue-600",
+        "value": {
+          "light": "#3b82f6",
+          "dark": "#bfdbfe"
+        },
+        "usage": "Blue palette step 600."
+      },
+      {
+        "name": "blue-700",
+        "value": {
+          "light": "#1d4ed8",
+          "dark": "#dbeafe"
+        },
+        "usage": "Blue palette step 700."
+      },
+      {
+        "name": "blue-800",
+        "value": {
+          "light": "#1e3a8a",
+          "dark": "#eff6ff"
+        },
+        "usage": "Blue palette step 800."
+      },
+      {
+        "name": "green-100",
+        "value": {
+          "light": "#f0fdf4",
+          "dark": "#14532d"
+        },
+        "usage": "Green palette step 100."
+      },
+      {
+        "name": "green-200",
+        "value": {
+          "light": "#dcfce7",
+          "dark": "#15803d"
+        },
+        "usage": "Green palette step 200."
+      },
+      {
+        "name": "green-300",
+        "value": {
+          "light": "#bbf7d0",
+          "dark": "#22c55e"
+        },
+        "usage": "Green palette step 300."
+      },
+      {
+        "name": "green-400",
+        "value": {
+          "light": "#86efac",
+          "dark": "#4ade80"
+        },
+        "usage": "Green palette step 400."
+      },
+      {
+        "name": "green-500",
+        "value": {
+          "light": "#4ade80",
+          "dark": "#86efac"
+        },
+        "usage": "Green palette step 500."
+      },
+      {
+        "name": "green-600",
+        "value": {
+          "light": "#22c55e",
+          "dark": "#bbf7d0"
+        },
+        "usage": "Green palette step 600."
+      },
+      {
+        "name": "green-700",
+        "value": {
+          "light": "#15803d",
+          "dark": "#dcfce7"
+        },
+        "usage": "Green palette step 700."
+      },
+      {
+        "name": "green-800",
+        "value": {
+          "light": "#14532d",
+          "dark": "#f0fdf4"
+        },
+        "usage": "Green palette step 800."
+      },
+      {
+        "name": "red-100",
+        "value": {
+          "light": "#fef2f2",
+          "dark": "#7f1d1d"
+        },
+        "usage": "Red palette step 100."
+      },
+      {
+        "name": "red-200",
+        "value": {
+          "light": "#fee2e2",
+          "dark": "#b91c1c"
+        },
+        "usage": "Red palette step 200."
+      },
+      {
+        "name": "red-300",
+        "value": {
+          "light": "#fecaca",
+          "dark": "#ef4444"
+        },
+        "usage": "Red palette step 300."
+      },
+      {
+        "name": "red-400",
+        "value": {
+          "light": "#fca5a5",
+          "dark": "#f87171"
+        },
+        "usage": "Red palette step 400."
+      },
+      {
+        "name": "red-500",
+        "value": {
+          "light": "#f87171",
+          "dark": "#fca5a5"
+        },
+        "usage": "Red palette step 500."
+      },
+      {
+        "name": "red-600",
+        "value": {
+          "light": "#ef4444",
+          "dark": "#fecaca"
+        },
+        "usage": "Red palette step 600."
+      },
+      {
+        "name": "red-700",
+        "value": {
+          "light": "#b91c1c",
+          "dark": "#fee2e2"
+        },
+        "usage": "Red palette step 700."
+      },
+      {
+        "name": "red-800",
+        "value": {
+          "light": "#7f1d1d",
+          "dark": "#fef2f2"
+        },
+        "usage": "Red palette step 800."
+      },
+      {
+        "name": "surface",
+        "value": {
+          "light": "#ffffff",
+          "dark": "#171717"
+        },
+        "usage": "Main page surface."
+      },
+      {
+        "name": "surface-raised",
+        "value": {
+          "light": "#fafafa",
+          "dark": "#404040"
+        },
+        "usage": "Raised cards and popovers."
+      },
+      {
+        "name": "text-primary",
+        "value": {
+          "light": "#171717",
+          "dark": "#fafafa"
+        },
+        "usage": "Primary readable text."
+      },
+      {
+        "name": "text-secondary",
+        "value": {
+          "light": "#737373",
+          "dark": "#d4d4d4"
+        },
+        "usage": "Supporting text."
+      },
+      {
+        "name": "border-default",
+        "value": {
+          "light": "#d4d4d4",
+          "dark": "#737373"
+        },
+        "usage": "Default separators."
+      },
+      {
+        "name": "action-primary",
+        "value": {
+          "light": "#1d4ed8",
+          "dark": "#93c5fd"
+        },
+        "usage": "Primary actions."
+      },
+      {
+        "name": "status-success",
+        "value": {
+          "light": "#15803d",
+          "dark": "#86efac"
+        },
+        "usage": "Success feedback."
+      },
+      {
+        "name": "status-danger",
+        "value": {
+          "light": "#b91c1c",
+          "dark": "#fca5a5"
+        },
+        "usage": "Error feedback."
+      }
+    ]
+  },
+  "spacing": {
+    "tokens": [
+      {
+        "name": "space-1",
+        "value": "4px",
+        "usage": "4 pixel layout spacing."
+      },
+      {
+        "name": "space-2",
+        "value": "8px",
+        "usage": "8 pixel layout spacing."
+      },
+      {
+        "name": "space-3",
+        "value": "12px",
+        "usage": "12 pixel layout spacing."
+      },
+      {
+        "name": "space-4",
+        "value": "16px",
+        "usage": "16 pixel layout spacing."
+      },
+      {
+        "name": "space-5",
+        "value": "20px",
+        "usage": "20 pixel layout spacing."
+      },
+      {
+        "name": "space-6",
+        "value": "24px",
+        "usage": "24 pixel layout spacing."
+      },
+      {
+        "name": "space-7",
+        "value": "28px",
+        "usage": "28 pixel layout spacing."
+      },
+      {
+        "name": "space-8",
+        "value": "32px",
+        "usage": "32 pixel layout spacing."
+      },
+      {
+        "name": "space-10",
+        "value": "40px",
+        "usage": "40 pixel layout spacing."
+      },
+      {
+        "name": "space-12",
+        "value": "48px",
+        "usage": "48 pixel layout spacing."
+      },
+      {
+        "name": "space-16",
+        "value": "64px",
+        "usage": "64 pixel layout spacing."
+      },
+      {
+        "name": "space-20",
+        "value": "80px",
+        "usage": "80 pixel layout spacing."
+      },
+      {
+        "name": "space-24",
+        "value": "96px",
+        "usage": "96 pixel layout spacing."
+      },
+      {
+        "name": "space-32",
+        "value": "128px",
+        "usage": "128 pixel layout spacing."
+      },
+      {
+        "name": "space-40",
+        "value": "160px",
+        "usage": "160 pixel layout spacing."
+      },
+      {
+        "name": "space-48",
+        "value": "192px",
+        "usage": "192 pixel layout spacing."
+      }
+    ]
+  },
+  "radius": {
+    "tokens": [
+      {
+        "name": "radius-none",
+        "value": "0px",
+        "usage": "None corner radius."
+      },
+      {
+        "name": "radius-xs",
+        "value": "2px",
+        "usage": "Xs corner radius."
+      },
+      {
+        "name": "radius-sm",
+        "value": "4px",
+        "usage": "Sm corner radius."
+      },
+      {
+        "name": "radius-md",
+        "value": "6px",
+        "usage": "Md corner radius."
+      },
+      {
+        "name": "radius-lg",
+        "value": "8px",
+        "usage": "Lg corner radius."
+      },
+      {
+        "name": "radius-xl",
+        "value": "12px",
+        "usage": "Xl corner radius."
+      },
+      {
+        "name": "radius-2xl",
+        "value": "16px",
+        "usage": "2Xl corner radius."
+      },
+      {
+        "name": "radius-pill",
+        "value": "999px",
+        "usage": "Pill corner radius."
+      }
+    ]
+  },
+  "type": {
+    "families": {
+      "sans": "Arial, sans-serif",
+      "mono": "monospace"
+    },
+    "groups": [
+      {
+        "name": "Text",
+        "styles": [
+          {
+            "name": "caption",
+            "fontSize": "12px",
+            "lineHeight": 1.4,
+            "fontWeight": 400,
+            "letterSpacing": "0.01em",
+            "usage": "Caption text style."
+          },
+          {
+            "name": "body",
+            "fontSize": "16px",
+            "lineHeight": 1.5,
+            "fontWeight": 400,
+            "letterSpacing": "0em",
+            "usage": "Body text style."
+          },
+          {
+            "name": "label",
+            "fontSize": "14px",
+            "lineHeight": 1.4,
+            "fontWeight": 500,
+            "letterSpacing": "0.01em",
+            "usage": "Label text style."
+          },
+          {
+            "name": "heading",
+            "fontSize": "24px",
+            "lineHeight": 1.2,
+            "fontWeight": 600,
+            "letterSpacing": "-0.01em",
+            "usage": "Heading text style."
+          },
+          {
+            "name": "display",
+            "fontSize": "48px",
+            "lineHeight": 1.1,
+            "fontWeight": 700,
+            "letterSpacing": "-0.02em",
+            "usage": "Display text style."
+          }
+        ]
+      }
+    ]
+  },
+  "other": {
+    "tokens": [
+      {
+        "name": "border-thin",
+        "value": "1px",
+        "usage": "Default border width."
+      },
+      {
+        "name": "border-thick",
+        "value": "2px",
+        "usage": "Emphasized border width."
+      },
+      {
+        "name": "duration-fast",
+        "value": "100ms",
+        "usage": "Fast transitions."
+      },
+      {
+        "name": "duration-normal",
+        "value": "200ms",
+        "usage": "Normal transitions."
+      },
+      {
+        "name": "easing-standard",
+        "value": "ease-in-out",
+        "usage": "Standard motion curve."
+      },
+      {
+        "name": "shadow-raised",
+        "value": "0 4px 16px #00000020",
+        "usage": "Raised surface shadow."
+      }
+    ]
+  }
+}

@@ -1,0 +1,38 @@
+Tokens merge/fix round · 2026-10-21
+
+Conflict markers resolved in src/commit.js, src/server.js, test/CONTRACT.md and
+ test/helpers/harness.js. Index deliberately left for the lead to stage/commit.
+writeTokens uses core writeFileAtomic; exclusive config creation retained.
+Static token-math + css-props routes and API token/layout/history/agent routes retained.
+Both contract sections and timeout/execArgv/env harness options retained.
+
+Critic fixes:
+1. Zero preserved, percentages and expressions excluded, named colours matched by
+   OKLab + alpha; auto-snap at distance <= 0.10, otherwise three explicit choices.
+2. Picker docks below its field row, reflows controls, stays within panel column.
+3. Off-token dot has a 20px hit area and >=8px separation from the diamond.
+4. Drawer groups Colour/Spacing/Radius/Type/Other; searchable names/values/usage;
+   mode swatches; redundant group/type caption removed. scale-92.json: 92 tokens.
+5. Visible and accessible Component theme label; chrome switch remains visible.
+
+Validation (all suites serial, cleanup preload used):
+- Merge integration: 71 passed, 0 failed.
+- Token regression/UI tests: 15 passed, 0 failed.
+- One full npm test, original result (not rerun):
+ℹ tests 396
+ℹ suites 0
+ℹ pass 389
+ℹ fail 4
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 266378.333261
+
+Full-run failures fixed afterward:
+- Installed newly merged dev dependencies with npm ci (lockfile unchanged).
+- no-op test discovers component fixtures only, excluding the tokens directory.
+- Consumer app declares CSS side-effect imports; strict type check includes it.
+Affected checks: format 5/5 pass, no-op 3/3 pass, standalone 3/3 pass.
+Consumer rendering additionally passed (3/3 PNGs identical).
+All known full-run failures now pass targeted checks; no second full run was made.
+/tmp inode usage stayed below 50% (observed 28–37%, final 28%).

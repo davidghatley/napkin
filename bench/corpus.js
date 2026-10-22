@@ -1,8 +1,10 @@
-// Deterministic varied TSX. Generated source belongs in a throwaway folder, never the repo.
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+// Deterministic TSX corpora. Generated source belongs in a throwaway folder, never the repo.
+//   generateCorpus(size, dir): varied specimens with 1-3 variant axes (engine benches, PRF/REL).
+//   corpus(dir, count, { tokens }): 200 copies of fixtures/Button, 1,200 cells, optionally token-bound (bench/tokens.js).
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 export function generateCorpus(size = 40, dir) {
@@ -59,4 +61,18 @@ ${children}
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const { values } = parseArgs({ options: { size: { type: 'string', default: '40' }, out: { type: 'string' } } });
   console.log(JSON.stringify(generateCorpus(Number(values.size), values.out), null, 2));
+}
+
+// Reproducible 200-component / 1,200-cell Button corpus. All source files are created only in the caller's temp folder.
+const root = fileURLToPath(new URL('../', import.meta.url));
+export function corpus(dir, count = 200, { tokens = false } = {}) {
+  const components = join(dir, 'components'); mkdirSync(components, { recursive: true });
+  let source = readFileSync(join(root, 'fixtures/Button/Button.tsx'), 'utf8');
+  if (tokens) {
+    source = source.replaceAll("background: '#2236b0'", "background: 'var(--accent)'").replaceAll("background: '#16181d'", "background: 'var(--accent)'").replace("color: '#f9f9f5'", "color: 'var(--on-accent)'").replace("padding: '8px 16px'", "padding: 'var(--space-4)'").replace('borderRadius: 6', "borderRadius: 'var(--radius-medium)'");
+    cpSync(join(root, 'fixtures/tokens'), join(dir, 'tokens'), { recursive: true });
+    writeFileSync(join(dir, 'napkin.json'), '{"tokens":{"source":"tokens/tokens.json","css":"tokens/tokens.css"}}\n');
+  }
+  for (let i = 0; i < count; i++) { const name = `Button${String(i).padStart(3, '0')}`; writeFileSync(join(components, name + '.tsx'), source.replaceAll('Button', name)); }
+  return components;
 }

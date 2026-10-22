@@ -1,0 +1,47 @@
+LAY-10: 231 snippets (the critics' corpora plus the cases they listed): 188 accepted and verified exact against real React rendering (text, tree, every box to 0.5 px, every computed style), 43 refused with a reason, 0 approximations.
+verify: EVIDENCE=1 node --test --test-force-exit test/24-html-paste.test.js
+
+refusals:
+09 important spaced: color is !important, which the dialect has no way to hold
+10 important upper: color is !important, which the dialect has no way to hold
+11 nested b in text: <p> mixes text with other elements; put the text in its own <span>
+13 dir/lang/title: the attribute dir on <p> cannot be kept (only style)
+20 head style rule: the <head> has <style>, which napkin would drop
+21 body style: the <body> has attributes (style) that napkin would drop
+27 pre tag: <pre> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
+29 ws-only span between: napkin can't paste this exactly: the text differs ("a b" vs "ab")
+36 textarea: <textarea> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
+38 br in text: <p> mixes text with other elements; put the text in its own <span>
+N04 ! important in shorthand: margin is !important, which the dialect has no way to hold
+N05 self-closed span/i: <p> mixes text with other elements; put the text in its own <span>
+N06 dup attrs id/class: <div> has a class name; classes cannot be kept, only inline styles
+N07 style tag mid-body: <div> mixes text with other elements; put the text in its own <span>
+N08 head/title/meta/link: the <head> has <title>, which napkin would drop
+N15 nested tables: <table> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
+N16 inline svg: <svg> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
+N17 char refs in attrs: the attribute title on <div> cannot be kept (only style)
+N18 attr ref without semicolon in url: the attribute href on <a> cannot be kept (only style)
+L01 spaces around span in p: <p> mixes text with other elements; put the text in its own <span>
+L03 strong then em sp: napkin can't paste this exactly: the text differs ("bold it" vs "boldit")
+L07 newline between inline: napkin can't paste this exactly: the text differs ("a b" vs "ab")
+L12 inline-block with space between: napkin can't paste this exactly: the text differs ("a b" vs "ab")
+L14 button spaces: napkin can't paste this exactly: the text differs ("Go Stop" vs "GoStop")
+L23 span display:inline-flex: napkin can't paste this exactly: the text differs ("a b" vs "ab")
+L31 white-space:pre-line: napkin can't paste this exactly: the text differs ("a\nb" vs "a b")
+L38 comment between with space: napkin can't paste this exactly: the text differs ("a b" vs "ab")
+L50 &lt in text then tag-like: <p> mixes text with other elements; put the text in its own <span>
+L54 css escape backslash: the attribute a\"" on <p> cannot be kept (only style)
+L72 css custom prop uppercase: the custom property --X cannot be kept
+L82 br inside: <br> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
+L83 wbr: <p> mixes text with other elements; put the text in its own <span>
+L90 attr alt with newline: the alt text has a line break or a backtick, which the dialect cannot hold
+L95 attr no space between: the attribute id on <p> cannot be kept (only style)
+L98 attr src on non-img: the attribute src on <span> cannot be kept (only style)
+L99 button type: the attribute type on <button> cannot be kept (only style)
+L101 text in ul direct: <ul> mixes text with other elements; put the text in its own <span>
+L112 label for: the attribute for on <label> cannot be kept (only style)
+L114 form-ish tags: <input> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
+L115 hr: <hr> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
+L125 span nested unclosed ws: <div> mixes text with other elements; put the text in its own <span>
+X10 id after style: the attribute id on <div> cannot be kept (only style)
+X11 junk after tag: <p<b> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
