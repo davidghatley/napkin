@@ -35,6 +35,8 @@ export const ACTIONS = [
   action('panel-cancel', 'Cancel field edit or scrub', 'Escape', ['Escape'], refs('panel', 'keydown')),
   action('font', 'Font menu: move / choose / close', '↑ ↓ · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('panel', 'keydown')),
   action('native', 'Controls: move focus / activate / expand section', 'Tab · Shift+Tab · Enter · Space', [], refs('panel', 'keydown')),
+  action('play', 'Play mode: cells become live components you can click and type into', 'P', ['KeyP'], refs('play', 'keydown'), (c) => c.play.toggle(), 'view'),
+  action('play-exit', 'Leave play mode', 'Escape (or P again)', ['Escape'], refs('play', 'keydown')),
   action('duplicate', 'Duplicate selection', 'Ctrl/Cmd+D', ['d'], refs('edit-ops', 'keydown'), (c) => c.ops.duplicate(), 'edit'),
   action('wrap', 'Wrap in frame · unwrap', 'Ctrl/Cmd+Alt+G · Ctrl/Cmd+Shift+G', ['g'], refs('edit-ops', 'keydown'), (c) => c.ops.wrap(), 'edit'),
   action('gesture-cancel', 'Cancel a drag on the canvas', 'Escape', ['Escape'], refs('handles', 'keydown')),
@@ -55,7 +57,7 @@ export const ACTIONS = [
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
   'colorpop.js:keydown': 2, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
-  'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
+  'play.js:keydown': 1, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
   'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run).map((a) => ({ ...a, run: () => a.run(ctx) }));

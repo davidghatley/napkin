@@ -36,6 +36,10 @@ import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
 import { initHandles } from './handles.js';
 import { initHistoryLane } from './history-lane.js';
+import { initMatrix } from './matrix.js';
+import { initPlay } from './play.js';
+import { initInstances } from './instances.js';
+import { initSlots } from './slots.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -103,6 +107,10 @@ initShortcuts(ctx);
 initReadOnly(ctx);
 const nav = initNav(ctx);
 initHandles(ctx);
+initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
+initPlay(ctx); // CMP-09: P makes the cells live
+initInstances(ctx); // CMP-04, 06..08: composition
+initSlots(ctx); // CMP-05: slot drop zones
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
@@ -140,6 +148,8 @@ client.onChange((f) => {
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'preview') { ctx.emit('preview', f); }
+  else if (f.type === 'slots') { stage.render(f.component, true).catch(console.error); }
+  else if (f.type === 'build') { if (f.cause && f.ok) stage.render(f.component, true).catch(console.error); } // a component this one shows was edited: draw it again
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; }
   else if (f.type === 'presence') {

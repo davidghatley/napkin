@@ -15,6 +15,7 @@ import { summarize } from './summary.js';
 import { ADOPTION } from './adopt.js';
 import { classifySource } from './scan.js';
 import { staleEntries } from './stale.js';
+import { checkInstances, pruneSwapped } from './model.js';
 import { diffToEdits, undoKeys } from './undo.js';
 import { gitAttribution, primeGit } from './git.js';
 
@@ -120,7 +121,8 @@ export async function openStore(file, start = {}) {
       commit(loaded.doc, new Set(['file']), by, [{ op: 'adoption' }], origin);
       return { ok: true, revision, doc };
     }
-    if (disk && !dryRun) return { ok: false, error: brokenMessage(file, disk), problem: disk }; // (a dry run may still check the edit against the last good document)
+    // a hand edit that is not valid TSX is a syntax error; one that is valid but outside the dialect makes the file read-only, and says so
+    if (disk && !dryRun) return { ok: false, error: /syntax error/i.test(disk) ? brokenMessage(file, disk) : `read-only: ${disk}`, problem: disk }; // (a dry run may still check the edit against the last good document)
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
     // every revision names a real caller (AGT-05); a dry run makes none
     if (!dryRun && (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown')) return { ok: false, error: 'by is required: every revision names a real caller' };
@@ -140,6 +142,12 @@ export async function openStore(file, start = {}) {
     let next;
     try { next = applyEdits(doc, edits); }
     catch (e) { if (e instanceof EditError) return { ok: false, error: e.message }; throw e; }
+    if (start.components) { // other components this one uses: they must exist, fit and not make a cycle
+      const lookup = (n) => start.components.lookup(n, file);
+      next = pruneSwapped(next, edits, lookup);
+      const bad = checkInstances(next, lookup);
+      if (bad) return { ok: false, error: `invalid edit #0: ${bad}` };
+    }
     let saved;
     try { saved = codec.save(state, doc, next); }
     catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }

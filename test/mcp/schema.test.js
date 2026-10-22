@@ -41,14 +41,14 @@ const GOOD = [
 ];
 const BAD = [
   { op: 'sett', path: 'a.b', value: 1 }, { op: 'set', path: 'a.b' }, { op: 'set', value: 1 }, { op: 'delete' }, { op: 'delete', id: 5 },
-  { op: 'insert', parent: 'root' }, { op: 'move', id: 'a' }, { op: 'addProp', name: 'x', type: 'number' }, { op: 'addVariant', axis: 'size' },
+  { op: 'insert', parent: 'root' }, { op: 'move', id: 'a' }, { op: 'addProp', name: 'x', type: 'banana' }, { op: 'addVariant', axis: 'size' },
   { op: 'set', path: 'a.b', value: 1, extra: true }, 'set title', {}, { op: 'removeVariant', value: 'xl' },
 ];
 
 test('the edit item schema is a oneOf with one entry per op; good edits validate, typos and missing fields do not', () => {
   const schema = editItemSchema();
-  assert.equal(schema.oneOf.length, 10);
-  assert.deepEqual(schema.oneOf.map((s) => s.properties.op.const).sort(), ['addProp', 'addVariant', 'bindText', 'delete', 'insert', 'move', 'removeProp', 'removeVariant', 'set', 'setDefault']);
+  assert.equal(schema.oneOf.length, 13);
+  assert.deepEqual(schema.oneOf.map((s) => s.properties.op.const).sort(), ['addProp', 'addVariant', 'bindText', 'delete', 'extractComponent', 'insert', 'insertInstance', 'move', 'removeProp', 'removeVariant', 'set', 'setDefault', 'swapInstance']);
   for (const e of GOOD) assert.ok(valid(schema, e), `should validate: ${JSON.stringify(e)}`);
   for (const e of BAD) assert.ok(!valid(schema, e), `should not validate: ${JSON.stringify(e)}`);
   assert.deepEqual(editItemSchema(true), { type: 'object' }, 'the control arm gets a bare object');
@@ -69,6 +69,6 @@ test('tools/list exposes the oneOf schema on apply_edits.edits items', async () 
   const mcp = await startMcp(server.url);
   try {
     const tools = (await mcp.request('tools/list', {})).result.tools;
-    assert.equal(tools.find((t) => t.name === 'apply_edits').inputSchema.properties.edits.items.oneOf.length, 10);
+    assert.equal(tools.find((t) => t.name === 'apply_edits').inputSchema.properties.edits.items.oneOf.length, 13);
   } finally { mcp.stop(); await server.stop(); }
 });

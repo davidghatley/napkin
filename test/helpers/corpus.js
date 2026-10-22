@@ -34,6 +34,8 @@ const FORMATS = {
     const items = body.trim().split(/,\r?\n\s*/).map((x) => x.replace(/,$/, '').trim()).filter(Boolean);
     return `${ind}${key}: { ${items.map((x, i) => (i === 0 && items.length > 1 ? `${x}, /* tight */` : i < items.length - 1 ? `${x},` : x)).join(' ')} }, // ${key}${cr}`;
   }),
+  // a union of values written one per line, with a comment inside and one after it
+  unionComments: (t) => t.replace(/^(\s+)(\w+)\?: ('[\w-]+'(?: \| '[\w-]+')+);(\r?)$/gm, (m, ind, name, union, cr, off) => (off % 2 ? m : `${ind}${name}?:${cr}\n${ind}  // inside the union${cr}\n${union.split(' | ').map((x) => `${ind}  | ${x}`).join(`${cr}\n`)}; // after it${cr}`)),
   extraBlankLines: (t) => t.replace(/^(function s|const variants)/gm, '\n$1'),
   noFinalNewline: (t) => t.replace(/\n$/, ''),
   crlf: (t) => (t.includes('\r') ? t : t.replace(/\n/g, '\r\n')),
@@ -44,7 +46,7 @@ export function makeCorpus(dir, n = 40, seed = 40, { skip = [] } = {}) {
   const rand = rng(seed);
   const pick = (a) => a[Math.floor(rand() * a.length)];
   const files = [];
-  const NEW = ['trailingComments', 'commentLines', 'blankGroups', 'jsxComments', 'jsxTrailing', 'compactObjects', 'noTrailingCommas', 'semicolonlessInterface'];
+  const NEW = ['trailingComments', 'commentLines', 'blankGroups', 'jsxComments', 'jsxTrailing', 'compactObjects', 'unionComments', 'noTrailingCommas', 'semicolonlessInterface'];
   const formats = [...Object.keys(FORMATS), ...NEW, ...NEW].filter((f) => !skip.includes(f)); // (the comment and blank-line shapes are drawn more often)
   for (let i = 0; i < n; i++) {
     const name = `${NAMES[i % NAMES.length]}${i >= NAMES.length ? i : ''}`;
@@ -122,7 +124,7 @@ export const OUT_OF_DIALECT = [
   ['props-rest', swap("{ label = 'Button', size = 'md', state = 'default' }: ButtonProps", "{ label = 'Button', size = 'md', state = 'default', ...rest }: ButtonProps"), '...rest'],
   ['prop-renamed', swap("{ label = 'Button',", "{ label: text = 'Button',"), 'label: text'],
   ['prop-default-expression', swap("label = 'Button'", "label = DEFAULT"), 'DEFAULT'],
-  ['prop-type-number', swap('  label?: string;', '  label?: string;\n  count?: number;'), 'count'],
+  ['prop-type-number-union', swap('  label?: string;', '  label?: string;\n  count?: 1 | 2;'), 'count'],
   ['prop-type-function', swap('  label?: string;', '  label?: string;\n  onPress?: () => void;'), 'onPress'],
   ['axis-without-default', swap("size = 'md', ", ''), 'size'],
   ['v-out-of-order', swap('const v = { size, state };', 'const v = { state, size };'), 'const v'],

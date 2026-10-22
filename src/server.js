@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
+import { vendorModule } from './vendor.js';
 import { createComponent } from './commit.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
 import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
@@ -47,6 +48,7 @@ ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
 ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
 ws.events.on('preview', (c) => broadcast({ type: 'preview', ...c }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
+ws.events.on('slots', (s) => broadcast({ type: 'slots', ...s }));
 ws.events.on('added', async ({ component, by, summary }) => {
   const e = ws.find(component);
   if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)), ...(by && { by, summary }) });
@@ -104,12 +106,21 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
+    // The one copy of React the page shares between component bundles (?shared=1), named in the page's import map.
+    const vend = path.match(/^\/vendor\/([a-z-]+)\.js$/);
+    if (req.method === 'GET' && vend) {
+      const code = await vendorModule(vend[1]).catch(() => null);
+      if (!code) return json(res, 404, { ok: false, error: 'not found' });
+      res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'max-age=3600' });
+      return res.end(code);
+    }
+
     // The bundle for one component; waits for the build that follows the latest revision. ?rev=N only busts caches.
     const b = path.match(/^\/bundle\/([^/]+)\.js$/);
     if (req.method === 'GET' && b) {
       const e = ws.find(decodeURIComponent(b[1]));
       if (!e) return json(res, 404, { ok: false, error: 'not found' });
-      const r = await ws.bundle(e);
+      const r = await ws.bundle(e, { shared: url.searchParams.get('shared') === '1' });
       if (!r.ok) return json(res, 500, { ok: false, error: r.error });
       res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'no-store', 'x-napkin-build-ms': r.ms.toFixed(1) });
       return res.end(r.code);
