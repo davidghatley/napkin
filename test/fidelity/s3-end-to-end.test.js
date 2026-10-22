@@ -40,8 +40,10 @@ test('SCN-3: a Card drawn in napkin, copied as usage into a plain React app, is 
     await canvas.waitFor(`document.querySelector('#i-usage')?.textContent.includes('ProfileCard')`);
     await canvas.eval(`document.querySelector('#i-copy').click()`);
     await sleep(200);
-    const usage = await canvas.eval(`napkin.copied`);
-    log.push(`Copy usage: ${usage}`);
+    const copied = await canvas.eval(`napkin.copied`);
+    const usage = copied.trim().split('\n').filter((l) => l.trim().startsWith('<')).join('\n'); // Copy usage may now carry its import line; the app below uses it
+    const importLine = copied.split('\n').find((l) => l.startsWith('import ')) ?? `import { ProfileCard } from './ProfileCard';`;
+    log.push(`Copy usage: ${JSON.stringify(copied)}`);
     assert.match(usage, /^<ProfileCard\b/);
     // canvas clip at 100%
     const sel = `section[data-name="ProfileCard"] .mount [data-n="${rid}"]`;
@@ -55,7 +57,7 @@ test('SCN-3: a Card drawn in napkin, copied as usage into a plain React app, is 
     const cb = await boxOf(canvas, sel);
     const pc = await clip(canvas, cb, false);
     // the plain app: the pasted line, nothing else
-    await plainApp(app, repo.compDir, `import { createRoot } from 'react-dom/client';\nimport { flushSync } from 'react-dom';\nimport { ProfileCard } from '@components/ProfileCard';\nimport { Button } from '@components/Button';\nflushSync(() => createRoot(document.getElementById('m')!).render(${usage}));\n`);
+    await plainApp(app, repo.compDir, `import { createRoot } from 'react-dom/client';\nimport { flushSync } from 'react-dom';\n${importLine.replace(/from ['"]\.\/ProfileCard['"]/, "from '@components/ProfileCard'")}\nimport { Button } from '@components/Button';\nflushSync(() => createRoot(document.getElementById('m')!).render(${usage}));\n`);
     const ab = await boxOf(app, '#m [data-n=root], #m > *');
     const pa = await clip(app, ab, true);
     if (process.env.FIDELITY_OUT) { writeFileSync(`${process.env.FIDELITY_OUT}/s3-canvas.png`, pc); writeFileSync(`${process.env.FIDELITY_OUT}/s3-app.png`, pa); }
