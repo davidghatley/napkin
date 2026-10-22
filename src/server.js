@@ -37,7 +37,7 @@ else { // a throwaway copy of the fixtures, so playing with the canvas never edi
   createProjectConfig(join(dir, 'napkin.json'), JSON.stringify({ tokens: { source: 'tokens.json', css: 'tokens.css' } }) + '\n');
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
-if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run napkin init.`); process.exit(1); }
+if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run node src/cli.js init.`); process.exit(1); }
 let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
 try { lock = acquireWorkspaceLock(dir, { writeSidecars: !args['no-sidecars'] }); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
 const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'], progressive: args.stream });

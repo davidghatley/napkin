@@ -251,7 +251,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       const n = needId(); if (n) return n;
       const mode = agentPermission(dir, caller);
       if (mode === 'read') return fail(403, `agent "${caller}" is read-only (napkin.json). Next: ask a write or propose agent to propose_adoption.`, { permission: mode });
-      if (!canPropose) return fail(409, 'propose needs a running napkin canvas server. Next: run napkin open to review an adoption.');
+      if (!canPropose) return fail(409, 'propose needs a running napkin canvas server. Next: run node src/cli.js open to review an adoption.');
       const r = await e.store.read();
       if (!r.readOnly) return fail(409, `${e.file} is already editable. Next: use apply_edits.`);
       let converted;

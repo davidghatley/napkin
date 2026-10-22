@@ -68,11 +68,15 @@ and [decision 0005](docs/decisions/0005-clash-undo-permissions.md).
 
 ## Open an existing repository
 
-Pass its folder to `open`, as in the sample command above. A `napkin.json` project
-uses its `components` path. Without a config, napkin scans `.tsx` files recursively,
-skipping `node_modules`, `dist`, `build`, `.git`, and `.napkin`. It does not follow
-symlinks. Files outside the [dialect](docs/dialect.md) open read-only, with reasons
-and line numbers. Missing dependencies or providers can prevent a preview.
+Pass its folder to `node src/cli.js open`, as in the sample command above.
+
+- A `napkin.json` project uses its `components` path.
+- Without a config, napkin scans `.tsx` files recursively, skipping `node_modules`,
+  `dist`, `build`, `.git`, `.napkin`, and `.next`.
+- The scan does not follow symlinks.
+- Files outside the [dialect](docs/dialect.md) open read-only, with reasons and
+  line numbers.
+- Missing dependencies or providers can prevent a preview.
 
 Opening, reading, and rendering create no component sidecars. A configured project
 saves a sidecar beside a component when you move its frame or save a preview
@@ -121,7 +125,7 @@ node src/server.js --port 0
 ```
 
 It edits a temporary fixture copy and removes it on exit. Use the diamond beside
-an inspector field to bind a token. **Theme** previews component modes. The
+an inspector field to bind a token. **Component theme** previews component modes. The
 **Tokens** drawer edits the configured token source. Token paths in `napkin.json`
 are relative to that config. See [tokens and variants](docs/guide/change-every-version.md)
 and [decision 0010](docs/decisions/0010-tokens.md).

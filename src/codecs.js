@@ -18,10 +18,12 @@ const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 
 export const sidecarText = (side) => JSON.stringify(sortKeys(side), null, 2) + '\n';
 export function writeSidecar(file, side) { commitSidecar(sidecarPath(file), sidecarText(side)); }
 export function sidecarPath(file) { return file.replace(/\.tsx$/, '.napkin.json'); }
-export function readSidecar(file, name, { create = false } = {}) {
+export function readSidecar(file, name, { create = false, identityPath = basename(file) } = {}) {
   const p = sidecarPath(file);
   if (existsSync(p)) { try { return JSON.parse(readFileSync(p, 'utf8')); } catch (e) { throw new Error(explainError(e.message, { file: p, next: 'fix the sidecar JSON or restore it from git, then reopen the component.' })); } }
-  const side = { id: `cmp_${name.replace(/[A-Z]/g, (c, i) => (i ? '_' : '') + c.toLowerCase())}_${createHash('sha256').update(file).digest('hex').slice(0, 16)}`, canvas: { x: 0, y: 0 } };
+  // Hash only the path within the opened components folder, never its location on disk.
+  // A persisted sidecar above always takes precedence, including after a rename.
+  const side = { id: `cmp_${name.replace(/[A-Z]/g, (c, i) => (i ? '_' : '') + c.toLowerCase())}_${createHash('sha256').update(identityPath.split('\\').join('/')).digest('hex').slice(0, 16)}`, canvas: { x: 0, y: 0 } };
   if (create) { try { createSidecar(p, sidecarText(side)); } catch (e) { if (e.code === 'EEXIST') return JSON.parse(readFileSync(p, 'utf8')); throw e; } }
   return side;
 }
@@ -29,11 +31,11 @@ export function readSidecar(file, name, { create = false } = {}) {
 // Components as React TSX in the napkin dialect (decision 0003).
 export const tsxCodec = {
   kind: 'napkin/1',
-  load(text, file) {
+  load(text, file, { displayFile } = {}) {
     const { doc } = readComponent(text);
     // Derive an identity without touching disk. Persist it with the first canvas
     // setting (or before a rename), never merely because a file was opened.
-    const side = file ? readSidecar(file, doc.name) : { id: `cmp_${doc.name}` };
+    const side = file ? readSidecar(file, doc.name, { identityPath: displayFile }) : { id: `cmp_${doc.name}` };
     return { doc: { ...doc, id: side.id }, state: { text } };
   },
   // The writer patches an AST in place, so every save parses its own from the last good text:

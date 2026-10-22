@@ -25,7 +25,7 @@ A component's sidecar saves canvas position, identity, preview widths, and slot
 preview text. It appears when those settings need saving or a rename needs a
 stable identity. Opening, bundling, and reading do not create sidecars. Existing
 sidecars are preserved. The `.napkin/` folder holds the project writer lock; the
-sample ignores it in git. In an unconfigured repository, `open` keeps the lock
+folder ignores itself in git through its own `.gitignore`. In an unconfigured repository, `open` keeps the lock
 outside the repo and disables sidecar writes unless `--write-sidecars` is set.
 
 Undo and redo are in the canvas. History is session memory; source and saved

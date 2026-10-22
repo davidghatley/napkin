@@ -292,7 +292,7 @@ export async function openStore(file, start = {}) {
   // Where the component sits on the canvas lives in the sidecar, never in the .tsx (FMT-02, FMT-06).
   function moveCanvas(x, y) {
     if (![x, y].every((n) => typeof n === 'number' && Number.isFinite(n))) return { ok: false, error: 'invalid canvas position: x and y must be numbers. Next: send x and y as finite numbers.' };
-    const side = readSidecar(file, basename(file).replace(/\.tsx$/, ''));
+    const side = readSidecar(file, basename(file).replace(/\.tsx$/, ''), { identityPath: displayFile });
     const canvas = { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
     if (side.canvas?.x !== canvas.x || side.canvas?.y !== canvas.y) writeSidecar(file, { ...side, canvas });
     events.emit('canvas', { canvas });

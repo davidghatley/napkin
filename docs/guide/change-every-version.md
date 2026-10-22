@@ -20,7 +20,7 @@ padding, gap, radius, or font-size field to choose a token. The field shows the
 name and resolved value. An orange dot offers a nearby token for an unbound
 literal. A snap changes the source; use undo if needed.
 
-Use Theme in the top bar to preview component modes. The separate editor theme
+Use Component theme in the top bar to preview component modes. The separate editor theme
 control changes the canvas chrome. Open the Tokens drawer to search by name,
 value, usage, or family and edit source values for each mode.
 

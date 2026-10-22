@@ -10,7 +10,7 @@ return to selection. Delete removes the selected node. Shortcuts do not draw
 while you type in an input.
 
 Use the inspector for Layout, Size, Appearance, Fill, Stroke, Shadow, Text,
-Content, Advanced CSS, Settings, and Variants. Text controls appear for text
+Image, Advanced: all CSS, Settings, Variants, and Composition. Text controls appear for text
 nodes. Drag a number's label to scrub it. A multi-selection stays inside one
 component and shows Mixed for fields with different values.
 
@@ -19,7 +19,7 @@ has Duplicate and Delete. Drag layers to reorder them. Enter focuses the
 selected component; Esc returns to the previous view. Drag its frame title to
 save its canvas position.
 
-Use Content to edit text or image attributes. Use Make setting to expose text
+Use the Text field to edit text, or Image to edit Source and Alt text. Use Make setting to expose text
 as a prop. Settings and Variants edit props, defaults, and enum axis values.
 Composition controls insert another local component, configure an instance,
 set a boolean condition, or preview a children slot.

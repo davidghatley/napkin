@@ -13,7 +13,7 @@ values and can reapply your value on the current revision.
 Open History for attributed edits. Ctrl/Cmd+Z undoes your own last edit as a new
 revision. Ctrl/Cmd+Shift+Z redoes it. Undo does not undo another caller's work.
 If someone changed the same property later, undo refuses and identifies that
-change. History preview does not write a file; Restore does.
+change. History preview does not write a file; Restore this does.
 
 Hand edits reload live. A broken save leaves the last good render visible and
 shows an error. Fix the source and save again. A valid file outside the dialect
