@@ -108,22 +108,22 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
 | FEEL-05 | FEEL | canvas | pass | walk 1: completed keyboard-only, but 86 Tabs to Radius (WPC-07) | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
 | SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
-| SCN-2 | SCN | whole | critic-pass | critic walk cold: accept 3/4, rejected #ff00ff in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
+| SCN-2 | SCN | whole | pass | critic walk cold: accept 3/4, rejected value in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
 | SCN-3 | SCN | whole | building | walk 1 fail; WPC-01/02 in fidelity | docs/evidence/walk-1/SCN-3.txt | 36daf60 |
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
 | WPC-01 | WPC | fidelity | building | builder: cells isolated (all: initial); follow-up: new elements border-box so W = outer size | docs/evidence/walk-1/ | 7bbf4ee |
 | WPC-02 | WPC | fidelity | building | builder: 0 computed-style diffs on 23 nodes vs plain page | docs/evidence/walk-1/ | 7bbf4ee |
-| WPC-03 | WPC | agents | critic-pass | critic pass; suite pending (lock queue) | test/agents/propose-create.test.js | 0085d7f |
+| WPC-03 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-04 | WPC | docs | critic-pass | critic: dialect example editable; decisions/ excluded by lead ruling | test/onboarding/docs-examples.test.js | 07734c8 |
 | WPC-05 | WPC | docs | critic-fail | critic: 5 doc/UI contradictions (napkin not on PATH, labels, .next, npx); fix round 2 (Codex) | docs/evidence/onboard2-commands.txt | 07734c8 |
 | WPC-06 | WPC | files | critic-fail | critic: ids derived from absolute path change on move/clone; .napkin/lock untracked; fix round 2 (Codex) | test/onboarding/sample.test.js | 07734c8 |
 | WPC-07 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-08 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-09 | WPC | agents | critic-pass | critic pass; suite pending (lock queue) | test/agents/propose-create.test.js | 0085d7f |
+| WPC-09 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-10 | WPC | docs | critic-pass | critic: modes, import line, consumer app all documented and true | test/history/ui-inspect.test.js | 07734c8 |
 | WPC-11 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-12 | WPC | agents | critic-pass | critic pass; suite pending (lock queue) | test/agents-ui/propose-create.test.js | 0085d7f |
+| WPC-12 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents-ui/propose-create.test.js | 0085d7f |
 | WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |

@@ -186,8 +186,8 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     store.events.on('problem', (p) => events.emit('problem', { component: id, ...p }));
     store.events.on('canvas', (c) => events.emit('canvas', { component: id, ...c }));
     if (!progressive) { e.dirty = false; await build(e); }
-    note({ kind: 'added', component: id, name: e.name, by: origin?.by ?? 'file', summary: origin?.summary ?? 'file appeared', revision: (await store.read()).revision });
-    events.emit('added', { component: id, ...(origin && { by: origin.by, summary: origin.summary }) });
+    note({ kind: 'added', component: id, name: e.name, by: origin?.by ?? 'file', summary: origin?.summary ?? 'file appeared', revision: (await store.read()).revision, ...(origin?.approvedBy && { approvedBy: origin.approvedBy }) });
+    events.emit('added', { component: id, ...(origin && { by: origin.by, summary: origin.summary, ...(origin.approvedBy && { approvedBy: origin.approvedBy }) }) });
   }
 
   async function remove(e) {
@@ -345,16 +345,29 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     },
     // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
     // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.
-    async create(name, rootTag = 'div', { by } = {}) {
-      needBy(by);
+    // Everything create() checks before it writes, so a propose-mode agent's request can be refused up front. Returns the file it would make.
+    checkCreate(name, rootTag = 'div') {
       if (typeof name !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new CreateError(`component name "${name}" must be PascalCase (letters and digits, starting with a capital)`);
       if (typeof rootTag !== 'string' || !TAGS.has(rootTag) || VOID.has(rootTag)) throw new CreateError(`root tag "${rootTag}" is not supported`);
       if (wanted) throw new CreateError('this server opened a single file, so it cannot add components');
-      await queue;
       const taken = [...entries.values()].some((e) => e.name.toLowerCase() === name.toLowerCase());
       const file = join(dir, `${name}.tsx`);
       if (taken || existsSync(file)) throw new CreateError(`component "${name}" already exists`, 409);
-      origins.set(file, { by, summary: `created ${name}` });
+      return file;
+    },
+    // The source and document a new component would start with (nothing is written): the ghost of a create proposal.
+    previewCreate(name, rootTag = 'div') {
+      this.checkCreate(name, rootTag);
+      const source = newComponentSource(name, rootTag);
+      return { source, doc: readComponent(source).doc };
+    },
+    // opts.approvedBy: the person who accepted a proposal to create it; recorded beside the author in history.
+    async create(name, rootTag = 'div', { by, approvedBy } = {}) {
+      needBy(by);
+      this.checkCreate(name, rootTag);
+      await queue;
+      const file = this.checkCreate(name, rootTag);
+      origins.set(file, { by, summary: `created ${name}`, ...(approvedBy && { approvedBy }) });
       try { createComponent(file, newComponentSource(name, rootTag)); }
       catch (err) { origins.delete(file); throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
       await scan();

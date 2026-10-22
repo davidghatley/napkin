@@ -51,7 +51,7 @@ export async function openStore(file, start = {}) {
   try { ({ doc, state } = codec.load(text, file, start)); } catch (e) { readOnly = reason(e); if (e.loc) syntaxErr = readOnly; }
   let revision = revisionOf(text);
   let seq = 1;
-  const history = [{ seq, revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', doc, text }];
+  const history = [{ seq, revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', ...(start.approvedBy && { approvedBy: start.approvedBy }), doc, text }];
   // A past revision's text and document. Old entries hold the text deflated and no document (see FULL).
   const textOf = (h) => (typeof h.text === 'string' ? h.text : Buffer.isBuffer(h.text) ? inflateSync(h.text).toString('utf8') : undefined);
   const docOf = (h) => {
