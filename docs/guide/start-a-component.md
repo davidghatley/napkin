@@ -10,7 +10,7 @@ return to selection. Delete removes the selected node. Shortcuts do not draw
 while you type in an input.
 
 Use the inspector for Layout, Size, Appearance, Fill, Stroke, Shadow, Text,
-Image, Advanced: all CSS, Settings, Variants, and Composition. Text controls appear for text
+Image, Advanced: all CSS, Composition, Settings, and Variants. Text controls appear for text
 nodes. Drag a number's label to scrub it. A multi-selection stays inside one
 component and shows Mixed for fields with different values.
 
