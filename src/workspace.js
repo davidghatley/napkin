@@ -62,13 +62,21 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
   const note = (x) => { log.push({ at: Date.now(), ...x }); if (log.length > 200) log.shift(); };
 
   // The canvas page's flavour of the bundle (React shared, see bundle.js): built after the first request for it, then kept current.
-  const buildShared = (e) => {
+  const buildShared = (e, cause) => {
     const prev = e.builtS || Promise.resolve();
-    e.builtS = prev.then(() => bundler.build(e.file, e.name, relative(dir, e.file), { shared: true }));
+    e.dirtyS = false;
+    // (when the plain bundle is kept current too, its 'build' event is the one that tells the page)
+    e.builtS = prev.then(() => bundler.build(e.file, e.name, relative(dir, e.file), { shared: true })).then((r) => { if (!e.built) events.emit('build', { component: e.id, ok: r.ok, ms: r.ms, error: r.error, ...(cause && { cause }) }); return r; });
     return e.builtS;
   };
+  // A file this component is made of changed (or a component it shows): bring whichever bundles exist up to date, or mark them stale.
+  const refresh = (e, cause) => {
+    e.dirty = true; e.dirtyS = true;
+    if (e.built) { e.dirty = false; build(e, cause); }
+    else if (e.builtS) buildShared(e, cause);
+  };
   const build = (e, cause) => {
-    if (e.builtS) buildShared(e);
+    if (e.builtS) buildShared(e, cause);
     // Builds of one component run one after another, and a bundle is always built from the file as it is on disk.
     const prev = e.built || Promise.resolve();
     e.built = prev.then(() => bundler.build(e.file, e.name, relative(dir, e.file))).then((r) => { e.lastBuild = r; events.emit('build', { component: e.id, ok: r.ok, ms: r.ms, error: r.error, ...(cause && { cause }) }); return r; });
@@ -88,10 +96,9 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     store.events.on('change', (c) => {
       e.name = c.doc?.name || e.name;
       setDoc(file, c.doc ?? null);
-      e.dirty = true;
-      if (e.built) { e.dirty = false; build(e); }
+      refresh(e);
       // everything that shows this component inside it is bundled again (a component that was never drawn yet is only marked)
-      for (const d of dependents(file)) { if (d.built) { d.dirty = false; build(d, e.name); } else d.dirty = true; }
+      for (const d of dependents(file)) refresh(d, e.name);
       note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision, ...(c.approvedBy && { approvedBy: c.approvedBy }) });
       events.emit('change', { component: id, ...c });
     });
@@ -111,7 +118,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     await e.builtS?.catch(() => {});
     await e.built?.catch(() => {}); // a build still queued would otherwise open a new esbuild context after the dispose
     await bundler.dispose(e.file);
-    for (const d of orphans) { if (d.built) { d.dirty = false; build(d, e.name); } else d.dirty = true; } // they now import a file that is gone: show that
+    for (const d of orphans) refresh(d, e.name); // they now import a file that is gone: show that
     note({ kind: 'removed', component: e.id, name: e.name, by: why?.by ?? 'file', summary: why?.summary ?? 'file removed' });
     events.emit('removed', { component: e.id, ...(why && { by: why.by, summary: why.summary }) });
   }
@@ -216,7 +223,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       return { id: e.id, component: made.id, name, node: id, revision: result.revision };
     },
     async bundle(e, { shared = false } = {}) {
-      if (shared) { if (!e.builtS) buildShared(e); return e.builtS; }
+      if (shared) { if (!e.builtS || e.dirtyS) buildShared(e); return e.builtS; }
       if (!e.built || e.dirty) { e.dirty = false; build(e); }
       return e.built;
     },

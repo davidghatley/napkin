@@ -2,6 +2,7 @@
 // 'react-dom' and 'react-dom/client' at /vendor/<name>.js, each a small ES module built here once from this repo's node_modules.
 // A component bundle then holds only the component, and React is evaluated once, not once per component per redraw.
 import * as esbuild from 'esbuild';
+import { explainError } from './errors.js';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +14,7 @@ const cache = new Map();
 
 export function vendorModule(name) {
   const spec = SPECS[name];
-  if (!spec) return Promise.reject(new Error(`no vendor module "${name}"`));
+  if (!spec) return Promise.reject(new Error(explainError(`no vendor module "${name}"`, { next: 'use one of react, react-jsx-runtime, react-dom, react-dom-client.' })));
   if (!cache.has(name)) {
     const names = Object.keys(require(spec)).filter((k) => /^[A-Za-z_$][\w$]*$/.test(k) && k !== 'default');
     const file = JSON.stringify(require.resolve(spec)); // by path: the bare names 'react' and 'react/...' are the ones left external below

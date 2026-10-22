@@ -90,3 +90,4 @@ body[data-play] .cell .mount button { cursor: pointer; }
 .group-title { min-width: 280px; }
 section.cmp:has(.mctl) .ghint { display: none; }
 .cmp-head .mctl { max-width: 660px; }
+#panel .srcblock { display: grid; gap: 4px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }

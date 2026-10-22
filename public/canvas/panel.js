@@ -411,10 +411,12 @@ export function renderPanel(ctx) {
     </div>`;
 
   const propsUi = section('props', 'Settings', settingsBody(doc, dis, err), { open: false });
-  const variantsUi = section('variants', 'Variants', variantsBody(doc, dis, err), { open: false });
   const nOver = overriddenCount(doc, { node: node.id, variant: sel.variant });
+  const hasOverrides = Object.values(doc.variants || {}).some((vals) => Object.values(vals).some((nodesOf) => nodesOf[node.id]));
+  // CMP-03: where each value of the selected element comes from. Part of Variants (open while this cell overrides something).
+  const sourcesBlock = multi || node.instance || !hasOverrides ? '' : `<div class="srcblock" id="sources-block" data-sec="sources"><div class="metacap">Where each value comes from</div>${sourcesBody(doc, { node: node.id, variant: sel.variant }, dis)}</div>`;
+  const variantsUi = section('variants', `Variants${nOver ? ` <span class="srcbadge" id="sources-count">${nOver} from variants</span>` : ''}`, sourcesBlock + variantsBody(doc, dis, err), { open: nOver > 0 });
   const composeUi = multi ? '' : section('compose', 'Composition', composeBody(ctx, doc, node, comp, dis), { open: !!(node.instance || node.slot || node.when) });
-  const sourcesUi = multi || node.instance ? '' : section('sources', `Sources${nOver ? ` <span class="srcbadge" id="sources-count">${nOver} from variants</span>` : ''}`, sourcesBody(doc, { node: node.id, variant: sel.variant }, dis), { open: nOver > 0 });
 
   const vlabel = variantLabel(sel.variant);
   el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="nodename" id="sel-node">${esc(node.id)} <span class="tagname">&lt;${esc(node.tag)}&gt;</span>${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
@@ -426,7 +428,7 @@ export function renderPanel(ctx) {
       : node.tag === 'img' ? content + sizeSec + look + stroke + effects + layout
       : container ? layout + sizeSec + look + fill + stroke + effects + (showType ? typeSec : '')
       : sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + layout}${node.instance ? '' : advanced}
-    <div class="grouphead">Component</div>${composeUi}${sourcesUi}${propsUi}${variantsUi}`;
+    ${composeUi}${propsUi}${variantsUi}`;
 
   for (const sw of el.querySelectorAll('.chipcolor')) {
     const v = sw.dataset.color;
