@@ -18,7 +18,7 @@ test('undo, restore and preview work through revisions old enough to have been c
     assert.ok(r.ok, r.error);
     revisions.push(r.revision); texts.push(readFileSync(fileOf('Button'), 'utf8'));
   }
-  // revision 5 is 35 steps old: far past the 8 that stay in full
+  // revision 5 is 35 steps old: far past the 3 that stay in full
   const old = store.at(revisions[5]);
   assert.ok(old, 'an old revision is still previewable');
   assert.equal(old.source, texts[5], 'its text is exactly what the file held');

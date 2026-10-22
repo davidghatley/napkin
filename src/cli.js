@@ -9,6 +9,7 @@ import { spawn } from 'node:child_process';
 import { createComponent, createProjectConfig } from './commit.js';
 import { newComponentSource } from './tsx/write.js';
 import { starterSource } from './adopt.js';
+import { SERVER_FLAGS } from './node-flags.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 export function connection(url) {
@@ -41,7 +42,7 @@ async function main() {
     if (!existsSync(components)) throw new Error(`${components} does not exist (napkin.json). Next: create the components folder or correct the components path.`);
   }
   if (external && !values['write-sidecars']) console.log('Opening without sidecar writes. Frame positions stay in this session; component edits and accepted adoptions still write the selected TSX file.');
-  const args = [join(ROOT, 'src/server.js'), '--dir', components, '--port', String(port), '--recursive', '--next-port', '--stream', ...(external && !values['write-sidecars'] ? ['--no-sidecars'] : [])];
+  const args = [...SERVER_FLAGS, join(ROOT, 'src/server.js'), '--dir', components, '--port', String(port), '--recursive', '--next-port', '--stream', ...(external && !values['write-sidecars'] ? ['--no-sidecars'] : [])];
   const child = spawn(process.execPath, args, { stdio: ['inherit', 'pipe', 'inherit'] });
   let printed = false, buffer = '';
   child.stdout.on('data', (b) => {

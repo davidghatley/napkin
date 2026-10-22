@@ -4,6 +4,7 @@ import { mkdtempSync, copyFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SERVER_FLAGS } from '../../src/node-flags.js';
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 export const fixture = (name) => join(ROOT, 'fixtures', name, `${name}.tsx`);
@@ -31,7 +32,7 @@ export async function waitFor(fn, timeout = 3000, step = 10) {
 
 // Starts src/server.js on a free port (or on `port`, to restart it where it was) for a components folder.
 export async function startServer(compDir, { execArgv = [], env = {}, port = 0 } = {}) {
-  const proc = spawn(process.execPath, [...execArgv, join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+  const proc = spawn(process.execPath, [...SERVER_FLAGS, ...execArgv, join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let out = '';
   const url = await new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error('server did not start: ' + out)), 5000);

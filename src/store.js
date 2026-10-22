@@ -31,7 +31,7 @@ export const brokenMessage = (file, why) => `${basename(file)} has a syntax erro
 const POLL_MS = 400; // safety net for a missed file-system event; FMT-07 wants a hand edit seen within 1 s
 
 const HISTORY = 500;
-const FULL = 8; // the newest revisions keep their document and text in memory; older ones keep the text compressed and rebuild the document when asked (REL-04: memory flat over a long session)
+const FULL = 3; // the newest revisions keep their document and text in memory; older ones keep the text compressed and rebuild the document when asked (REL-04: memory flat over a long session)
 const STACK = 100; // undo steps remembered per caller // revisions remembered for rebasing; older bases are "stale revision"
 
 // start: { revision, by, summary } seeds the first history entry (create and rename record themselves there).
