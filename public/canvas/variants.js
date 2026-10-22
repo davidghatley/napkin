@@ -80,12 +80,13 @@ export function sourcesBody(doc, sel, dis) {
   if (!rows.length) return '<p class="hint" id="sources-empty">This element has no styles yet.</p>';
   const li = rows.map((r) => {
     const p = esc(r.prop), from = r.from ? `${r.from[0]}=${r.from[1]}` : 'base';
+    const chip = `<span class="srcchip${r.from ? ' over' : ''}" id="src-chip-${p}">${esc(from)}</span>`;
+    const also = r.also.length ? `<span class="also" id="src-also-${p}">also in ${esc(r.also.map(([a, v]) => `${a}=${v}`).join(', '))}</span>` : '';
+    const buttons = r.from ? `<button type="button" class="minibtn" id="src-reset-${p}" data-cmp="src-reset" data-prop="${p}" data-axis="${esc(r.from[0])}" data-value="${esc(r.from[1])}" title="Remove the ${esc(from)} override; the base value shows again"${dis}>${ICON.reset} Reset</button>
+        <button type="button" class="minibtn" id="src-base-${p}" data-cmp="src-base" data-prop="${p}" data-axis="${esc(r.from[0])}" data-value="${esc(r.from[1])}" title="Make this value the base for every variant, and drop the ${esc(from)} override"${dis}>${ICON.base} Move to base</button>` : '';
     return `<li class="srow${r.from ? ' over' : ''}" data-prop="${p}" id="src-${p}" data-source="${esc(from)}">
-      <div class="sline"><span class="${r.from ? 'dot' : 'dot off'}" id="src-dot-${p}" role="img" aria-label="${r.from ? `${esc(human(r.prop))} is overridden by ${esc(from)}` : `${esc(human(r.prop))} comes from the base`}"></span><span class="sname">${esc(human(r.prop))}</span><code class="sval">${esc(fmt(r.value))}</code></div>
-      <div class="sline sub"><span class="srcchip${r.from ? ' over' : ''}" id="src-chip-${p}">${esc(from)}</span>
-        ${r.from ? `<button type="button" class="minibtn" id="src-reset-${p}" data-cmp="src-reset" data-prop="${p}" data-axis="${esc(r.from[0])}" data-value="${esc(r.from[1])}" title="Remove the ${esc(from)} override; the base value shows again"${dis}>${ICON.reset} Reset</button>
-        <button type="button" class="minibtn" id="src-base-${p}" data-cmp="src-base" data-prop="${p}" data-axis="${esc(r.from[0])}" data-value="${esc(r.from[1])}" title="Make this value the base for every variant, and drop the ${esc(from)} override"${dis}>${ICON.base} Move to base</button>` : ''}
-        ${r.also.length ? `<span class="also" id="src-also-${p}">also in ${esc(r.also.map(([a, v]) => `${a}=${v}`).join(', '))}</span>` : ''}</div>
+      <div class="sline"><span class="${r.from ? 'dot' : 'dot off'}" id="src-dot-${p}" role="img" aria-label="${r.from ? `${esc(human(r.prop))} is overridden by ${esc(from)}` : `${esc(human(r.prop))} comes from the base`}"></span><span class="sname">${esc(human(r.prop))}</span>${r.from ? '' : chip}<code class="sval">${esc(fmt(r.value))}</code></div>
+      ${r.from || also ? `<div class="sline sub">${r.from ? chip : ''}${buttons}${also}</div>` : ''}
       ${errorLine('src-' + r.prop)}</li>`;
   }).join('');
   return `<ul class="plain srcs" id="sources">${li}</ul>`;

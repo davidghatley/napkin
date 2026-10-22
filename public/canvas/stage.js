@@ -155,7 +155,7 @@ export function createStage(ctx, root, world, view) {
       const pw = c.preview?.[JSON.stringify(variant)];
       if (pw) { mount.style.width = `${pw}px`; fig.dataset.pw = String(pw); }
       fig.append(mount, cap, grip);
-      try { unmounts.push(mod.mount(mount, variant)); }
+      try { unmounts.push(mod.mount(mount, { ...variant, ...(ctx.play?.props(id) ?? {}) })); }
       catch (e) { mount.replaceChildren(errorCard(`${c.path || c.name + '.tsx'}: render failed: ${e.message}`)); }
       return fig;
     };
@@ -360,9 +360,9 @@ export function createStage(ctx, root, world, view) {
     return el && cell && { el, id: cell.closest('.cmp').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
-  root.addEventListener('mousedown', (ev) => { if (ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
+  root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
   const setHoverEl = (el, h) => { hoverEl = el; ctx.emit('hover', h ? { component: h.id, node: h.el.dataset.n } : null); refreshOverlays(); };
-  root.addEventListener('mouseover', (ev) => { const h = hit(ev.target); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mouseover', (ev) => { if (document.body.dataset.play) return; const h = hit(ev.target); setHoverEl(h?.el ?? null, h); });
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
   function hoverNode(sel) {
@@ -371,10 +371,11 @@ export function createStage(ctx, root, world, view) {
   }
   let suppressClick = 0;
   root.addEventListener('click', (ev) => {
+    if (document.body.dataset.play) return; // play mode: the click belongs to the component
     if (suppressClick && Date.now() - suppressClick < 300) { suppressClick = 0; return; }
     const h = hit(ev.target);
     if (h) ev.preventDefault();
-    if (ev.target.closest?.('.cmp-head, .build-error')) return; // handled by the frame drag (a click on a title selects the component's root)
+    if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
     const sel = { component: h.id, node: h.el.dataset.n, variant: h.variant };
     if (ev.shiftKey || ev.metaKey || ev.ctrlKey) ctx.toggle(sel); else ctx.select(sel);
@@ -430,7 +431,7 @@ export function createStage(ctx, root, world, view) {
     // by the title, or by any empty part of the frame (never by a component's own elements)
     const head = ev.target.closest?.('.cmp-head');
     const body = !head && ctx.state.tool === 'select' && ev.pointerType !== 'touch' && !ev.target.closest('.mount [data-n]') ? ev.target.closest?.('.frame') : null;
-    if (ev.target.closest('details, summary, pre')) return;
+    if (ev.target.closest('details, summary, pre, [data-nodrag]')) return;
     if (!(head || body) || ev.button !== 0 || view.isPanning()) return;
     const id = (head || body).closest('.cmp').dataset.component, sec = sections.get(id);
     if (!sec?.pos) return;

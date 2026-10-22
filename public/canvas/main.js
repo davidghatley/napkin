@@ -36,6 +36,8 @@ import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
 import { initHandles } from './handles.js';
 import { initHistoryLane } from './history-lane.js';
+import { initMatrix } from './matrix.js';
+import { initPlay } from './play.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -103,6 +105,8 @@ initShortcuts(ctx);
 initReadOnly(ctx);
 const nav = initNav(ctx);
 initHandles(ctx);
+initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
+initPlay(ctx); // CMP-09: P makes the cells live
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
