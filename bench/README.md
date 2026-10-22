@@ -63,16 +63,31 @@ SOAK=1 node --test test/engine/bench.test.js     # 60 s soak, writes REL-04-60s 
   frame, and the same page driven by the same wheel events, with `loadavg` and the number of chromium
   processes. Pass, every run: raw p95 <= max(16.7, floor + 1) ms, at most 2% of frames >= 25 ms and at most
   2% dropped. The benchmark never injects a transform.
-  Floor on this machine, five-second runs: raw p95 16.85 to 17.08 ms (0 frames >= 25 ms), with 51 to 66
-  chromium processes alive and a load average of 1.7 to 2.8 (other agents' suites).
-  State at the last commit (three consecutive runs, all FAIL): `pan` passes the frame bar in two of three
-  runs (raw p95 17.3 to 18.5 against a bar of 17.9 to 18.1, 0 to 3 frames of 300 at 25 ms or more, 0 long
-  tasks, longest main-thread task 13 to 15 ms); `pan+zoom` and `sweep+zoom` have raw p95 of about 21 ms and
-  1.4 to 3% of frames at 25 ms or more, with one stall of 200 to 380 ms where the zoom turns round at about
-  1 s (the main thread is not busy then: the compositor is waiting for tiles to rasterise, 100 ms of raster
-  work on the thread pool, on CPU raster with the machine shared); `overview` (120 components drawn) has
-  5 to 10% of frames at 25 ms or more, 30 dropped frames and 11 to 16 long tasks (longest 24 to 30 ms).
-  Where the time went: see docs/engine.md.
+  `--gpu` (run it as `~/anime-pipeline/tools/gpu_run node bench/perf.js --id PRF-04 --gpu`; the GPU is
+  shared) launches every Chromium of the run with GPU raster (`--enable-gpu-rasterization
+  --ignore-gpu-blocklist --use-angle=gl --use-gl=angle`, headless=new) and fails unless `SystemInfo.getInfo`
+  reports `gpu_compositing: enabled`, `rasterization: enabled*` and an NVIDIA renderer; that report is in
+  the evidence (`docs/evidence/PRF-04.gpu.json`, the CPU run is `PRF-04.json`). `--use-angle=vulkan` also
+  works here; plain `--use-gl=egl` and the default fall back to software.
+  Zoom steps alternate in and out. (An earlier version zoomed in for a whole second: the view then sat on the
+  gaps between frames, nothing on screen changed, and the compositor drew no frames for 200 to 380 ms. That
+  "stall" was the benchmark looking at empty canvas, not a stall; it is gone now. The overview sweep is
+  scaled to stay inside the grid for the same reason.)
+  Floor on this machine, five-second runs: raw p95 16.9 ms CPU (0 frames >= 25 ms), 16.9 to 17.0 ms GPU (1
+  frame >= 25 ms), with 51 to 66 chromium processes alive and a load average of 0.5 to 2.9.
+  State at the last commit, three consecutive runs each (all FAIL): CPU `pan` raw p95 17.1 to 17.3 ms (bar
+  17.9), 0 to 1 frames of 300 at 25 ms or more, passes; `pan+zoom` 18.5 to 19.5 ms, 0.3 to 2% of frames at
+  25 ms or more (mostly passes the 2% gate, misses the p95 bar by 0.6 to 1.6 ms); `sweep+zoom` 20.9 to 25.4
+  ms, 3.4 to 5.4% of frames at 25 ms or more; `overview` 23 to 24 ms, 1.7 to 3.7%, 7 to 23 dropped frames, 21
+  to 23 long tasks (longest 23 to 31 ms). GPU raster is no better and often worse: `pan` 18.9 to 19.6 ms,
+  `pan+zoom` 18.6 to 25.6 ms and 2.7 to 6% of frames at 25 ms or more, `sweep+zoom` 26 to 29 ms and 6 to 9%,
+  `overview` 23.6 to 23.7 ms and 2 to 3%.
+  Why zoom steps are late: each zoom step makes the compositor re-rasterise the world layer (about 57 raster
+  tasks per step, 31 without `will-change`, counted in a trace), even with `will-change: transform`; a step
+  therefore costs a frame 25 to 30 ms apart from the last. A page of 1,500 plain elements with the same
+  `will-change` layer and the same steps shows no such lateness (p95 17.1), and a zoom step costs the main
+  thread little (under 2 ms alone). Not fixed. What was tried and did not help: tighter and looser culling,
+  un-culling two frames per frame, a transform instead of `zoom` on the titles.
   Tradeoffs the pan and zoom path accepts: during a gesture the `--nk-ls` scale of the in-frame chips and
   axis labels waits for the view to settle (160 ms idle), so they can be the wrong size while you keep
   moving; titles are kept readable by setting their scale on the few titles on screen; frames outside 0.12

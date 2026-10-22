@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
+if (process.argv.includes('--gpu')) process.env.NAPKIN_GPU = '1'; // GPU raster (run through ~/anime-pipeline/tools/gpu_run: the GPU is shared)
 import { generateCorpus } from './corpus.js';
 import { stats, record, rssMB, trackErrors, allDrawn } from './common.js';
 import { launchChromium } from '../test/helpers/cdp.js';
@@ -179,7 +180,7 @@ export async function traceWhile(b, work) {
 }
 const quantile = (xs, q) => { const a = [...xs].sort((x, y) => x - y); return a.length ? a[Math.min(a.length - 1, Math.ceil(q * a.length) - 1)] : NaN; };
 const TICK = 1000 / 60;
-function analyseTrace(events, t0, t1) {
+export function analyseTrace(events, t0, t1) {
   // The renderer main thread, and the frames the compositor produced inside the window [t0, t1] (trace microseconds).
   const mains = new Set(events.filter((e) => e.ph === 'M' && e.name === 'thread_name' && e.args?.name === 'CrRendererMain').map((e) => `${e.pid}:${e.tid}`));
   const tasks = events.filter((e) => e.ph === 'X' && e.name === 'RunTask' && mains.has(`${e.pid}:${e.tid}`) && e.ts >= t0 && e.ts <= t1).map((e) => e.dur / 1000);
@@ -203,7 +204,8 @@ function analyseTrace(events, t0, t1) {
   if (process.env.DBG) { const b0 = Math.min(...events.filter((e) => e.name === 'EventDispatch' && e.args?.data?.type === 'wheel').map((e) => e.ts)); console.log('missed@', frames.slice(1).map((f, i) => [(f.end - b0) / 1000, (f.end - frames[i].end) / 1000]).filter(([, g]) => g >= 25).map(([t, g]) => `${t.toFixed(0)}:${g.toFixed(0)}`).join(' ')); }
   if (process.env.DBG3) console.log('states', JSON.stringify(frames.reduce((a, f) => (a[f.state] = (a[f.state] ?? 0) + 1, a), {})), 'first gaps', frames.slice(1, 30).map((f, i) => ((f.end - frames[i].end) / 1000).toFixed(0)).join(' '));
   if (process.env.DBG5) { const g = frames.slice(1).map((f, i) => (f.end - frames[i].end) / 1000); const h = {}; for (const x of g) { const k = Math.round(x); h[k] = (h[k] ?? 0) + 1; } console.log('hist', JSON.stringify(h)); const b0 = Math.min(...events.filter((e) => e.name === 'EventDispatch' && e.args?.data?.type === 'wheel').map((e) => e.ts)); console.log('late', frames.slice(1).map((f, i) => [(f.end - b0) / 1000, (f.end - frames[i].end) / 1000]).filter(([, g]) => g > +(process.env.DBG6 || 19)).slice(0, 30).map(([t, g]) => `${t.toFixed(0)}:${g.toFixed(0)}`).join(' ')); }
-  if (process.env.DBG7) { const big = frames.slice(1).map((f, i) => ({ a: frames[i].end, b: f.end })).filter((g) => g.b - g.a > 150000); for (const g of big.slice(0, 1)) { const nm = {}; for (const e of events) { if (e.ph !== 'X' || e.ts < g.a || e.ts > g.b) continue; const k = `${e.name}@${e.tid === undefined ? '' : (mains.has(`${e.pid}:${e.tid}`) ? 'main' : 'other')}`; (nm[k] ??= { n: 0, d: 0 }); nm[k].n++; nm[k].d += e.dur / 1000; } console.log('gap', (g.b - g.a) / 1000, Object.entries(nm).sort((x, y) => y[1].d - x[1].d).slice(0, 12).map(([k, v]) => `${k} n=${v.n} ${v.d.toFixed(0)}ms`).join(' | ')); } }
+  if (process.env.DBG7) { const big = frames.slice(1).map((f, i) => ({ a: frames[i].end, b: f.end })).filter((g) => g.b - g.a > (+process.env.DBG9 || 150000)); for (const g of big.slice(2, 5)) { const nm = {}; for (const e of events) { if (e.ph !== 'X' || e.ts < g.a || e.ts > g.b) continue; const k = `${e.name}@${e.tid === undefined ? '' : (mains.has(`${e.pid}:${e.tid}`) ? 'main' : 'other')}`; (nm[k] ??= { n: 0, d: 0 }); nm[k].n++; nm[k].d += e.dur / 1000; } console.log('gap', (g.b - g.a) / 1000, Object.entries(nm).sort((x, y) => y[1].d - x[1].d).slice(0, 12).map(([k, v]) => `${k} n=${v.n} ${v.d.toFixed(0)}ms`).join(' | ')); } }
+  if (process.env.DBG8) { const big = frames.slice(1).map((f, i) => ({ a: frames[i].end, b: f.end })).filter((g) => g.b - g.a > 150000)[0]; if (big) { const b0 = Math.min(...events.filter((e) => e.name === 'EventDispatch' && e.args?.data?.type === 'wheel').map((e) => e.ts)); const rel = (t) => ((t - b0) / 1000).toFixed(0); console.log('gapwin', rel(big.a), rel(big.b)); console.log(' wheels', events.filter((e) => e.name === 'EventDispatch' && e.args?.data?.type === 'wheel' && e.ts > big.a - 50000 && e.ts < big.b + 20000).map((e) => rel(e.ts) + ':' + (e.dur / 1000).toFixed(1)).join(' ')); console.log(' reporters', events.filter((e) => e.name === 'PipelineReporter' && e.ph === 'b' && e.ts > big.a - 40000 && e.ts < big.b + 30000).map((e) => rel(e.ts) + ':' + (e.args?.frame_reporter?.state ?? '?').replace('STATE_', '')).join(' ')); console.log(' draws', events.filter((e) => e.name === 'Display::DrawAndSwap' && e.ph === 'X' && e.ts > big.a - 40000 && e.ts < big.b + 30000).map((e) => rel(e.ts)).join(' ')); console.log(' bmf', events.filter((e) => e.name === 'ProxyMain::BeginMainFrame' && e.ph === 'X' && e.ts > big.a - 40000 && e.ts < big.b + 30000).map((e) => rel(e.ts) + ':' + (e.dur / 1000).toFixed(0)).join(' ')); } }
   const gaps = frames.slice(1).map((f, i) => (f.end - frames[i].end) / 1000); // presentation to presentation: 16.7 ms when every vsync made a frame, 33.3 after a missed one
   
   // Draw-to-draw intervals as a cross-check: they carry the compositor's scheduling jitter, so only whole missed vsyncs are counted from them.
@@ -220,7 +222,7 @@ function analyseTrace(events, t0, t1) {
     pipelineStates: states,
   };
 }
-// Zoom: a Ctrl-wheel zoom step in place of every twelfth scroll event (a step is one notch, about 1.27x; in for a second, out for a second).
+// Zoom: a Ctrl-wheel zoom step in place of every twelfth scroll event (a step is one notch, about 1.27x; alternately in and out).
 // Pan: scroll events along a Lissajous path (about 750 px tall and 70 px wide; the components form one tall column), so the view stays over them and every frame has something to redraw.
 // The corpus is packed by the stage while the view is zoomed out to fit everything, which makes one tall column. A real canvas is a grid: lay the 200 components out in
 // rows of the width that makes the whole a rough square, with the stage's own gaps, before measuring.
@@ -247,19 +249,20 @@ window.__tick = setInterval(() => { const v = napkin.view.get(), bx = napkin.vie
   const c = napkin.state.selection?.component, sc = c && S.get(c); q.sel[sc && sc.pos && vis({ x: sc.pos.x, y: sc.pos.y, w: sc.size.w, h: sc.size.h }) ? 0 : 1]++;
   q.onMax = Math.max(q.onMax, on); q.onMin = Math.min(q.onMin, on); q.drawnMax = Math.max(q.drawnMax, drawn); q.n++; }, 100); true`;
 // mode: 'hold' scrolls back and forth about 370 px around the selection (it stays on screen); 'sweep' travels in a square (25 px per event, a side every 1.25 s, about 7,500 px in all) so components are
-// un-culled and rasterised continuously. zoomSteps: every twelfth event is a Ctrl-wheel zoom step (one notch, 1.27x; in for a second, out for a second), anchored on the stage centre.
-async function motionRun(b, { mode, zoomSteps, z0 = 0.3 }) {
+// un-culled and rasterised continuously. zoomSteps: every twelfth event is a Ctrl-wheel zoom step (one notch, 1.27x; alternately in and out), anchored on the stage centre.
+async function motionRun(b, { mode, zoomSteps, z0 = 0.3, grid }) {
+  const speed = Math.min(25, 0.4 * Math.min(grid.width, grid.height) * z0 / 78); // px per event: a side of the square is 78 events, and the tour stays inside the grid
   await b.eval(`(()=>{ const r = napkin.stage.componentRect(napkin.state.selection.component), bx = napkin.view.stageBox(), z = ${z0}; napkin.view.set({ z, x: bx.width / 2 - (r.x + r.w / 2) * z, y: bx.height / 2 - (r.y + r.h / 2) * z }); return 1 })()`);
   await sleep(900);
   const before = await b.eval('napkin.view.get()');
   await b.eval(`window.__path = 0; { let last = napkin.view.get(); napkin.on('view', (v) => { window.__path += Math.hypot(v.x - last.x, v.y - last.y) + Math.abs(v.z - last.z) * 1000; last = v; }); } window.__frames = []; window.__stop = false; (() => { let prev; const tick = (t) => { if (prev !== undefined) __frames.push(t - prev); prev = t; if (!__stop) requestAnimationFrame(tick); }; requestAnimationFrame(tick); })(); ${SAMPLER}`);
   const sb = await b.eval('(() => { const r = napkin.view.stageBox(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })()'), mx = sb.x, my = sb.y;
-  const dirs = [[0, 25], [25, 0], [0, -25], [-25, 0]];
+  const dirs = [[0, speed], [speed, 0], [0, -speed], [-speed, 0]];
   const { events, out } = await traceWhile(b, async () => {
     const sent = [], started = performance.now();
     let n = 0;
     while (performance.now() - started < 5000) {
-      const e = performance.now() - started, zoom = zoomSteps && n % 12 === 0, up = Math.floor(e / 1000) % 2 === 0;
+      const e = performance.now() - started, zoom = zoomSteps && n % 12 === 0, up = (n / 12) % 2 === 0; // steps alternate in and out, so the view stays over components (a second in a row of zoom-in leaves the gaps between frames on screen: nothing to draw, so no frames)
       const [dx, dy] = mode === 'sweep' ? dirs[Math.floor(e / 1250) % 4] : [Math.cos(e / 270) * 18, Math.cos(e / 400) * 18];
       sent.push(b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mx, y: my, deltaX: zoom ? 0 : dx, deltaY: zoom ? (up ? -120 : 120) : dy, modifiers: zoom ? 2 : 0 }));
       n++;
@@ -300,10 +303,12 @@ async function floorRun(wheel = false) {
 }
 const machine = () => { const n = (cmd) => { try { return execFileSync('sh', ['-c', cmd], { encoding: 'utf8' }).trim(); } catch { return null; } }; return { loadavg: n("cut -d' ' -f1-3 /proc/loadavg"), chromiumProcesses: Number(n('pgrep -c chrom') ?? NaN), cpus: n('nproc') }; };
 async function motion({ browser: b, cells }) {
+  const gpuMode = !!process.env.NAPKIN_GPU, gpu = await b.gpuInfo().then((i) => ({ gpuCompositing: i.gpu.featureStatus.gpu_compositing, rasterization: i.gpu.featureStatus.rasterization, renderer: i.gpu.auxAttributes?.glRenderer })).catch((e) => ({ error: String(e) }));
+  if (gpuMode) assert.ok(gpu.rasterization?.startsWith('enabled') && gpu.gpuCompositing === 'enabled' && /NVIDIA/.test(gpu.renderer ?? ''), `GPU raster is not on: ${JSON.stringify(gpu)}`);
   const m0 = machine(), floor = await floorRun(), floorWheel = await floorRun(true);
   const grid = await gridLayout(b);
   await sleep(500);
-  const pan = await motionRun(b, { mode: 'hold', zoomSteps: false }), zoom = await motionRun(b, { mode: 'hold', zoomSteps: true }), sweep = await motionRun(b, { mode: 'sweep', zoomSteps: true }), overview = await motionRun(b, { mode: 'sweep', zoomSteps: true, z0: 0.1 });
+  const pan = await motionRun(b, { mode: 'hold', zoomSteps: false, grid }), zoom = await motionRun(b, { mode: 'hold', zoomSteps: true, grid }), sweep = await motionRun(b, { mode: 'sweep', zoomSteps: true, grid }), overview = await motionRun(b, { mode: 'sweep', zoomSteps: true, z0: 0.1, grid });
   const m1 = machine();
   // The bar is the raw p95 <= 16.7 ms. The software compositor adds jitter to presentation times, so the reading is also given against the trivial page measured in the same run (floor): pass is raw p95 <= 16.7, or raw p95 within 1 ms of the floor's raw p95.
   // And at most 2% of frames >= 25 ms (a missed vsync) or dropped, in each run.
@@ -312,7 +317,7 @@ async function motion({ browser: b, cells }) {
   const pass = [pan, zoom, sweep, overview].every(ok);
   const line = (n, r) => { const t = r.trace; return `${n}: raw p95 ${t.frameP95.toFixed(2)} ms (whole-vsync ${t.frameP95Vsync.toFixed(2)}), frames >=25 ms ${t.frames25}/${t.frames} (${(100 * t.frames25 / t.frames).toFixed(1)}%), >=33 ms ${t.frames33}, max ${t.frameMax.toFixed(1)} ms, dropped ${t.framesDropped}, ${t.longTasks} long tasks (max ${t.longTaskMax.toFixed(1)} ms), ${r.componentsOnScreenMin}-${r.componentsOnScreenMax} components on screen, ${r.componentsDrawnMax} un-culled (${r.componentsDrawnDuringRun} different ones over the run), selection on screen ${(100 * r.selectionOnScreenShare).toFixed(0)}%`; };
   const head = `floor (trivial translate3d page, same run): raw p95 ${floor.frameP95.toFixed(2)} ms, max ${floor.frameMax.toFixed(1)}, ${floor.frames25} frames >=25 ms; bar max(16.7, floor + 1) = ${bar.toFixed(2)} ms; same page driven by the same wheel events: raw p95 ${floorWheel.frameP95.toFixed(2)} ms, max ${floorWheel.frameMax.toFixed(1)}, ${floorWheel.frames25} frames >=25 ms; machine load ${m0.loadavg} before / ${m1.loadavg} after, ${m0.chromiumProcesses} chromium processes at start`;
-  return record('PRF-04', { pass, cells, grid, floor, floorWheel, bar, machineBefore: m0, machineAfter: m1, pan, panWithZoom: zoom, sweepWithZoom: sweep, overviewSweepWithZoom: overview, method: 'The 200 components are laid out as a grid (about square) first, as a real canvas is. Five seconds of real CDP wheel events (Input.dispatchMouseEvent, one every 16 ms, not waiting for each acknowledgement; about 300 are sent) while a Chromium trace (Tracing domain: devtools.timeline, frame, cc, viz) records. Frame time = the time between the presentations of consecutive frames that wanted an update (compositor PipelineReporter events inside the window). Counts of components on screen and un-culled come from geometry sampled every 100 ms without layout. Four runs: "pan" (30% zoom, selection centred, scrolling about 370 px back and forth: selection stays on screen), "pan+zoom" (the same with every twelfth event a Ctrl-wheel zoom step), "sweep+zoom" (30%, 25 px per event around a square of about 7,500 px of travel, with zoom steps: components are un-culled and rasterised continuously), "overview" (the sweep from 10% zoom). A floor run (a page that only moves a translate3d, own Chromium, same run) gives the compositor jitter of this machine at this moment. Pass, every run: raw p95 <= max(16.7, floor + 1) ms and at most 2% of frames >= 25 ms or dropped. CPU raster (--disable-gpu). The benchmark never gives the page a transform.' }, `${pass ? 'PASS' : 'FAIL'}: ${head} | ${line('pan', pan)} | ${line('pan+zoom', zoom)} | ${line('sweep+zoom', sweep)} | ${line('overview 10% sweep+zoom', overview)}.`, 'node bench/perf.js --id PRF-04');
+  return record('PRF-04', { pass, cells, mode: gpuMode ? 'gpu' : 'cpu', gpu, grid, floor, floorWheel, bar, machineBefore: m0, machineAfter: m1, pan, panWithZoom: zoom, sweepWithZoom: sweep, overviewSweepWithZoom: overview, method: 'The 200 components are laid out as a grid (about square) first, as a real canvas is. Five seconds of real CDP wheel events (Input.dispatchMouseEvent, one every 16 ms, not waiting for each acknowledgement; about 300 are sent) while a Chromium trace (Tracing domain: devtools.timeline, frame, cc, viz) records. Frame time = the time between the presentations of consecutive frames that wanted an update (compositor PipelineReporter events inside the window). Counts of components on screen and un-culled come from geometry sampled every 100 ms without layout. Four runs: "pan" (30% zoom, selection centred, scrolling about 370 px back and forth: selection stays on screen), "pan+zoom" (the same with every twelfth event a Ctrl-wheel zoom step), "sweep+zoom" (30%, 25 px per event around a square of about 7,500 px of travel, with zoom steps: components are un-culled and rasterised continuously), "overview" (the sweep from 10% zoom). A floor run (a page that only moves a translate3d, own Chromium, same run) gives the compositor jitter of this machine at this moment. Pass, every run: raw p95 <= max(16.7, floor + 1) ms and at most 2% of frames >= 25 ms or dropped. CPU raster (--disable-gpu). The benchmark never gives the page a transform.' }, `${pass ? 'PASS' : 'FAIL'} (${gpuMode ? 'GPU raster: ' + gpu.renderer : 'CPU raster'}): ${head} | ${line('pan', pan)} | ${line('pan+zoom', zoom)} | ${line('sweep+zoom', sweep)} | ${line('overview 10% sweep+zoom', overview)}.`, `node bench/perf.js --id PRF-04${gpuMode ? ' --gpu' : ''}`, { suffix: gpuMode ? '.gpu' : '' });
 }
 
 async function engine(ids) {
@@ -376,6 +381,6 @@ export async function runPerf({ id } = {}) {
   return results;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const { values } = parseArgs({ options: { id: { type: 'string' } } });
-  const results = await runPerf(values); if (results.some((r) => !r.pass)) process.exitCode = 1;
+  const { values } = parseArgs({ options: { id: { type: 'string' }, gpu: { type: 'boolean' } } });
+  const results = await runPerf({ id: values.id }); if (results.some((r) => !r.pass)) process.exitCode = 1;
 }
