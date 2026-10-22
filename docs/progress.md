@@ -109,11 +109,11 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | FEEL-05 | FEEL | canvas | pass | walk 1: completed keyboard-only, but 86 Tabs to Radius (WPC-07) | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
 | SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
 | SCN-2 | SCN | whole | pass | critic walk cold: accept 3/4, rejected value in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
-| SCN-3 | SCN | whole | building | walk 1 fail; WPC-01/02 in fidelity | docs/evidence/walk-1/SCN-3.txt | 36daf60 |
+| SCN-3 | SCN | whole | critic-pass | critic cold walk: 280x95 canvas and app, 2 px <=2/255 (antialiased corner) | docs/evidence/SCN-3.txt | b96f89d |
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
-| WPC-01 | WPC | fidelity | building | builder: cells isolated (all: initial); follow-up: new elements border-box so W = outer size | docs/evidence/walk-1/ | 7bbf4ee |
-| WPC-02 | WPC | fidelity | building | builder: 0 computed-style diffs on 23 nodes vs plain page | docs/evidence/walk-1/ | 7bbf4ee |
+| WPC-01 | WPC | fidelity | critic-pass | critic: 83-node adversarial component 0 px diff; S3 280x95 both | test/fidelity/cell-isolation.test.js | b96f89d |
+| WPC-02 | WPC | fidelity | building | critic: computed styles match, but editor custom properties leak into cells and ghosts lack tokens: fixing | test/fidelity/cell-isolation.test.js | b96f89d |
 | WPC-03 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-04 | WPC | docs | critic-pass | critic: dialect example editable; decisions/ excluded by lead ruling | test/onboarding/docs-examples.test.js | 07734c8 |
 | WPC-05 | WPC | docs | critic-fail | critic: 5 doc/UI contradictions (napkin not on PATH, labels, .next, npx); fix round 2 (Codex) | docs/evidence/onboard2-commands.txt | 07734c8 |
@@ -127,7 +127,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-16 | WPC | fidelity | building | builder: banner names first edited line + parser line | docs/evidence/walk-1/ | 7bbf4ee |
+| WPC-16 | WPC | fidelity | building | critic: wrong line when a save mixes a valid edit and a break; Next: hint names parser line: fixing | test/fidelity/broken-line.test.js | b96f89d |
 | WPC-17 | WPC | docs | critic-pass | critic: SIGTERM/SIGINT/startup failure leave no fixtures | test/onboarding/demo-cleanup.test.js | 07734c8 |
 | WPC-18 | WPC | docs | critic-pass | critic: tools/sample-repo.js 40 editable; S1 on it 1-line diff | test/onboarding/sample.test.js | 07734c8 |
 | WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
