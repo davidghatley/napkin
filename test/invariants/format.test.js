@@ -161,12 +161,14 @@ test('FMT-04: 20 pairs of branches changing different properties merge without a
 test('FMT-06: the sidecar is sorted, minimal and stable; moving a component changes the sidecar only', async () => {
   const { dir, file, git: g } = tempRepo(['Card']);
   const side = file.replace(/\.tsx$/, '.napkin.json');
-  const store = await openStore(file); // writes the sidecar on first sight
+  const store = await openStore(file);
+  assert.equal(existsSync(side), false, 'opening does not save default canvas settings');
+  await store.moveCanvas(1, 2);
   await store.close();
   const first = readFileSync(side, 'utf8');
   const parsed = JSON.parse(first);
   assert.deepEqual(Object.keys(parsed), ['canvas', 'id'], 'keys are sorted and only id and canvas are there');
-  assert.deepEqual(parsed.canvas, { x: 0, y: 0 });
+  assert.deepEqual(parsed.canvas, { x: 1, y: 2 });
   assert.equal(first, sidecarText(parsed), 'the file is exactly the canonical text');
   g('add', '-A'); g('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'sidecar');
   const s2 = await openStore(file);

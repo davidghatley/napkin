@@ -1,60 +1,60 @@
 /* The same 28 px wells, chrome palette and type scale as inspector.css. */
-#token-theme-label { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font: 11px var(--sans); }
+#token-theme-label { display: inline-flex; align-items: center; gap: 6px; color: var(--nk-text-2); font: 11px var(--nk-sans); }
 #token-theme-label[hidden] { display: none; }
-#token-theme { height: 28px; border: 1px solid var(--line); border-radius: 6px; padding: 0 6px; background: var(--chrome-2); color: var(--text); font: 12px var(--sans); }
-#panel .token-pick { flex: none; width: 18px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-3); font-size: 17px; cursor: pointer; }
-#panel .token-pick:hover, #panel .token-pick:focus-visible { color: var(--accent-text); background: var(--chrome-3); }
+#token-theme { height: 28px; border: 1px solid var(--nk-line); border-radius: 6px; padding: 0 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12px var(--nk-sans); }
+#panel .token-pick { flex: none; width: 18px; height: 20px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--nk-text-3); font-size: 17px; cursor: pointer; }
+#panel .token-pick:hover, #panel .token-pick:focus-visible { color: var(--nk-accent-text); background: var(--nk-chrome-3); }
 #panel .off-token { flex: none; display: grid; place-items: center; width: 20px; height: 22px; margin-right: 4px; padding: 0; border: 0; border-radius: 4px; background: transparent; cursor: pointer; }
 #panel .off-token::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: #da841b; }
 #panel .off-token:hover, #panel .off-token:focus-visible { background: color-mix(in srgb, #da841b 20%, transparent); }
-#panel .token-bound input { color: var(--accent-text); text-align: left; }
-#panel .token-resolved { flex: none; max-width: 54px; overflow: hidden; text-overflow: ellipsis; color: var(--text-3); font: 10px var(--sans); white-space: nowrap; }
+#panel .token-bound input { color: var(--nk-accent-text); text-align: left; }
+#panel .token-resolved { flex: none; max-width: 54px; overflow: hidden; text-overflow: ellipsis; color: var(--nk-text-3); font: 10px var(--nk-sans); white-space: nowrap; }
 #panel .token-bound .unit, #panel .token-bound .alpha, #panel .token-bound .vdiv { display: none; }
 #panel .fbox:has(.token-pick) { gap: 4px; padding-right: 4px; }
 /* With tokens the per-side toggle has no room in the row. It stays focusable (Tab, Cmd-K) but takes no space: invisible until it has focus, then drawn over the end of the field. */
 #panel .fbox:has(.token-pick):has(.linkbtn) { position: relative; }
 #panel .fbox:has(.token-pick):has(.linkbtn) .linkbtn { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); opacity: 0; pointer-events: none; z-index: 2; }
-#panel .fbox:has(.token-pick):has(.linkbtn) .linkbtn:focus { opacity: 1; background: var(--chrome); box-shadow: 0 0 0 1px var(--accent); }
-#token-picker { position: relative; z-index: 1; grid-column: 1 / -1; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; width: 100%; min-width: 0; padding: 8px; border-radius: 10px; background: var(--chrome); color: var(--text); box-shadow: var(--shadow-pop); font: 12px var(--sans); }
+#panel .fbox:has(.token-pick):has(.linkbtn) .linkbtn:focus { opacity: 1; background: var(--nk-chrome); box-shadow: 0 0 0 1px var(--nk-accent); }
+#token-picker { position: relative; z-index: 1; grid-column: 1 / -1; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; width: 100%; min-width: 0; padding: 8px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px var(--nk-sans); }
 .token-picker-head { flex: none; display: flex; gap: 6px; margin-bottom: 6px; }
-#token-search { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome-2); color: var(--text); font: 12px var(--sans); }
-#token-picker-close { width: 28px; border: 0; border-radius: 6px; background: var(--chrome-2); color: var(--text-2); font-size: 16px; cursor: pointer; }
+#token-search { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--nk-line); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12px var(--nk-sans); }
+#token-picker-close { width: 28px; border: 0; border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text-2); font-size: 16px; cursor: pointer; }
 #token-results { min-height: 0; max-height: 276px; overflow: auto; }
-.token-choice-hint { flex: none; margin: 0 0 8px; color: var(--text-2); font-size: 11px; }
-#token-results .token-option { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--text); font: 12px var(--sans); cursor: pointer; text-align: left; }
-#token-results .token-option:hover, #token-results .token-option:focus-visible { background: var(--chrome-2); }
-.token-swatch { flex: none; width: 18px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--line-2); text-align: center; color: var(--text-3); font-style: normal; }
-.token-option small { margin-left: auto; color: var(--text-2); font-size: 11px; }
+.token-choice-hint { flex: none; margin: 0 0 8px; color: var(--nk-text-2); font-size: 11px; }
+#token-results .token-option { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 4px 6px; border: 0; border-radius: 5px; background: transparent; color: var(--nk-text); font: 12px var(--nk-sans); cursor: pointer; text-align: left; }
+#token-results .token-option:hover, #token-results .token-option:focus-visible { background: var(--nk-chrome-2); }
+.token-swatch { flex: none; width: 18px; height: 18px; border-radius: 4px; box-shadow: inset 0 0 0 1px var(--nk-line-2); text-align: center; color: var(--nk-text-3); font-style: normal; }
+.token-option small { margin-left: auto; color: var(--nk-text-2); font-size: 11px; }
 #pane-tokens { overflow: auto; padding: 12px 16px; }
 #token-notice { margin: 0 0 8px; }
 #token-table { display: grid; gap: 8px; }
-.token-row { display: grid; grid-template-columns: minmax(140px, 1fr) repeat(var(--token-mode-count), minmax(140px, 180px)) minmax(140px, 1.5fr); align-items: center; gap: 16px; min-height: 40px; border-bottom: 1px solid var(--line); padding-bottom: 8px; font: 12px var(--sans); }
+.token-row { display: grid; grid-template-columns: minmax(140px, 1fr) repeat(var(--nk-token-mode-count), minmax(140px, 180px)) minmax(140px, 1.5fr); align-items: center; gap: 16px; min-height: 40px; border-bottom: 1px solid var(--nk-line); padding-bottom: 8px; font: 12px var(--nk-sans); }
 .token-info { min-width: 0; overflow-wrap: anywhere; }
 .token-info strong { font-weight: 500; }
-.token-mode { color: var(--text-2); font-size: 10.5px; }
+.token-mode { color: var(--nk-text-2); font-size: 10.5px; }
 .token-value { display: grid; gap: 3px; min-width: 0; }
 .token-value-well { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .token-value-well input { min-width: 0; }
-.token-value input { width: 100%; height: 28px; padding: 0 8px; border: 1px solid transparent; border-radius: 6px; background: var(--chrome-2); color: var(--text); font: 12px var(--sans); }
-.token-value input:focus { outline: 0; border-color: var(--accent); }
-.token-usage { margin: 0; color: var(--text-2); font-size: 11px; }
+.token-value input { width: 100%; height: 28px; padding: 0 8px; border: 1px solid transparent; border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12px var(--nk-sans); }
+.token-value input:focus { outline: 0; border-color: var(--nk-accent); }
+.token-usage { margin: 0; color: var(--nk-text-2); font-size: 11px; }
 /* Bound names get the space they need while the wells retain the panel's 28 px rhythm. */
 #panel .irow > .fld:has(.token-bound) { grid-column: 1 / -1; }
-#panel .fbox.token-bound input:not([type=color]) { color: var(--accent-text); font-size: 11.5px; }
+#panel .fbox.token-bound input:not([type=color]) { color: var(--nk-accent-text); font-size: 11.5px; }
 #panel .token-bound .token-resolved { max-width: 48px; font-size: 10px; }
 #panel .fbox.token-bound { opacity: 1; }
 /* Reserve all six tabs before modules register, keeping initial layout shift at zero. */
 #drawer-tabs { min-width: 340px; }
 
-.token-toolbar { position: sticky; top: -12px; z-index: 1; flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 0; background: var(--chrome); }
-#token-drawer-search { width: min(420px, 65%); height: 30px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--chrome-2); color: var(--text); font: 12px var(--sans); }
-#token-count { color: var(--text-2); font: 11px var(--sans); }
+.token-toolbar { position: sticky; top: -12px; z-index: 1; flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 0; background: var(--nk-chrome); }
+#token-drawer-search { width: min(420px, 65%); height: 30px; padding: 0 10px; border: 1px solid var(--nk-line); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12px var(--nk-sans); }
+#token-count { color: var(--nk-text-2); font: 11px var(--nk-sans); }
 #token-table { flex: none; }
-.token-family h3 { margin: 8px 0; color: var(--text-2); font: 600 11px var(--sans); }
+.token-family h3 { margin: 8px 0; color: var(--nk-text-2); font: 600 11px var(--nk-sans); }
 .token-family { display: grid; gap: 8px; }
 .token-usage { overflow-wrap: anywhere; }
 @media (max-width: 1000px) {
-  .token-row { grid-template-columns: minmax(130px, 1fr) repeat(var(--token-mode-count), minmax(100px, 1fr)); gap: 10px; }
+  .token-row { grid-template-columns: minmax(130px, 1fr) repeat(var(--nk-token-mode-count), minmax(100px, 1fr)); gap: 10px; }
   .token-usage { grid-column: 1 / -1; }
 }
 /* Keep the preview label and chrome switch legible beside hash revisions. */
@@ -65,7 +65,7 @@
 /* WPC-11: headers, group chips and captions inside a frame that takes the theme's surface follow the theme's ink, not the fixed light-grey ones */
 #world[data-frame-theme="1"] .group-title, #world[data-frame-theme="1"] .colhead, #world[data-frame-theme="1"] .rowhead, #world[data-frame-theme="1"] .corner,
 #world[data-frame-theme="1"] .colhead span, #world[data-frame-theme="1"] .rowhead span, #world[data-frame-theme="1"] .ghint, #world[data-frame-theme="1"] .gcount,
-#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { color: var(--frame-ink); }
-#world[data-frame-theme="1"] .cell figcaption, #world[data-frame-theme="1"] .group-title i, #world[data-frame-theme="1"] .gchip i { color: color-mix(in srgb, var(--frame-ink) 70%, var(--frame)); }
-#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { background: color-mix(in srgb, var(--frame-ink) 14%, var(--frame)); }
-#world[data-frame-theme="1"] .gtoggle:hover { background: color-mix(in srgb, var(--frame-ink) 24%, var(--frame)); }
+#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { color: var(--nk-frame-ink); }
+#world[data-frame-theme="1"] .cell figcaption, #world[data-frame-theme="1"] .group-title i, #world[data-frame-theme="1"] .gchip i { color: color-mix(in srgb, var(--nk-frame-ink) 70%, var(--nk-frame)); }
+#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { background: color-mix(in srgb, var(--nk-frame-ink) 14%, var(--nk-frame)); }
+#world[data-frame-theme="1"] .gtoggle:hover { background: color-mix(in srgb, var(--nk-frame-ink) 24%, var(--nk-frame)); }

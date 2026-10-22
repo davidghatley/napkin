@@ -18,7 +18,7 @@ test('a far frame keeps its box but not its contents; a pan restyles nothing; a 
 
   await t.test('culled frames: size kept, matrix not laid out; sections placed with left/top', async () => {
     const r = await b.eval(`(() => { const sec = document.querySelector('.cmp[data-cull]'); const frame = sec.querySelector('.frame'); const box = frame.getBoundingClientRect();
-      return { display: getComputedStyle(frame.firstElementChild).display, w: box.width, h: box.height, want: [parseFloat(sec.style.getPropertyValue('--w')), parseFloat(sec.style.getPropertyValue('--h'))], transform: sec.style.transform, left: sec.style.left }; })()`);
+      return { display: getComputedStyle(frame.firstElementChild).display, w: box.width, h: box.height, want: [parseFloat(sec.style.getPropertyValue('--nk-w')), parseFloat(sec.style.getPropertyValue('--nk-h'))], transform: sec.style.transform, left: sec.style.left }; })()`);
     assert.equal(r.display, 'none');
     assert.ok(Math.abs(r.w - r.want[0]) < 1 && Math.abs(r.h - r.want[1]) < 1, `box ${r.w}x${r.h}, measured ${r.want}`);
     assert.equal(r.transform, ''); assert.match(r.left, /px$/);
@@ -29,7 +29,7 @@ test('a far frame keeps its box but not its contents; a pan restyles nothing; a 
   await t.test('panning sets no custom property on #stage (that would restyle every element under it)', async () => {
     await b.eval('napkin.view.panBy(-300, -200); true');
     const style = await b.eval(`document.querySelector('#stage').getAttribute('style') || ''`);
-    assert.doesNotMatch(style, /--tx|--ty|--gz/);
+    assert.doesNotMatch(style, /--tx|--ty|--nk-gz|--gz/);
     assert.match(style, /background-position/);
   });
 

@@ -51,7 +51,7 @@ export const ACTIONS = [
   action('open-code', 'Open the code strip', 'Status bar: Code', [], [], (c) => c.drawer.open('code')),
   action('token-picker-close', 'Close token picker', 'Escape', ['Escape'], refs('tokens', 'keydown')),
   action('open-tokens', 'Open tokens', 'Status bar: Tokens', [], [], (c) => c.drawer.open('tokens')),
-  action('token-mode', 'Preview component theme', 'Top bar: Theme', [], [], (c) => document.querySelector('#token-theme').focus()),
+  action('token-mode', 'Preview component theme', 'Top bar: Component theme', [], [], (c) => document.querySelector('#token-theme').focus()),
   action('open-history', 'Open history', 'Status bar: History', [], [], (c) => c.drawer.open('history')),
   action('open-inspect', 'Open inspect', 'Status bar: Inspect', [], [], (c) => c.drawer.open('inspect')),
   action('open-assets', 'Open assets', 'Status bar: Assets', [], [], (c) => c.drawer.open('assets')),

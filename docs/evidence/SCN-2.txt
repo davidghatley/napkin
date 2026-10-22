@@ -1,0 +1,19 @@
+S2 "An agent builds a Tooltip in propose mode while you tune Button" re-walk (WPC-03, WPC-09, WPC-12).
+  EVIDENCE=1 EVIDENCE_OUT=docs/evidence node --test test/agents-ui/s2-walk.test.js
+
++   57 ms  napkin.json agents = { claude: "propose", you: "write" }; claude is src/mcp.js over stdio, NAPKIN_AGENT=claude
++   82 ms  claude create_component Tooltip -> proposal prp_fe8d2210fe; Tooltip.tsx does not exist
++  163 ms  tray: "1proposal · claude▴"; canvas shows the ghost frame: "claude's proposal · new component Tooltip · not written"
++  232 ms  claude tries to edit it before it exists -> refused: component "Tooltip" is only proposed so far (prp_fe8d2210fe): it has no file until the person accepts it Next: wait for its resolved event (subscribe), then rea
++  369 ms  you set Button padding = 18 in the panel (Button.tsx changed; Tooltip.tsx still absent)
++  437 ms  ACCEPT #1 (create): Tooltip.tsx written; history rf94d145f16686e79 by claude, approved by you
++  438 ms  claude subscribe -> resolved: [{"proposal":"prp_fe8d2210fe","outcome":"accepted","by":"you"}]
++  449 ms  claude proposed "padding": root.padding = "6px 10px"
++  559 ms  claude proposed "background": root.background = "#1c1f27"
++  666 ms  claude proposed "border (will be rejected)": root.border = "6px dashed #ff00ff"
++  768 ms  presence: claude's outline on Tooltip · root; #presence "claude: editing Tooltip · root"
++ 2529 ms  ACCEPT #2 padding, ACCEPT #3 background: both in Tooltip.tsx
++ 2557 ms  REJECT #4 border: Tooltip.tsx sha before = after = c134bf9e0872; "ff00ff" appears in no file
++ 2557 ms  claude subscribe -> resolved: [{"proposal":"prp_8f0adc90dd","outcome":"accepted","by":"you","rejected":[]},{"proposal":"prp_58ad3c6aa9","outcome":"accepted","by":"you","rejected":[]},{"proposal":"prp_156ee7970f","outcome":"rejected","by":"you","rejected":["root.border = \"6px dashed #ff00ff\""]}]
++ 2559 ms  Tooltip history: rf94d145f16686e79 claude (approved by you), rd412013a52b36911 claude (approved by you), rc134bf9e087247c5 claude (approved by you)
++ 3054 ms  VERDICT: 4 proposals (create + 3 edits), 3 accepted, 1 rejected; rejected never in the file; agent told of every answer

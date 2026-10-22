@@ -80,7 +80,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-01 | PRF | engine | pass | critic p50 1097; merged p50 1105 ms | docs/evidence/PRF-01.txt | da57ab8 |
 | PRF-02 | PRF | engine | pass | critic p95 <=99.5; merged p95 82.8 ms (thin margin) | docs/evidence/PRF-02.txt | da57ab8 |
 | PRF-03 | PRF | engine | pass | critic p95 87.6; merged 87.6 ms | docs/evidence/PRF-03.txt | da57ab8 |
-| PRF-04 | PRF | engine | building | critic-fail: pan+zoom with a selection misses vsyncs | docs/evidence/PRF-04.txt | da57ab8 |
+| PRF-04 | PRF | engine | building | critic 6820539: FAIL. 3 runs: raw p95 17.2-19.1 ms all scenarios; whole-vsync p95 16.67 but run 3 pan 3.4% missed (>2%); bench has 1 of 200 comps on screen (column layout), pan swing ~300 px; trivial page reads raw 16.87 (floor not reproduced): fixing | docs/evidence/PRF-04.txt | 6820539 |
 | PRF-05 | PRF | engine | pass | merged p95 8.3 ms | docs/evidence/PRF-05.txt | da57ab8 |
 | PRF-06 | PRF | engine | pass | merged ratio 0.477 | docs/evidence/PRF-06.txt | da57ab8 |
 | PRF-07 | PRF | engine | pass | merged 109 MB / 17 MB heap | docs/evidence/PRF-07.txt | da57ab8 |
@@ -102,34 +102,38 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | REL-03 | REL | engine | pass | worst 208 ms, 0 silent losses | docs/evidence/REL-03.txt | da57ab8 |
 | REL-04 | REL | engine | pass | critic soak 1800 s, 0 errors, 9.0% growth (pre-merge code, one seed) | docs/evidence/REL-04.txt | da57ab8 |
 | REL-05 | REL | engine | pass | merged 685 ms | docs/evidence/REL-05.txt | da57ab8 |
-| FEEL-01 | FEEL | canvas | critic | screenshots taken; blind judging next | docs/evidence/walk-1/FEEL-01.txt | 36daf60 |
+| FEEL-01 | FEEL | canvas | building | judge after keys + fidelity merge (WPC-15 overflow visible in shots) | docs/evidence/walk-1/FEEL-01.txt | 36daf60 |
 | FEEL-02 | FEEL | layout | needs-david | 6 rounds: Sonnet tie; Codex prefers Figma help imagery in both orders | test/23-layout-panel.test.js | a4a87dd |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
-| FEEL-05 | FEEL | canvas | pass | walk 1: completed keyboard-only, but 86 Tabs to Radius (WPC-07) | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
+| FEEL-05 | FEEL | canvas | pass | walk 1 pass; keys critic: 15 keys keyboard-only, diff 1 line | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
 | SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
-| SCN-2 | SCN | whole | critic-fail | walk 1: propose agent cannot create Tooltip (WPC-03); rest done, reject sha unchanged | docs/evidence/walk-1/SCN-2.txt | 36daf60 |
-| SCN-3 | SCN | whole | critic-fail | walk 1: app card 312 px vs 280 on canvas; text colour differs (WPC-01, WPC-02) | docs/evidence/walk-1/SCN-3.txt | 36daf60 |
+| SCN-2 | SCN | whole | pass | critic walk cold: accept 3/4, rejected value in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
+| SCN-3 | SCN | whole | pass | critic cold walk: 280x95 canvas and app; merged | docs/evidence/SCN-3.txt | 5707a23 |
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
-| WPC-01 | WPC | fidelity | open | whole-product critic walk 1: Cells get box-sizing: border-box from the editor: Fixed 280 + padding 16 is 280 on canvas, 312 in a plain app. Same component, canvas at 100% vs no-CSS React app, pixel diff: 0 px differ | docs/evidence/walk-1/ |  |
-| WPC-02 | WPC | fidelity | open | whole-product critic walk 1: Cells inherit the editor text colour (28,31,39; an app gets 0,0,0) and Inspect calls it 'browser default'. Computed colour equals a blank page; label truthful | docs/evidence/walk-1/ |  |
-| WPC-03 | WPC | agents | open | whole-product critic walk 1: A propose-mode agent cannot create_component, so S2 as written is impossible. create_component with propose makes a ghost component; no file until Accept | docs/evidence/walk-1/ |  |
-| WPC-04 | WPC | docs | open | whole-product critic walk 1: docs/dialect.md's complete example uses <b>, which the dialect forbids, so it opens read-only. Paste it and open: editable | docs/evidence/walk-1/ |  |
-| WPC-05 | WPC | docs | open | whole-product critic walk 1: docs/guide describes another product (Button.html, napkin mcp, 'planned, not shipped'); README says no tokens panel and init prints .mcp.json. Run every documented command; 0 contradictions | docs/evidence/walk-1/ |  |
-| WPC-06 | WPC | files | open | whole-product critic walk 1: open writes 40 untracked *.napkin.json sidecars ({x:0,y:0}) before anything moves. git status after open: 0 new files until a frame is moved | docs/evidence/walk-1/ |  |
-| WPC-07 | WPC | keys | built | whole-product critic walk 1: 86 Tabs from a selection to Radius; cells and 30 collapse buttons in tab order; Cmd-K 'radius' finds nothing. <= 5 keys from selection to any property | docs/evidence/walk-1/; docs/evidence/FEEL-05.txt (re-walk); test/keys/keys.test.js |  |
-| WPC-08 | WPC | keys | built | whole-product critic walk 1: Cmd-K to a component flies there but selects nothing. Cmd-K Badge Enter: Badge root selected | docs/evidence/walk-1/; docs/evidence/FEEL-05.txt (re-walk); test/keys/keys.test.js |  |
-| WPC-09 | WPC | agents | open | whole-product critic walk 1: An agent never learns its proposal was rejected. Reject, then MCP subscribe: a rejected event naming the proposal id | docs/evidence/walk-1/ |  |
-| WPC-10 | WPC | docs | open | whole-product critic walk 1: README doesn't say how to put an agent in propose mode; Copy usage has no import line; examples/consumer-app not linked. Newcomer finds each from the README or guide | docs/evidence/walk-1/ |  |
-| WPC-11 | WPC | keys | built | whole-product critic walk 1: Component theme dark leaves cell backgrounds white; light accent button with near-white label unreadable. Cells use the theme surface, or contrast >= 3:1 | docs/evidence/walk-1/; docs/evidence/FEEL-05.txt (re-walk); test/keys/keys.test.js |  |
-| WPC-12 | WPC | agents | open | whole-product critic walk 1: With 4 proposals, items 3-4 are below the 900 px viewport. All tray actions reachable at 1440x900 (tray scrolls the focused item into view) | docs/evidence/walk-1/ |  |
-| WPC-13 | WPC | keys | built | whole-product critic walk 1: Clicking an off-token dot snaps silently (6 -> radius-small 4px). Shows target token and value before writing, or offers undo | docs/evidence/walk-1/; docs/evidence/FEEL-05.txt (re-walk); test/keys/keys.test.js |  |
-| WPC-14 | WPC | keys | built | whole-product critic walk 1: Empty undo toast leaks API text ('Next: check this request against /api/guide...'). Plain-language toast | docs/evidence/walk-1/; docs/evidence/FEEL-05.txt (re-walk); test/keys/keys.test.js |  |
-| WPC-15 | WPC | keys | built | whole-product critic walk 1: A clipped 'r' (revision label) right of Component theme; Chip filter bar runs past its frame. Screenshot 1440x900 with tokens: no clipped labels or overflow | docs/evidence/walk-1/; docs/evidence/FEEL-05.txt (re-walk); test/keys/keys.test.js |  |
-| WPC-16 | WPC | fidelity | open | whole-product critic walk 1: Broken-file banner names line 52 for a break on 51. Names the edited line, or both | docs/evidence/walk-1/ |  |
-| WPC-17 | WPC | docs | open | whole-product critic walk 1: The disposable demo leaves /tmp/napkin-fixtures-* after SIGTERM. Removed on exit | docs/evidence/walk-1/ |  |
-| WPC-18 | WPC | docs | open | whole-product critic walk 1: No documented way to make S1's 40-component repo with a Badge. A documented command makes it | docs/evidence/walk-1/ |  |
+| WPC-01 | WPC | fidelity | pass | critic pass; merged, suite 555/560 0 fail | test/fidelity/cell-isolation.test.js | 5707a23 |
+| WPC-02 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/cell-isolation.test.js | 5707a23 |
+| WPC-03 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
+| WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
+| WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
+| WPC-06 | WPC | files | pass | critic pass r2: portable ids, .napkin self-ignores, 0 new files until a move; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
+| WPC-07 | WPC | keys | building | critic r2: Cmd-K reaches ordinary props in <=5 keys; settings defaults, add-prop, variant axes/values, fill/stroke eye+remove, Insert not indexed (11-39 keys): round 3 | docs/evidence/walk-1/ | bb22830 |
+| WPC-08 | WPC | keys | critic-pass | critic r2: Ctrl+K Badge Enter = 7 keys, selects root | test/keys/keys.test.js | bb22830 |
+| WPC-09 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
+| WPC-10 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/history/ui-inspect.test.js | 5c8f4a9 |
+| WPC-11 | WPC | keys | critic-pass | critic r2: demo 72 text nodes, min 3.48 light / 3.40 dark, 0 below 3:1 | docs/evidence/walk-1/ | bb22830 |
+| WPC-12 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents-ui/propose-create.test.js | 0085d7f |
+| WPC-13 | WPC | keys | critic-pass | critic r2: Undo by Enter restores disk; 99 hit-tested dot activations, 0 fail; old dead dot = folded Text section | docs/evidence/walk-1/ | bb22830 |
+| WPC-14 | WPC | keys | critic-pass | critic r2: syntax, connection, read-only, invalid and stale messages plain; disk untouched; minor wording notes | docs/evidence/walk-1/ | bb22830 |
+| WPC-15 | WPC | keys | critic-pass | critic r2: 1280x720 and 1440x900, both themes, 3 selections: 0 clipped, ellipsis, overlap | docs/evidence/walk-1/ | bb22830 |
+| WPC-16 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/broken-line.test.js | 5707a23 |
+| WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
+| WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
+| WPC-19 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | test/agents/agents3.test.js | 4d2cdf6 |
+| WPC-20 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | test/agents/agents3.test.js | 4d2cdf6 |
+| WPC-21 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | test/agents-ui/agents3.test.js | 4d2cdf6 |
+| WPC-22 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | docs/evidence/agents3-ghost.png | 4d2cdf6 |
 
 ## Rounds
 
@@ -167,6 +171,8 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 - LAY-06: the grid quantizes positions in parent-local coordinates at any zoom; edge and centre snaps within 4 screen px take priority.
 - Blind bars: two judges from different model families (Sonnet, Codex). Codex runs twice with the image order swapped; a verdict that flips counts as a tie. A row passes only when both judges give a win or tie.
 - 0005 amendment: with an `agents` key in napkin.json, unlisted names default to read; Host/Origin guard on every route.
+- WPC-04 scope: docs/decisions/*.md are dated design records and are excluded from "every TSX example in docs/" (0003 shows an elided sketch).
+- PRF-04 measure (pending David): on this machine (headless, CPU raster) even a trivial compositor-only page reads raw p95 ~18.2 ms from symmetric presentation-timestamp jitter, so the bar is read as p95 in whole vsyncs <= 16.7 ms with <= 2% missed or dropped frames. The bar text in DREAM.md is unchanged; David decides whether to accept this reading.
 
 ## Incidents
 

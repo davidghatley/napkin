@@ -29,9 +29,9 @@ export function createView(ctx, stageEl, worldEl) {
     const { x, y, z } = v;
     worldEl.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${z})`;
     const ls = Math.round(clamp(1 / z, 1, 3.2) * 20) / 20; // label scale, quantised so it changes rarely
-    if (worldEl.dataset.ls !== String(ls)) { worldEl.dataset.ls = String(ls); worldEl.style.setProperty('--ls', ls); }
+    if (worldEl.dataset.ls !== String(ls)) { worldEl.dataset.ls = String(ls); worldEl.style.setProperty('--nk-ls', ls); }
     const lf = Math.round(clamp(1 / z, 1, 16) * 20) / 20; // titles and the axis strip stay readable down to the 200-component fit
-    if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--lf', lf); }
+    if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--nk-lf', lf); }
     stageEl.dataset.hdr = z < 0.33 ? 'strip' : '';
     // (not custom properties: a custom property set on #stage is inherited by every element under it, and each pan event would restyle them all)
     stageEl.style.backgroundPosition = `${x}px ${y}px`; stageEl.style.backgroundSize = `${24 * z}px ${24 * z}px`;

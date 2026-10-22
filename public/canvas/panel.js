@@ -274,6 +274,14 @@ export function renderPanel(ctx) {
     if (quiet) value = effProp(cs);
     return `<div class="fld full${isOver(prop) ? ' overridden' : ''}"><div class="seg${quiet ? ' quiet' : ''}" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, text, icon, match]) => `<button type="button" role="radio" id="seg-${prop}-${v}" aria-checked="${!mixed && (match ? match.test(String(value)) : value === v)}" data-seg="${prop}" data-val="${v}" title="${esc(aria?.[v] ?? text)}"${dis}>${icon || ''}<span${iconOnly ? ' class="sr"' : ''}>${esc(text)}</span></button>`).join('')}</div>${tags(prop, label)}${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
+  // A content-box element draws bigger than its width/height by its padding and border (as it does in an app): say so beside the field.
+  const boxHint = (prop) => {
+    if (prop !== 'width' || !selEl?.isConnected || nodes.length !== 1) return '';
+    const cs = getComputedStyle(selEl); if (cs.boxSizing !== 'content-box') return '';
+    const f = (a) => parseFloat(cs[a]) || 0;
+    const w = f('paddingLeft') + f('paddingRight') + f('borderLeftWidth') + f('borderRightWidth'), h = f('paddingTop') + f('paddingBottom') + f('borderTopWidth') + f('borderBottomWidth');
+    return w || h ? `<span class="boxhint" id="boxhint-width" title="W and H set the content box; padding and border are added to them (+${w} px wide, +${h} px tall)">content-box: outer = W + padding + border</span>` : '';
+  };
   const sizeRow = (prop) => {
     const n0 = nodes[0], style = resolvedOf(n0);
     const { value, mixed } = val(prop), mode = mixed ? '' : sizeMode(style, parentStyle, prop);
@@ -284,7 +292,7 @@ export function renderPanel(ctx) {
     const opts = [['hug', 'Hug', 'Hug contents (auto)'], ['fill', 'Fill', fillTip], ['fixed', 'Fixed', 'Fixed size in px']];
     return `<div class="fld sizerow${isOver(prop) ? ' overridden' : ''}"><label class="flabel scrub pfx" data-scrub="${prop}" for="${prop}" title="Drag to change ${name.toLowerCase()}">${GLYPH[prop]}<span class="sr">${name}</span></label>
       <div class="seg sizeseg" role="radiogroup" aria-label="${name} sizing">${opts.map(([m, text, tip]) => `<button type="button" role="radio" id="size-${prop}-${m}" aria-checked="${mode === m}" data-size="${prop}" data-mode="${m}" title="${tip}"${dis}><span>${text}</span></button>`).join('')}</div>
-      <div class="fbox num${kind ? ' ' + kind : ''}"><input id="${prop}" data-field="style" data-prop="${prop}" data-step="1"${kind ? ' data-eff="1"' : ''} autocomplete="off" spellcheck="false" value="${esc(mode === 'fill' && !kind ? shown : shown)}" placeholder="${mixed ? 'Mixed' : 'Auto'}" aria-label="${name}"${mixed ? ' data-mixed="1"' : ''}${dis}>${NUMBER.test(shown) && !mixed ? '<span class="unit" aria-hidden="true">px</span>' : ''}${tags(prop, name)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
+      <div class="fbox num${kind ? ' ' + kind : ''}"><input id="${prop}" data-field="style" data-prop="${prop}" data-step="1"${kind ? ' data-eff="1"' : ''} autocomplete="off" spellcheck="false" value="${esc(mode === 'fill' && !kind ? shown : shown)}" placeholder="${mixed ? 'Mixed' : 'Auto'}" aria-label="${name}"${mixed ? ' data-mixed="1"' : ''}${dis}>${NUMBER.test(shown) && !mixed ? '<span class="unit" aria-hidden="true">px</span>' : ''}${tags(prop, name)}</div>${boxHint(prop)}${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
   const section = (id, title, body, { open = true, action = '' } = {}) => `<details class="sec" data-sec="${id}"${(ui.closed.has(id) ? false : ui.opened.has(id) ? true : open) ? ' open' : ''}><summary>${title}${action}</summary><div class="sbody">${body}</div></details>`;
   const has = (prop) => nodes.some((n) => resolvedOf(n)[prop] !== undefined);

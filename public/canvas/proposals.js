@@ -12,7 +12,7 @@ const fmt = (v) => (v === null || v === undefined ? 'removed' : typeof v === 'st
 const JSON_POST = { method: 'POST', headers: { 'content-type': 'application/json' } };
 
 export function initProposals(ctx) {
-  const S = { list: new Map(), picked: null, pickedEdit: null, open: false, userFolded: false, mode: 'after', errors: new Map(), busy: new Set(), mod: null, token: 0, unmounts: [] };
+  const S = { list: new Map(), picked: null, pickedEdit: null, open: false, userFolded: false, mode: 'after', news: new Map(), hiddenNew: new Set(), errors: new Map(), busy: new Set(), mod: null, token: 0, unmounts: [] };
   const stageEl = document.querySelector('#stage');
   // The tray lives in the dock under the canvas (beside the drawer), so the canvas shrinks instead of being covered: cells under review stay fully visible.
   const dockEl = document.querySelector('#dock');
@@ -20,6 +20,7 @@ export function initProposals(ctx) {
   const tray = h('section', { id: 'proposals-tray', role: 'region', 'aria-label': 'Proposals from agents', hidden: true, 'data-open': '0' });
   dockEl.append(tray);
   const nameOf = (id) => ctx.state.components.get(id)?.name ?? id;
+  const titleOf = (p) => (p.create ? p.name : nameOf(p.component));
   const sectionOf = (id) => document.querySelector(`section.cmp[data-component="${CSS.escape(id)}"]`);
   const sorted = () => [...S.list.values()].sort((a, b) => a.by.localeCompare(b.by) || a.at - b.at);
 
@@ -28,7 +29,7 @@ export function initProposals(ctx) {
     const r = await fetch('/api/proposals').then((x) => x.json()).catch(() => null);
     if (!Array.isArray(r)) return;
     S.list = new Map(r.map((p) => [p.id, p]));
-    for (const p of r) ctx.presence?.remember?.(p.by, p.color, p.ink);
+    for (const p of r) { ctx.presence?.remember?.(p.by, p.color, p.ink); if (p.create) showNew(p, false); }
     afterChange(true);
   }
   function upsert(p) {
@@ -37,11 +38,13 @@ export function initProposals(ctx) {
     ctx.presence?.remember?.(p.by, p.color, p.ink);
     S.errors.delete(p.id);
     if (S.picked === p.id) ghost(p);
+    if (p.create) showNew(p, fresh);
     afterChange(fresh);
   }
   function drop(id) {
     S.list.delete(id); S.errors.delete(id);
     if (S.picked === id) { S.picked = null; S.pickedEdit = null; clearGhost(); }
+    S.news.delete(id); S.hiddenNew.delete(id); ctx.stage.removeGhost(id);
     afterChange(false);
   }
   function afterChange(opened) {
@@ -51,7 +54,7 @@ export function initProposals(ctx) {
   }
 
   // ---------------------------------------------------------------------------------------------- the tray
-  const tint = (p) => `--c:${p.color || 'var(--text-3)'};--ink:${p.ink || 'var(--text)'}`;
+  const tint = (p) => `--nk-c:${p.color || 'var(--nk-text-3)'};--nk-ink:${p.ink || 'var(--nk-text)'}`;
   function editRows(p) {
     const lines = p.lines ?? p.edits.map((e) => e.op);
     const many = p.edits.length > 1 && !p.adoption;
@@ -67,17 +70,21 @@ export function initProposals(ctx) {
     const rows = (e.stale ?? []).map((s) => h('li', {}, h('code', { text: s.key }), ` is now ${fmt(s.value)}`, s.by ? ` (${s.by}, r${s.revision})` : '', `; the proposal wanted ${fmt(s.yours)}.`));
     return h('div', { class: 'pi-stale', role: 'alert' }, h('div', { text: e.stale ? 'Can\'t accept: this changed after the agent looked.' : `Can't accept: ${plain(String(e.error).replace(/^stale revision: /, ''))}` }), rows.length ? h('ul', { style: 'margin:4px 0 0;padding-left:16px' }, rows) : null, h('div', { text: 'Reject it, or ask the agent to propose again on the new revision.' }));
   }
+  // A create proposal whose name was taken meanwhile: marked as soon as the server knows, not when Accept is pressed.
+  const clashBox = (p) => (p.clash ? h('div', { class: 'pi-stale pi-clash', role: 'alert', 'data-clash': '1' }, h('strong', { text: 'Name taken. ' }), p.clash) : null);
   function propRow(p) {
     const busy = S.busy.has(p.id);
-    return h('li', { class: 'pitem', tabindex: '0', role: 'group', 'data-id': p.id, 'data-by': p.by, 'data-component': p.component, 'aria-current': String(S.picked === p.id), 'aria-label': `Proposal from ${p.by} on ${nameOf(p.component)}: ${p.summary}`,
+    return h('li', { class: 'pitem', tabindex: '0', role: 'group', 'data-id': p.id, 'data-by': p.by, 'data-component': p.component, ...(p.create && { 'data-create': p.name }), 'aria-current': String(S.picked === p.id), 'aria-label': p.create ? `Proposal from ${p.by} to create the new component ${p.name}` : `Proposal from ${p.by} on ${nameOf(p.component)}: ${p.summary}`,
       onclick: (ev) => { if (!ev.target.closest('button')) pick(p.id); } },
-      h('div', { class: 'pi-top' }, h('span', { class: 'pi-comp', text: nameOf(p.component) }), p.adoption ? h('span', { class: 'pi-age', text: 'adoption' }) : null, h('time', { class: 'pi-age', text: ago(p.at) })),
-      editRows(p),
-      staleBox(p),
+      h('div', { class: 'pi-main' },
+        h('div', { class: 'pi-top' }, h('span', { class: 'pi-comp', text: titleOf(p) }), p.adoption ? h('span', { class: 'pi-tag', text: 'adoption' }) : null, p.create ? h('span', { class: 'pi-tag', text: 'new component' }) : null, h('time', { class: 'pi-age', text: ago(p.at) })),
+        editRows(p)),
       h('div', { class: 'pi-btns' },
-        h('button', { type: 'button', class: 'pb go p-accept', disabled: busy, 'aria-label': `Accept ${p.edits.length > 1 ? 'all ' + p.edits.length + ' edits of ' : ''}the proposal on ${nameOf(p.component)}`, text: p.edits.length > 1 ? 'Accept' : 'Accept', onclick: () => act(p, 'accept') }),
-        h('button', { type: 'button', class: 'pb no p-reject', disabled: busy, 'aria-label': `Reject the proposal on ${nameOf(p.component)}`, text: 'Reject', onclick: () => act(p, 'reject') }),
-        h('button', { type: 'button', class: 'pb p-show', 'aria-pressed': String(S.picked === p.id), text: S.picked === p.id ? 'Hide ghost' : 'Show ghost', onclick: () => pick(S.picked === p.id && S.pickedEdit === null ? null : p.id) })));
+        h('button', { type: 'button', class: 'pb go p-accept', disabled: busy, 'aria-label': `Accept ${p.edits.length > 1 ? 'all ' + p.edits.length + ' edits of ' : ''}the proposal on ${titleOf(p)}`, text: p.edits.length > 1 ? 'Accept' : 'Accept', onclick: () => act(p, 'accept') }),
+        h('button', { type: 'button', class: 'pb no p-reject', disabled: busy, 'aria-label': `Reject the proposal on ${titleOf(p)}`, text: 'Reject', onclick: () => act(p, 'reject') }),
+        h('button', { type: 'button', class: 'pb p-show', 'aria-pressed': String(shown(p)), text: shown(p) ? 'Hide ghost' : 'Show ghost', onclick: () => (p.create ? toggleNew(p) : pick(S.picked === p.id && S.pickedEdit === null ? null : p.id)) })),
+      clashBox(p),
+      staleBox(p));
   }
   function draw() {
     const keep = document.activeElement?.closest?.('#proposals-tray') ? { id: document.activeElement.closest('.pitem')?.dataset.id, cls: [...document.activeElement.classList].find((c) => /^(p-|ed-|pt-)/.test(c)), edit: document.activeElement.closest('li[data-edit]')?.dataset.edit } : null;
@@ -144,7 +151,7 @@ export function initProposals(ctx) {
     for (const u of S.unmounts) try { u(); } catch {}
     S.unmounts = []; S.mod = null;
     for (const e of document.querySelectorAll('.ghost-layer, .ghost-flag, .ghost-divider')) e.remove();
-    for (const e of document.querySelectorAll('.cell[data-ghost]')) { delete e.dataset.ghost; e.style.removeProperty('--c'); }
+    for (const e of document.querySelectorAll('.cell[data-ghost]')) { delete e.dataset.ghost; e.style.removeProperty('--nk-c'); }
     for (const e of document.querySelectorAll('section.cmp[data-ghost]')) delete e.dataset.ghost;
     ctx.emit('ghost', { proposal: null });
   }
@@ -159,15 +166,55 @@ export function initProposals(ctx) {
     sec.dataset.ghost = p.id;
     const split = S.mode === 'split' ? '50%' : '0%';
     for (const cell of sec.querySelectorAll('.cell')) {
-      cell.dataset.ghost = p.id; cell.style.setProperty('--c', p.color || 'var(--accent)');
+      cell.dataset.ghost = p.id; cell.style.setProperty('--nk-c', p.color || 'var(--nk-accent)');
       const inner = h('div', { class: 'preview-inner' });
-      cell.append(h('div', { class: 'ghost-layer', 'data-mode': S.mode, 'aria-hidden': 'true', style: `--c:${p.color || 'var(--accent)'};--split:${split}` }, inner));
-      if (S.mode === 'split') cell.append(h('div', { class: 'ghost-divider', style: `--c:${p.color || 'var(--accent)'};--split:${split}`, 'aria-hidden': 'true' }));
+      cell.append(h('div', { class: 'ghost-layer', 'data-mode': S.mode, 'aria-hidden': 'true', style: `--nk-c:${p.color || 'var(--nk-accent)'};--nk-split:${split}` }, inner));
+      if (S.mode === 'split') cell.append(h('div', { class: 'ghost-divider', style: `--nk-c:${p.color || 'var(--nk-accent)'};--nk-split:${split}`, 'aria-hidden': 'true' }));
       let variant = {}; try { variant = JSON.parse(cell.dataset.variant); } catch {}
       try { S.unmounts.push(S.mod.mount(inner, variant)); } catch (e) { inner.textContent = `could not draw: ${e.message}`; }
     }
-    sec.querySelector('.frame')?.append(h('div', { class: 'ghost-flag', role: 'status', style: `--c:${p.color || 'var(--accent)'};--ink:${p.ink || 'var(--on-accent)'}`, text: `${p.by}'s proposal${S.pickedEdit === null ? '' : ` · edit ${S.pickedEdit + 1} of ${p.edits.length}`} · ${S.mode === 'before' ? 'before (live)' : S.mode === 'split' ? 'before | after' : 'after'} · not written` }));
+    sec.querySelector('.frame')?.append(h('div', { class: 'ghost-flag', role: 'status', style: `--nk-c:${p.color || 'var(--nk-accent)'};--nk-ink:${p.ink || 'var(--nk-on-accent)'}`, text: `${p.by}'s proposal${S.pickedEdit === null ? '' : ` · edit ${S.pickedEdit + 1} of ${p.edits.length}`} · ${S.mode === 'before' ? 'before (live)' : S.mode === 'split' ? 'before | after' : 'after'} · not written` }));
     ctx.emit('ghost', { proposal: p.id, component: p.component, mode: S.mode });
+  }
+  // A component that does not exist yet (WPC-22): drawn as a dashed ghost frame with its real rendered cells the moment the proposal arrives,
+  // in the slot a new component would take (stage.ghostFrame). Hide ghost / Show ghost toggles it; accept, reject or removal clears it.
+  const shown = (p) => (p.create ? !S.hiddenNew.has(p.id) : S.picked === p.id);
+  function paintNews() {
+    for (const [id, mod] of S.news) {
+      const p = S.list.get(id);
+      if (!p || S.hiddenNew.has(id)) { ctx.stage.removeGhost(id); continue; }
+      ctx.stage.ghostFrame(id, { flag: `${p.by}'s proposal · new component ${p.name} · not written`, color: p.color, ink: p.ink, doc: p.doc, mod });
+      ctx.emit('ghost', { proposal: id, component: p.component, mode: S.mode, create: p.name });
+    }
+  }
+  async function showNew(p, reveal) {
+    if (S.hiddenNew.has(p.id)) return;
+    if (!S.news.has(p.id)) {
+      const res = await fetch(`/bundle-proposal/${encodeURIComponent(p.id)}.js`).catch(() => null);
+      if (!res || !res.ok) { if (res) ctx.hint((await res.json().catch(() => ({}))).error || 'could not draw that proposal'); return; }
+      if (!S.list.has(p.id)) return;
+      const url = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
+      let mod; try { mod = await import(url); } finally { URL.revokeObjectURL(url); }
+      if (!S.list.has(p.id) || S.hiddenNew.has(p.id)) return;
+      S.news.set(p.id, mod);
+    }
+    if (!ctx.stage.ghostKeys().includes(p.id)) paintNews();
+    if (reveal) requestAnimationFrame(() => revealNew());
+  }
+  // Bring every pending ghost into view when any was placed off screen (nothing moves if they are all visible): several quick create
+  // proposals fit in one view, zooming out as far as needed.
+  function revealNew() {
+    const rs = [...S.news.keys()].filter((id) => !S.hiddenNew.has(id)).map((id) => ctx.stage.ghostRect(id)).filter(Boolean);
+    if (!rs.length) return;
+    const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h));
+    const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+    const { x, y, z } = ctx.view.get(), b = ctx.view.stageBox();
+    const inside = r.x * z + x >= 0 && r.y * z + y >= 0 && (r.x + r.w) * z + x <= b.width && (r.y + r.h) * z + y <= b.height;
+    if (!inside) ctx.view.flyTo(r, { pad: 90, max: Math.max(1, z) });
+  }
+  function toggleNew(p) {
+    if (S.hiddenNew.has(p.id)) { S.hiddenNew.delete(p.id); showNew(p, true); } else { S.hiddenNew.add(p.id); ctx.stage.removeGhost(p.id); }
+    draw();
   }
   async function ghost(p) {
     const token = ++S.token;
@@ -181,11 +228,13 @@ export function initProposals(ctx) {
   }
   // Show a proposal's result (or one edit of it) as a ghost, and bring its component fully into view in the space the tray left.
   function pick(id, edit = null) {
+    const np = id && S.list.get(id);
+    if (np?.create) { S.hiddenNew.delete(id); showNew(np, true).then(() => revealNew()); draw(); return; } // a new component's ghost is always drawn; picking only brings it into view
     clearGhost();
     S.picked = id; S.pickedEdit = id ? edit : null;
     draw();
     const p = id && S.list.get(id);
-    if (p) { ghost(p); requestAnimationFrame(() => requestAnimationFrame(() => frame(p))); }
+    if (p) { ghost(p); tray.querySelector(`.pitem[data-id="${CSS.escape(p.id)}"]`)?.scrollIntoView({ block: 'nearest' }); requestAnimationFrame(() => requestAnimationFrame(() => frame(p))); }
   }
   function frame(p) {
     const r = ctx.stage.componentRect?.(p.component);
@@ -205,6 +254,8 @@ export function initProposals(ctx) {
     else if (ev.key === 'a' || ev.key === 'A') { ev.preventDefault(); const next = rows[i + 1] ?? rows[i - 1]; act(p, 'accept').then(() => (next?.isConnected ? next : tray.querySelector('.pitem') ?? stageEl).focus?.({ preventScroll: true })); }
     else if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); const next = rows[i + 1] ?? rows[i - 1]; act(p, 'reject').then(() => (next?.isConnected ? next : tray.querySelector('.pitem') ?? stageEl).focus?.({ preventScroll: true })); }
   });
+  // Keyboard focus (or any focus) inside a row scrolls that row into the tray's visible part, so Accept is never out of reach.
+  tray.addEventListener('focusin', (ev) => ev.target.closest?.('.pitem')?.scrollIntoView({ block: 'nearest' }));
   function openTray() {
     if (!S.list.size) { ctx.hint('No proposals waiting'); return; }
     if (tray.contains(document.activeElement) && S.open) { S.open = false; S.userFolded = true; draw(); stageEl.focus({ preventScroll: true }); return; }
@@ -220,6 +271,8 @@ export function initProposals(ctx) {
   // ---------------------------------------------------------------------------------------------- events
   ctx.on('proposal', (f) => upsert(f.proposal));
   ctx.on('proposal-resolved', (f) => drop(f.id));
+  ctx.on('layout', () => ctx.stage.reslotGhosts());
+  ctx.on('render', () => { if (S.news.size) ctx.stage.reslotGhosts(); });
   ctx.on('render', ({ component }) => { const p = S.picked && S.list.get(S.picked); if (p && p.component === component && S.mod) paintGhost(); });
   ctx.on('removed', ({ component }) => { for (const p of [...S.list.values()]) if (p.component === component) drop(p.id); });
   setInterval(() => { for (const t of tray.querySelectorAll('time.pi-age')) { const p = S.list.get(t.closest('.pitem')?.dataset.id); if (p) t.textContent = ago(p.at); } }, 15000);

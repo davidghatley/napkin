@@ -76,7 +76,7 @@ export function createStage(ctx, root, world, view) {
     const [across, down, ...rest] = ax;
     let groups = [{}];
     for (const a of rest) groups = groups.flatMap((g) => a.options.map((o) => ({ ...g, [a.name]: o })));
-    matrix.style.setProperty('--gcols', String(Math.max(1, Math.min(groups.length, Math.ceil(Math.sqrt(groups.length))))));
+    matrix.style.setProperty('--nk-gcols', String(Math.max(1, Math.min(groups.length, Math.ceil(Math.sqrt(groups.length))))));
     for (const g of groups) {
       const group = document.createElement('div');
       group.className = 'group'; group.dataset.group = JSON.stringify(g);
@@ -86,7 +86,7 @@ export function createStage(ctx, root, world, view) {
       t.innerHTML = `<span class="gchips">${chips}</span><span class="ghint"><i>${esc(across.name)}</i> →${down ? ` <i>${esc(down.name)}</i> ↓` : ''}</span>`;
       group.append(t);
       const grid = document.createElement('div');
-      grid.className = 'mgrid'; grid.style.setProperty('--cols', across.options.length);
+      grid.className = 'mgrid'; grid.style.setProperty('--nk-cols', across.options.length);
       grid.dataset.rows = down ? '1' : '0';
       const head = (cls, text, base) => { const d = document.createElement('div'); d.className = cls + (base ? ' is-base' : ''); d.innerHTML = `<span>${esc(text)}</span>`; return d; };
       if (down) { const corner = document.createElement('div'); corner.className = 'corner'; grid.append(corner); }
@@ -186,7 +186,7 @@ export function createStage(ctx, root, world, view) {
   function measure(sec) {
     if (sec.culled) return;
     sec.size = { w: sec.frame.offsetWidth, h: sec.frame.offsetHeight };
-    sec.el.style.setProperty('--w', `${sec.size.w}px`); sec.el.style.setProperty('--h', `${sec.size.h}px`);
+    sec.el.style.setProperty('--nk-w', `${sec.size.w}px`); sec.el.style.setProperty('--nk-h', `${sec.size.h}px`);
   }
   // preview widths (LAY-11) came in from the sidecar: put them on the cells
   function applyPreview(id) {
@@ -284,6 +284,64 @@ export function createStage(ctx, root, world, view) {
     auto.set(id, { x, y }); moveTo(id, x, y);
   }
 
+  // ---------------------------------------------------------------------------------------------- ghost frames (WPC-22)
+  // A component that does not exist yet (an agent's create proposal) is drawn as a dashed frame with its real rendered cells, in the slot a
+  // new component would take (the same search as placeNew, but nothing advances: if it is accepted the real frame lands in this same slot).
+  // Ghost frames are not components: no section, no selection, no pointer events. key is the proposal id.
+  const ghosts = new Map(); // key -> { el, frame, unmounts, pos, size }
+  function ghostSlot(key, size) {
+    const z = Math.min(1, view.get().z), lf = Math.min(16, Math.max(1, 1 / z));
+    const top = Math.ceil(52 * lf) + CLEAR, w = size.w, h = size.h;
+    const others = [...sections.values()].filter((s) => s.pos).map((s) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
+    for (const [k, g] of ghosts) if (k !== key && g.pos) others.push({ x: g.pos.x, y: g.pos.y - top, w: g.size.w, h: g.size.h + top });
+    const sw = Math.max(SHELF_W, w);
+    let x = shelf.x, y = shelf.y;
+    if (x && x + w > sw) { x = 0; y = y + shelf.h + CLEAR; }
+    const hit = (px, py) => others.some((o) => px < o.x + o.w + GAP_X && px + w + GAP_X > o.x && py - top < o.y + o.h + CLEAR && py + h + CLEAR > o.y);
+    if (hit(x, y)) { x = 0; y = Math.max(0, ...others.map((o) => o.y + o.h)) + CLEAR + top; }
+    return { x, y };
+  }
+  function removeGhost(key) {
+    const g = ghosts.get(key);
+    if (!g) return;
+    for (const u of g.unmounts) try { u(); } catch { /* already gone */ }
+    g.el.remove(); ghosts.delete(key);
+  }
+  function ghostFrame(key, { flag, color, ink, doc, mod }) {
+    removeGhost(key);
+    const el = document.createElement('section');
+    el.className = 'ghost-new'; el.dataset.proposal = key; el.setAttribute('role', 'status');
+    el.style.setProperty('--nk-c', color || 'var(--nk-accent)'); el.style.setProperty('--nk-ink', ink || 'var(--nk-on-accent)');
+    const head = document.createElement('div'); head.className = 'gn-head';
+    const f = document.createElement('span'); f.className = 'gn-flag'; f.textContent = flag; f.title = flag; head.append(f);
+    const frame = document.createElement('div'); frame.className = 'frame gn-frame';
+    el.append(head, frame);
+    const unmounts = [];
+    const cellFor = (variant) => {
+      const fig = document.createElement('figure'); fig.className = 'cell'; fig.dataset.variant = JSON.stringify(variant);
+      const mount = document.createElement('div'); mount.className = 'mount';
+      const cap = document.createElement('figcaption'); cap.textContent = variantLabel(variant);
+      fig.append(mount, cap);
+      try { unmounts.push(mod.mount(mount, { ...variant })); } catch (e) { mount.textContent = `could not draw: ${e.message}`; }
+      return fig;
+    };
+    frame.append(buildMatrix(doc, cellFor));
+    const g = { el, frame, unmounts, pos: null, size: { w: 0, h: 0 } };
+    ghosts.set(key, g);
+    el.style.visibility = 'hidden'; world.append(el);
+    g.size = { w: frame.offsetWidth, h: frame.offsetHeight };
+    g.pos = ghostSlot(key, g.size);
+    el.style.left = `${g.pos.x}px`; el.style.top = `${g.pos.y}px`; el.style.visibility = '';
+    el.style.setProperty('--nk-w', `${g.size.w}px`);
+    return el;
+  }
+  // The layout moved on (first pack, a new component): ghosts take the first free slot again.
+  function reslotGhosts() {
+    for (const [key, g] of ghosts) { g.pos = ghostSlot(key, g.size); g.el.style.left = `${g.pos.x}px`; g.el.style.top = `${g.pos.y}px`; }
+  }
+  const ghostRect = (key) => { const g = ghosts.get(key); return g?.pos ? { x: g.pos.x, y: g.pos.y - 36, w: g.size.w, h: g.size.h + 36 } : null; };
+  const ghostKeys = () => [...ghosts.keys()];
+
   // ---------------------------------------------------------------------------------------------- rectangles (canvas units)
   function componentRect(id) {
     const sec = sections.get(id);
@@ -307,7 +365,7 @@ export function createStage(ctx, root, world, view) {
   function place(box, target, label, base) {
     if (!target?.isConnected || target.closest('[data-cull]')) { box.style.display = 'none'; return; }
     const r = target.getBoundingClientRect();
-    box.style.setProperty('--w', `${r.width}px`); box.style.setProperty('--h', `${r.height}px`); // children are placed with transforms from these, so a new size never shifts layout
+    box.style.setProperty('--nk-w', `${r.width}px`); box.style.setProperty('--nk-h', `${r.height}px`); // children are placed with transforms from these, so a new size never shifts layout
     Object.assign(box.style, { display: 'block', transform: `translate(${r.left - base.left}px, ${r.top - base.top}px)`, width: `${r.width}px`, height: `${r.height}px` });
     if (label !== undefined) box.dataset.label = label;
   }
@@ -527,7 +585,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
+    reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: queueCull,
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

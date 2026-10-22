@@ -5,7 +5,7 @@ import { h } from './drawer.js';
 const cssValue = v => String(v).replace(/\{([\w-]+)\}/g, 'var(--$1)');
 export async function initTokens(ctx) {
   let data = { tokens: [], modes: [] }, mode = 'light', drawerPane, table, notice, drawerSearch, drawerCount;
-  const style = h('style', { id: 'token-stage-vars' }); style.textContent = '#world .mount, #world .preview-layer {}'; document.head.append(style);
+  const style = h('style', { id: 'token-stage-vars' }); style.textContent = '#world .mount, #world .preview-inner, #stage .ghost-new .preview-inner {}'; document.head.append(style);
   const declarations = style.sheet.cssRules[0].style;
   style.sheet.insertRule('#world .frame {}', 1); // WPC-11: the frame (every cell's background) follows the theme's surface
   const frameDecl = style.sheet.cssRules[1].style;
@@ -22,9 +22,9 @@ export async function initTokens(ctx) {
     const resolve = (name) => { let v = data.tokens.find(t => t.name === name)?.values[mode]; for (let i = 0; i < 4 && /^\{[\w-]+\}$|^var\(--[\w-]+\)$/.test(String(v ?? '').trim()); i++) v = data.tokens.find(t => t.name === String(v).replace(/[{}]|var\(--|\)/g, ''))?.values[mode]; return v; };
     const named = (list) => list.find(n => data.tokens.some(t => t.name === n && t.type === 'color' && resolve(n)));
     const surface = named(['surface', 'background', 'bg', 'canvas', 'page', 'base']), ink = named(['ink', 'text', 'foreground', 'fg', 'on-surface']);
-    surface ? frameDecl.setProperty('--frame', resolve(surface)) : frameDecl.removeProperty('--frame');
+    surface ? frameDecl.setProperty('--nk-frame', resolve(surface)) : frameDecl.removeProperty('--nk-frame');
     document.querySelector('#world').dataset.frameTheme = surface && ink ? '1' : '';
-    surface && ink ? frameDecl.setProperty('--frame-ink', resolve(ink)) : frameDecl.removeProperty('--frame-ink');
+    surface && ink ? frameDecl.setProperty('--nk-frame-ink', resolve(ink)) : frameDecl.removeProperty('--nk-frame-ink');
   }
   function update(next) {
     if (next.revision === data.revision && next.error === data.error) return false;
@@ -149,7 +149,7 @@ export async function initTokens(ctx) {
       const [id, label] = families.find(([, , match]) => match(t));
       if (`${label} ${t.name} ${t.usage} ${Object.values(t.values).join(' ')}`.toLowerCase().includes(query)) buckets.get(id).push(t);
     }
-    const row = t => h('div', { class: 'token-row', 'data-token': t.name, style: `--token-mode-count:${data.modes.length}` },
+    const row = t => h('div', { class: 'token-row', 'data-token': t.name, style: `--nk-token-mode-count:${data.modes.length}` },
       h('div', { class: 'token-info', title: t.usage }, h('strong', { text: t.name })),
       ...data.modes.map(m => h('label', { class: 'token-value' }, h('span', { class: 'token-mode', text: m + (t.value !== undefined && typeof t.value !== 'object' ? ' · shared' : '') }),
         h('div', { class: 'token-value-well' },

@@ -8,6 +8,7 @@ import { match, search } from '../public/canvas/fuzzy.js';
 import { tempRepo, startServer, sleep, waitFor } from './helpers/harness.js';
 import { launchChromium } from './helpers/cdp.js';
 import { input, centerOf } from './helpers/input.js';
+import { readSidecar } from '../src/codecs.js';
 
 const sha = (f) => createHash('sha256').update(readFileSync(f)).digest('hex');
 const sec = (name) => `document.querySelector('section[data-name="${name}"]')`;
@@ -35,6 +36,9 @@ test('CAN-03 fuzzy search over 200 components stays under 50 ms (p95)', (t) => {
 
 test('canvas frames, quick open, layers, multi-select, measure, focus', { timeout: 150000 }, async (t) => {
   const { compDir, fileOf, git } = tempRepo(['Card', 'Button', 'Chip']);
+  // These cases measure subsequent position diffs in already-saved sidecars.
+  // First-save behavior is checked by onboarding/sample.test.js.
+  for (const name of ['Card', 'Chip']) readSidecar(fileOf(name), name, { create: true });
   const server = await startServer(compDir);
   const browser = await launchChromium({ width: 1440, height: 900 });
   const io = input(browser);
