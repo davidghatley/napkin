@@ -13,7 +13,7 @@ const LABEL = (prop) => prop.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.t
 
 export function initClash(ctx) {
   const panel = document.querySelector('#panel');
-  const S = { clashes: new Map(), base: new Map(), mine: new Map(), inserting: false };
+  const S = { clashes: new Map(), base: new Map(), inserting: false };
 
   // ---- the revision you saw when you started on a field ----
   const mark = (field, pointer) => {
@@ -36,7 +36,7 @@ export function initClash(ctx) {
   const base = (component) => {
     const b = S.base.get(component), s = ctx.state.selection;
     // an old base would make your own earlier edits of the same property look like someone else's: after any write of yours, send on the current revision
-    return b && s?.component === component && (b.pointer || panel.contains(document.activeElement)) && b.rev >= (S.mine.get(component) ?? 0) ? b.rev : undefined;
+    return b && s?.component === component && (b.pointer || panel.contains(document.activeElement)) ? b.rev : undefined;
   };
   const sent = (component, r) => {
     const b = S.base.get(component);
@@ -53,7 +53,7 @@ export function initClash(ctx) {
     place();
     ctx.emit('clash', { component, keys: (result.stale ?? []).map((s) => s.key) });
   });
-  ctx.on('change', (f) => { if (f.by === 'you') S.mine.set(f.component, Math.max(S.mine.get(f.component) ?? 0, Number(f.revision) || 0));
+  ctx.on('change', (f) => { const b0 = S.base.get(f.component); if (f.by === 'you' && b0 && b0.rev !== f.revision) S.base.delete(f.component); // revisions are opaque hashes: a write of yours that sent() did not follow drops the old base
     // a newer write of the same key by anyone settles the clash
     if (!f.edits) return;
     for (const e of f.edits) { const k = editKey(e); if (k && S.clashes.delete(`${f.component}|${k}`)) place(); }

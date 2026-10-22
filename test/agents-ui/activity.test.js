@@ -25,7 +25,7 @@ test('activity feed on the canvas', { timeout: 120000 }, async (t) => {
       console.log(`# activity: scout's apply listed ${hit.seenAt - hit.at} ms after it landed (${Date.now() - t0} ms incl. the request)`);
       evidence('AGT-09', `Re-run: EVIDENCE=1 node --test test/agents-ui/activity.test.js\nAn agent's apply was listed in the Activity tab ${hit.seenAt - hit.at} ms after it landed (bar: <= 200 ms).\nApply, create, rename, delete and undo rows by who; click or Enter focuses the node.`);
       const [first] = await rows();
-      assert.equal(first.by, 'scout'); assert.match(first.text, /label\.fontWeight = 700/); assert.match(first.text, /Button · label · r2/); assert.match(first.text, /\d\d:\d\d:\d\d · (now|\d+s ago)/);
+      assert.equal(first.by, 'scout'); assert.match(first.text, /label\.fontWeight = 700/); assert.match(first.text, /Button · label · r[0-9a-f]{7}\d\d:\d\d:\d\d/); assert.match(first.text, /\d\d:\d\d:\d\d · (now|\d+s ago)/);
       assert.equal(first.node, 'label');
       const dot = await q(`getComputedStyle(document.querySelector('#a-list .arow .adot')).backgroundColor`);
       assert.notEqual(dot, 'rgba(0, 0, 0, 0)');

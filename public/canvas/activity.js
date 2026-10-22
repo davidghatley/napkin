@@ -38,7 +38,7 @@ export function initActivity(ctx, drawer) {
         title: 'Select and fly to this change', onclick: () => focusRow(r), onkeydown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); focusRow(r); } else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); (ev.key === 'ArrowDown' ? li.nextElementSibling : li.previousElementSibling)?.focus(); } } },
         dot(r), h('span', { class: 'awho', text: r.by }),
         h('span', { class: 'asum', text: r.summary, title: r.summary }, r.approvedBy ? h('span', { class: 'aapp', text: `approved by ${r.approvedBy}` }) : null),
-        h('span', { class: 'awhere', text: `${name}${r.node ? ' · ' + r.node : ''}${r.revision ? ' · r' + r.revision : ''}` }),
+        h('span', { class: 'awhere', text: `${name}${r.node ? ' · ' + r.node : ''}${r.revision ? ' · r' + String(r.revision).slice(0, 7) : ''}` }),
         h('time', { datetime: new Date(r.at).toISOString(), title: new Date(r.at).toLocaleString(), text: `${clock(r.at)} · ${ago(r.at)}` }));
       return li;
     }) : [h('li', { class: 'empty', text: S.agentsOnly ? 'No agent has done anything yet.' : 'Nothing has happened yet.' })]));

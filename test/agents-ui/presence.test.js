@@ -53,6 +53,20 @@ test('presence on the canvas', { timeout: 120000 }, async (t) => {
       assert.equal((await q(`document.querySelector('#presence').textContent`)).includes('scout'), true, 'the words are there for a screen reader');
     });
 
+    await t.test('name tags of two agents on nested nodes never sit on each other', async () => {
+      const scout = await p.agent('scout'), claude = await p.agent('claude');
+      await scout.presence('Button', 'root', { ttl: 8000 });
+      await claude.presence('Button', 'label', { ttl: 8000 });
+      await browser.waitFor(`napkin.presence.boxes().length === 2 && napkin.presence.boxes().every((b) => b.node)`);
+      await sleep(250);
+      const tags = await q(`[...document.querySelectorAll('.pbox')].map((b) => { const r = b.querySelector('.ptag').getBoundingClientRect(); return { agent: b.dataset.agent, left: r.left, right: r.right, top: r.top, bottom: r.bottom }; })`);
+      assert.equal(tags.length, 2);
+      const [a, c] = tags;
+      assert.equal(a.left < c.right && a.right > c.left && a.top < c.bottom && a.bottom > c.top, false, `tags overlap: ${JSON.stringify(tags)}`);
+      await scout.presence('Button', 'label', { ttl: 100 }); await claude.presence('Button', 'label', { ttl: 100 });
+      await sleep(300);
+    });
+
     await t.test('moving between nodes leaves a fading trail', async () => {
       const scout = await p.agent('scout');
       await scout.presence('Button', 'root', { ttl: 8000 });

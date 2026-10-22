@@ -28,7 +28,7 @@
 #presence-trail circle { fill: var(--c); }
 .pbox { position: absolute; left: 0; top: 0; outline: 2px solid var(--c); outline-offset: var(--off, 2px); border-radius: 2px; transition: transform .16s cubic-bezier(.2, .8, .2, 1), width .16s, height .16s; box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 35%, transparent), 0 0 18px -2px color-mix(in srgb, var(--c) 55%, transparent); }
 .pbox[data-fresh="1"] { transition: none; }
-.pbox .ptag { position: absolute; left: calc(-1 * var(--off, 2px) - 2px); bottom: calc(100% + var(--off, 2px) + 4px + var(--slot, 0) * 21px); display: inline-flex; align-items: center; gap: 5px; height: 19px; padding: 0 8px 0 6px; border-radius: 4px 4px 4px 0; background: var(--c); color: var(--ink); font: 650 11px/1 var(--sans); white-space: nowrap; }
+.pbox .ptag { position: absolute; left: calc(-1 * var(--off, 2px) - 2px); bottom: calc(100% + var(--off, 2px) + 4px + var(--slot, 0) * 21px + var(--lift, 0) * 21px); display: inline-flex; align-items: center; gap: 5px; height: 19px; padding: 0 8px 0 6px; border-radius: 4px 4px 4px 0; background: var(--c); color: var(--ink); font: 650 11px/1 var(--sans); white-space: nowrap; }
 .pbox .ptag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); opacity: .85; }
 .pbox .ptag small { font: 500 10.5px var(--sans); opacity: .85; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
 @media (prefers-reduced-motion: reduce) { .pbox { transition: none; } #avatars .av[data-live="1"]::after { animation: none; } }
@@ -115,7 +115,7 @@
 .clash-chip button:hover { filter: brightness(1.06); }
 
 /* the Activity tab is the sixth button in the status bar: reserve its width so nothing shifts when it arrives (FEEL-04) */
-#drawer-tabs { min-width: 372px; }
+#drawer-tabs { min-width: 392px; } /* all eight tabs: Code to Activity measure 389px, so none arriving late moves the status bar */
 
 #proposals-tray .pi-edits button.ed-show[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 
@@ -123,4 +123,4 @@
 #avatars .av-name + .av, #avatars .av:first-child + .av { margin-left: 2px; }
 .top-right { padding-left: 6px; }
 .top-right .meta { width: 64px; }
-.top-right .slot { width: 164px; flex: none; }
+.top-right .slot { width: 164px; flex: 0 1 164px; min-width: 56px; } /* gives way (never the chrome switch) when the token theme picker shares the bar */

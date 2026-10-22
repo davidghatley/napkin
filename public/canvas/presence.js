@@ -85,6 +85,7 @@ export function initPresence(ctx) {
     rafId = 0;
     const base = overlays.getBoundingClientRect(), t = now();
     const placed = new Map(); // element -> how many agents already outline it
+    const tags = []; // name tags already placed this frame: {x0, x1, y0, y1}; a tag that would sit on one of them is lifted a row
     const lines = [];
     let animating = false;
     for (const [name, a] of live) {
@@ -96,6 +97,15 @@ export function initPresence(ctx) {
       box.style.display = 'block';
       box.style.setProperty('--c', col.color); box.style.setProperty('--ink', col.ink);
       box.style.setProperty('--off', `${2 + slot * 4}px`); box.style.setProperty('--slot', String(slot));
+      // tags of nested or adjacent nodes land on each other: lift this one by a tag row until it is clear of the tags already drawn
+      const tw = box.querySelector('.ptag').offsetWidth, tx = r.left - base.left - (2 + slot * 4) - 2;
+      let lift = 0;
+      for (let n = 0; n < 8; n++) {
+        const y1 = r.top - base.top - (2 + slot * 4) - 4 - slot * 21 - lift * 21;
+        if (!tags.some((o) => tx < o.x1 && tx + tw > o.x0 && y1 - 19 < o.y1 && y1 > o.y0)) { tags.push({ x0: tx, x1: tx + tw, y0: y1 - 19, y1 }); break; }
+        lift++;
+      }
+      box.style.setProperty('--lift', String(lift)); box.dataset.lift = String(lift);
       box.style.width = `${r.width}px`; box.style.height = `${r.height}px`;
       box.style.transform = `translate(${r.left - base.left}px, ${r.top - base.top}px)`;
       box.dataset.component = f.component; box.dataset.node = f.node ?? ''; box.dataset.slot = String(slot);
