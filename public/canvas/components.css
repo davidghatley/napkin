@@ -1,0 +1,40 @@
+/* Components lane: props editor, variant axes, sources (panel parts). Same wells, glyphs and spacing as inspector.css. */
+#panel .pcards, #panel .vlist { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; position: relative; }
+#panel .vlist { gap: 4px; }
+#panel .pcard, #panel .acard { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--chrome); }
+#panel .acard { margin-bottom: 6px; }
+#panel .phead { display: flex; align-items: center; gap: 4px; min-width: 0; }
+#panel .phead .pname { flex: 1; min-width: 0; }
+#panel .ptype { flex: none; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 5px; background: var(--chrome-2); color: var(--text-2); }
+#panel .ptype .gt, #panel .pfx .gt { font: 600 10px var(--sans); }
+#panel .grip { flex: none; display: grid; place-items: center; width: 18px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--text-3); cursor: grab; touch-action: none; }
+#panel .grip:hover { color: var(--text); }
+#panel .rowbtn:disabled, #panel .minibtn:disabled { opacity: .35; cursor: default; }
+#panel .pcard.dragging, #panel .vrow.dragging { opacity: .45; }
+#panel .drop-line { position: absolute; left: 0; right: 0; height: 2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+body[data-cmp-drag] { cursor: grabbing; user-select: none; }
+#panel .pmeta { margin: 0; font: 11px var(--sans); color: var(--text-3); overflow-wrap: anywhere; }
+#panel .pmeta code, #panel .sval { font: 11px var(--mono); color: var(--text-2); }
+#panel .enumrow { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px; align-items: center; }
+#panel .seg.wrapseg { flex-wrap: wrap; height: auto; min-height: var(--fh); }
+#panel .vrow { display: flex; align-items: center; gap: 4px; min-height: 28px; }
+#panel .vrow .vname { flex: 1; min-width: 0; }
+#panel .vrow .badge { flex: none; font: 600 10.5px var(--sans); padding: 2px 6px; border-radius: 999px; background: var(--chrome-2); color: var(--text-2); box-shadow: inset 0 0 0 1px var(--line); }
+#panel .ocount { flex: none; min-width: 16px; padding: 1px 5px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); font: 600 10.5px var(--sans); text-align: center; }
+#panel .addform { display: grid; gap: 6px; }
+/* sources */
+#panel .srcs { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+#panel .srow { display: grid; gap: 2px; padding: 5px 0; border-top: 1px solid var(--line); }
+#panel .srow:first-child { border-top: 0; }
+#panel .sline { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+#panel .sline.sub { padding-left: 12px; }
+#panel .sline .sname { font: 500 12px var(--sans); color: var(--text); }
+#panel .sline .sval { margin-left: auto; text-align: right; overflow-wrap: anywhere; }
+#panel .srow .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+#panel .srow .dot.off { background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); }
+#panel .srcchip { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 999px; background: var(--chrome-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-2); font: 500 11px var(--mono); }
+#panel .srcchip.over { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); color: var(--accent-text); }
+#panel .srow .minibtn { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 6px; color: var(--text-2); }
+#panel .srow .minibtn:hover { color: var(--text); }
+#panel .also { font: 11px var(--sans); color: var(--text-3); overflow-wrap: anywhere; }
+#panel .srcbadge { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-text); font: 600 10.5px var(--sans); }
