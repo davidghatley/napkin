@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "NODE_OPTIONS=\"--import=$PWD/test/helpers/cleanup.js\" node --test --test-concurrency=1 test/",
-    "start": "node src/server.js --port 4810",
+    "start": "node --max-semi-space-size=2 src/server.js --port 4810",
     "mcp": "node src/mcp.js",
     "demo": "DEMO_OUT=docs/demo node --test test/10-demo.test.js",
     "evidence:canvas": "EVIDENCE_OUT=docs/evidence node --test --test-force-exit test/14-canvas-look.test.js",

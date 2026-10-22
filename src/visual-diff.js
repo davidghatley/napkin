@@ -24,7 +24,7 @@ export async function visualDiff(ws, renderer, e) {
   const after = snap.doc;
   const cellsAfter = new Map(variantGrid(after).map((v) => [keyOf(v), v]));
   const cellsBefore = new Map(before ? variantGrid(before).map((v) => [keyOf(v), v]) : []);
-  const bundleAfter = await ws.bundle(e);
+  const bundleAfter = await ws.bundleStandalone(e);
   if (!bundleAfter?.ok) return { ok: false, error: `build failed: ${bundleAfter?.error}. Next: fix the build error shown on the frame.` };
   const bundleBefore = before ? await ws.bundleText(e, headText) : null;
   if (before && !bundleBefore.ok) return { ok: false, error: `the file at HEAD does not build: ${bundleBefore.error}. Next: compare against a commit that builds.` };

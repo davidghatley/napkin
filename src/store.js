@@ -7,6 +7,7 @@ import { explainError } from './errors.js';
 import { readFileSync, watch } from 'node:fs';
 import { basename, dirname } from 'node:path';
 import { createHash } from 'node:crypto';
+import { deflateSync, inflateSync } from 'node:zlib';
 import { writeComponent } from './commit.js';
 import { cleanStaleTmp, HandSave } from './atomic.js';
 import { EventEmitter } from 'node:events';
@@ -31,6 +32,7 @@ export const brokenMessage = (file, why) => `${basename(file)} has a syntax erro
 const POLL_MS = 400; // safety net for a missed file-system event; FMT-07 wants a hand edit seen within 1 s
 
 const HISTORY = 500;
+const FULL = 3; // the newest revisions keep their document and text in memory; older ones keep the text compressed and rebuild the document when asked (REL-04: memory flat over a long session)
 const STACK = 100; // undo steps remembered per caller // revisions remembered for rebasing; older bases are "stale revision"
 
 // start: { revision, by, summary } seeds the first history entry (create and rename record themselves there).
@@ -50,6 +52,20 @@ export async function openStore(file, start = {}) {
   let revision = revisionOf(text);
   let seq = 1;
   const history = [{ seq, revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', doc, text }];
+  // A past revision's text and document. Old entries hold the text deflated and no document (see FULL).
+  const textOf = (h) => (typeof h.text === 'string' ? h.text : Buffer.isBuffer(h.text) ? inflateSync(h.text).toString('utf8') : undefined);
+  const docOf = (h) => {
+    if (h.doc !== undefined) return h.doc;
+    if (!h.hasDoc) return null;
+    try { return codec.load(textOf(h), file, { ...start, writeSidecars: false }).doc; } catch { return null; }
+  };
+  // (deflateSync's output keeps the ~20 KB chunk it was built in alive: copy it into a buffer of exactly its size)
+  const exact = (b) => { const out = Buffer.allocUnsafeSlow(b.length); b.copy(out); return out; };
+  const age = () => {
+    const h = history[history.length - 1 - FULL];
+    if (!h || typeof h.text !== 'string') return;
+    h.hasDoc = !!h.doc; h.doc = undefined; h.text = exact(deflateSync(h.text));
+  };
   const stacks = new Map(); // caller -> { undo: [{ revision, keys, edits, summary }], redo: [...] } (HIS-01: your own edits only)
   const stackOf = (by) => { if (!stacks.has(by)) stacks.set(by, { undo: [], redo: [] }); return stacks.get(by); };
   let queue = Promise.resolve();
@@ -64,6 +80,7 @@ export async function openStore(file, start = {}) {
     const { summary: _s, restoreText: _r, ...extra } = meta;
     history.push({ seq: ++seq, revision, keys, by, summary, at, kind: meta.kind || (edits ? 'edit' : by), doc: next, text, ...extra });
     if (history.length > HISTORY) history.shift();
+    age();
     events.emit('change', { revision, by, edits, origin, doc, summary, at, source: text, ...(meta.approvedBy && { approvedBy: meta.approvedBy }), ...(meta.kind && { kind: meta.kind }) });
   };
 
@@ -211,11 +228,11 @@ export async function openStore(file, start = {}) {
     if (i < 1) return refuse('cannot undo: that revision is older than the history this server keeps');
     const c = clash(i, top.keys, by, 'undo');
     if (c) return c;
-    const inverse = diffToEdits(history[i].doc, history[i - 1].doc);
+    const inverse = diffToEdits(docOf(history[i]), docOf(history[i - 1]));
     if (!inverse) return refuse('cannot undo: the edit cannot be reversed exactly');
     const undone = { revision: top.revision, summary: top.summary };
     if (!inverse.length) { stacks.get(by).undo.pop(); return { ok: true, revision, doc, noop: true, undone }; }
-    const r = applyRetrying({ baseRevision: revision, edits: inverse, by, origin }, { restoreText: text === history[i].text ? history[i - 1].text : undefined, kind: 'undo', undoOf: top.revision, summary: `undo: ${top.summary}` });
+    const r = applyRetrying({ baseRevision: revision, edits: inverse, by, origin }, { restoreText: text === textOf(history[i]) ? textOf(history[i - 1]) : undefined, kind: 'undo', undoOf: top.revision, summary: `undo: ${top.summary}` });
     if (!r.ok) return refuse(`cannot undo: ${r.error}`);
     const st = stackOf(by); st.undo.pop(); st.redo.push({ ...top, undoRevision: revision, undoSeq: history.at(-1).seq });
     return { ...r, undone, ...(skipped && { skipped: { revision: skipped.revision, summary: skipped.summary } }) };
@@ -230,7 +247,7 @@ export async function openStore(file, start = {}) {
     const c = clash(i, top.keys, by, 'redo');
     if (c) return c;
     const orig = history[whereSeq(top.seq)];
-    const r = applyRetrying({ baseRevision: revision, edits: top.edits, by, origin }, { restoreText: orig && text === history[i].text ? orig.text : undefined, kind: 'redo', redoOf: top.revision, summary: `redo: ${top.summary}` });
+    const r = applyRetrying({ baseRevision: revision, edits: top.edits, by, origin }, { restoreText: orig && text === textOf(history[i]) ? textOf(orig) : undefined, kind: 'redo', redoOf: top.revision, summary: `redo: ${top.summary}` });
     if (!r.ok) return refuse(`cannot redo: ${r.error}`);
     const st = stackOf(by); st.redo.pop(); st.undo.push({ revision, seq: history.at(-1).seq, keys: top.keys, edits: top.edits, summary: top.summary });
     return { ...r, redone: { revision: top.revision, summary: top.summary } };
@@ -238,12 +255,12 @@ export async function openStore(file, start = {}) {
   // HIS-03: make the document what it was after `target`, as ONE new revision by the caller.
   function restoreNow(target, by, origin) {
     if (readOnly) return refuse(`read-only: ${readOnly}`);
-    const t = history[where(target)];
-    if (!t?.doc) return refuse(`revision ${target} is not in the history this server keeps`);
-    const edits = diffToEdits(doc, t.doc);
+    const t = history[where(target)], then = t && docOf(t);
+    if (!then) return refuse(`revision ${target} is not in the history this server keeps`);
+    const edits = diffToEdits(doc, then);
     if (!edits) return refuse('cannot restore: the difference cannot be written as edits exactly');
     if (!edits.length) return { ok: true, revision, doc, noop: true };
-    return applyRetrying({ baseRevision: revision, edits, by, origin }, { restoreText: t.text, kind: 'restore', restoreOf: target, summary: `restore to r${target}: ${t.summary}` });
+    return applyRetrying({ baseRevision: revision, edits, by, origin }, { restoreText: textOf(t), kind: 'restore', restoreOf: target, summary: `restore to r${target}: ${t.summary}` });
   }
 
   // Server-internal: a change that spanned several files failed in a later one, so this file goes back to exactly the text it had at `target`
@@ -300,7 +317,7 @@ export async function openStore(file, start = {}) {
     undoTop(by) { const t = stacks.get(by)?.undo.at(-1); return t ? { revision: t.revision, summary: t.summary, at: history[whereSeq(t.seq)]?.at ?? 0 } : null; },
     redoTop(by) { const t = stacks.get(by)?.redo.at(-1); return t ? { revision: t.revision, summary: t.summary, at: history[whereSeq(t.undoSeq)]?.at ?? 0 } : null; },
     // The document and file text as they were after a past revision (for preview and restore), or null.
-    at(rev) { const h = history[where(rev)]; return h?.doc ? { revision: h.revision, by: h.by, summary: h.summary, at: h.at, doc: h.doc, source: h.text } : null; },
+    at(rev) { const h = history[where(rev)], d = h && docOf(h); return d ? { revision: h.revision, by: h.by, summary: h.summary, at: h.at, doc: d, source: textOf(h) } : null; },
     // Recent revisions, newest first: [{ revision, by, summary, at, keys }].
     history(limit = 50) { return history.slice(-Math.max(1, limit)).reverse().map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, at: h.at, keys: [...h.keys], kind: h.kind, ...(h.approvedBy && { approvedBy: h.approvedBy }), ...(h.undoOf !== undefined && { undoOf: h.undoOf }), ...(h.redoOf !== undefined && { redoOf: h.redoOf }), ...(h.restoreOf !== undefined && { restoreOf: h.restoreOf }) })); },
     async close() { clearInterval(poll); watcher.close(); await queue; },

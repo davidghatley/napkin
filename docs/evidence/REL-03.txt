@@ -1,0 +1,6 @@
+REL-03: Node client: 6 server restarts on the same port, reconnected 204, 204, 10, 10, 10, 10 ms after the new server printed its address (bar <= 2000 ms; worst 204 ms). A write while the server was down answered "stale revision: the connection to napkin..." and left the file untouched; a hand edit made during the outage arrived as exactly one change frame; the first write after reconnecting (new session token) was accepted.
+An edit whose reply was cut after the server applied it: the client answered "stale revision ... may have landed", the file holds the edit exactly once, the canvas state caught up through the event stream, and a resend on the old base is stale (0 silent losses).
+Chromium page: the connection state went lost, then ok; the hand edit made during the outage was painted 206 ms after the restarted server printed its address (bar <= 2000 ms); the page's next edit was accepted.
+
+Re-run: EVIDENCE=1 node --test test/engine/reconnect.test.js
+Measured: 2026-10-22T07:40:00.005Z; v26.8.2; Chromium page and Node client against a real server restarted on its own port.

@@ -1,0 +1,7 @@
+PRF-07
+PASS: server RSS 109 MB (<= 500), page live JS heap 17 MB (<= 400); 1131 cells.
+
+Re-run: node bench/perf.js --id PRF-07
+Measured: 2026-10-22T07:39:40.800Z
+v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
+Raw samples and method: docs/evidence/PRF-07.json

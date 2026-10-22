@@ -33,7 +33,8 @@ export function createView(ctx, stageEl, worldEl) {
     const lf = Math.round(clamp(1 / z, 1, 16) * 20) / 20; // titles and the axis strip stay readable down to the 200-component fit
     if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--lf', lf); }
     stageEl.dataset.hdr = z < 0.33 ? 'strip' : '';
-    stageEl.style.setProperty('--tx', `${x}px`); stageEl.style.setProperty('--ty', `${y}px`); stageEl.style.setProperty('--gz', String(z));
+    // (not custom properties: a custom property set on #stage is inherited by every element under it, and each pan event would restyle them all)
+    stageEl.style.backgroundPosition = `${x}px ${y}px`; stageEl.style.backgroundSize = `${24 * z}px ${24 * z}px`;
     stageEl.dataset.zoomBand = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
     ctx.state.zoom = z;
     document.body.classList.add('moving'); clearTimeout(movingTimer); movingTimer = setTimeout(() => document.body.classList.remove('moving'), 160);

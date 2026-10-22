@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { readComponent } from '../src/tsx/read.js';
 import { getValue } from '../src/model.js';
-import { tempRepo, startServer, ROOT } from './helpers/harness.js';
+import { tempRepo, startServer, waitFor, ROOT } from './helpers/harness.js';
 import { launchChromium } from './helpers/cdp.js';
 
 test('the panel edits base, variants, text settings, props and axes through the store', { timeout: 90000 }, async (t) => {
@@ -20,6 +20,8 @@ test('the panel edits base, variants, text settings, props and axes through the 
   const click = async (sel) => { await browser.waitFor(`document.querySelector(${JSON.stringify(sel)})`); return q(`document.querySelector(${JSON.stringify(sel)}).click()`); };
   const doc = (name) => readComponent(readFileSync(fileOf(name), 'utf8')).doc;
   const numstat = () => git('diff', '--numstat').trim();
+  // The canvas previews while a person types, so the pixels can be ahead of the file: wait for the file.
+  const inFile = (check) => waitFor(() => { try { return check(); } catch { return false; } }, 5000);
   const selectCell = async (n, i, node) => {
     await q(`${cells(n)}[${i}].querySelector('[data-n="${node}"]').click()`);
     await browser.waitFor(`document.querySelector('#sel-node')?.textContent.startsWith('${node}')`);
@@ -38,14 +40,17 @@ test('the panel edits base, variants, text settings, props and axes through the 
       assert.equal(await q(`document.querySelector('#borderRadius').value`), '6');
       await browser.type('#borderRadius', '10');
       await browser.waitFor(`${cells('Button')}.every((c) => getComputedStyle(c.querySelector('[data-n="root"]')).borderTopLeftRadius === '10px')`);
+      await inFile(() => getValue(doc('Button'), 'root.borderRadius') === 10);
       assert.equal(numstat(), '1\t1\tcomponents/Button.tsx');
       assert.equal(getValue(doc('Button'), 'root.borderRadius'), 10, 'a bare number stays a number');
       // string values stay strings; empty removes
       await browser.type('#padding', '8px 20px');
       await browser.waitFor(`document.querySelector('#padding').value === '8px 20px' && ${sec('Button')}.querySelector('[data-n="root"]').style.padding === '8px 20px'`);
+      await inFile(() => getValue(doc('Button'), 'root.padding') === '8px 20px');
       assert.equal(getValue(doc('Button'), 'root.padding'), '8px 20px');
       await browser.type('#borderRadius', '');
       await browser.waitFor(`getComputedStyle(${sec('Button')}.querySelector('[data-n="root"]')).borderTopLeftRadius === '0px'`);
+      await inFile(() => getValue(doc('Button'), 'root.borderRadius') === undefined);
       assert.equal(getValue(doc('Button'), 'root.borderRadius'), undefined);
       git('checkout', '--', 'components/Button.tsx');
       await browser.waitFor(`getComputedStyle(${sec('Button')}.querySelector('[data-n="root"]')).borderTopLeftRadius === '6px'`);
@@ -64,6 +69,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
       await browser.type('#padding', '2px 4px');
       await browser.waitFor(`${cells('Button')}.filter((c) => getComputedStyle(c.querySelector('[data-n="root"]')).paddingTop === '2px').length === 2`);
       const p = await pads('paddingTop');
+      await inFile(() => getValue(doc('Button'), 'root.padding', { size: 'sm' }) === '2px 4px');
       assert.deepEqual(Object.entries(p).filter(([, v]) => v === '2px').map(([k]) => JSON.parse(k).size), ['sm', 'sm']);
       assert.equal(p['{"size":"md","state":"default"}'], '8px');
       assert.equal(getValue(doc('Button'), 'root.padding', { size: 'sm' }), '2px 4px');
@@ -95,6 +101,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
       await browser.waitFor(`document.querySelector('[data-sec=type]').open`);
       await browser.type('#color', 'tomato');
       await browser.waitFor(`${cells('Button')}.filter((c) => getComputedStyle(c.querySelector('[data-n="root"]')).color === 'rgb(255, 99, 71)').length === 3`);
+      await inFile(() => getValue(doc('Button'), 'root.color', { state: 'hover' }) === 'tomato');
       assert.equal(getValue(doc('Button'), 'root.color', { state: 'hover' }), 'tomato');
       git('checkout', '--', 'components/Button.tsx');
       await browser.waitFor(`${cells('Button')}.every((c) => getComputedStyle(c.querySelector('[data-n="root"]')).color !== 'rgb(255, 99, 71)')`);

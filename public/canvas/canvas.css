@@ -142,8 +142,8 @@ code { font-family: var(--mono); }
   grid-area: stage; position: relative; overflow: clip; contain: layout paint; touch-action: none; user-select: none; outline: none;
   background-color: var(--bg);
   background-image: radial-gradient(circle at 1px 1px, var(--dot) 1px, transparent 1.4px);
-  background-size: calc(24px * var(--gz, 1)) calc(24px * var(--gz, 1));
-  background-position: var(--tx, 0) var(--ty, 0);
+  background-size: 24px 24px; /* (view.js sets the real size and position inline, at every pan and zoom) */
+  background-position: 0 0;
 }
 #stage[data-zoom-band="far"] { background-image: none; }
 body[data-pan="ready"] #stage { cursor: grab; }
@@ -154,7 +154,10 @@ body.moving #world { will-change: transform; }
 .cmp { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .cmp:not([data-pos]) { visibility: hidden; }
 body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; transition: opacity .18s; }
-.cmp[data-cull] .frame { content-visibility: hidden; contain-intrinsic-size: var(--w, 200px) var(--h, 120px); }
+/* A frame far off screen keeps its box (--w, --h are its measured size) but not its contents: even content-visibility:hidden subtrees cost
+   every frame (style, pre-paint, layerize) in proportion to their elements, about 17 ms per frame at 200 components (PRF-02, PRF-04). */
+.cmp[data-cull] .frame { box-sizing: border-box; width: var(--w, 200px); height: var(--h, 120px); }
+.cmp[data-cull] .frame > * { display: none; }
 .cmp[data-presence] .frame { outline: 2px dashed var(--ok); outline-offset: 8px; }
 
 .cmp-head { position: absolute; left: 0; bottom: 100%; margin-bottom: 8px; transform: scale(var(--lf, 1)); transform-origin: 0 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: grab; white-space: nowrap; width: max-content; }

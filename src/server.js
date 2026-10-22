@@ -12,7 +12,6 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
-import { vendorModule } from './vendor.js';
 import { createComponent, createProjectConfig, writeTokens } from './commit.js';
 import { createPresence } from './presence.js';
 import { nodeOfEdit } from './model.js';
@@ -86,6 +85,12 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const path = url.pathname;
   try {
+    if (req.method === 'GET' && path === '/runtime.js') { // the one shared copy of React the component bundles import (see src/bundle.js)
+      const r = await ws.runtime(url.searchParams.get('module'));
+      if (!r) return json(res, 404, { ok: false, error: 'unknown runtime module' });
+      res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'public, max-age=3600' });
+      return res.end(r.code);
+    }
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
     if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
@@ -123,21 +128,12 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true });
     }
 
-    // The one copy of React the page shares between component bundles (?shared=1), named in the page's import map.
-    const vend = path.match(/^\/vendor\/([a-z-]+)\.js$/);
-    if (req.method === 'GET' && vend) {
-      const code = await vendorModule(vend[1]).catch(() => null);
-      if (!code) return json(res, 404, { ok: false, error: 'not found' });
-      res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'max-age=3600' });
-      return res.end(code);
-    }
-
     // The bundle for one component; waits for the build that follows the latest revision. ?rev=N only busts caches.
     const b = path.match(/^\/bundle\/([^/]+)\.js$/);
     if (req.method === 'GET' && b) {
       const e = ws.find(decodeURIComponent(b[1]));
       if (!e) return json(res, 404, { ok: false, error: 'not found' });
-      const r = await ws.bundle(e, { shared: url.searchParams.get('shared') === '1' });
+      const r = await ws.bundle(e);
       if (!r.ok) return json(res, 500, { ok: false, error: r.error });
       res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'no-store', 'x-napkin-build-ms': r.ms.toFixed(1) });
       return res.end(r.code);

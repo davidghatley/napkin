@@ -49,8 +49,9 @@ export function initNav(ctx) {
   }
   const firstVariant = (c) => { const ax = (c.doc?.props || []).filter((p) => p.type === 'enum'); return Object.fromEntries(ax.map((a) => [a.name, a.default])); };
 
-  let timer = 0;
-  const persist = () => { clearTimeout(timer); timer = setTimeout(() => store({ view: view.get(), before, focus: focused }), 120); };
+  let timer = 0, restored = false;
+  // (nothing is saved until restore() has run: the page's first layout moves the view to its default before the saved or fitted view is chosen)
+  const persist = () => { if (!restored) return; clearTimeout(timer); timer = setTimeout(() => store({ view: view.get(), before, focus: focused }), 120); };
   ctx.on('view', persist);
 
   function fromHash() {
@@ -58,6 +59,7 @@ export function initNav(ctx) {
     return m[0] ? { name: m[0], node: m[1] } : null;
   }
   function restore() {
+    restored = true;
     const h = fromHash(), saved = load();
     if (h && ctx.find(h.name)) {
       before = saved?.before ?? null;

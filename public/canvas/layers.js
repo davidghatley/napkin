@@ -19,7 +19,7 @@ const canHold = (n) => !holdsText(n) && !VOID.has(n.tag);
 export function initLayers(ctx, el) {
   const expanded = new Set();          // component ids showing their nodes
   const folded = new Set();            // "component|node" rows whose children are hidden
-  let queued = false, renaming = null, dragging = null, reveal = false, focusKey = null; // focusKey: the row that keeps keyboard focus across a rebuild
+  let lastHtml = '', queued = false, renaming = null, dragging = null, reveal = false, focusKey = null; // focusKey: the row that keeps keyboard focus across a rebuild
   const rowKey = (r) => `${r.dataset.component}|${r.dataset.node ?? ''}`;
 
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; draw(); }); } };
@@ -28,7 +28,7 @@ export function initLayers(ctx, el) {
   const baseVariant = (c) => Object.fromEntries((c.doc?.props || []).filter((p) => p.type === 'enum').map((a) => [a.name, a.default]));
 
   function draw() {
-    if (renaming || dragging) return;
+    if (renaming || dragging) { lastHtml = ''; return; } // (the rename box and the drag marks are not in lastHtml)
     const sel = selected(), prim = ctx.state.selection;
     const comps = [...ctx.state.components.values()].sort((a, b) => a.name.localeCompare(b.name));
     const rows = [];
@@ -45,7 +45,10 @@ export function initLayers(ctx, el) {
         if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
       })(c.doc.root, 1);
     }
-    el.innerHTML = rows.join('') || '<p class="empty">No layers yet.</p>';
+    const html = rows.join('') || '<p class="empty">No layers yet.</p>';
+    if (html === lastHtml && !focusKey) { if (reveal) { reveal = false; el.querySelector('.primary')?.scrollIntoView({ block: 'nearest' }); } return; } // an edit that moved no row leaves the tree alone (~200 rows at 200 components)
+    lastHtml = html;
+    el.innerHTML = html;
     if (rows.length) el.setAttribute('role', 'tree'); else el.removeAttribute('role'); // an empty tree is not a tree
     const tab = el.querySelector('.primary') || el.querySelector('.has-sel') || el.querySelector('.lrow');
     if (tab) { tab.tabIndex = 0; tab.querySelectorAll('.leye, .lmore').forEach((b) => { b.tabIndex = 0; }); } // reachable by Tab from the row; shown while the row has focus

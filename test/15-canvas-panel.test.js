@@ -142,7 +142,9 @@ test('the design panel reads like a design tool and every control is one small e
       assert.equal(await q(`!!document.querySelector('details.adv #cursor')`), true, 'cursor is in there');
       await q(`document.querySelector('details.adv > summary').click()`);
       await browser.waitFor(`document.querySelector('details.adv').open`);
+      const r0 = await rev();
       await browser.type('#cursor', 'default');
+      await settled('Button', r0 + 1); // (the canvas previews while you type, so the pixels can lead the file)
       await browser.waitFor(`getComputedStyle(${root}).cursor === 'default'`);
       assert.equal(getValue(doc(), 'root.cursor'), 'default');
       assert.equal(lines(), '1\t1\tcomponents/Button.tsx');

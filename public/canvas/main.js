@@ -120,7 +120,7 @@ await initTokens(ctx); // token source, theme preview and Tokens drawer
 ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
 initAgentsLane(ctx);  // presence, proposals tray + ghost cells, Activity tab, clash chip
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
-ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
+ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
 
 const sync = id => {
   if (!id) return;
@@ -156,6 +156,7 @@ client.onChange((f) => {
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'preview') { ctx.emit('preview', f); }
+  else if (f.type === 'connection') { document.body.dataset.connection = f.connected ? 'ok' : 'lost'; ctx.emit('connection', f); }
   else if (f.type === 'slots') { stage.render(f.component, true).catch(console.error); }
   else if (f.type === 'build') { if (f.cause && f.ok) stage.render(f.component, true).catch(console.error); } // a component this one shows was edited: draw it again
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }

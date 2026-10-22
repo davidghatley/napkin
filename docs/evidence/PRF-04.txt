@@ -1,0 +1,7 @@
+PRF-04
+FAIL: pan only: p95 16.70 ms (bar <= 16.7) | pan only: p50 16.70, p95 16.70 ms, 0/301 frames over 20 ms | pan with a zoom step every 12th event: p50 16.70, p95 16.80 ms, 7/294 frames over 20 ms.
+
+Re-run: node bench/perf.js --id PRF-04
+Measured: 2026-10-22T07:38:53.142Z
+v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
+Raw samples and method: docs/evidence/PRF-04.json
