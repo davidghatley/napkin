@@ -37,7 +37,7 @@ export function search(items, query, limit = 30) {
   for (const item of items) {
     const m = match(q, item.label);
     if (m) out.push({ item, score: m.score + (item.boost || 0), at: m.at });
-    else if (item.hint && q) { const h = match(q, `${item.label} ${item.hint}`); if (h) out.push({ item, score: h.score - 12, at: [] }); }
+    else if (item.hint && q) { const h = match(q, `${item.label} ${item.hint}`); if (h) out.push({ item, score: h.score - 12 + (item.boost || 0), at: [] }); }
   }
   out.sort((a, b) => b.score - a.score || KIND_RANK[a.item.kind] - KIND_RANK[b.item.kind] || a.item.label.localeCompare(b.item.label));
   return out.slice(0, limit);

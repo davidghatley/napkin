@@ -23,6 +23,30 @@ export function initQuick(ctx) {
   let items = [], results = [], active = 0, returnTo = null;
 
 
+  // Every control of the inspector, named by its section and label ("Fill colour", "Stroke colour", "Shadow", "Layout align top left",
+  // "Settings label"), so Cmd-K reaches any property, not just the labelled number fields.
+  const ALIAS = { Stroke: 'Border', Appearance: 'Corner opacity', Layout: 'Auto layout flex grid' };
+  const SKIP = /^(pick-|nativepick|token-|off-token-|eye-|remove-|grip-|value-(up|down|name)|axis-(up|down|name)|make-base|add-(style|prop|value|axis)|swatch-|scope-info|insert-|pad-sides|rad-sides|edit-settings)/;
+  function panelControls() {
+    const out = [], seen = new Set(), panel = document.querySelector('#panel');
+    if (!panel) return out;
+    const seenIn = new Map();
+    for (const el of panel.querySelectorAll('input, select, textarea, button[id]')) {
+      const id = el.id;
+      if (!id || seen.has(id) || el.disabled || el.type === 'color' || SKIP.test(id) || (/^propdef-/.test(id) && el.tagName !== 'INPUT')) continue;
+      const lab = panel.querySelector(`label[for="${CSS.escape(id)}"]`);
+      let name = (lab?.querySelector('.lt') || lab)?.textContent.trim() || el.getAttribute('aria-label') || (el.tagName === 'BUTTON' ? el.textContent.trim() : '') || '';
+      const section = el.closest('details')?.querySelector('summary')?.firstChild?.textContent.trim() || '';
+      if (el.id === 'add-effects') { name = 'Shadow'; }
+      else if (/^Add /.test(name)) name = name.replace(/^Add /, '');
+      if (!name) continue;
+      seen.add(id);
+      const generic = /^propdef-/.test(id) || /^(Colour|Opacity|Width|Height|Style|Size|Hug|Fill|Fixed|Block|Flex|Grid|Row|Column|Wrap|Left|Right|Top|Bottom|Center|All sides|Min \/ Max|Space between)$/.test(name) || /^Align /.test(name);
+      const full = el.id === 'add-effects' || !section || !generic || section === name ? name : `${section.replace(/^Advanced.*/, 'Advanced')} ${name}`;
+      out.push({ id, order: (seenIn.set(el.closest('details'), (seenIn.get(el.closest('details')) ?? -1) + 1), seenIn.get(el.closest('details'))), button: el.tagName === 'BUTTON', label: full, alias: ALIAS[section] && section !== 'Layout' ? ALIAS[section] : '' });
+    }
+    return out;
+  }
   function build() {
     items = actionsFor(ctx);
     for (const c of ctx.state.components.values()) {
@@ -36,19 +60,19 @@ export function initQuick(ctx) {
     // WPC-07: the inspector's fields of the current selection, so Cmd-K + "rad" + Enter lands in Radius
     const sel = ctx.state.selection;
     if (sel) {
-      const where = `${ctx.state.components.get(sel.component)?.name ?? ''} › ${sel.node}`, seen = new Set();
-      for (const lab of document.querySelectorAll('#panel label[for]')) {
-        const name = (lab.querySelector('.lt') || lab).textContent.trim(), input = document.getElementById(lab.htmlFor);
-        if (!name || !input || input.disabled || seen.has(lab.htmlFor)) continue;
-        seen.add(lab.htmlFor);
-        items.push({ kind: 'property', label: name, hint: where, field: lab.htmlFor, boost: 6 });
-      }
+      const where = `${ctx.state.components.get(sel.component)?.name ?? ''} › ${sel.node}`;
+      for (const p of panelControls()) items.push({ kind: 'property', label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, boost: (p.button ? 3 : 6) - Math.min(p.order, 8) * 0.35 });
     }
     return items;
   }
   // Focus an inspector control (opening its section if folded). Used by property results and Alt+I.
   function focusField(el) {
     if (!el) return false;
+    const id = el.id, sc = document.getElementById('scope'), sel = ctx.state.selection;
+    if (id && id !== 'scope' && sc && sc.value !== 'variant' && sc.options[1] && !sc.options[1].disabled && sel) { // a variant cell is selected: land in that variant's scope
+      sc.value = 'variant'; sc.dispatchEvent(new Event('change', { bubbles: true }));
+      el = document.getElementById(id) || el;
+    }
     for (let d = el.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
     el.focus({ preventScroll: false }); el.select?.();
     return document.activeElement === el;

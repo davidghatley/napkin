@@ -577,3 +577,13 @@ body[data-empty="1"] #statusbar .hints { visibility:hidden; }
 .cmp-title h3 { flex-shrink:0; max-width:calc(var(--w) - 96px); }
 .cmp .badge:not([hidden]) { flex-shrink:1; min-width:60px; }
 .frame .build-error, .mount .error { color:#9f2633; }
+
+/* WPC-15: at 1280 px and narrower the tools collapse to icons (the tooltip and aria-label carry the name) and the status-bar hints give up
+   their last entries one by one, so the top bar and status bar never overlap or truncate. */
+@media (max-width: 1360px) {
+  #toolbar { min-width: 0; }
+  #toolbar .tl, #toolbar kbd { display: none; }
+  #toolbar button { padding: 0 9px; }
+  #statusbar .hints .h:nth-child(n+5) { display: none; }
+}
+@media (max-width: 1180px) { #statusbar .hints .h:nth-child(n+3) { display: none; } }

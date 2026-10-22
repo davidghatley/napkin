@@ -11,7 +11,7 @@
 // Interactions here: click / shift-click / marquee selection (ctx.state.selections), dragging a frame by its
 // title (position saved in the sidecar only), Alt to measure, hover. Components are laid out once and never
 // re-packed, so an edit in one frame can never move another (FEEL-04).
-import { plain } from './words.js';
+import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 
@@ -64,7 +64,7 @@ export function createStage(ctx, root, world, view) {
     sec.el.querySelector('.axes-strip').textContent = ax.map((a, i) => `${a.name} ×${a.options.length}${i === 0 ? ' →' : i === 1 ? ' ↓' : ''}`).join('  ');
     const badge = sec.el.querySelector('.badge');
     badge.hidden = !c.readOnly; badge.textContent = c.readOnly ? `read-only: ${c.readOnly}` : ''; badge.title = badge.textContent;
-    sec.el.querySelector('.problem').textContent = c.problem ? `file has an error, showing the last good version: ${c.problem}` : '';
+    sec.el.querySelector('.problem').textContent = c.problem ? problemBanner(c.path || `${c.name}.tsx`, c.problem) : '';
   }
 
   // The matrix: first axis across, second down, the rest as labelled groups.

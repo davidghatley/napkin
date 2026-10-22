@@ -128,7 +128,7 @@ export function initProposals(ctx) {
       ctx.hint(verb === 'accept' ? `Accepted ${part} from ${p.by}${j.revision ? ` as r${j.revision}` : ''}` : `Rejected ${part} from ${p.by}; nothing was written`);
     } else {
       S.errors.set(p.id, j); draw();
-      if (!j.stale?.length) ctx.hint(`Can't ${verb}: ${plain(String(j.error).replace(/^stale revision: /, 'stale: '))}`); // a stale reason is already in the tray
+      if (!j.stale?.length) ctx.hint(`Can't ${verb}: ${/^stale revision/.test(j.error) ? 'this changed after the agent looked' : plain(j.error)}`); // a stale reason is already in the tray
     }
     return j;
   }

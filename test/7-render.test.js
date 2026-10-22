@@ -109,7 +109,7 @@ test('the canvas follows the files: grid, live edits, broken edits, branch switc
       writeFileSync(file, readFileSync(file, 'utf8').replace('return (', 'return (<<'));
       await browser.waitFor(`${sec('Card')}.querySelector('.problem').textContent.includes('line ')`, 2000);
       const msg = await q(`${sec('Card')}.querySelector('.problem').textContent`);
-      assert.match(msg, /last good version: line \d+:/);
+      assert.match(msg, /^Card\.tsx has a syntax error at line \d+\. Showing the last version that worked\./);
       assert.equal(await q(`${sec('Card')}.querySelector('[data-n="title"]').textContent`), 'Changed outside', 'last good render stays');
       git('restore', 'components/Card.tsx');
       await browser.waitFor(`!${sec('Card')}.querySelector('.problem').textContent && ${sec('Card')}.querySelector('[data-n="title"]').textContent === 'From napkin to component'`, 2000);

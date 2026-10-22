@@ -182,7 +182,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
       await selectCell('Button', 0, 'root');
       await browser.type('#width', 'a;b');
       await browser.waitFor('document.querySelector("#err-style-width")');
-      assert.match(await q(`document.querySelector('#err-style-width').textContent`), /invalid edit #0: unsafe value/);
+      assert.match(await q(`document.querySelector('#err-style-width').textContent`), /"a;b" is not something width can be/);
       assert.equal(readFileSync(fileOf('Button'), 'utf8'), before);
       assert.equal(readFileSync(fileOf('Card'), 'utf8').includes('New default'), true);
     });

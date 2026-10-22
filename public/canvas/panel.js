@@ -85,6 +85,17 @@ function target(doc, sel) {
 // Axis/value pairs of the selected cell that override `prop` on `node`.
 const overridesOf = (doc, nonBase, nodeId, prop) => nonBase.filter(([a, v]) => doc.variants?.[a]?.[v]?.[nodeId]?.[prop] !== undefined);
 
+// A value the browser would not accept for this property never reaches the file ("banana" as a colour, "abc def" as a padding).
+function invalidValue(prop, v) {
+  if (v === null || v === undefined || typeof v === 'boolean' || !globalThis.CSS?.supports) return null;
+  const kebab = prop.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
+  if (!CSS.supports(kebab, 'inherit')) return null; // not a CSS property the panel knows how to check
+  const text = typeof v === 'number' && !UNITLESS.has(prop) ? `${v}px` : String(v);
+  if (CSS.supports(kebab, text)) return null;
+  const label = (F[prop]?.label ?? prop).toLowerCase();
+  const example = CSS.supports(kebab, '#2236b0') ? 'a colour like #2236b0' : CSS.supports(kebab, '12px') ? 'a size like 12px' : CSS.supports(kebab, '400') ? 'a number like 400' : 'one of the values CSS allows';
+  return `"${String(v).slice(0, 30)}" is not something ${label} can be. Try ${example}.`;
+}
 const err = (key) => {
   const e = ui.errors[key];
   if (!e) return '';
@@ -188,7 +199,7 @@ export function renderPanel(ctx) {
   if (!node) {
     el.innerHTML = `<div class="empty-panel"><svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="7" y="9" width="34" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 4"/><path d="M19 20l11 5-5 2-2 5z" fill="currentColor"/></svg>
       <h2>Nothing selected</h2><p class="hint">Click a layer or an element on the canvas. Shift-click or drag a box to select several.</p>
-      <dl class="keys"><dt><kbd>⌘K</kbd></dt><dd>Jump to anything</dd><dt><kbd>Enter</kbd></dt><dd>Focus a component</dd><dt><kbd>⇧1</kbd></dt><dd>Fit everything</dd><dt><kbd>N</kbd></dt><dd>New component</dd><dt><kbd>Alt</kbd></dt><dd>Measure to hovered</dd></dl></div>`;
+      <dl class="keys"><dt><kbd>⌘K</kbd></dt><dd>Jump to anything</dd><dt><kbd>Enter</kbd></dt><dd>Focus a component</dd><dt><kbd>Alt+I</kbd></dt><dd>Jump to the inspector</dd><dt><kbd>⌘K</kbd></dt><dd>…then type a property: Radius, Fill, Gap</dd><dt><kbd>⇧1</kbd></dt><dd>Fit everything</dd><dt><kbd>N</kbd></dt><dd>New component</dd><dt><kbd>Alt</kbd></dt><dd>Measure to hovered</dd></dl></div>`;
     return;
   }
   const selKey = `${sel.component}|${JSON.stringify(sel.variant)}`;
@@ -536,6 +547,8 @@ function wire(ctx, el) {
     let v = typeof raw === 'string' ? toValue(raw) : raw;
     if (prop === 'opacity' && typeof v === 'number') v = Math.round(v) / 100; // the panel shows percent, the file holds 0..1
     else if (typeof v === 'number' && F[prop]?.unit === 'px' && /^-?\d*\.?\d+px$/.test(String(curVal(prop)))) v = `${v}px`; // keep '16px' a string, as the file had it
+    const bad = invalidValue(prop, v);
+    if (bad) { ui.errors['style-' + prop] = { text: bad, retry: null }; rerender(); return { ok: false, error: bad }; } // nothing is written
     const edits = styleEdits([[prop, v]]);
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
     return run('style-' + prop, s.component, edits, { clear: [id ?? prop] });

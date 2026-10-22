@@ -27,7 +27,7 @@ export const ACTIONS = [
   action('quick', 'Quick open', 'Ctrl/Cmd+K', ['k'], refs('quick', 'keydown'), (c) => c.quick.open()),
   action('quick-move', 'Quick open: move / go / close', '↑ ↓ · Enter · Escape · Ctrl/Cmd+K · Tab stays in search', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'k'], refs('quick', 'keydown')),
   action('inspector', 'Jump to the inspector (first property of the selection)', 'Alt+I', ['KeyI'], refs('quick', 'keydown'), (c) => c.quick.focusInspector(), 'edit'),
-  action('property-search', 'Jump to a property of the selection', 'Ctrl/Cmd+K, then type the property (Radius, Fill, Gap...)', [], []),
+  action('property-search', 'Jump to a property of the selection', 'Ctrl/Cmd+K, then type the property (Radius, Fill colour, Stroke colour, Shadow, Align, a setting...)', [], []),
   action('matrix-rove', 'Variant matrix: move between group bars and filter chips', '← → ↑ ↓ · Home · End (Tab leaves)', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'], refs('matrix', 'keydown')),
   action('rename', 'Rename layer', 'F2 · double click', ['F2'], refs('layers', 'keydown')),
   action('layer-nav', 'Layers: select / expand / collapse / focus', '↑ ↓ ← → · Enter', ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'], refs('layers', 'keydown')),

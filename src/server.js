@@ -26,8 +26,8 @@ if (args.file) { dir = dirname(resolve(args.file)); only = resolve(args.file); }
 else if (args.dir) dir = resolve(args.dir);
 else { // a throwaway copy of the fixtures, so playing with the canvas never edits the repo
   dir = mkdtempSync(join(tmpdir(), 'napkin-fixtures-'));
-  for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) createComponent(join(dir, f), readFileSync(join(ROOT, 'fixtures', d, f), 'utf8'));
-  writeTokens(join(dir, 'tokens.json'), readFileSync(join(ROOT, 'fixtures/tokens/tokens.json'), 'utf8'), { file: join(dir, 'tokens.css'), text: readFileSync(join(ROOT, 'fixtures/tokens/tokens.css'), 'utf8') });
+  for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) createComponent(join(dir, f), readFileSync(join(ROOT, 'fixtures', existsSync(join(ROOT, 'fixtures/tokens/themed', f)) ? 'tokens/themed' : d, existsSync(join(ROOT, 'fixtures/tokens/themed', f)) ? '' : '', f), 'utf8')); // the demo's components use the demo's tokens, so both themes read well
+  writeTokens(join(dir, 'tokens.json'), readFileSync(join(ROOT, 'fixtures/tokens/demo-tokens.json'), 'utf8'), { file: join(dir, 'tokens.css'), text: readFileSync(join(ROOT, 'fixtures/tokens/demo-tokens.css'), 'utf8') });
   createProjectConfig(join(dir, 'napkin.json'), JSON.stringify({ tokens: { source: 'tokens.json', css: 'tokens.css' } }) + '\n');
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
