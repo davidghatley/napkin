@@ -17,9 +17,11 @@ export function corpus() {
   }
   return dir;
 }
+// Pending proposals are kept in the private, self-ignoring .napkin folder (WPC-20); they are not the user's files.
+const PRIVATE_PROPOSALS = new Set(['.napkin/proposals.json', '.napkin/.gitignore']);
 export function hashes(dir) {
   const out = {};
-  function walk(d) { for (const f of readdirSync(d, { withFileTypes: true })) { const p = join(d, f.name); if (f.isDirectory()) walk(p); else out[relative(dir, p)] = createHash('sha256').update(readFileSync(p)).digest('hex'); } }
+  function walk(d) { for (const f of readdirSync(d, { withFileTypes: true })) { const p = join(d, f.name); if (f.isDirectory()) walk(p); else if (!PRIVATE_PROPOSALS.has(relative(dir, p))) out[relative(dir, p)] = createHash('sha256').update(readFileSync(p)).digest('hex'); } }
   walk(dir); return out;
 }
 export async function cli(dir, extra = [], env = {}) {

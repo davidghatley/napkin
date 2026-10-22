@@ -45,44 +45,81 @@ const pending = []; // changes by others, for the subscribe tool
 const pendingResolved = []; // how the person answered this agent's proposals (WPC-09), for the subscribe tool
 let waiters = [];
 // A proposal of mine was accepted, rejected or answered in part: { proposal, component, outcome: accepted|rejected|partly, accepted: [edits], rejected: [edits], by (who decided), final }
+const wake = () => { for (const w of [...waiters]) w(); }; // waiters stay registered until they remove themselves
+const seen = new Set(); let lastAt = Date.now() - 1; // answers already delivered (by frame time and id), and when the last one came
 const resolvedNotice = (f) => {
+  if (f.at) { const k = `${f.at}:${f.id}:${f.type}`; if (seen.has(k)) return; seen.add(k); lastAt = Math.max(lastAt, f.at); }
   const final = f.type === 'proposal-resolved';
+  if (f.type === 'proposal-clash') { // WPC-21: a name my create proposal wanted was taken meanwhile; the proposal stays but cannot land
+    const n = { proposal: f.id, component: f.component, summary: f.summary, outcome: 'blocked', by: null, final: false, reason: f.reason };
+    pendingResolved.push(n); wake(); send({ method: 'notifications/napkin/resolved', params: n }); return;
+  }
   const n = { proposal: f.id, component: f.component, summary: f.summary, outcome: final ? f.outcome : f.status === 'accepted' ? 'partly accepted' : 'partly rejected', by: f.by ?? null, final,
     ...(final ? { accepted: f.accepted, rejected: f.rejected } : { [f.status === 'accepted' ? 'accepted' : 'rejected']: f.edits, remaining: f.remaining }),
     ...(f.revision !== undefined && { revision: f.revision }), ...(f.created && { created: f.created }), ...(f.reason && { reason: f.reason }) };
   pendingResolved.push(n); if (pendingResolved.length > 200) pendingResolved.shift();
-  waiters.forEach((w) => w()); waiters = [];
+  wake();
   send({ method: 'notifications/napkin/resolved', params: n });
 };
 const notice = (ch) => {
-  const n = { component: ch.component, revision: ch.revision, by: ch.by, summary: ch.summary, edits: ch.edits };
+  const n = { component: ch.component, revision: ch.revision, by: ch.by, summary: ch.summary, edits: ch.edits, ...(ch.approvedBy && { approvedBy: ch.approvedBy }) };
   pending.push(n); if (pending.length > 200) pending.shift();
-  waiters.forEach((w) => w()); waiters = [];
+  wake();
   send({ method: 'notifications/napkin/change', params: n });
 };
 
+let catchUp = () => {}, catching = Promise.resolve(); // catching: the fetch of answers given while the stream was down; subscribe waits for it
 class Unreachable extends Error { constructor(message) { super(explainError(message, { next: "run node src/cli.js open and set NAPKIN_URL to its printed address." })); } }
 async function makeRemote() {
   const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) }).catch((e) => { throw new Unreachable(e.message); });
   if (!probe.ok) throw new Error(explainError(`napkin server answered ${probe.status}`));
   const live = await connectCanvas(BASE, { by: 'agent', identify: false, name: AGENT });
   live.onChange((ch) => {
-    if (ch.type === 'change' && !ch.mine && ch.origin !== origin) notice(ch);
-    else if ((ch.type === 'proposal-resolved' || ch.type === 'proposal-part') && ch.proposedBy === AGENT) resolvedNotice(ch);
+    if (ch.type === 'connection' && ch.connected) catchUp();
+    else if (ch.type === 'change' && !ch.mine && ch.origin !== origin) notice(ch);
+    else if ((ch.type === 'proposal-resolved' || ch.type === 'proposal-part' || ch.type === 'proposal-clash') && ch.proposedBy === AGENT) resolvedNotice(ch);
   });
   const base = live.origin;
-  const sess = await (await fetch(new URL('api/session', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: AGENT, token: process.env.NAPKIN_TOKEN }) })).json();
-  if (!sess.ok) throw new Error(explainError(`napkin refused this agent a session: ${sess.error}`));
+  // A session token. A server restart forgets every session (WPC-20): the next call that is refused for identity, or cannot connect
+  // while the server comes back, takes a new token by itself and goes again, so the agent never notices.
+  let token = null;
+  const newSession = async () => {
+    const sess = await (await fetch(new URL('api/session', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: AGENT, token: process.env.NAPKIN_TOKEN }) })).json();
+    if (!sess.ok) throw new Error(explainError(`napkin refused this agent a session: ${sess.error}`));
+    token = sess.token;
+  };
+  await newSession();
+  // After the stream comes back (a server restart), answers given while it was down are fetched, so none is lost (WPC-19/20).
+  catchUp = () => { catching = fetchAnswers(); };
+  const fetchAnswers = async () => {
+    try {
+      const r = await authed(new URL(`api/proposals/answered?by=${encodeURIComponent(AGENT)}&since=${lastAt}`, BASE), { method: 'GET', headers: {} });
+      const list = await r.json();
+      if (Array.isArray(list)) for (const f of list) resolvedNotice(f);
+    } catch { /* the next reconnect tries again */ }
+  };
+  const refused = async (r) => r.status === 401 && /identity required/.test(await r.clone().text().catch(() => ''));
+  const refusedToConnect = (e) => ['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET'].includes(e?.cause?.code ?? e?.code);
+  // fetch with the current token; one fresh session on an identity refusal; a few short waits while the server is coming back
+  async function authed(url, init) {
+    const go = () => fetch(url, { ...init, headers: { ...init.headers, authorization: `Bearer ${token}` } });
+    for (let tries = 0; ; tries++) {
+      let r;
+      try { r = await go(); } catch (e) { if (!refusedToConnect(e) || tries >= 12) throw e; await new Promise((x) => setTimeout(x, 250)); if (tries > 0) await newSession().catch(() => {}); continue; }
+      if (tries < 12 && await refused(r)) { await newSession().catch(() => {}); continue; }
+      return r;
+    }
+  }
   return {
     mode: 'server', origin: base,
     async call({ method, path, query, body }) {
       const url = new URL(path.replace(/^\//, ''), BASE);
       if (query) url.search = query.toString();
-      const r = await fetch(url, { method, headers: { authorization: `Bearer ${sess.token}`, ...(body !== undefined && { 'content-type': 'application/json' }) }, ...(body !== undefined && { body: JSON.stringify(body) }) });
+      const r = await authed(url, { method, headers: body !== undefined ? { 'content-type': 'application/json' } : {}, ...(body !== undefined && { body: JSON.stringify(body) }) });
       if ((r.headers.get('content-type') || '').startsWith('image/')) return { status: r.status, png: Buffer.from(await r.arrayBuffer()), ms: Number(r.headers.get('x-napkin-render-ms')) };
       return { status: r.status, json: await r.json() };
     },
-    async presence(component, label, node, variant, ttl) { await fetch(new URL('api/presence', BASE), { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${sess.token}` }, body: JSON.stringify({ component, label, node, variant, ttl }) }).catch(() => {}); },
+    async presence(component, label, node, variant, ttl) { await authed(new URL('api/presence', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component, label, node, variant, ttl }) }).catch(() => {}); },
   };
 }
 
@@ -149,8 +186,21 @@ async function callTool(name, a = {}) {
     const deadline = Math.min(Number(a.waitMs) || 0, 10000);
     const cid = a.component ? ok(await b.call({ method: 'GET', path: `/api/components/${c}` })).component : null;
     const drain = (list) => { const out = list.filter((n) => !cid || n.component === cid || (n.created && n.created === cid)); for (const n of out) list.splice(list.indexOf(n), 1); return out; };
+    const mine = (n) => !cid || n.component === cid || (n.created && n.created === cid);
+    // wait up to ms for something the filter wants (a change, or with resolvedOnly a resolved notice)
+    const until = (ms, ready) => ms > 0 && !ready() ? new Promise((r) => { const done = () => { clearTimeout(t); waiters = waiters.filter((w) => w !== check); r(); }; const t = setTimeout(done, ms); const check = () => { if (ready()) done(); }; waiters.push(check); }) : null;
+    await catching;
     let got = drain(pending), res = drain(pendingResolved);
-    if (!got.length && !res.length && deadline) { await new Promise((r) => { const t = setTimeout(r, deadline); waiters.push(() => { clearTimeout(t); r(); }); }); got = drain(pending); res = drain(pendingResolved); }
+    if (!got.length && !res.length && deadline) { await until(deadline, () => pending.some(mine) || pendingResolved.some(mine)); await catching; got = drain(pending); res = drain(pendingResolved); }
+    // WPC-19: an unrelated change must not cut the wait short while an answer to one of my proposals is on its way. The change a person's
+    // Accept makes arrives a moment before its resolved notice, so give that notice time to land and return both together.
+    if (!res.length && got.length && (deadline || got.some((g) => g.approvedBy && g.by === AGENT))) {
+      const open = (await b.call({ method: 'GET', path: '/api/proposals' }).catch(() => null))?.json;
+      if (Array.isArray(open) && open.some((p) => p.by === AGENT)) {
+        await until(got.some((g) => g.approvedBy && g.by === AGENT) ? 1500 : Math.min(deadline, 400), () => pendingResolved.some(mine));
+        got = got.concat(drain(pending)); res = drain(pendingResolved);
+      }
+    }
     return { changes: got, resolved: res };
   }
   if (name === 'apply_edits' || name === 'add_variant') {

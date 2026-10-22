@@ -4,6 +4,7 @@
 // Writes all go through store.apply (INV-05). Proposals live in memory only and never touch a file.
 import { explainError } from './errors.js';
 import { readFileSync, realpathSync } from 'node:fs';
+import { writeAtomic, privateDir } from './atomic.js';
 import { join, dirname, extname, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { CreateError } from './workspace.js';
@@ -40,13 +41,56 @@ export const agentPermission = (dir, name) => { const c = agentsConfig(dir); ret
 const res = (status, json) => ({ status, json });
 const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error), ...extra });
 
-export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}) } = {}) {
+export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}) } = {}) {
   const sessions = new Map(); // token -> name
-  const proposals = new Map(); // id -> proposal
   const renderer = createRenderer();
 
+  // Proposals survive a restart (WPC-20): they are kept in <dir>/.napkin/proposals.json (private, self-ignoring, written atomically,
+  // never a tracked file). Every change to the set, and every proposal frame that follows an in-place edit of one, schedules a write.
+  const PFILE = join(dir, '.napkin', 'proposals.json');
+  let dirty = false;
+  const persist = () => {
+    if (!canPropose || dirty) return;
+    dirty = true;
+    queueMicrotask(() => { dirty = false; try { privateDir(dir); writeAtomic(PFILE, JSON.stringify({ v: 1, proposals: [...proposals.values()], answered })); } catch (e) { console.error(`napkin: could not save proposals: ${e.message}`); } });
+  };
+  const proposals = new (class extends Map { set(k, v) { super.set(k, v); persist(); return this; } delete(k) { const r = super.delete(k); persist(); return r; } })(); // id -> proposal
+  // How the person answered recent proposals, kept (and saved) for a while so an agent that was disconnected at that moment (a restart,
+  // a dropped stream) still hears: GET /api/proposals/answered?by=<name>&since=<ms>.
+  const answered = [];
+  const broadcast = (f) => {
+    if (f.type === 'proposal-part' || f.type === 'proposal-resolved') { f.at ??= Date.now(); answered.push(f); while (answered.length > 100 || (answered[0] && answered[0].at < Date.now() - 864e5)) answered.shift(); }
+    emitFrame(f);
+    if (f.type === 'proposal' || f.type === 'proposal-part' || f.type === 'proposal-resolved') persist();
+  };
+  if (canPropose) {
+    try { const saved = JSON.parse(readFileSync(PFILE, 'utf8')); answered.push(...(saved.answered ?? [])); for (const p of saved.proposals ?? []) if (p?.id && p.by) Map.prototype.set.call(proposals, p.id, p); } catch { /* none saved, or unreadable: start empty */ }
+  }
+
+  // A pending create proposal whose name has been taken since (the person made it meanwhile): marked at once, the agent is told, and Accept
+  // still never overwrites (ws.create refuses an existing name).
+  const resolving = new Set();
+  function refreshClashes({ quiet = false } = {}) {
+    for (const p of proposals.values()) {
+      if (!p.create || resolving.has(p.id)) continue;
+      let why;
+      try { ws.checkCreate(p.create.name, p.create.rootTag); } catch (err) { if (err instanceof CreateError && err.status === 409) why = `A component named ${p.create.name} now exists (it was created after this proposal). Accepting would not overwrite it, so it will be refused. Reject this proposal; the agent can propose another name.`; }
+      if (why === p.clash) continue;
+      if (why) p.clash = why; else delete p.clash;
+      persist();
+      if (quiet) continue;
+      broadcast({ type: 'proposal', component: p.component, proposal: p });
+      if (why) broadcast({ type: 'proposal-clash', id: p.id, component: p.component, proposedBy: p.by, name: p.name, summary: p.summary, reason: why });
+    }
+  }
+  ws.events.on('added', () => refreshClashes());
+  ws.events.on('removed', () => { if (!closing) refreshClashes(); });
+  refreshClashes({ quiet: true });
+
   // A proposal whose component is gone can never land.
+  let closing = false; // closing the workspace announces every component as removed: that is not a deletion, and proposals must survive it
   ws.events.on('removed', ({ component }) => {
+    if (closing) return;
     for (const p of [...proposals.values()]) if (p.component === component) { proposals.delete(p.id); broadcast(resolvedFrame(p, 'reject', undefined, { reason: 'component removed' })); }
   });
 
@@ -156,8 +200,10 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     }
     if (p.create) {
       let made;
+      resolving.add(id);
       try { made = await ws.create(p.create.name, p.create.rootTag, { by: p.by, approvedBy: by }); }
-      catch (err) { if (err instanceof CreateError) return res(409, { ok: false, error: explainError(`${err.message}. The proposal stays so it can be rejected.`), proposal: id }); throw err; }
+      catch (err) { resolving.delete(id); if (err instanceof CreateError) return res(409, { ok: false, error: explainError(`${err.message}. The proposal stays so it can be rejected.`), proposal: id }); throw err; }
+      resolving.delete(id);
       proposals.delete(id);
       const revision = (await ws.find(made.id).store.read()).revision;
       broadcast(resolvedFrame(p, 'accept', by, { revision, created: made.id }));
@@ -257,6 +303,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
         const c = query.get('component'), e = c && ws.find(c);
         return res(200, [...proposals.values()].filter((p) => !c || (e && p.component === e.id)).map(publicProposal));
       }
+      if (method === 'GET' && seg.length === 2 && seg[1] === 'answered') return res(200, answered.filter((f) => f.proposedBy === query.get('by') && f.at > Number(query.get('since') || 0)));
       if (method === 'POST' && seg.length === 3 && (seg[2] === 'accept' || seg[2] === 'reject')) { const g = guard(`${seg[2]} a proposal`); if (g) return g; const m = msgOf(); return resolve(seg[1], seg[2], caller, m?.only); }
       return fail(405, 'method not allowed');
     }
@@ -406,5 +453,5 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     return fail(405, 'method not allowed');
   }
 
-  return { handle, proposals, renderer, session, identify, async close() { await renderer.close(); } };
+  return { handle, proposals, renderer, session, identify, async close() { closing = true; await renderer.close(); } };
 }

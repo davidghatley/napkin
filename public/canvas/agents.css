@@ -60,15 +60,16 @@
 #proposals-tray .pitem { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 2px 0; padding: 5px 8px; scroll-margin: 4px; border-radius: 8px; border: 1px solid transparent; outline-offset: -1px; cursor: default; }
 #proposals-tray .pitem:hover { background: var(--chrome-2); }
 #proposals-tray .pitem[aria-current="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
-#proposals-tray .pi-top { display: flex; align-items: baseline; gap: 6px; }
+#proposals-tray .pi-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
 #proposals-tray .pi-comp { font-weight: 650; }
-#proposals-tray .pi-age { margin-left: auto; color: var(--text-3); font-size: 11px; }
+#proposals-tray .pi-age { margin-left: auto; flex: none; white-space: nowrap; color: var(--text-3); font-size: 11px; }
+#proposals-tray .pitem[data-create] .pi-edits li span { white-space: normal; overflow-wrap: anywhere; }
 #proposals-tray .pi-edits { list-style: none; margin: 1px 0 0; padding: 0; }
 #proposals-tray .pi-edits li { display: flex; align-items: center; gap: 4px; padding: 1px 0; font: 11.5px var(--mono); color: var(--text-2); }
 #proposals-tray .pi-edits li span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #proposals-tray .pi-edits button { width: 22px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-3); font-size: 13px; }
 #proposals-tray .pi-edits button:hover { background: var(--chrome-3); color: var(--text); }
-#proposals-tray .pi-main { flex: 1 1 0; min-width: 0; overflow: hidden; }
+#proposals-tray .pi-main { flex: 1 1 170px; min-width: 0; overflow: hidden; }
 #proposals-tray .pi-btns { display: flex; flex: none; gap: 5px; margin: 0; }
 #proposals-tray .pi-tag { padding: 0 6px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--text-2); font-size: 10.5px; white-space: nowrap; }
 #proposals-tray .pitem .pi-stale { flex: 1 0 100%; }
@@ -129,6 +130,9 @@
 .top-right .slot { width: 164px; flex: 0 1 164px; min-width: 56px; } /* gives way (never the chrome switch) when the token theme picker shares the bar */
 
 /* A component an agent proposes to create: a dashed ghost frame on the canvas until the person accepts or rejects it. */
-.ghost-new { position: absolute; left: 16px; top: 16px; z-index: 8; max-width: calc(100% - 32px); max-height: calc(100% - 32px); overflow: auto; border: 2px dashed var(--c, var(--accent)); border-radius: 10px; background: var(--chrome); box-shadow: 0 6px 24px rgb(0 0 0 / .22); }
-.ghost-new .gn-flag { padding: 3px 10px; background: var(--c, var(--accent)); color: var(--ink, var(--on-accent)); font: 650 11px var(--mono); }
-.ghost-new .gn-body { padding: 16px; min-width: 120px; min-height: 48px; }
+.ghost-new { position: absolute; z-index: 3; pointer-events: none; }
+.ghost-new .gn-head { position: absolute; left: 0; bottom: 100%; margin-bottom: 10px; transform: scale(var(--lf, 1)); transform-origin: 0 100%; max-width: max(var(--w, 240px), 440px); }
+.ghost-new .gn-flag { display: inline-block; max-width: 100%; padding: 4px 10px; border-radius: 999px; background: var(--c, var(--accent)); color: var(--ink, var(--on-accent)); font: 650 11.5px/1.3 var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 8px rgb(0 0 0 / .18); }
+.ghost-new .gn-frame { min-width: 200px; min-height: 110px; box-sizing: border-box; outline: 2px dashed var(--c, var(--accent)); outline-offset: 6px; box-shadow: 0 8px 28px color-mix(in srgb, var(--c, var(--accent)) 28%, transparent); }
+
+#proposals-tray .pi-clash { border-left-color: var(--danger, var(--warn)); }
