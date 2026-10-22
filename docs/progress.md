@@ -130,10 +130,10 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-16 | WPC | fidelity | critic-pass | critic r2: banner and Next name the same line; edited line in 9 of 11 cases, +-1 on reflow/multi-line attr | test/fidelity/broken-line.test.js | 862bc69 |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
-| WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
-| WPC-20 | WPC | agents | open | agents2 critic: Pending proposals (incl. create) vanish on server restart; the agent is not told and its MCP session then fails 'identity required' until restarted. Proposals survive a restart, or the agent gets a dropped event and its session recovers | /tmp/claude-1000/critic-agents2/ |  |
-| WPC-21 | WPC | agents | open | agents2 critic: A name clash with a pending create shows only on Accept; the row has no warning and the agent isn't told. The row marks the clash as soon as it exists; the agent gets an event | /tmp/claude-1000/critic-agents2/ |  |
-| WPC-22 | WPC | agents | open | agents2 critic: Create-proposal ghost is hidden until Show ghost, and then an empty dashed box in the top-left with no preview; tray text truncated ('Toolt…', 'no'). Ghost frame shows the would-be component, placed like a new frame, visible on arrival | /tmp/claude-1000/critic-agents2/ |  |
+| WPC-19 | WPC | agents | critic-pass | critic: ~170 interleaved races, 0 lost | test/agents/agents3.test.js | 6d5fce2 |
+| WPC-20 | WPC | agents | critic-pass | critic: restart + 15 kill -9 rounds, 0 lost; follow-ups: no trace in opened repos, tmp sweep, fresh MCP gets missed answers | test/agents/agents3.test.js | 6d5fce2 |
+| WPC-21 | WPC | agents | critic-pass | critic: clash marked before Accept (API, file, rename); agent told; never overwrites | test/agents-ui/agents3.test.js | 6d5fce2 |
+| WPC-22 | WPC | agents | critic-pass | critic: ghost on arrival, placed like a new frame; follow-up: several ghosts all in view, full name in flag | docs/evidence/agents3-ghost.png | 6d5fce2 |
 
 ## Rounds
 
