@@ -229,6 +229,7 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
     }
     case 'addVariant': {
       const fresh = !before.props.some((p) => p.name === edit.axis);
+      if (!fresh && memberLines(ctx.textBefore, edit.axis) > 1) return { add: 2, del: 1 }; // a union written one value per line: the new value's line, and the old last line loses its `;`
       if (!fresh) { const m = layoutCost(memberLines(ctx.textBefore, edit.axis), predictMember(ctx.textBefore, after, edit.axis)); return m; } // the union line (split when long)
       return { add: 2 + pc.add, del: 1 + pc.del }; // fresh axis: interface member, parameters, `const v` line
     }
@@ -240,6 +241,7 @@ function budgetOf(edit, before, after, pB, pA, ctx) {
       const axisModel = gone ? 2 + Object.values(before.variants?.[edit.axis] || {}).reduce((a, v) => a + 2 + nodesModel(v), 0) : 0;
       const actual = blockLines(ctx.textBefore, edit.value) + (gone ? blockLines(ctx.textBefore, edit.axis) : 0);
       const gone2 = pos(-dV) + Math.max(0, actual - valueModel - axisModel + (gone ? valueModel : 0)); // (+ comment lines written inside the removed blocks)
+      if (!gone && mB > 1) return { add: 2, del: 2 + gone2 }; // (a value's line in a one-per-line union)
       return gone ? { add: pc.add + 1, del: mB + 1 + pc.del + gone2 } : { add: layoutCost(mB, mA).add, del: layoutCost(mB, mA).del + gone2 };
     }
     case 'insert': {

@@ -122,6 +122,48 @@ function typeText(p, indent, unit, eol, name) {
   return `${eol}${opts.map((o) => `${indent}${unit}| ${o}`).join(eol)}`; // prettier's layout for a union that does not fit
 }
 
+// A union of values edited in place, comments and layout included: a renamed value changes only its literal, a removed value
+// takes its own piece (its line when the union is written one value per line), and new values go after the last one in the
+// file's own layout. Returns null when the union is not a plain list of strings (then the member is rewritten).
+function unionSplices(text, m, old, p, st, memberIndent) {
+  const u = m.typeAnnotation?.typeAnnotation;
+  const lits = u?.type === 'TSUnionType' ? u.types : u?.type === 'TSLiteralType' ? [u] : null;
+  if (!lits || !lits.every((x) => x.type === 'TSLiteralType' && x.literal.type === 'StringLiteral') || lits.length !== old.options.length) return null;
+  const out = [];
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const renamedTo = new Map((st.renames.values || []).filter((r) => r.axis === old.name).map((r) => [r.from, r.toValue]));
+  const keep = new Set();
+  lits.forEach((lit, i) => {
+    const v = old.options[i];
+    if (renamedTo.has(v) && p.options.includes(renamedTo.get(v))) { keep.add(i); out.push({ start: lit.literal.start, end: lit.literal.end, text: `${Q}${renamedTo.get(v)}${Q}` }); }
+    else if (p.options.includes(v)) keep.add(i);
+  });
+  const multi = /\n/.test(text.slice(u.start, u.end));
+  lits.forEach((lit, i) => {
+    if (keep.has(i)) return;
+    if (multi) {
+      const ls = lineStart(text, lit.start);
+      const own = /^[ \t]*(\|[ \t]*)?$/.test(text.slice(ls, lit.start)) && /^[ \t]*[;,]?[ \t]*(\r?\n|\/\/)/.test(text.slice(lit.end));
+      if (own && i < lits.length - 1) out.push({ start: ls, end: lineEnd(text, lit.end), text: '' });
+      else if (i > 0) out.push({ start: lits[i - 1].end, end: lit.end, text: '' });
+      else out.push({ start: lit.start, end: lits[1].start, text: '' });
+    } else if (i > 0) out.push({ start: lits[i - 1].end, end: lit.end, text: '' });
+    else out.push({ start: lit.start, end: lits[1] ? lits[1].start : lit.end, text: '' });
+  });
+  if (keep.size === 0) return null;
+  const present = new Set([...keep].map((i) => renamedTo.get(old.options[i]) ?? old.options[i]));
+  const added = p.options.filter((o) => !present.has(o));
+  if (added.length) {
+    const last = lits.at(-1);
+    if (!keep.has(lits.length - 1)) return null; // the last value is being removed and new ones added: rewrite
+    const lastLine = multi ? text.slice(lineStart(text, last.start), last.start) : '';
+    const lead = multi ? (lastLine.match(/^[ \t]*/)[0]) : '';
+    const bar = multi && /^[ \t]*\|[ \t]*$/.test(lastLine) ? lastLine : null;
+    out.push({ start: last.end, end: last.end, text: added.map((o) => (multi ? `${eol}${bar ?? lead + '| '}${Q}${o}${Q}` : ` | ${Q}${o}${Q}`)).join('') });
+  }
+  return out;
+}
+
 // --- the interface ---
 function ifaceSplices(text, parts, before, after, st) {
   const iface = parts.iface;
@@ -144,7 +186,11 @@ function ifaceSplices(text, parts, before, after, st) {
     const name = keyName(m.key), p = now.get(renamed.get(name) ?? name), old = was.get(name);
     if (!p) out.push({ start: lineStart(text, m.start), end: lineEnd(text, m.end), text: '' });
     else if (old && old.name !== p.name && old.type === p.type && same(old.options, p.options)) out.push({ start: m.key.start, end: m.key.end, text: p.name }); // a rename: only the name changes
-    else if (old && (old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
+    else if (old && (old.type !== p.type || !same(old.options, p.options))) {
+      const inPlace = old.type === 'enum' && p.type === 'enum' ? unionSplices(text, m, old, p, st, indent) : null;
+      if (inPlace) { if (old.name !== p.name) out.push({ start: m.key.start, end: m.key.end, text: p.name }); out.push(...inPlace); }
+      else out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
+    }
   }
   const have = new Set(members.map((m) => renamed.get(keyName(m.key)) ?? keyName(m.key)));
   const added = after.props.filter((p) => !have.has(p.name));
