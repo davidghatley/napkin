@@ -160,7 +160,10 @@ export async function openStore(file, start = {}) {
         if (bare(alt.doc) === bare(next)) saved = { text: meta.restoreText, state: alt.state };
       } catch { /* not readable: keep the written text */ }
     }
-    if (dryRun) return { ok: true, dryRun: true, revision, doc: next, source: saved.text };
+    if (dryRun) { // `written` is the document read back from the text that would be written: what a reader of the file would see (the paste check renders this)
+      let written; try { written = codec.load(saved.text, file, { ...start, writeSidecars: false }).doc; } catch (e) { return { ok: false, error: `invalid edit #0: the file as it would be written does not read back (${e.message})` }; }
+      return { ok: true, dryRun: true, revision, doc: next, source: saved.text, written };
+    }
     if (saved.text !== text) { // a batch that changes nothing leaves the file (and its mtime) alone
       try {
         // the guard link and the check catch a hand save that lands between our last look at the file and the rename
