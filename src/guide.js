@@ -54,4 +54,7 @@ While it is pending, read_component and apply_edits on that name are refused ("o
 
 ### Learning how your proposals were answered
 subscribe { waitMs } returns { changes, resolved }. Each resolved entry is { proposal, component, summary, outcome: "accepted" | "rejected" | "partly", accepted: [edit summaries], rejected: [edit summaries], by (the person), final: true, revision? }. When the person answers only some edits of a proposal you get an entry with final: false and outcome "partly accepted" or "partly rejected", listing those edits and what remains. The same entry is pushed as notifications/napkin/resolved. A rejected proposal never touched the file: do not assume a change landed until its resolved entry says accepted; if it was rejected, read_component again before proposing something different.
+subscribe never drops an answer because other changes are pending: it returns every pending change and every pending resolved entry together, and while one of your proposals is still open it waits a moment for its answer to land with the change that accompanied it.
+If a name your create proposal wanted is taken meanwhile (the person created it), you get a resolved entry { proposal, outcome: "blocked", final: false, reason }: the proposal stays in the tray but can never land (Accept never overwrites). Expect it to be rejected, then propose another name.
+Pending proposals survive a napkin server restart, and your session is renewed by itself after one: if a call fails once while the server restarts, just repeat it.
 `;

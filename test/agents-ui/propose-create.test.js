@@ -16,9 +16,11 @@ test('a create proposal is a ghost frame; reject leaves no file, accept writes i
     await browser.waitFor(`napkin.proposals.list().length === 1`);
     assert.match(await q(`document.querySelector('.pitem .pi-comp').textContent`), /Tooltip/);
     assert.match(await q(`document.querySelector('.pitem .pi-tag').textContent`), /new component/);
-    await q(`document.querySelector('.pitem .p-show').click()`);
+    // WPC-22: the ghost is drawn on arrival, no click needed; the button then hides it
     await browser.waitFor(`!!document.querySelector('.ghost-new [data-n="root"]')`);
+    assert.equal(await q(`document.querySelector('.pitem .p-show').textContent`), 'Hide ghost');
     assert.match(await q(`document.querySelector('.ghost-new .gn-flag').textContent`), /claude's proposal · new component Tooltip · not written/);
+    await sleep(900); // a ghost placed off screen is flown to once
     const vis = await q(`(() => { const g = document.querySelector('.ghost-new').getBoundingClientRect(), s = document.querySelector('#stage').getBoundingClientRect(); return g.left >= s.left && g.top >= s.top && g.right <= s.right && g.bottom <= s.bottom; })()`);
     assert.equal(vis, true, 'the ghost frame is on the canvas');
     assert.equal(existsSync(file), false, 'the ghost wrote nothing');

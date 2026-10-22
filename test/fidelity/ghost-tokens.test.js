@@ -49,8 +49,7 @@ test('the create-proposal ghost frame (.ghost-new) gets the token variables and 
     const made = await http(server.url, '/api/components', { method: 'POST', token, body: { name: 'Tooltip', propose: true } });
     assert.equal(made.json.proposed, true, JSON.stringify(made.json));
     await b.waitFor(`napkin.proposals.list().length === 1`);
-    await b.eval(`document.querySelector('.pitem .p-show').click()`);
-    await b.waitFor(`!!document.querySelector('.ghost-new [data-n="root"]')`);
+    await b.waitFor(`!!document.querySelector('.ghost-new [data-n="root"]')`); // drawn on arrival, nobody clicked Show ghost
     const val = (sel, name) => b.eval(`getComputedStyle(document.querySelector(${JSON.stringify(sel)})).getPropertyValue('${name}').trim()`);
     for (const mode of ['light', 'dark']) {
       await b.eval(`document.querySelector('#token-theme').value = '${mode}'; document.querySelector('#token-theme').dispatchEvent(new Event('change'))`);
@@ -59,6 +58,9 @@ test('the create-proposal ghost frame (.ghost-new) gets the token variables and 
       assert.ok(live, 'the live cell has the token');
       assert.equal(await val('.ghost-new [data-n="root"]', '--accent'), live, `${mode}: the ghost frame has the same token value`);
     }
+    // the ghost's cell is isolated exactly like a live cell: same reset on its .mount, nothing inherited from the editor or the frame
+    const cell = (sel) => b.eval(`JSON.stringify((() => { const cs = getComputedStyle(document.querySelector(${JSON.stringify(sel)})); return { font: cs.fontFamily, size: cs.fontSize, lh: cs.lineHeight, color: cs.color, scheme: cs.colorScheme, display: cs.display }; })())`);
+    assert.equal(await cell('.ghost-new .cell .mount'), await cell('section[data-name="Button"] .cell .mount'), 'the ghost .mount computes the same as a live .mount');
     // isolation: the ghost frame's component sees no editor colour or font, and no editor custom property
     assert.equal(await b.eval(`getComputedStyle(document.querySelector('.ghost-new [data-n="root"]')).color`), 'rgb(0, 0, 0)');
     const names = (sel) => b.eval(`(() => { const cs = getComputedStyle(document.querySelector(${JSON.stringify(sel)})); const out = []; for (const p of cs) if (p.startsWith('--') && !p.startsWith('--nk-')) out.push(p); return out.sort().join(); })()`);

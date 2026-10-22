@@ -13,6 +13,11 @@ export function privateDir(dir) {
   return folder;
 }
 
+// A file in a private folder napkin owns (its state dir, or a project's .napkin): the folder is made if needed, the write is atomic.
+export function writePrivate(folder, name, text) { mkdirSync(folder, { recursive: true }); writeAtomic(join(folder, name), text); }
+// Remove what an interrupted atomic write left behind (.<name>.tmp-<pid>-<n>) in a private folder.
+export function sweepTmp(folder) { try { for (const f of readdirSync(folder)) if (/^\..+\.tmp-\d+-\d+$/.test(f)) unlinkSync(join(folder, f)); } catch { /* no such folder */ } }
+
 let counter = 0;
 export const tmpName = (file) => join(dirname(file), `.${basename(file)}.tmp-${process.pid}-${counter++}`);
 

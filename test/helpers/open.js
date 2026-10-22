@@ -17,9 +17,13 @@ export function corpus() {
   }
   return dir;
 }
-export function hashes(dir) {
+// Proposals of a folder napkin merely opened live in napkin's own state dir, never in the repo: point it at a temp dir for every test.
+process.env.NAPKIN_STATE_DIR ??= mkdtempSync(join(tmpdir(), 'napkin-state-'));
+// { ignorePrivate }: for a folder that is a napkin project (has a napkin.json), whose pending proposals are kept in its private .napkin folder.
+const PRIVATE_PROPOSALS = new Set(['.napkin/proposals.json', '.napkin/.gitignore']);
+export function hashes(dir, { ignorePrivate = false } = {}) {
   const out = {};
-  function walk(d) { for (const f of readdirSync(d, { withFileTypes: true })) { const p = join(d, f.name); if (f.isDirectory()) walk(p); else out[relative(dir, p)] = createHash('sha256').update(readFileSync(p)).digest('hex'); } }
+  function walk(d) { for (const f of readdirSync(d, { withFileTypes: true })) { const p = join(d, f.name); if (f.isDirectory()) walk(p); else if (!(ignorePrivate && PRIVATE_PROPOSALS.has(relative(dir, p)))) out[relative(dir, p)] = createHash('sha256').update(readFileSync(p)).digest('hex'); } }
   walk(dir); return out;
 }
 export async function cli(dir, extra = [], env = {}) {
