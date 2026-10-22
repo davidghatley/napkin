@@ -133,7 +133,7 @@ function note(c) {
   const name = ctx.state.components.get(c.component)?.name ?? c.component;
   for (let i = LOG_ROWS - 1; i > 0; i--) { logRows[i].className = logRows[i - 1].className; logRows[i].textContent = logRows[i - 1].textContent; }
   logRows[0].className = 'by-' + c.by;
-  logRows[0].textContent = `${name} r${c.revision} ${c.by}: ` + (c.edits ? c.edits.map((e) => e.path ? `${e.path} = ${JSON.stringify(e.value)}` : `${e.op} ${e.node?.id ?? e.id ?? ''}`.trim()).join(', ') : 'file changed on disk');
+  logRows[0].textContent = `${name} r${String(c.revision).slice(0, 7)} ${c.by}: ` + (c.edits ? c.edits.map((e) => e.path ? `${e.path} = ${JSON.stringify(e.value)}` : `${e.op} ${e.node?.id ?? e.id ?? ''}`.trim()).join(', ') : 'file changed on disk');
 }
 
 client.onChange((f) => {

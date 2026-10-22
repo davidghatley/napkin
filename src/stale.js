@@ -21,12 +21,12 @@ export function currentValue(doc, key) {
 }
 
 // Entries for every key of `edits` that a later revision changed: [{ key, value (theirs, now), yours, revision, by }].
-export function staleEntries({ doc, edits, keys, history, baseRevision }) {
+// baseAt: the index in `history` of the revision the caller based its edit on (revisions are content hashes, not numbers).
+export function staleEntries({ doc, edits, keys, history, baseAt }) {
   const yours = new Map();
   for (const e of edits) for (const k of touched([e])) if (!yours.has(k)) yours.set(k, e?.op === 'set' ? clean(e.value) : e);
   const out = new Map();
-  for (const h of history) {
-    if (h.revision <= baseRevision) continue;
+  for (const h of history.slice(baseAt + 1)) {
     for (const k of keys) {
       if (conflicts(new Set([k]), h.keys)) out.set(k, { key: k, value: currentValue(doc, k), yours: clean(yours.get(k)), revision: h.revision, by: h.by });
     }

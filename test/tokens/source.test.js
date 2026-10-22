@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, mkdtempSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { openTokens, parseTokens } from '../../src/tokens.js';
-import { nearestToken, offToken } from '../../src/token-math.js';
+import { nearestToken, nearestTokens, offToken, snapValue, MAX_COLOR_SNAP_DISTANCE } from '../../src/token-math.js';
 import { changedLines } from '../helpers/lab.js';
 import { tempRepo, startServer, startMcp, waitFor, ROOT } from '../helpers/harness.js';
 
@@ -138,4 +138,31 @@ test('TOK-01: CSS may omit the last semicolon and use a dark class', () => {
   assert.equal(r.tokens.find(t => t.name === 'ink').values.light, '#123456');
   assert.equal(r.tokens.find(t => t.name === 'ink').values.dark, '#abcdef');
   assert.equal(r.tokens.find(t => t.name === 'space-4').values.light, '16px');
+});
+
+test('TOK-03 regression: zero, percentage radii and CSS expressions are never off-token or snapped', () => {
+  const { tokens } = parseTokens(fixture(), 'json'); // deliberately has no zero token
+  for (const prop of ['padding', 'gap', 'margin', 'borderRadius']) {
+    for (const value of [0, '0', '0px', '0 0', 'calc(100% - 0px)', 'calc(2 * 8px)', 'var(--custom, 0)', 'var(--missing)']) {
+      assert.equal(offToken(tokens, prop, value), false, `${prop}: ${value}`);
+      assert.equal(snapValue(tokens, prop, value), String(value));
+    }
+  }
+  assert.equal(offToken(tokens, 'borderRadius', '50%'), false);
+  assert.equal(snapValue(tokens, 'borderRadius', '50%'), '50%');
+  assert.equal(snapValue(tokens, 'padding', '0 17px'), '0 var(--space-4)');
+  assert.equal(offToken(tokens, 'color', 'var(--custom, red)'), false);
+});
+
+test('TOK-03 regression: nearby named colours snap by OKLab; distant colours offer three choices', () => {
+  const { tokens } = parseTokens(fixture(), 'json');
+  const red = { name: 'danger', type: 'color', values: { light: '#f01010' } };
+  assert.equal(offToken([red, ...tokens], 'color', 'red'), true);
+  assert.equal(snapValue([red, ...tokens], 'color', 'red'), 'var(--danger)');
+  assert.equal(snapValue(tokens, 'color', 'red'), 'red');
+  const choices = nearestTokens(tokens, 'color', 'red');
+  assert.equal(choices.length, 3);
+  assert.ok(choices[0].distance > MAX_COLOR_SNAP_DISTANCE);
+  assert.ok(choices.every((c, i) => !i || c.distance >= choices[i - 1].distance));
+  assert.equal(snapValue([{ name: 'white', type: 'color', values: { light: '#fff' } }], 'color', 'rgba(255,255,255,0.1)'), 'rgba(255,255,255,0.1)');
 });

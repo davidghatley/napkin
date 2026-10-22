@@ -29,7 +29,7 @@ const zoomTo1 = (L) => L.q(`napkin.view.set({ x: 40, y: 60, z: 1 }, { animate: f
 const cell = (name) => `document.querySelector('section[data-name=${JSON.stringify(name)}] .cell')`;
 const el = (name, node) => `${cell(name)}.querySelector('[data-n=${JSON.stringify(node)}]')`;
 const read = (L, name) => readFileSync(join(L.compDir, `${name}.tsx`), 'utf8');
-const waitRev = (L, name, r) => L.browser.waitFor(`napkin.find(${JSON.stringify(name)}).revision > ${r} && document.querySelector('section[data-name=${JSON.stringify(name)}]').dataset.revision === String(napkin.find(${JSON.stringify(name)}).revision)`);
+const waitRev = (L, name, r) => L.browser.waitFor(`napkin.find(${JSON.stringify(name)}).seq > ${r} && document.querySelector('section[data-name=${JSON.stringify(name)}]').dataset.revision === String(napkin.find(${JSON.stringify(name)}).revision)`);
 
 test('LAY-05: resize, padding, gap and reorder gestures: one revision each, small diffs', { timeout: 150000 }, async (t) => {
   const L = await lab({ Flow: FLOW }, { theme: 'light' });
