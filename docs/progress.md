@@ -115,21 +115,21 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-01 | WPC | fidelity | critic-pass | critic: 83-node adversarial component 0 px diff; S3 280x95 both | test/fidelity/cell-isolation.test.js | b96f89d |
 | WPC-02 | WPC | fidelity | building | critic: computed styles match, but editor custom properties leak into cells and ghosts lack tokens: fixing | test/fidelity/cell-isolation.test.js | b96f89d |
 | WPC-03 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
-| WPC-04 | WPC | docs | critic-pass | critic: dialect example editable; decisions/ excluded by lead ruling | test/onboarding/docs-examples.test.js | 07734c8 |
-| WPC-05 | WPC | docs | critic-fail | critic: 5 doc/UI contradictions (napkin not on PATH, labels, .next, npx); fix round 2 (Codex) | docs/evidence/onboard2-commands.txt | 07734c8 |
-| WPC-06 | WPC | files | critic-fail | critic: ids derived from absolute path change on move/clone; .napkin/lock untracked; fix round 2 (Codex) | test/onboarding/sample.test.js | 07734c8 |
+| WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
+| WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
+| WPC-06 | WPC | files | pass | critic pass r2: portable ids, .napkin self-ignores, 0 new files until a move; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
 | WPC-07 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-08 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-09 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
-| WPC-10 | WPC | docs | critic-pass | critic: modes, import line, consumer app all documented and true | test/history/ui-inspect.test.js | 07734c8 |
+| WPC-10 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/history/ui-inspect.test.js | 5c8f4a9 |
 | WPC-11 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-12 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents-ui/propose-create.test.js | 0085d7f |
 | WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-16 | WPC | fidelity | building | critic: wrong line when a save mixes a valid edit and a break; Next: hint names parser line: fixing | test/fidelity/broken-line.test.js | b96f89d |
-| WPC-17 | WPC | docs | critic-pass | critic: SIGTERM/SIGINT/startup failure leave no fixtures | test/onboarding/demo-cleanup.test.js | 07734c8 |
-| WPC-18 | WPC | docs | critic-pass | critic: tools/sample-repo.js 40 editable; S1 on it 1-line diff | test/onboarding/sample.test.js | 07734c8 |
+| WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
+| WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
 | WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
 | WPC-20 | WPC | agents | open | agents2 critic: Pending proposals (incl. create) vanish on server restart; the agent is not told and its MCP session then fails 'identity required' until restarted. Proposals survive a restart, or the agent gets a dropped event and its session recovers | /tmp/claude-1000/critic-agents2/ |  |
 | WPC-21 | WPC | agents | open | agents2 critic: A name clash with a pending create shows only on Accept; the row has no warning and the agent isn't told. The row marks the clash as soon as it exists; the agent gets an event | /tmp/claude-1000/critic-agents2/ |  |
