@@ -85,10 +85,10 @@ export function initMatrix(ctx) {
         const cols = across.options.filter((o) => !hidden(across.name, o));
         for (const h of grid.querySelectorAll('.colhead')) h.classList.toggle('mhide', hidden(across.name, h.textContent));
         if (down) for (const h of grid.querySelectorAll('.rowhead')) h.classList.toggle('mhide', hidden(down.name, h.textContent));
-        grid.style.setProperty('--cols', String(Math.max(1, cols.length)));
+        grid.style.setProperty('--nk-cols', String(Math.max(1, cols.length)));
       }
     }
-    sec.querySelector('.matrix')?.style.setProperty('--gcols', String(Math.max(1, Math.min(groupsShown || 1, Math.ceil(Math.sqrt(groupsShown || 1))))));
+    sec.querySelector('.matrix')?.style.setProperty('--nk-gcols', String(Math.max(1, Math.min(groupsShown || 1, Math.ceil(Math.sqrt(groupsShown || 1))))));
     const count = sec.querySelector('.mcount');
     if (count) count.textContent = `${shown} of ${total} shown`;
     sec.dataset.shown = String(shown);

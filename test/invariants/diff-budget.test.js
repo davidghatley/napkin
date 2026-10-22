@@ -72,8 +72,9 @@ test('FMT-02 budget: moving a component on the canvas changes the sidecar only',
   const { file, git, dir } = tempRepo(['Card']);
   const store = await openStore(file);
   try {
+    await store.moveCanvas(1, 2);
     git('add', 'components/Card.napkin.json'); git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'sidecar');
-    // first open writes the sidecar once; the .tsx is untouched
+    // The first move saves the sidecar; later moves keep the small diff budget.
     const tsx = readFileSync(file, 'utf8');
     const r = await store.moveCanvas(120.456, -40);
     assert.deepEqual(r, { ok: true, canvas: { x: 120.46, y: -40 } });

@@ -1,0 +1,9 @@
+FEEL-05  S1 keyboard only (no mouse events). Fresh server, repo reset.
+Ctrl+K, insertText "Badge", Enter -> flew to Badge. Enter -> panel shows "Badge > root <span>", Variant tone=info, Editing Base.
+Focus remained on BODY. ? opens shortcut sheet: no shortcut to jump focus to the inspector / a property. Ctrl+K "radius" -> "Nothing matches" (actions don't include properties).
+Tab walk to Radius field: 86 Tab presses (log in this file's sibling transcript):
+  1-9 topbar; 10-12 layers row; 13 CHANGES; 14-19 six "Button" buttons (the Button component's live cells are in tab order);
+  20-62 Chip filter chips + 30x "Collapse group density normal/dense"; 63-65 three "Make something" (Welcome cells' buttons);
+  66 scope select; ... 86 INPUT#borderRadius.
+Shift+ArrowUp x2, Enter -> 24. Both Badge cells 24px. git diff = 1 line (f5-gitdiff.txt). Screens f5-01..f5-04.
+VERDICT: COMPLETED, but stuck-ish: 86 Tabs through canvas content to reach one property; no "go to panel"/property search.

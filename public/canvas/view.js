@@ -31,9 +31,9 @@ export function createView(ctx, stageEl, worldEl) {
   function labels() {
     const { z } = v; labelsStale = false; labelZ = z;
     const ls = Math.round(clamp(1 / z, 1, 3.2) * 20) / 20; // label scale, quantised so it changes rarely
-    if (worldEl.dataset.ls !== String(ls)) { worldEl.dataset.ls = String(ls); worldEl.style.setProperty('--ls', ls); }
+    if (worldEl.dataset.ls !== String(ls)) { worldEl.dataset.ls = String(ls); worldEl.style.setProperty('--nk-ls', ls); }
     const lf = Math.round(clamp(1 / z, 1, 16) * 20) / 20; // titles and the axis strip stay readable down to the 200-component fit
-    if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--lf', lf); }
+    if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--nk-lf', lf); }
     // (an attribute written with the value it already has still repaints the page: only write on a change)
     const hdr = z < 0.33 ? 'strip' : '', band = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
     if (stageEl.dataset.hdr !== hdr) stageEl.dataset.hdr = hdr;

@@ -19,24 +19,24 @@ export function connection(url) {
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { port: { type: 'string', default: '4810' }, 'write-sidecars': { type: 'boolean' }, help: { type: 'boolean', short: 'h' } } });
   const [command, folder = '.', ...extra] = positionals;
-  if (values.help || !command) { console.log('Usage: napkin init [dir]\n       napkin open [dir] [--port 4810] [--write-sidecars]\nUse node src/cli.js from this checkout, or npx napkin.'); return; }
-  if (!['init', 'open'].includes(command) || extra.length) throw new Error(`unknown command ${positionals.join(' ')}. Next: run napkin --help.`);
+  if (values.help || !command) { console.log('Usage: node src/cli.js init [dir]\n       node src/cli.js open [dir] [--port 4810] [--write-sidecars]\nRun these commands from this checkout.'); return; }
+  if (!['init', 'open'].includes(command) || extra.length) throw new Error(`unknown command ${positionals.join(' ')}. Next: run node src/cli.js --help.`);
   const dir = resolve(folder);
   const port = Number(values.port);
   if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`port ${values.port} is invalid. Next: use --port 4810 or --port 0.`);
   if (command === 'init') {
-    if (existsSync(dir) && readdirSync(dir).length) throw new Error(`${dir} is not empty. Next: choose an empty folder for napkin init, or use napkin open ${JSON.stringify(dir)}.`);
+    if (existsSync(dir) && readdirSync(dir).length) throw new Error(`${dir} is not empty. Next: choose an empty folder for node src/cli.js init, or use node src/cli.js open ${JSON.stringify(dir)}.`);
     mkdirSync(join(dir, 'components'), { recursive: true });
     createComponent(join(dir, 'components/Welcome.tsx'), starterSource('Welcome'));
     createProjectConfig(join(dir, 'napkin.json'), JSON.stringify({ components: 'components' }, null, 2) + '\n');
-    console.log(`Created ${dir}/napkin.json and components/Welcome.tsx.\nNext: run napkin open ${JSON.stringify(dir)} to start.`);
+    console.log(`Created ${dir}/napkin.json and components/Welcome.tsx.\nNext: run node src/cli.js open ${JSON.stringify(dir)} to start.`);
     return;
   }
-  if (!existsSync(dir)) throw new Error(`folder ${dir} does not exist. Next: choose a repository folder or run napkin init ${JSON.stringify(dir)}.`);
-  if (!statSync(dir).isDirectory()) throw new Error(`${dir} is a file. Next: choose a repository folder for napkin open.`);
+  if (!existsSync(dir)) throw new Error(`folder ${dir} does not exist. Next: choose a repository folder or run node src/cli.js init ${JSON.stringify(dir)}.`);
+  if (!statSync(dir).isDirectory()) throw new Error(`${dir} is a file. Next: choose a repository folder for node src/cli.js open.`);
   let components = dir, external = !existsSync(join(dir, 'napkin.json'));
   if (!external) {
-    let config; try { config = JSON.parse(readFileSync(join(dir, 'napkin.json'), 'utf8')); } catch (e) { throw new Error(`${dir}/napkin.json: ${e.message}. Next: fix its JSON and run napkin open again.`); }
+    let config; try { config = JSON.parse(readFileSync(join(dir, 'napkin.json'), 'utf8')); } catch (e) { throw new Error(`${dir}/napkin.json: ${e.message}. Next: fix its JSON and run node src/cli.js open again.`); }
     if (config.components !== undefined && typeof config.components !== 'string') throw new Error(`${dir}/napkin.json: components must be a folder path string. Next: set components to \"components\" and retry.`);
     components = resolve(dir, config.components || 'components');
     if (!existsSync(components)) throw new Error(`${components} does not exist (napkin.json). Next: create the components folder or correct the components path.`);
@@ -55,4 +55,4 @@ async function main() {
   child.on('exit', (code) => { process.exitCode = code || 0; });
 }
 
-main().catch((e) => { console.error(`napkin: ${explainError(e.message, { next: 'run napkin --help, correct the path or option, and retry.' })}`); process.exitCode = 1; });
+main().catch((e) => { console.error(`napkin: ${explainError(e.message, { next: 'run node src/cli.js --help, correct the path or option, and retry.' })}`); process.exitCode = 1; });

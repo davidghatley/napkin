@@ -1,0 +1,13 @@
+diff --git i/components/Badge.tsx w/components/Badge.tsx
+index 29f5b28..81d95d4 100644
+--- i/components/Badge.tsx
++++ w/components/Badge.tsx
+@@ -10,7 +10,7 @@ type Styles = Record<string, CSSProperties>;
+ const base: Styles = {
+   root: {
+     padding: 8,
+-    borderRadius: 4,
++    borderRadius: 34,
+     background: '#eef0f6',
+     color: '#16181d',
+   },

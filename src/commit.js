@@ -3,7 +3,7 @@
 // summary that it records as a revision and announces as a frame. Nothing else in src/ touches a component .tsx with fs.
 // Every write goes through writeFileAtomic (REL-01): temp file in the same folder, fsync, rename; a new file is created
 // exclusively (link), so it can never replace one that exists.
-import { unlinkSync, mkdirSync } from 'node:fs';
+import { unlinkSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeFileAtomic } from './atomic-write.js';
 
@@ -29,6 +29,10 @@ export function writeAsset(dir, name, bytes) {
 
 // CLI init creates a project config only after checking an empty destination.
 export function createProjectConfig(file, text) { writeFileAtomic(file, text, { exclusive: true }); }
+
+// The server passes only the disposable fixture directory it created itself.
+// Keep removal in the same filesystem authority as component creation.
+export function removeDemoWorkspace(dir) { rmSync(dir, { recursive: true, force: true }); }
 
 // Token source is authoritative; generated CSS (when owned by napkin) follows it.
 // Both files use the shared fsync + atomic rename writer.

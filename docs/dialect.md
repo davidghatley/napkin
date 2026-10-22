@@ -44,9 +44,9 @@ export function Badge({ label = 'New', tone = 'info' }: BadgeProps) {
   const v = { tone };
   return (
     <span data-n="root" style={s('root', v)}>
-      <b data-n="text" style={s('text', v)}>
+      <strong data-n="text" style={s('text', v)}>
         {label}
-      </b>
+      </strong>
     </span>
   );
 }

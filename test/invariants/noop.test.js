@@ -65,9 +65,11 @@ test('INV-02: 40/40 generated corpus components: open, apply a no-change edit, s
 test('INV-02: reopening leaves the sidecar bytes alone too', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-side-'));
   const [f] = makeCorpus(dir, 1);
-  const s0 = await openStore(f); await s0.close();
+  const s0 = await openStore(f);
+  assert.equal(existsSync(f.replace(/\.tsx$/, '.napkin.json')), false);
+  await s0.moveCanvas(10, 20); await s0.close();
   const { readSidecar } = await import('../../src/codecs.js');
-  readSidecar(f, 'Badge'); // creates the sidecar
+  readSidecar(f, 'Badge'); // reads the already saved sidecar
   const side = f.replace(/\.tsx$/, '.napkin.json');
   const before = sha(side);
   const s = await openStore(f); await s.close();

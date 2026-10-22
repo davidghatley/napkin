@@ -3,7 +3,10 @@
 //   const api = createApi(ws, { broadcast, dir });   await api.handle({ method, path, query, body }) -> { status, json } | { status, png } | null
 // Writes all go through store.apply (INV-05). Proposals live in memory only and never touch a file.
 import { explainError } from './errors.js';
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync, realpathSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
+import { writePrivate, privateDir, sweepTmp } from './atomic.js';
 import { join, dirname, extname, relative } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { CreateError } from './workspace.js';
@@ -40,14 +43,65 @@ export const agentPermission = (dir, name) => { const c = agentsConfig(dir); ret
 const res = (status, json) => ({ status, json });
 const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error), ...extra });
 
-export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}) } = {}) {
+export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}) } = {}) {
   const sessions = new Map(); // token -> name
-  const proposals = new Map(); // id -> proposal
   const renderer = createRenderer();
 
+  // Proposals survive a restart (WPC-20): they are kept in <dir>/.napkin/proposals.json (private, self-ignoring, written atomically,
+  // never a tracked file). Every change to the set, and every proposal frame that follows an in-place edit of one, schedules a write.
+  // A folder with a napkin.json is a napkin project: its proposals live in <dir>/.napkin (private, self-ignoring). A folder napkin merely
+  // opened keeps its promise to leave no trace: its proposals go to napkin's own state dir, outside the repo (NAPKIN_STATE_DIR, else
+  // $XDG_STATE_HOME/napkin, else ~/.local/state/napkin), under a hash of the folder's real path.
+  const isProject = () => [dir, dirname(dir)].some((d) => existsSync(join(d, 'napkin.json')));
+  const stateFolder = () => join(process.env.NAPKIN_STATE_DIR || join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'napkin'), createHash('sha256').update(realpathSync(dir)).digest('hex').slice(0, 24));
+  const place = () => (isProject() ? { folder: join(dir, '.napkin'), project: true } : { folder: stateFolder(), project: false });
+  const pfile = () => join(place().folder, 'proposals.json');
+  let dirty = false;
+  const persist = () => {
+    if (!canPropose || dirty) return;
+    dirty = true;
+    queueMicrotask(() => { dirty = false; try { const { folder, project } = place(); if (project) privateDir(dir); writePrivate(folder, 'proposals.json', JSON.stringify({ v: 1, proposals: [...proposals.values()], answered, seen })); } catch (e) { console.error(`napkin: could not save proposals: ${e.message}`); } });
+  };
+  const proposals = new (class extends Map { set(k, v) { super.set(k, v); persist(); return this; } delete(k) { const r = super.delete(k); persist(); return r; } })(); // id -> proposal
+  // How the person answered recent proposals, kept (and saved) for a while so an agent that was disconnected at that moment (a restart,
+  // a dropped stream) still hears: GET /api/proposals/answered?by=<name>&since=<ms>.
+  const answered = [];
+  const seen = {}; // agent name -> time of the last answer it has acknowledged, so a fresh MCP process hears what came while none ran
+  const broadcast = (f) => {
+    if (f.type === 'proposal-part' || f.type === 'proposal-resolved') { f.at ??= Date.now(); answered.push(f); while (answered.length > 100 || (answered[0] && answered[0].at < Date.now() - 864e5)) answered.shift(); }
+    emitFrame(f);
+    if (f.type === 'proposal' || f.type === 'proposal-part' || f.type === 'proposal-resolved') persist();
+  };
+  if (canPropose) {
+    sweepTmp(place().folder); // leftovers of an interrupted private write
+    try { const saved = JSON.parse(readFileSync(pfile(), 'utf8')); answered.push(...(saved.answered ?? [])); Object.assign(seen, saved.seen ?? {}); for (const p of saved.proposals ?? []) if (p?.id && p.by) Map.prototype.set.call(proposals, p.id, p); } catch { /* none saved, or unreadable: start empty */ }
+  }
+
+  // A pending create proposal whose name has been taken since (the person made it meanwhile): marked at once, the agent is told, and Accept
+  // still never overwrites (ws.create refuses an existing name).
+  const resolving = new Set();
+  function refreshClashes({ quiet = false } = {}) {
+    for (const p of proposals.values()) {
+      if (!p.create || resolving.has(p.id)) continue;
+      let why;
+      try { ws.checkCreate(p.create.name, p.create.rootTag); } catch (err) { if (err instanceof CreateError && err.status === 409) why = `A component named ${p.create.name} now exists (it was created after this proposal). Accepting would not overwrite it, so it will be refused. Reject this proposal; the agent can propose another name.`; }
+      if (why === p.clash) continue;
+      if (why) p.clash = why; else delete p.clash;
+      persist();
+      if (quiet) continue;
+      broadcast({ type: 'proposal', component: p.component, proposal: p });
+      if (why) broadcast({ type: 'proposal-clash', id: p.id, component: p.component, proposedBy: p.by, name: p.name, summary: p.summary, reason: why });
+    }
+  }
+  ws.events.on('added', () => refreshClashes());
+  ws.events.on('removed', () => { if (!closing) refreshClashes(); });
+  refreshClashes({ quiet: true });
+
   // A proposal whose component is gone can never land.
+  let closing = false; // closing the workspace announces every component as removed: that is not a deletion, and proposals must survive it
   ws.events.on('removed', ({ component }) => {
-    for (const p of [...proposals.values()]) if (p.component === component) { proposals.delete(p.id); broadcast({ type: 'proposal-resolved', id: p.id, component, status: 'rejected', reason: 'component removed' }); }
+    if (closing) return;
+    for (const p of [...proposals.values()]) if (p.component === component) { proposals.delete(p.id); broadcast(resolvedFrame(p, 'reject', undefined, { reason: 'component removed' })); }
   });
 
   const publicProposal = (p) => ({ ...p, ...colorOf(p.by) }); // + the agent's presence colour (color, ink) so the tray and the feed match the outline
@@ -84,11 +138,42 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     return res(200, { ok: true, proposed: true, proposal: { id: p.id, component: p.component, baseRevision: p.baseRevision, by: p.by, summary: p.summary } });
   }
 
+  // A propose-mode agent's create_component: a proposal for a component that does not exist. Nothing is written until the person
+  // accepts (then ws.create makes the file, by the agent, approved by the person). While it is pending the component has no id and no
+  // file, so edits to it are refused with a message that says so (pendingCreate); the agent proposes them once it is accepted.
+  const pendingCreate = (name) => [...proposals.values()].find((p) => p.create && p.create.name.toLowerCase() === String(name).toLowerCase());
+  function proposeCreate(msg, by) {
+    if (!canPropose) return fail(409, 'propose needs a running napkin canvas server: nobody could review the proposal here. Start the canvas (node src/server.js) or create it directly if you are allowed to.');
+    let pre;
+    try { pre = ws.previewCreate(msg.name, msg.rootTag); }
+    catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
+    const dup = pendingCreate(msg.name);
+    if (dup) return fail(409, `component "${msg.name}" is already proposed (${dup.id}, by ${dup.by}). Next: wait for its resolved event, then read_component.`);
+    const rootTag = msg.rootTag || 'div';
+    const p = { id: 'prp_' + randomBytes(5).toString('hex'), component: `new:${msg.name}`, name: msg.name, create: { name: msg.name, rootTag },
+      baseRevision: 0, currentRevision: 0, edits: [], by, summary: `create component ${msg.name}`, lines: [`create component ${msg.name} (${rootTag})`], at: Date.now(), ...pre };
+    proposals.set(p.id, p);
+    broadcast({ type: 'proposal', component: p.component, proposal: p });
+    return res(200, { ok: true, proposed: true, proposal: { id: p.id, component: p.component, name: p.name, by: p.by, summary: p.summary } });
+  }
+  const pendingMessage = (p) => `component "${p.name}" is only proposed so far (${p.id}): it has no file until the person accepts it. Next: wait for its resolved event (subscribe), then read_component and propose your edits.`;
+
+  // What a proposal ended as, for the agent that made it: every part resolved earlier plus how the rest ended.
+  const lineList = (p) => (p.lines ?? (p.edits || []).map((x) => summarize([x])));
+  function outcomeOf(p, finalAction) {
+    const accepted = [], rejected = [];
+    for (const part of p.parts ?? []) (part.status === 'accepted' ? accepted : rejected).push(...part.lines);
+    (finalAction === 'accept' ? accepted : rejected).push(...lineList(p));
+    return { outcome: accepted.length && rejected.length ? 'partly' : accepted.length ? 'accepted' : 'rejected', accepted, rejected };
+  }
+  const resolvedFrame = (p, finalAction, by, extra = {}) => ({ type: 'proposal-resolved', id: p.id, component: p.component, status: finalAction === 'accept' ? 'accepted' : 'rejected', by, proposedBy: p.by, summary: p.asked ?? p.summary, ...outcomeOf(p, finalAction), ...extra });
+
   // Accept or reject some of a proposal's edits: only: [0, 2] (indexes into its edits). Each part must be valid alone, because the rest
   // stays proposed on the new revision; edits that depend on each other (insert, then set on it) are taken together.
   async function resolvePart(p, action, by, only) {
     const e = ws.find(p.component);
     if (!e) { proposals.delete(p.id); return fail(404, 'the component no longer exists'); }
+    p.asked ??= p.summary;
     const keep = p.edits.filter((_, i) => !only.includes(i)), take = p.edits.filter((_, i) => only.includes(i));
     for (const [name, part] of [['those edits', take], ['the other edits', keep]]) {
       const d = await e.store.apply({ baseRevision: p.baseRevision, edits: part, by: p.by, dryRun: true });
@@ -100,10 +185,13 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       if (!r.ok) return res(409, { ...r, proposal: p.id });
       revision = r.revision; p.baseRevision = r.revision;
     }
+    (p.parts ??= []).push({ status: action === 'accept' ? 'accepted' : 'rejected', lines: take.map((x) => summarize([x])) });
+    const partFrame = { type: 'proposal-part', id: p.id, component: p.component, status: action === 'accept' ? 'accepted' : 'rejected', by, proposedBy: p.by, summary: p.asked, edits: take.map((x) => summarize([x])), remaining: keep.map((x) => summarize([x])), ...(revision !== undefined && { revision }) };
     p.edits = keep; p.lines = keep.map((x) => summarize([x])); p.summary = summarize(keep);
     const dry = await e.store.apply({ baseRevision: p.baseRevision, edits: keep, by: p.by, dryRun: true });
     if (dry.ok) { p.currentRevision = dry.revision; p.doc = dry.doc; p.source = dry.source; }
     p.updated = true;
+    broadcast(partFrame);
     broadcast({ type: 'proposal', component: p.component, proposal: p });
     return res(200, { ok: true, status: action === 'accept' ? 'accepted' : 'rejected', ...(revision !== undefined && { revision }), remaining: keep.length });
   }
@@ -112,20 +200,31 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     const p = proposals.get(id);
     if (!p) return fail(404, `no such proposal "${id}"`);
     if (only !== undefined) {
-      if (p.adoption || !Array.isArray(only) || !only.length || only.some((i) => !Number.isInteger(i) || i < 0 || i >= p.edits.length) || new Set(only).size !== only.length) return fail(400, `only must list distinct edit numbers from 0 to ${p.edits.length - 1} (an adoption is taken whole)`);
+      if (p.adoption || p.create || !Array.isArray(only) || !only.length || only.some((i) => !Number.isInteger(i) || i < 0 || i >= p.edits.length) || new Set(only).size !== only.length) return fail(400, `only must list distinct edit numbers from 0 to ${p.edits.length - 1} (an adoption or a new component is taken whole)`);
       if (only.length < p.edits.length) return resolvePart(p, action, by, only);
     }
     if (action === 'reject') {
       proposals.delete(id);
-      broadcast({ type: 'proposal-resolved', id, component: p.component, status: 'rejected', by });
+      broadcast(resolvedFrame(p, 'reject', by));
       return res(200, { ok: true, status: 'rejected' });
+    }
+    if (p.create) {
+      let made;
+      resolving.add(id);
+      try { made = await ws.create(p.create.name, p.create.rootTag, { by: p.by, approvedBy: by }); }
+      catch (err) { resolving.delete(id); if (err instanceof CreateError) return res(409, { ok: false, error: explainError(`${err.message}. The proposal stays so it can be rejected.`), proposal: id }); throw err; }
+      resolving.delete(id);
+      proposals.delete(id);
+      const revision = (await ws.find(made.id).store.read()).revision;
+      broadcast(resolvedFrame(p, 'accept', by, { revision, created: made.id }));
+      return res(200, { ok: true, status: 'accepted', revision, component: made.id });
     }
     const e = ws.find(p.component);
     if (!e) { proposals.delete(id); return fail(404, 'the component no longer exists'); }
     const r = await e.store.apply({ baseRevision: p.baseRevision, edits: p.edits, by: p.by, origin: undefined, ...(p.adoption && { [ADOPTION]: { before: p.before, source: p.source } }) }, { approvedBy: by }); // history records who approved it
     if (!r.ok) return res(409, { ...r, proposal: id }); // stale (or invalid now): the proposal stays so it can be rejected
     proposals.delete(id);
-    broadcast({ type: 'proposal-resolved', id, component: p.component, status: 'accepted', by, revision: r.revision });
+    broadcast(resolvedFrame(p, 'accept', by, { revision: r.revision }));
     return res(200, { ok: true, status: 'accepted', revision: r.revision });
   }
 
@@ -214,6 +313,13 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
         const c = query.get('component'), e = c && ws.find(c);
         return res(200, [...proposals.values()].filter((p) => !c || (e && p.component === e.id)).map(publicProposal));
       }
+      if (method === 'GET' && seg.length === 2 && seg[1] === 'answered') {
+        const by = query.get('by'), ack = Number(query.get('ack') || 0);
+        if (ack && by && ack > (seen[by] ?? 0)) { seen[by] = ack; persist(); }
+        if (query.has('ack') && !query.has('since')) return res(200, []);
+        const since = query.has('since') ? Number(query.get('since')) : (seen[by] ?? 0); // no since: everything this agent has not acknowledged (within the log)
+        return res(200, answered.filter((f) => f.proposedBy === by && f.at > since));
+      }
       if (method === 'POST' && seg.length === 3 && (seg[2] === 'accept' || seg[2] === 'reject')) { const g = guard(`${seg[2]} a proposal`); if (g) return g; const m = msgOf(); return resolve(seg[1], seg[2], caller, m?.only); }
       return fail(405, 'method not allowed');
     }
@@ -224,7 +330,9 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       if (method === 'GET') return res(200, await ws.summary());
       if (method === 'POST') {
         const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
-        const g = guard('create_component'); if (g) return g;
+        const n = needId(); if (n) return n;
+        if (agentPermission(dir, caller) === 'propose' || (msg.propose && agentPermission(dir, caller) !== 'read')) return proposeCreate(msg, caller);
+        const g = deny('create_component'); if (g) return g;
         try { return res(201, { ok: true, ...(await ws.create(msg.name, msg.rootTag, { by: caller })) }); }
         catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
       }
@@ -232,7 +340,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     }
 
     const e = ws.find(seg[1]);
-    if (!e) return fail(404, `component "${seg[1]}" not found`);
+    if (!e) { const pc = pendingCreate(seg[1]); return pc ? fail(409, pendingMessage(pc)) : fail(404, `component "${seg[1]}" not found`); }
     contextFile = e.path || e.name + '.tsx';
     const sub = seg[2];
 
@@ -251,7 +359,7 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       const n = needId(); if (n) return n;
       const mode = agentPermission(dir, caller);
       if (mode === 'read') return fail(403, `agent "${caller}" is read-only (napkin.json). Next: ask a write or propose agent to propose_adoption.`, { permission: mode });
-      if (!canPropose) return fail(409, 'propose needs a running napkin canvas server. Next: run napkin open to review an adoption.');
+      if (!canPropose) return fail(409, 'propose needs a running napkin canvas server. Next: run node src/cli.js open to review an adoption.');
       const r = await e.store.read();
       if (!r.readOnly) return fail(409, `${e.file} is already editable. Next: use apply_edits.`);
       let converted;
@@ -361,5 +469,5 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
     return fail(405, 'method not allowed');
   }
 
-  return { handle, proposals, renderer, session, identify, async close() { await renderer.close(); } };
+  return { handle, proposals, renderer, session, identify, async close() { closing = true; await renderer.close(); } };
 }

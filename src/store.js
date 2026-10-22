@@ -24,11 +24,38 @@ import { gitAttribution, primeGit } from './git.js';
 // Every reason names a line (INV-04); a file-level problem with no line of its own says line 1.
 const rawReason = (e) => (/^line \d+/.test(e.message) ? e.message : `line ${e.loc?.line ?? 1}: ${e.message}`);
 
+// WPC-16: a parser reports where it gave up, which is often the line after the edit (an unclosed tag, a missing quote). Name the first
+// line the hand edit changed as well, so the banner points at what was typed. Same line: unchanged.
+// Lines of `after` that are not in `before` (an LCS line diff; a pure prefix/suffix fallback for very large files).
+function changedLines(before, after) {
+  const x = before.split('\n'), y = after.split('\n'), out = new Set();
+  let lo = 0; while (lo < x.length && lo < y.length && x[lo] === y[lo]) lo++;
+  let hx = x.length, hy = y.length; while (hx > lo && hy > lo && x[hx - 1] === y[hy - 1]) { hx--; hy--; }
+  const n = hx - lo, m = hy - lo;
+  if (n * m > 4e6) { for (let i = lo; i < hy; i++) out.add(i + 1); return out; }
+  const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[lo + i] === y[lo + j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0;
+  while (j < m) { if (i < n && x[lo + i] === y[lo + j]) { i++; j++; } else if (i < n && L[i + 1][j] >= L[i][j + 1]) i++; else { out.add(lo + j + 1); j++; } }
+  return out;
+}
+// The line to name: the parser's own line when the hand edit changed it, else the nearest changed line at or before it (an unclosed tag
+// is reported on the line after), else the first changed line after it. Everything in the message names that line; the parser's line is secondary.
+function withEditedLine(why, e, before, after) {
+  const parser = e.loc?.line; if (!parser || typeof before !== 'string') return why;
+  const changed = [...changedLines(before, after)].sort((a, b) => a - b);
+  const reflowed = changed.length >= 0.9 * after.split('\n').filter((l) => l.trim()).length; // the whole file changed (reformatted): every line is "changed", so say where the parser stopped too
+  if (!changed.length) return why;
+  if (changed.includes(parser)) return reflowed ? why + ` (the parser stopped at line ${parser})` : why;
+  const edited = [...changed].reverse().find((l) => l <= parser) ?? changed[0];
+  return why.replace(new RegExp(`\\bline ${parser}\\b`, 'g'), `line ${edited}`) + ` (the parser stopped at line ${parser})`;
+}
+
 // Revisions are content hashes (HIS-04): the first 16 hex digits of the sha256 of the file's bytes. They survive a server restart,
 // so a client holding one from before the restart can still commit when the file has not changed. Clients treat them as opaque.
 export const revisionOf = (text) => createHash('sha256').update(text).digest('hex').slice(0, 16);
 // The answer for every write while the file on disk does not parse (a hand edit in progress): napkin never writes over it.
-export const brokenMessage = (file, why) => `${basename(file)} has a syntax error at ${/line \d+/.exec(why)?.[0] ?? 'line 1'}; fix it (or undo the hand edit), then retry. napkin won't overwrite your text.`;
+export const brokenMessage = (file, why) => `${basename(file)} has a syntax error at ${/line \d+/.exec(why)?.[0] ?? 'line 1'}; fix it (or undo the hand edit), then retry. napkin won't overwrite your text.${/\(the parser stopped at line \d+\)/.exec(why)?.[0]?.replace(/^\(the/, ' The').replace(/\)$/, '.') ?? ''}`;
 const POLL_MS = 400; // safety net for a missed file-system event; FMT-07 wants a hand edit seen within 1 s
 
 const HISTORY = 500;
@@ -51,7 +78,7 @@ export async function openStore(file, start = {}) {
   try { ({ doc, state } = codec.load(text, file, start)); } catch (e) { readOnly = reason(e); if (e.loc) syntaxErr = readOnly; }
   let revision = revisionOf(text);
   let seq = 1;
-  const history = [{ seq, revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', doc, text }];
+  const history = [{ seq, revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', ...(start.approvedBy && { approvedBy: start.approvedBy }), doc, text }];
   // A past revision's text and document. Old entries hold the text deflated and no document (see FULL).
   const textOf = (h) => (typeof h.text === 'string' ? h.text : Buffer.isBuffer(h.text) ? inflateSync(h.text).toString('utf8') : undefined);
   const docOf = (h) => {
@@ -96,7 +123,7 @@ export async function openStore(file, start = {}) {
       return syntaxErr;
     }
     let loaded; try { loaded = codec.load(t, file, start); } catch (e) {
-      const why = reason(e, t);
+      const why = readOnly ? reason(e, t) : withEditedLine(reason(e, t), e, text, t);
       if (readOnly) { text = t; readOnly = why; syntaxErr = e.loc ? why : null; revision = revisionOf(text); history.push({ seq: ++seq, revision, keys: new Set(['file']), by: 'file', summary: 'file changed', at: Date.now() }); if (history.length > HISTORY) history.shift(); events.emit('change', { revision, doc: null, by: 'file', summary: 'file changed' }); return syntaxErr; }
       problem(why); syntaxErr = e.loc ? why : null;
       return why; // half-written or broken: keep the last good doc, and write nothing over it
@@ -292,7 +319,7 @@ export async function openStore(file, start = {}) {
   // Where the component sits on the canvas lives in the sidecar, never in the .tsx (FMT-02, FMT-06).
   function moveCanvas(x, y) {
     if (![x, y].every((n) => typeof n === 'number' && Number.isFinite(n))) return { ok: false, error: 'invalid canvas position: x and y must be numbers. Next: send x and y as finite numbers.' };
-    const side = readSidecar(file, basename(file).replace(/\.tsx$/, ''));
+    const side = readSidecar(file, basename(file).replace(/\.tsx$/, ''), { identityPath: displayFile });
     const canvas = { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
     if (side.canvas?.x !== canvas.x || side.canvas?.y !== canvas.y) writeSidecar(file, { ...side, canvas });
     events.emit('canvas', { canvas });

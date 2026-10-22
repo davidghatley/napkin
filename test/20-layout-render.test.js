@@ -57,7 +57,7 @@ test('LAY-02: 12 cases, every Hug / Fill / Fixed lands at the expected size, and
   } finally { await L.close(); }
 });
 
-const PINS = tsx('Pins', { id: 'stage', tag: 'div', style: { position: 'relative', width: 400, height: 300, boxSizing: 'border-box' }, kids: [
+const PINS = tsx('Pins', { id: 'stage', tag: 'div', style: { position: 'relative', display: 'flow-root', width: 400, height: 300, boxSizing: 'border-box' }, kids: [
   { id: 'pin', tag: 'div', style: { width: 100, height: 60, background: '#2236b0' } },
 ] });
 
