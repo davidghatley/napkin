@@ -102,16 +102,34 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | REL-03 | REL | engine | pass | worst 208 ms, 0 silent losses | docs/evidence/REL-03.txt | da57ab8 |
 | REL-04 | REL | engine | pass | critic soak 1800 s, 0 errors, 9.0% growth (pre-merge code, one seed) | docs/evidence/REL-04.txt | da57ab8 |
 | REL-05 | REL | engine | pass | merged 685 ms | docs/evidence/REL-05.txt | da57ab8 |
-| FEEL-01 | FEEL | canvas | building |  |  |  |
+| FEEL-01 | FEEL | canvas | critic | screenshots taken; blind judging next | docs/evidence/walk-1/FEEL-01.txt | 36daf60 |
 | FEEL-02 | FEEL | layout | needs-david | 6 rounds: Sonnet tie; Codex prefers Figma help imagery in both orders | test/23-layout-panel.test.js | a4a87dd |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
-| FEEL-05 | FEEL | canvas | building |  |  |  |
-| SCN-1 | SCN | whole | open |  |  |  |
-| SCN-2 | SCN | whole | open |  |  |  |
-| SCN-3 | SCN | whole | open |  |  |  |
-| SCN-4 | SCN | whole | open |  |  |  |
-| SCN-5 | SCN | whole | open |  |  |  |
+| FEEL-05 | FEEL | canvas | pass | walk 1: completed keyboard-only, but 86 Tabs to Radius (WPC-07) | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
+| SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
+| SCN-2 | SCN | whole | critic-fail | walk 1: propose agent cannot create Tooltip (WPC-03); rest done, reject sha unchanged | docs/evidence/walk-1/SCN-2.txt | 36daf60 |
+| SCN-3 | SCN | whole | critic-fail | walk 1: app card 312 px vs 280 on canvas; text colour differs (WPC-01, WPC-02) | docs/evidence/walk-1/SCN-3.txt | 36daf60 |
+| SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
+| SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
+| WPC-01 | WPC | fidelity | open | whole-product critic walk 1: Cells get box-sizing: border-box from the editor: Fixed 280 + padding 16 is 280 on canvas, 312 in a plain app. Same component, canvas at 100% vs no-CSS React app, pixel diff: 0 px differ | docs/evidence/walk-1/ |  |
+| WPC-02 | WPC | fidelity | open | whole-product critic walk 1: Cells inherit the editor text colour (28,31,39; an app gets 0,0,0) and Inspect calls it 'browser default'. Computed colour equals a blank page; label truthful | docs/evidence/walk-1/ |  |
+| WPC-03 | WPC | agents | open | whole-product critic walk 1: A propose-mode agent cannot create_component, so S2 as written is impossible. create_component with propose makes a ghost component; no file until Accept | docs/evidence/walk-1/ |  |
+| WPC-04 | WPC | docs | open | whole-product critic walk 1: docs/dialect.md's complete example uses <b>, which the dialect forbids, so it opens read-only. Paste it and open: editable | docs/evidence/walk-1/ |  |
+| WPC-05 | WPC | docs | open | whole-product critic walk 1: docs/guide describes another product (Button.html, napkin mcp, 'planned, not shipped'); README says no tokens panel and init prints .mcp.json. Run every documented command; 0 contradictions | docs/evidence/walk-1/ |  |
+| WPC-06 | WPC | files | open | whole-product critic walk 1: open writes 40 untracked *.napkin.json sidecars ({x:0,y:0}) before anything moves. git status after open: 0 new files until a frame is moved | docs/evidence/walk-1/ |  |
+| WPC-07 | WPC | keys | open | whole-product critic walk 1: 86 Tabs from a selection to Radius; cells and 30 collapse buttons in tab order; Cmd-K 'radius' finds nothing. <= 5 keys from selection to any property | docs/evidence/walk-1/ |  |
+| WPC-08 | WPC | keys | open | whole-product critic walk 1: Cmd-K to a component flies there but selects nothing. Cmd-K Badge Enter: Badge root selected | docs/evidence/walk-1/ |  |
+| WPC-09 | WPC | agents | open | whole-product critic walk 1: An agent never learns its proposal was rejected. Reject, then MCP subscribe: a rejected event naming the proposal id | docs/evidence/walk-1/ |  |
+| WPC-10 | WPC | docs | open | whole-product critic walk 1: README doesn't say how to put an agent in propose mode; Copy usage has no import line; examples/consumer-app not linked. Newcomer finds each from the README or guide | docs/evidence/walk-1/ |  |
+| WPC-11 | WPC | keys | open | whole-product critic walk 1: Component theme dark leaves cell backgrounds white; light accent button with near-white label unreadable. Cells use the theme surface, or contrast >= 3:1 | docs/evidence/walk-1/ |  |
+| WPC-12 | WPC | agents | open | whole-product critic walk 1: With 4 proposals, items 3-4 are below the 900 px viewport. All tray actions reachable at 1440x900 (tray scrolls the focused item into view) | docs/evidence/walk-1/ |  |
+| WPC-13 | WPC | keys | open | whole-product critic walk 1: Clicking an off-token dot snaps silently (6 -> radius-small 4px). Shows target token and value before writing, or offers undo | docs/evidence/walk-1/ |  |
+| WPC-14 | WPC | keys | open | whole-product critic walk 1: Empty undo toast leaks API text ('Next: check this request against /api/guide...'). Plain-language toast | docs/evidence/walk-1/ |  |
+| WPC-15 | WPC | keys | open | whole-product critic walk 1: A clipped 'r' (revision label) right of Component theme; Chip filter bar runs past its frame. Screenshot 1440x900 with tokens: no clipped labels or overflow | docs/evidence/walk-1/ |  |
+| WPC-16 | WPC | fidelity | open | whole-product critic walk 1: Broken-file banner names line 52 for a break on 51. Names the edited line, or both | docs/evidence/walk-1/ |  |
+| WPC-17 | WPC | docs | open | whole-product critic walk 1: The disposable demo leaves /tmp/napkin-fixtures-* after SIGTERM. Removed on exit | docs/evidence/walk-1/ |  |
+| WPC-18 | WPC | docs | open | whole-product critic walk 1: No documented way to make S1's 40-component repo with a Badge. A documented command makes it | docs/evidence/walk-1/ |  |
 
 ## Rounds
 

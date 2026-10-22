@@ -1,0 +1,13 @@
+SCN-2  S2 Agent beside me. repo2 = init + fixtures Button/Card/Chip; napkin.json agents {"claude":"propose","you":"write"} (found only in
+  decision 0005 / test/CONTRACT.md; README never says how to put an agent in propose mode). Agent = src/mcp.js over stdio, NAPKIN_AGENT=claude, separate process.
+1. Agent create_component {name:"Tooltip"} -> REFUSED: 'agent "claude" is propose-only (napkin.json agents): create_component is not allowed'.
+   => "an agent builds a Tooltip in propose mode" is impossible as written: a propose agent cannot create a component, and there is no propose-create.
+   Workaround: I pressed N, typed Tooltip, Enter (empty frame created, file written by me). Then the agent built it via proposals.
+2. Agent proposal 1 (4 style sets) answered in 14 ms. 250 ms later: canvas presence box + tag "claude root" on Tooltip, #presence "claude: editing Tooltip · root",
+   avatar "C claude" in top bar. Tray auto-opened "1 proposal · claude". s2-04-presence.png
+3. While agent sent proposals 2-4 (insert tip text; shadow+fontSize; border 6px dashed #ff00ff), I clicked Button>root and typed padding "14px 22px" Enter.
+   Button changed (1 line), no interference. s2-05, s2-06.
+4. Clicked Accept on proposals 1,2,3 (had to wheel-scroll the tray: items 3-4 rendered below the 900 px viewport). Each ~0.9 s, file updated, Tooltip renders. s2-07
+5. Clicked Reject on #4: toast "Rejected proposal from claude; nothing was written". sha1 before reject = after = 9dfaac1e...; "ff00ff" in no file. s2-08
+6. Agent's view: subscribe shows the 3 accepted changes as change events, but NOTHING tells the agent proposal #4 was rejected (no resolved/rejected notice).
+VERDICT: DONE with workaround (human had to create Tooltip). Rejected edit never in file: verified (sha + grep).

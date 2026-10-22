@@ -1,0 +1,18 @@
+SCN-4  S4 A bad morning. repo4: main (Button, Card, Chip) + branch feature (Card title default 'Feature branch card', Button bg #0a7d4f). Agent = MCP, write mode.
+1. Canvas (me): Chip > root > Padding "6px 16px" Enter -> Chip.tsx 1 line.                                   [my edit #1]
+2. Hand edit: Card.tsx line 51 `</h3>` -> `</h3` (broken). Within 1.5 s the Card frame shows a red banner above it:
+   "file has an error, showing the last good version: line 52: syntax error (Unexpected token, expected "jsxTagEnd" (52:6)) [Card.tsx] Next: fix the syntax error at line 52, then save; napkin reloads it."
+   Last good render kept. Line named is 52 (the break was on 51; parser position). s4-02-broken.png
+   Agent apply_edits on the broken Card -> "Card.tsx has a syntax error at line 52; fix it (or undo the hand edit), then retry. napkin won't overwrite your text." (good)
+   Restored the line -> banner gone.
+3. Agent read_component Card (rev 76228f08). Then `git checkout feature` (uncommitted Chip edit carried over).
+   Canvas showed 'Feature branch card' 54 ms after my poll began; Button cells rgb(10,125,79). Changes list: "Card ... git: file changed on disk", "Button ... git: file changed on disk". s4-03-branch.png
+4. Agent's in-flight setDefault title='Agent title' on base 76228f08 -> "stale revision: prop:title changed in revision 48445b28 (base 76228f08) ... by git", currentRevision given;
+   agent retried on currentRevision -> ok. File has 'Agent title'.                                            [agent edit #1]
+5. Canvas (me): Button root Radius 14.                                                                       [my edit #2]
+   Agent: Chip label.letterSpacing 0.5px.                                                                     [agent edit #2]
+6. Ctrl+Z (focus on canvas): toast "Undid: root.borderRadius = 14" (Button back to 6). Ctrl+Z: "Undid: root.padding = "6px 16px"" (Chip).
+   Agent's letterSpacing and title untouched. 3rd Ctrl+Z: "Can't undo: nothing to undo Next: check this request against /api/guide, correct the named value, and retry." (developer text in a user toast)
+   Ctrl+Shift+Z: "Redid: root.padding = "6px 16px"".
+Final diff: Card title 'Agent title', Chip padding (redone) + letterSpacing, Button bg from branch kept. Lost edits: 0.
+VERDICT: DONE. 0 lost edits. Undo touched only my edits. (Retry is the agent's job; napkin's stale error carried what's needed.)

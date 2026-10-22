@@ -1,0 +1,11 @@
+SCN-5  S5 Tokens day. Followed README "Tokens:" para: `node src/server.js --port 0` (disposable fixtures copy with 20 tokens).
+  NOTE: same README says earlier "Not in this build: a tokens panel" -> contradicts the Tokens paragraph and the shipped drawer.
+1. Top bar shows "Component theme [light v]" + a stray truncated "r" right of the select (revision label clipped). s5-01
+2. Clicked Button>root: orange off-token dots beside Radius 6, Fill #2236b0, Stroke #16181d, font size, colour; ◇ "Bind ... to token" on gap/padding/radius/fill/stroke/font/colour. s5-02
+3. ◇ on Fill -> picker lists surface/panel/ink/muted/accent/on-accent/line/focus with hex; clicked accent -> Fill row shows "accent #365dcc"; file `background: 'var(--accent)'`. 
+   Panel scrolled itself (breadcrumb "Button > root" scrolled out of view). s5-03, s5-04
+4. Clicked orange dot on Radius -> snapped 6 -> "radius-small 4px" (`var(--radius-small)`) - value visibly changes by 2 px without confirmation.
+5. Component theme -> dark: all 3 default-state Button cells rgb(54,93,204) -> rgb(140,170,255); hover cells keep literal #16181d (correct). 
+   Cell/frame backgrounds stay WHITE in dark mode; light-blue button with near-white label on white = illegible preview. Card/Chip unchanged (no tokens bound). s5-05
+6. Tokens drawer: "20 of 20 tokens", grouped Colour · 8 with light/dark swatches and usage. s5-06
+VERDICT: DONE (in the disposable demo). Own-repo token setup (napkin.json "tokens") not walked.
