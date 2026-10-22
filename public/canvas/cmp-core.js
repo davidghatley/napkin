@@ -33,10 +33,13 @@ export async function run(ctx, key, edits, clear = []) {
   const { s } = ctxDoc(ctx);
   if (!s) return { ok: false, error: 'nothing selected' };
   let r;
+  const was = ctx.state.components.get(s.component)?.revision;
   try { r = await ctx.sendEdits(s.component, edits); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
   clear.forEach(forgetDraft);
   if (r.ok) delete errors[key]; else errors[key] = r.error;
-  setTimeout(() => renderPanel(ctx), 0);
+  // A batch that changed the file is followed by a render, which redraws the panel after the new pixels (PRF-02, as panel.js does).
+  // A refusal or a batch that changed nothing (same revision) has no render coming: redraw now.
+  if (!r.ok || r.revision === was) setTimeout(() => renderPanel(ctx), 0);
   return r;
 }
 
