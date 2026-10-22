@@ -1,12 +1,12 @@
 # napkin
 
-From napkin sketch to real components: a Paper-like design canvas tuned for components, that agents and people edit together.
-
-Early days. The contract is in [INTENT.md](INTENT.md); how it fits the other projects is in [STACK.md](STACK.md).
+napkin is a local canvas for React TSX components. Edit a component in the browser,
+in a text editor, or through an agent over MCP. The file on disk is the component
+your app imports. There is no export step or napkin runtime dependency.
 
 ## Quickstart
 
-Use Node.js 26 or newer and npm. From the root of this checkout, run:
+Use Node.js 26 or newer, npm, and git. Run these commands from this checkout:
 
 <!-- quickstart:start -->
 ```sh
@@ -16,63 +16,115 @@ node src/cli.js open ./my-napkin
 ```
 <!-- quickstart:end -->
 
-If npm prints an `allowScripts` warning for esbuild, use `npm rebuild esbuild` if the build cannot start; napkin does not need any new dependency.
+`init` requires an empty destination. It creates `napkin.json` and
+`components/Welcome.tsx`, then exits. `open` starts the server and prints the
+canvas address and a `.mcp.json` object for Claude Code. The default port is 4810;
+napkin tries the next port if it is occupied. Use `--port 0` for a free random port.
+Open the printed address. Stop the server with Ctrl+C.
 
-Open the printed canvas address in your browser. It starts at **http://127.0.0.1:4810/**,
-or the next free port. The starter `Welcome.tsx` is already on the canvas. Press **N**
-to create another component; **F**, **T**, and **I** draw inside it. Press **?** for
-all shortcuts or **Ctrl/Cmd+K** to find a component, layer, or action. Stop with Ctrl+C.
+Press **N** to create a component. **F**, **T**, and **I** draw a frame, text, or
+image inside a component. **Ctrl/Cmd+K** finds components, layers, and actions.
+**?** opens the shortcut sheet. The [user guide](docs/guide/README.md) covers the
+canvas, variants, agents, files, tokens, and undo.
 
-The checkout also provides `npx napkin init ./another-napkin` and
-`npx napkin open ./another-napkin`; nothing needs publishing or a global install.
-`init` creates an empty project and prints connection details; `open` starts the server.
+## A 40-component sample
 
-Both commands print a ready-to-paste **`.mcp.json`** object for Claude Code.
-Paste it into your agent project's `.mcp.json`, then restart Claude Code. It uses
-`node`, the absolute path to this checkout's `src/mcp.js`, and the running canvas's
-`NAPKIN_URL` with `NAPKIN_AGENT=claude`. If an occupied port moves the server,
-use the snippet from `open`. Keep the canvas running while reviewing proposals.
+From this checkout, choose an empty destination (replace `./sample-40` in both
+commands to use another folder):
 
-Every component is a real React TSX file your app can import directly. There is
-no export step and no napkin runtime dependency. Edits in a text editor or from
-an agent appear live. The dialect is described in [decision 0003](docs/decisions/0003-tsx-dialect.md).
+```sh
+node tools/sample-repo.js ./sample-40
+node src/cli.js open ./sample-40
+```
+
+This creates exactly 40 editable components, including Badge, Button, Card, and
+Chip. It initializes git, creates no commits, and refuses a nonempty destination.
+Components have text settings, styles, and variants. Use Ctrl/Cmd+K to find Badge,
+select its root, and change Radius in the inspector. Base edits flow to variants
+that have no override. This is the setup for [scene S1](docs/DREAM.md).
+
+## Connect an agent
+
+Copy the `.mcp.json` object printed by `open` into your agent project's
+`.mcp.json`. It uses `node`, this checkout's `src/mcp.js`, the running canvas's
+`NAPKIN_URL`, and `NAPKIN_AGENT=claude`. Restart Claude Code and ask it to call
+`list_components`. Keep the server running while the agent works.
+
+To require review, merge this configuration into your project's `napkin.json`:
+
+```json
+{
+  "components": "components",
+  "agents": { "you": "write", "claude": "propose", "*": "read" }
+}
+```
+
+The agent name must match `NAPKIN_AGENT`. `read` permits inspection, `propose`
+holds edits for Accept or Reject on the canvas, and `write` applies edits directly.
+With an `agents` key, unlisted names use `*`, which defaults to `read`. Without
+that key, callers may write. These are local guard rails; programs running as you
+can also edit the files directly. See [agent setup](docs/guide/connect-your-agent.md)
+and [decision 0005](docs/decisions/0005-clash-undo-permissions.md).
 
 ## Open an existing repository
 
+Pass its folder to `open`, as in the sample command above. A `napkin.json` project
+uses its `components` path. Without a config, napkin scans `.tsx` files recursively,
+skipping `node_modules`, `dist`, `build`, `.git`, and `.napkin`. It does not follow
+symlinks. Files outside the [dialect](docs/dialect.md) open read-only, with reasons
+and line numbers. Missing dependencies or providers can prevent a preview.
+
+Opening, reading, and rendering create no component sidecars. A configured project
+saves a sidecar beside a component when you move its frame or save a preview
+setting. Existing sidecars retain their identities and settings. In a repository
+without `napkin.json`, opening writes no repository files; add `--write-sidecars`
+to permit saved positions and previews. Without it, positions last for the session.
+Explicit component edits and accepted adoption proposals write the selected TSX.
+
+For supported simple read-only files, an agent can call `propose_adoption`.
+Review its source and diff through the proposals API before accepting. Unsupported
+hooks, expressions, class names, or runtime imports are refused with reasons.
+See [keeping files](docs/guide/keep-your-files.md).
+
+## Use components in an app
+
+Select a node, open **Inspect**, and click **Copy usage**. The copied text includes
+a named import and JSX for the selected variant. The import path is relative to
+the opened components folder; adjust it for your app's location or alias.
+
+The [consumer app](examples/consumer-app/App.tsx) imports Button directly.
+Build it against the sample's components:
+
 ```sh
-node src/cli.js open /path/to/your/repo
+node examples/consumer-app/build.mjs ./sample-40/components ./sample-40/consumer
 ```
 
-Without a `napkin.json`, napkin scans every `.tsx` below that folder, skipping
-`node_modules`, `dist`, `build`, and `.git`. The report lists editable files and
-read-only files with all blocking constructs and their lines. The address prints
-before scanning finishes; components and scan progress stream into the canvas,
-and offscreen previews bundle when brought into view. The pinned shadcn reports
-are in `docs/evidence/OPN-04.txt` (canonical UI) and `OPN-04-full.txt` (all 3,674
-TSX files); `node tools/shadcn-report.js --archive <pinned .tar.gz>` reruns the full census. Opening, classifying and rendering write
-**no files in that repository**. The single-writer lock lives in the OS temporary
-folder. In foreign repositories, frame positions persist only with `--write-sidecars`. Otherwise positions last only for the session; pass `--write-sidecars` to allow
-`.napkin/lock` and position sidecars in the repository. A `napkin.json` project
-uses its `components` folder (configure another relative path with `"components"`).
+Serve the resulting folder with your usual static server. If components use token
+CSS variables, import their token CSS in the app too.
 
-Read-only files still render with their default props. Missing imports, CSS or
-context produce an error in that component's frame. napkin does not install a
-repository's dependencies or invent its providers. `Ctrl/Cmd+K` finds nested files too.
+## Canvas and files
 
-To adopt a simple read-only file, ask the agent to call
-`propose_adoption { "component": "Greeting" }`. The proposal contains the source
-and a diff; inspect it through `GET /api/proposals`. Accept or reject it through
-`POST /api/proposals/<id>/accept` or `/reject`, with your session bearer token
-(from `POST /api/session { "as": "you" }`). Reject writes nothing. Accept goes
-through the revision-checked store and the single commit path. A hand edit after
-the proposal makes acceptance stale. Conversion currently supports synchronous,
-named functions with string or boolean literal prop defaults containing intrinsic JSX and literal inline or constant style objects;
-class names, hooks, imports with runtime effects, dynamic children, significant
-text whitespace, and other unsupported behavior are refused with reasons.
+Pan with the wheel or Space-drag. Zoom with Ctrl/Cmd-wheel or `+` and `-`.
+Shift+1 fits all frames. Shift+2 fits the selection. Drag a frame by its title.
+The left Layers tree selects and reorders nodes. The inspector edits CSS, text,
+settings, and variants. Choose **Base** or **This variant** before editing.
 
-An editable file changes only after an explicit edit; a read-only file changes
-only after you accept an adoption. To keep a repository entirely untouched,
-review the canvas and do not issue edits or accept proposals.
+Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z undo and redo your own edits. They refuse to
+overwrite a later change to the same property by someone else. The bottom drawer
+has Code, History, Tokens, Inspect, Assets, Changes, and Activity. History and proposals
+last for the server session; git keeps long-term history. napkin never commits.
+
+The disposable demo includes 20 tokens:
+
+```sh
+node src/server.js --port 0
+```
+
+It edits a temporary fixture copy and removes it on exit. Use the diamond beside
+an inspector field to bind a token. **Theme** previews component modes. The
+**Tokens** drawer edits the configured token source. Token paths in `napkin.json`
+are relative to that config. See [tokens and variants](docs/guide/change-every-version.md)
+and [decision 0010](docs/decisions/0010-tokens.md).
 
 ## Development
 
@@ -82,27 +134,10 @@ npm start
 npm run demo
 ```
 
-`npm start` opens a disposable copy of the fixtures. Tests use random server
-ports and CPU Chromium; install Chromium or set `CHROMIUM` to its executable
-for browser tests. The [proving demo](docs/demo/demo-log.txt) shows simultaneous
-human and agent edits landing in the same Button component.
+`npm start` runs the disposable demo on port 4810. Stop it before starting another
+server on that port. Tests use random ports and CPU Chromium. Install Chromium
+or set `CHROMIUM` to its executable for browser tests. `npm run demo` runs the
+co-editing demonstration test and writes its evidence under `docs/demo`.
 
-**On the canvas:**
-- Pan with the wheel or Space-drag, zoom with Ctrl/⌘-wheel, pinch or `+` `-` (5% to 800%); `⇧1` fits everything, `⇧2` the selection, `⇧0` is 100%. Drag a frame by its title to place it (the position is saved in the `.napkin.json` beside the file).
-- `⌘K` jumps to any component, layer or action. `Enter` focuses the selected component, `Esc` comes back; `#Button/label` in the address deep-links.
-- The left tree is the JSX: click to select, F2 or double-click to rename, drag to reorder. Shift-click or drag a box to select several; hold Alt to measure to the hovered element.
-- Click an element to select it.
-- The panel edits styles on the **Base** or on **This variant**. An override shows a dot and a "Reset to base" button.
-- The panel also edits text, "Make setting" (text becomes a prop), props and defaults, and variant axes and values.
-- Tools: `V` select, `F` frame (drag to size), `T` text, `I` image slot, `N` new component.
-- Delete removes the selected element, and Alt+↑/↓ reorders it.
-
-**History and inspection (history lane):** `⌘Z` / `⇧⌘Z` undo and redo your own edits (never an agent's; refused, naming who, if someone changed the same property after you). The drawer under the canvas has **Code** (live TSX, click a line to select its node), **History** (timeline, scrub to preview, Restore), **Inspect** (computed CSS per cell, with where each value comes from, and Copy usage), **Assets** (images in the repo; drop an image on a node) and **Changes** (a dot on components that differ from git HEAD, line diff, before/after pictures). `node src/docs.js --dir components --out catalog` writes a static catalog. napkin never commits. Details: [CONTRACT](test/CONTRACT.md#history-lane-round-2-his-01-03-his-05-ins-01-05-ast-01-04), [decision 0009](docs/decisions/0009-history-undo-restore-git.md).
-
-A file napkin can't read fully opens read-only with a badge, and napkin never rewrites it.
-
-**Not in this build:** a tokens panel, Figma/HTML import, hosting. See FEATURES.md.
-
-Contract the tests rely on: [test/CONTRACT.md](test/CONTRACT.md). Decisions: [docs/decisions/](docs/decisions/).
-
-**Tokens:** `node src/server.js --port 0` opens the disposable demo with 20 fixture tokens. Choose a component, use the ◇ beside a colour, padding, gap, radius or font size to bind a token; orange dots snap literals to the nearest token. The top-bar **Theme** previews modes across cells; the **Tokens** drawer edits the token source. To use your own local source, add `"tokens": { "source": "tokens/tokens.json", "css": "tokens/tokens.css" }` to `napkin.json` (paths relative to it), and import the CSS in your app. Externally generated CSS is left to your token build. See [decision 0010](docs/decisions/0010-tokens.md) for source shapes and write behavior, and [the S5 walk](test/tokens/s5.test.js) for a reproducible demo. Re-run token checks with `node --test test/tokens/`; performance evidence with `node bench/tokens.js`.
+[test/CONTRACT.md](test/CONTRACT.md) lists the tested UI and API.
+[Decisions](docs/decisions/) describe the file format and behavior.

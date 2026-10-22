@@ -29,9 +29,11 @@ export function readSidecar(file, name, { create = false } = {}) {
 // Components as React TSX in the napkin dialect (decision 0003).
 export const tsxCodec = {
   kind: 'napkin/1',
-  load(text, file, { writeSidecars = true } = {}) {
+  load(text, file) {
     const { doc } = readComponent(text);
-    const side = file ? readSidecar(file, doc.name, { create: writeSidecars }) : { id: `cmp_${doc.name}` };
+    // Derive an identity without touching disk. Persist it with the first canvas
+    // setting (or before a rename), never merely because a file was opened.
+    const side = file ? readSidecar(file, doc.name) : { id: `cmp_${doc.name}` };
     return { doc: { ...doc, id: side.id }, state: { text } };
   },
   // The writer patches an AST in place, so every save parses its own from the last good text:

@@ -1,58 +1,36 @@
-# How to keep, review and undo your component files
+# Keep and review files
 
-Serves: **Keep plain files you own**.
+Components are React TSX files. Import their named exports in an app. There is
+no napkin runtime or export step. Inspect's Copy usage includes an import and
+the JSX for the selected cell. Its path starts at the opened components folder;
+adjust the import for your app's source layout or alias.
 
-## Who it's for and when to use it
-For anyone who wants design changes to go through the same review as code. Use it after any session, and especially after an agent's edit, to see what changed, keep it, or throw it away.
+The [consumer app](../../examples/consumer-app/App.tsx) uses a direct Button
+import. After making the sample in the [quickstart](quickstart.md), build it:
 
-## Prerequisites
-- Your project is a git repository.
-- At least one component made in napkin.
-
-## Flow
-
-```text
- canvas edit ─┐
-              ├─► one edit path ─► components/Card.html ─► git diff ─► commit
- agent edit ──┘                          ▲                    │
-                                         └── git restore ◄────┘ (undo)
+```sh
+node examples/consumer-app/build.mjs ./sample-40/components ./sample-40/consumer
 ```
 
-## Steps
-1. After the agent's edit, look at the diff:
-   ```console
-   $ git diff components/Card.html
-   -  --radius: 8px;
-   +  --radius: 12px;
-   ```
-   One change is one changed line. napkin writes files in a stable order, so an edit never reshuffles the rest.
-2. Keep it:
-   ```console
-   $ git add components/Card.html
-   $ git commit -m "Card: rounder corners"
-   ```
-3. Or throw it away:
-   ```console
-   $ git restore components/Card.html
-   ```
-   The canvas reloads the file and shows the Card as it was.
-4. Edit the file by hand if you like. Save it in your editor and the canvas updates.
-5. Use the component elsewhere: the file is the component. Reuse it from your app's code the way your project's format allows ([GAPS.md](GAPS.md), G1).
+This writes a static app into the sample's consumer folder. Serve it with your
+usual static server. Import your token CSS too when using token-bound styles.
 
-## What you see when it worked
-- `git diff` shows only the lines you or the agent changed.
-- After `git restore`, the canvas matches the file within a moment.
-- Closing napkin loses nothing. All state is in the files.
+Open Code to inspect live source. Click a line to select its node. Changes shows
+component differences against git HEAD, including a line diff and before/after
+pictures. A newly initialized sample has no HEAD until you make its first commit.
+napkin never makes commits. Review and version source through your normal git
+workflow.
 
-## Common problems and fixes
-| Problem | Fix |
-|---|---|
-| The diff is large for a small change | Report it as a bug. The file order should be stable. |
-| The canvas didn't update after `git restore` or a hand edit | Check the `napkin open` terminal for "file watcher stopped" and restart. |
-| A hand edit broke the file | napkin keeps showing the last good version and prints the line with the error. Fix the line and save. |
-| You switched git branches mid-session | The canvas reloads every changed component. Edits in flight are rejected and the agent re-reads. |
+A component's sidecar saves canvas position, identity, preview widths, and slot
+preview text. It appears when those settings need saving or a rename needs a
+stable identity. Opening, bundling, and reading do not create sidecars. Existing
+sidecars are preserved. The `.napkin/` folder holds the project writer lock; the
+sample ignores it in git. In an unconfigured repository, `open` keeps the lock
+outside the repo and disables sidecar writes unless `--write-sidecars` is set.
 
-## Limits
-- Undo is through git and your editor. In-app undo per edit isn't promised yet ([GAPS.md](GAPS.md), G5).
-- The file format, and so how your app imports a component, is not decided ([GAPS.md](GAPS.md), G1).
-- napkin doesn't store files anywhere else. Backups are your repository's job.
+Undo and redo are in the canvas. History is session memory; source and saved
+sidecars persist. Keep sidecars with components when moving files between repos.
+Hand saves reload through the file watcher. Broken source retains its last good
+render until fixed. Unsupported TSX stays read-only. An agent can propose
+adoption of supported simple components through `propose_adoption`; inspect its
+source and diff through the proposals API. Accept writes it; Reject does not.

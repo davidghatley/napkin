@@ -357,6 +357,8 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       origins.set(file, { by, summary: `created ${name}` });
       try { createComponent(file, newComponentSource(name, rootTag)); }
       catch (err) { origins.delete(file); throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
+      // Explicit creation saves its identity. Scanning existing files is read-only.
+      readSidecar(file, name, { create: writeSidecars });
       await scan();
       const e = find(name);
       if (!e) throw new Error(explainError(`created ${name}.tsx but could not open it`));
