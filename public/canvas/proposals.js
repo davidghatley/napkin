@@ -50,7 +50,7 @@ export function initProposals(ctx) {
   }
 
   // ---------------------------------------------------------------------------------------------- the tray
-  const tint = (p) => `--c:${p.color || 'var(--text-3)'};--ink:${p.ink || 'var(--text)'}`;
+  const tint = (p) => `--nk-c:${p.color || 'var(--nk-text-3)'};--nk-ink:${p.ink || 'var(--nk-text)'}`;
   function editRows(p) {
     const lines = p.lines ?? p.edits.map((e) => e.op);
     const many = p.edits.length > 1 && !p.adoption;
@@ -143,7 +143,7 @@ export function initProposals(ctx) {
     for (const u of S.unmounts) try { u(); } catch {}
     S.unmounts = []; S.mod = null;
     for (const e of document.querySelectorAll('.ghost-layer, .ghost-flag, .ghost-divider')) e.remove();
-    for (const e of document.querySelectorAll('.cell[data-ghost]')) { delete e.dataset.ghost; e.style.removeProperty('--c'); }
+    for (const e of document.querySelectorAll('.cell[data-ghost]')) { delete e.dataset.ghost; e.style.removeProperty('--nk-c'); }
     for (const e of document.querySelectorAll('section.cmp[data-ghost]')) delete e.dataset.ghost;
     ctx.emit('ghost', { proposal: null });
   }
@@ -158,14 +158,14 @@ export function initProposals(ctx) {
     sec.dataset.ghost = p.id;
     const split = S.mode === 'split' ? '50%' : '0%';
     for (const cell of sec.querySelectorAll('.cell')) {
-      cell.dataset.ghost = p.id; cell.style.setProperty('--c', p.color || 'var(--accent)');
+      cell.dataset.ghost = p.id; cell.style.setProperty('--nk-c', p.color || 'var(--nk-accent)');
       const inner = h('div', { class: 'preview-inner' });
-      cell.append(h('div', { class: 'ghost-layer', 'data-mode': S.mode, 'aria-hidden': 'true', style: `--c:${p.color || 'var(--accent)'};--split:${split}` }, inner));
-      if (S.mode === 'split') cell.append(h('div', { class: 'ghost-divider', style: `--c:${p.color || 'var(--accent)'};--split:${split}`, 'aria-hidden': 'true' }));
+      cell.append(h('div', { class: 'ghost-layer', 'data-mode': S.mode, 'aria-hidden': 'true', style: `--nk-c:${p.color || 'var(--nk-accent)'};--nk-split:${split}` }, inner));
+      if (S.mode === 'split') cell.append(h('div', { class: 'ghost-divider', style: `--nk-c:${p.color || 'var(--nk-accent)'};--nk-split:${split}`, 'aria-hidden': 'true' }));
       let variant = {}; try { variant = JSON.parse(cell.dataset.variant); } catch {}
       try { S.unmounts.push(S.mod.mount(inner, variant)); } catch (e) { inner.textContent = `could not draw: ${e.message}`; }
     }
-    sec.querySelector('.frame')?.append(h('div', { class: 'ghost-flag', role: 'status', style: `--c:${p.color || 'var(--accent)'};--ink:${p.ink || 'var(--on-accent)'}`, text: `${p.by}'s proposal${S.pickedEdit === null ? '' : ` · edit ${S.pickedEdit + 1} of ${p.edits.length}`} · ${S.mode === 'before' ? 'before (live)' : S.mode === 'split' ? 'before | after' : 'after'} · not written` }));
+    sec.querySelector('.frame')?.append(h('div', { class: 'ghost-flag', role: 'status', style: `--nk-c:${p.color || 'var(--nk-accent)'};--nk-ink:${p.ink || 'var(--nk-on-accent)'}`, text: `${p.by}'s proposal${S.pickedEdit === null ? '' : ` · edit ${S.pickedEdit + 1} of ${p.edits.length}`} · ${S.mode === 'before' ? 'before (live)' : S.mode === 'split' ? 'before | after' : 'after'} · not written` }));
     ctx.emit('ghost', { proposal: p.id, component: p.component, mode: S.mode });
   }
   async function ghost(p) {

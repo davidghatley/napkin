@@ -23,3 +23,24 @@ test('WPC-16: the banner names the edited line, and the parser line when it diff
   assert.match(r.error, new RegExp(`^Card\\.tsx has a syntax error at line ${at}; fix it .*The parser stopped at line ${at + 1}\\.$`));
   await store.close();
 });
+
+test('WPC-16: one save with an earlier valid edit plus a break names the break, and the Next hint names the same line', async () => {
+  const { fileOf } = tempRepo(['Card']);
+  const file = fileOf('Card');
+  const lines = readFileSync(file, 'utf8').split('\n');
+  const valid = lines.findIndex((l) => l.includes("gap: '12px'")) + 1; // a valid change early in the file
+  const at = lines.findIndex((l) => l.includes('<div data-n="image"')) + 1; // the break, parser trips on the next line
+  assert.ok(valid > 0 && valid < at - 5, `${valid} ${at}`);
+  const store = await openStore(file);
+  lines[valid - 1] = lines[valid - 1].replace("'12px'", "'14px'");
+  lines[at - 1] = lines[at - 1].replace(' />', ' ');
+  writeFileSync(file, lines.join('\n'));
+  const problem = (await waitFor(async () => (await store.read()).problem)).value;
+  const named = [...problem.matchAll(/\bline (\d+)/g)].map((m) => Number(m[1]));
+  assert.equal(named[0], at, `the banner names the break, not the valid edit at ${valid}: ${problem}`);
+  const secondary = problem.indexOf('parser stopped');
+  const before = secondary < 0 ? problem : problem.slice(0, secondary);
+  assert.deepEqual([...new Set([...before.matchAll(/\bline (\d+)/g)].map((m) => Number(m[1])))], [at], `banner and Next hint name one line: ${problem}`);
+  assert.match(problem, new RegExp(`parser stopped at line ${at + 1}\\b`));
+  await store.close();
+});

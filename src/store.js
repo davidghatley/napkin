@@ -26,11 +26,27 @@ const rawReason = (e) => (/^line \d+/.test(e.message) ? e.message : `line ${e.lo
 
 // WPC-16: a parser reports where it gave up, which is often the line after the edit (an unclosed tag, a missing quote). Name the first
 // line the hand edit changed as well, so the banner points at what was typed. Same line: unchanged.
-const firstChangedLine = (a, b) => { const x = a.split('\n'), y = b.split('\n'); let i = 0; while (i < x.length && i < y.length && x[i] === y[i]) i++; return i + 1; };
+// Lines of `after` that are not in `before` (an LCS line diff; a pure prefix/suffix fallback for very large files).
+function changedLines(before, after) {
+  const x = before.split('\n'), y = after.split('\n'), out = new Set();
+  let lo = 0; while (lo < x.length && lo < y.length && x[lo] === y[lo]) lo++;
+  let hx = x.length, hy = y.length; while (hx > lo && hy > lo && x[hx - 1] === y[hy - 1]) { hx--; hy--; }
+  const n = hx - lo, m = hy - lo;
+  if (n * m > 4e6) { for (let i = lo; i < hy; i++) out.add(i + 1); return out; }
+  const L = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = x[lo + i] === y[lo + j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0;
+  while (j < m) { if (i < n && x[lo + i] === y[lo + j]) { i++; j++; } else if (i < n && L[i + 1][j] >= L[i][j + 1]) i++; else { out.add(lo + j + 1); j++; } }
+  return out;
+}
+// The line to name: the parser's own line when the hand edit changed it, else the nearest changed line at or before it (an unclosed tag
+// is reported on the line after), else the first changed line after it. Everything in the message names that line; the parser's line is secondary.
 function withEditedLine(why, e, before, after) {
   const parser = e.loc?.line; if (!parser || typeof before !== 'string') return why;
-  const edited = firstChangedLine(before, after);
-  return edited < parser ? why.replace(/^line \d+/, `line ${edited}`) + ` (the parser stopped at line ${parser})` : why;
+  const changed = [...changedLines(before, after)].sort((a, b) => a - b);
+  if (!changed.length || changed.includes(parser)) return why;
+  const edited = [...changed].reverse().find((l) => l <= parser) ?? changed[0];
+  return why.replace(new RegExp(`\\bline ${parser}\\b`, 'g'), `line ${edited}`) + ` (the parser stopped at line ${parser})`;
 }
 
 // Revisions are content hashes (HIS-04): the first 16 hex digits of the sha256 of the file's bytes. They survive a server restart,

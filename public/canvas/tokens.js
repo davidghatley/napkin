@@ -4,7 +4,7 @@ import { h } from './drawer.js';
 const cssValue = v => String(v).replace(/\{([\w-]+)\}/g, 'var(--$1)');
 export async function initTokens(ctx) {
   let data = { tokens: [], modes: [] }, mode = 'light', drawerPane, table, notice, drawerSearch, drawerCount;
-  const style = h('style', { id: 'token-stage-vars' }); style.textContent = '#world .mount, #world .preview-layer {}'; document.head.append(style);
+  const style = h('style', { id: 'token-stage-vars' }); style.textContent = '#world .mount, #world .preview-inner {}'; document.head.append(style);
   const declarations = style.sheet.cssRules[0].style;
   const theme = h('select', { id: 'token-theme', 'aria-label': 'Component theme', title: 'Preview token mode in every cell', onchange: () => api.setMode(theme.value) });
   const themeLabel = h('label', { id: 'token-theme-label', hidden: true }, h('span', { text: 'Component theme' }), theme);
@@ -124,7 +124,7 @@ export async function initTokens(ctx) {
       const [id, label] = families.find(([, , match]) => match(t));
       if (`${label} ${t.name} ${t.usage} ${Object.values(t.values).join(' ')}`.toLowerCase().includes(query)) buckets.get(id).push(t);
     }
-    const row = t => h('div', { class: 'token-row', 'data-token': t.name, style: `--token-mode-count:${data.modes.length}` },
+    const row = t => h('div', { class: 'token-row', 'data-token': t.name, style: `--nk-token-mode-count:${data.modes.length}` },
       h('div', { class: 'token-info', title: t.usage }, h('strong', { text: t.name })),
       ...data.modes.map(m => h('label', { class: 'token-value' }, h('span', { class: 'token-mode', text: m + (t.value !== undefined && typeof t.value !== 'object' ? ' · shared' : '') }),
         h('div', { class: 'token-value-well' },

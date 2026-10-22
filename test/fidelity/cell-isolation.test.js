@@ -113,6 +113,14 @@ test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style 
     const g1 = JSON.parse(await canvas.eval(COLLECT('#gprobe'))), g2 = JSON.parse(await app.eval(COLLECT('#gprobe2')));
     const gbad = []; for (let i = 0; i < g1.length; i++) for (const p in g1[i][1]) if (p !== 'pointer-events' && g1[i][1][p] !== g2[i][1][p]) gbad.push(`${g1[i][0]} ${p}: ${g1[i][1][p]} vs ${g2[i][1][p]}`);
     assert.deepEqual(gbad, [], 'ghost/preview layers are isolated too');
+    // editor custom properties never reach a cell: a component's var(--accent, fallback) gets its fallback; only token variables may arrive
+    const EDITOR_VARS = 'accent accent-soft accent-text bg cell-line chrome chrome-2 chrome-3 dot frame frame-ink frame-shadow h head-line kbd line line-2 measure mono ok on-accent sans select shadow-pop text text-2 text-3 warn w c ink ls lf gz split gap gut stage panel git chip title slot out lift dir d off fh cols gcols head swatch-line stage-line dot-changed token-mode-count'.split(' ');
+    const leaks = JSON.parse(await canvas.eval(`JSON.stringify((() => { const out = [];
+      for (const host of [document.querySelector('section[data-name="Probe"] .mount'), document.querySelector('.preview-inner')]) {
+        for (const n of ${JSON.stringify(EDITOR_VARS)}) { const e = document.createElement('i'); e.style.color = 'var(--' + n + ', rgb(1, 2, 3))'; host.append(e); if (getComputedStyle(e).color !== 'rgb(1, 2, 3)') out.push(host.className + ' --' + n); e.remove(); }
+        const cs = getComputedStyle(host); for (const p of cs) if (p.startsWith('--') && !p.startsWith('--nk-')) out.push(host.className + ' defines ' + p);
+      } return out; })())`));
+    assert.deepEqual(leaks, [], 'no editor custom property (and no un-prefixed one at all, with no tokens loaded) reaches a cell or a ghost');
     await canvas.eval(`document.querySelector('.preview-layer')?.remove()`);
     // a content-box element (Plain's root has width 320 + padding 16) says so beside W
     await canvas.eval(`napkin.select({ component: napkin.find('Plain').component, node: 'card', variant: {} })`);

@@ -25,7 +25,7 @@ export function initActivity(ctx, drawer) {
 
   function dot(r) {
     const col = r.color ? r : ctx.presence?.colorOf?.(r.by) ?? {};
-    return h('span', { class: 'adot', style: col.color ? `--c:${col.color};--ink:${col.ink}` : '', text: r.by === 'file' ? '▤' : r.by === 'git' ? '⎇' : r.by[0] ?? '?', 'aria-hidden': 'true' });
+    return h('span', { class: 'adot', style: col.color ? `--nk-c:${col.color};--nk-ink:${col.ink}` : '', text: r.by === 'file' ? '▤' : r.by === 'git' ? '⎇' : r.by[0] ?? '?', 'aria-hidden': 'true' });
   }
   function draw(fresh) {
     if (!list) return;
