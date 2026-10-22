@@ -31,7 +31,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | LAY-07 | LAY | layout | pass | r2 pass: no truncation | test/23-layout-panel.test.js | a4a87dd |
 | LAY-08 | LAY | layout | pass | r2 pass; bug: colour edit rewrites alpha (fixing) | test/22-*.test.js | a4a87dd |
 | LAY-09 | LAY | layout | pass | r1 pass: pasted subtree byte-identical render | test/18-*.test.js | a4a87dd |
-| LAY-10 | LAY | layout | critic-fail | r5 fail: 14 approximations in 290 snippets; redesign: browser parse + render-verify | test/canvas/paste-html.test.js | a4a87dd |
+| LAY-10 | LAY | layout | critic-fail | r6 redesign: 47/48 exact in 5 contexts; 5 approx (write path, target context); fixing | test/24-html-paste.test.js | 577be0f |
 | LAY-11 | LAY | layout | pass | r1 pass: sidecar only, sha unchanged | test/21-*.test.js | a4a87dd |
 | CMP-01 | CMP | components | pass | r2 table redesign: Sonnet WIN; Codex napkin better both orders | test/25-components-panel.test.js | 9e66f9d |
 | CMP-02 | CMP | components | pass | r1 pass: rename 2/2 lines | test/25-components-panel.test.js | 9e66f9d |
