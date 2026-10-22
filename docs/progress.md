@@ -80,7 +80,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-01 | PRF | engine | pass | critic p50 1097; merged p50 1105 ms | docs/evidence/PRF-01.txt | da57ab8 |
 | PRF-02 | PRF | engine | pass | critic p95 <=99.5; merged p95 82.8 ms (thin margin) | docs/evidence/PRF-02.txt | da57ab8 |
 | PRF-03 | PRF | engine | pass | critic p95 87.6; merged 87.6 ms | docs/evidence/PRF-03.txt | da57ab8 |
-| PRF-04 | PRF | engine | critic | builder: 3/4 runs pass under whole-vsync reading; 0 long tasks (was 55-75 ms per wheel) | docs/evidence/PRF-04.txt | d41ac7d |
+| PRF-04 | PRF | engine | building | critic: literal raw p95 fails even on a trivial page (~18.2 ms, CPU raster jitter); whole-vsync reading passes; bench too thin (3 comps on screen, selection off-screen), titles wrong mid-gesture: fixing | docs/evidence/PRF-04.txt | d41ac7d |
 | PRF-05 | PRF | engine | pass | merged p95 8.3 ms | docs/evidence/PRF-05.txt | da57ab8 |
 | PRF-06 | PRF | engine | pass | merged ratio 0.477 | docs/evidence/PRF-06.txt | da57ab8 |
 | PRF-07 | PRF | engine | pass | merged 109 MB / 17 MB heap | docs/evidence/PRF-07.txt | da57ab8 |
@@ -172,6 +172,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 - Blind bars: two judges from different model families (Sonnet, Codex). Codex runs twice with the image order swapped; a verdict that flips counts as a tie. A row passes only when both judges give a win or tie.
 - 0005 amendment: with an `agents` key in napkin.json, unlisted names default to read; Host/Origin guard on every route.
 - WPC-04 scope: docs/decisions/*.md are dated design records and are excluded from "every TSX example in docs/" (0003 shows an elided sketch).
+- PRF-04 measure (pending David): on this machine (headless, CPU raster) even a trivial compositor-only page reads raw p95 ~18.2 ms from symmetric presentation-timestamp jitter, so the bar is read as p95 in whole vsyncs <= 16.7 ms with <= 2% missed or dropped frames. The bar text in DREAM.md is unchanged; David decides whether to accept this reading.
 
 ## Incidents
 
