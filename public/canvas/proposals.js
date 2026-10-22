@@ -198,12 +198,15 @@ export function initProposals(ctx) {
       S.news.set(p.id, mod);
     }
     if (!ctx.stage.ghostKeys().includes(p.id)) paintNews();
-    if (reveal) requestAnimationFrame(() => revealNew(p));
+    if (reveal) requestAnimationFrame(() => revealNew());
   }
-  // Bring the ghost into view when it was placed off screen (nothing moves if it is already visible).
-  function revealNew(p) {
-    const r = ctx.stage.ghostRect(p.id);
-    if (!r) return;
+  // Bring every pending ghost into view when any was placed off screen (nothing moves if they are all visible): several quick create
+  // proposals fit in one view, zooming out as far as needed.
+  function revealNew() {
+    const rs = [...S.news.keys()].filter((id) => !S.hiddenNew.has(id)).map((id) => ctx.stage.ghostRect(id)).filter(Boolean);
+    if (!rs.length) return;
+    const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h));
+    const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     const { x, y, z } = ctx.view.get(), b = ctx.view.stageBox();
     const inside = r.x * z + x >= 0 && r.y * z + y >= 0 && (r.x + r.w) * z + x <= b.width && (r.y + r.h) * z + y <= b.height;
     if (!inside) ctx.view.flyTo(r, { pad: 90, max: Math.max(1, z) });
@@ -225,7 +228,7 @@ export function initProposals(ctx) {
   // Show a proposal's result (or one edit of it) as a ghost, and bring its component fully into view in the space the tray left.
   function pick(id, edit = null) {
     const np = id && S.list.get(id);
-    if (np?.create) { S.hiddenNew.delete(id); showNew(np, true).then(() => revealNew(np)); draw(); return; } // a new component's ghost is always drawn; picking only brings it into view
+    if (np?.create) { S.hiddenNew.delete(id); showNew(np, true).then(() => revealNew()); draw(); return; } // a new component's ghost is always drawn; picking only brings it into view
     clearGhost();
     S.picked = id; S.pickedEdit = id ? edit : null;
     draw();

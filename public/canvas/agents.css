@@ -131,8 +131,8 @@
 
 /* A component an agent proposes to create: a dashed ghost frame on the canvas until the person accepts or rejects it. */
 .ghost-new { position: absolute; z-index: 3; pointer-events: none; }
-.ghost-new .gn-head { position: absolute; left: 0; bottom: 100%; margin-bottom: 10px; transform: scale(var(--lf, 1)); transform-origin: 0 100%; max-width: max(var(--w, 240px), 440px); }
-.ghost-new .gn-flag { display: inline-block; max-width: 100%; padding: 4px 10px; border-radius: 999px; background: var(--c, var(--accent)); color: var(--ink, var(--on-accent)); font: 650 11.5px/1.3 var(--sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 8px rgb(0 0 0 / .18); }
+.ghost-new .gn-head { position: absolute; left: 0; bottom: 100%; margin-bottom: 10px; transform: scale(var(--lf, 1)); transform-origin: 0 100%; width: max-content; max-width: max(var(--w, 240px), 300px); }
+.ghost-new .gn-flag { display: inline-block; max-width: 100%; padding: 4px 10px; border-radius: 12px; background: var(--c, var(--accent)); color: var(--ink, var(--on-accent)); font: 650 11.5px/1.3 var(--sans); white-space: normal; overflow-wrap: anywhere; box-shadow: 0 2px 8px rgb(0 0 0 / .18); }
 .ghost-new .gn-frame { min-width: 200px; min-height: 110px; box-sizing: border-box; outline: 2px dashed var(--c, var(--accent)); outline-offset: 6px; box-shadow: 0 8px 28px color-mix(in srgb, var(--c, var(--accent)) 28%, transparent); }
 
 #proposals-tray .pi-clash { border-left-color: var(--danger, var(--warn)); }

@@ -289,7 +289,7 @@ export function createStage(ctx, root, world, view) {
   const ghosts = new Map(); // key -> { el, frame, unmounts, pos, size }
   function ghostSlot(key, size) {
     const z = Math.min(1, view.get().z), lf = Math.min(16, Math.max(1, 1 / z));
-    const top = Math.ceil(34 * lf) + CLEAR, w = size.w, h = size.h;
+    const top = Math.ceil(52 * lf) + CLEAR, w = size.w, h = size.h;
     const others = [...sections.values()].filter((s) => s.pos).map((s) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
     for (const [k, g] of ghosts) if (k !== key && g.pos) others.push({ x: g.pos.x, y: g.pos.y - top, w: g.size.w, h: g.size.h + top });
     const sw = Math.max(SHELF_W, w);

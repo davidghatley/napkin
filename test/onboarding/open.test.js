@@ -98,7 +98,7 @@ test('OPN-03: adoption obeys identity and permissions; only acceptance calls sto
   const ws = await openWorkspace(dir, { recursive: true, writeSidecars: false }), api = createApi(ws);
   const calls = [], store = ws.find('Greeting').store, original = store.apply.bind(store);
   store.apply = (request) => { calls.push(request); return original(request); };
-  const before = hashes(dir);
+  const before = hashes(dir, { ignorePrivate: true }); // a napkin.json makes this folder a project: its proposals live in .napkin
   const call = (path, token, body = {}) => api.handle({ method: 'POST', path, token, body });
   try {
     const viewer = api.session('viewer').json.token, scout = api.session('scout').json.token, you = api.session('you').json.token;
@@ -107,7 +107,7 @@ test('OPN-03: adoption obeys identity and permissions; only acceptance calls sto
     const proposal = (await call('/api/components/Greeting/adoption', scout)).json.proposal;
     assert.equal(calls.length, 0);
     assert.equal((await call(`/api/proposals/${proposal.id}/accept`, scout)).status, 403);
-    assert.deepEqual(hashes(dir), before);
+    assert.deepEqual(hashes(dir, { ignorePrivate: true }), before);
     assert.equal((await call(`/api/proposals/${proposal.id}/accept`, you)).status, 200);
     assert.equal(calls.length, 1); assert.equal(calls[0].by, 'scout');
     assert.equal(store.history()[0].by, 'scout');

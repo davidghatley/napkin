@@ -71,3 +71,21 @@ test('a name clash shows on the tray row at once with a plain reason; Accept nev
     await browser.waitFor(`napkin.proposals.list().length === 0`);
   } finally { await p.close(); }
 });
+
+test('several quick create proposals: every ghost is on screen on arrival and every flag shows the whole component name', { timeout: 120000 }, async () => {
+  const p = await openAgents(['Button', 'Card', 'Chip']);
+  const { q, browser } = p;
+  try {
+    const claude = await p.agent('claude');
+    const names = ['Tooltip', 'NotificationBadgeWithCounter', 'Popover', 'Breadcrumbs', 'SegmentedControlGroup'];
+    await Promise.all(names.map((name) => http(p.server.url, '/api/components', { method: 'POST', token: claude.token, body: { name, propose: true } })));
+    await browser.waitFor(`document.querySelectorAll('.ghost-new [data-n="root"]').length === ${names.length}`);
+    await sleep(1200);
+    const g = await q(`(() => { const stage = document.querySelector('#stage').getBoundingClientRect();
+      return [...document.querySelectorAll('.ghost-new')].map((e) => { const f = e.querySelector('.gn-frame').getBoundingClientRect(), fl = e.querySelector('.gn-flag');
+        return { inStage: f.left >= stage.left && f.top >= stage.top && f.right <= stage.right && f.bottom <= stage.bottom, flagOk: fl.scrollWidth <= fl.clientWidth + 1 && fl.scrollHeight <= fl.clientHeight + 1, text: fl.textContent }; }); })()`);
+    assert.equal(g.length, names.length);
+    for (const x of g) { assert.equal(x.inStage, true, JSON.stringify(g)); assert.equal(x.flagOk, true, JSON.stringify(x)); }
+    for (const n of names) assert.ok(g.some((x) => x.text.includes(`new component ${n} ·`)), n);
+  } finally { await p.close(); }
+});

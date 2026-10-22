@@ -54,7 +54,7 @@ const resolvedNotice = (f) => {
     const n = { proposal: f.id, component: f.component, summary: f.summary, outcome: 'blocked', by: null, final: false, reason: f.reason };
     pendingResolved.push(n); wake(); send({ method: 'notifications/napkin/resolved', params: n }); return;
   }
-  const n = { proposal: f.id, component: f.component, summary: f.summary, outcome: final ? f.outcome : f.status === 'accepted' ? 'partly accepted' : 'partly rejected', by: f.by ?? null, final,
+  const n = { at: f.at, proposal: f.id, component: f.component, summary: f.summary, outcome: final ? f.outcome : f.status === 'accepted' ? 'partly accepted' : 'partly rejected', by: f.by ?? null, final,
     ...(final ? { accepted: f.accepted, rejected: f.rejected } : { [f.status === 'accepted' ? 'accepted' : 'rejected']: f.edits, remaining: f.remaining }),
     ...(f.revision !== undefined && { revision: f.revision }), ...(f.created && { created: f.created }), ...(f.reason && { reason: f.reason }) };
   pendingResolved.push(n); if (pendingResolved.length > 200) pendingResolved.shift();
@@ -68,7 +68,7 @@ const notice = (ch) => {
   send({ method: 'notifications/napkin/change', params: n });
 };
 
-let catchUp = () => {}, catching = Promise.resolve(); // catching: the fetch of answers given while the stream was down; subscribe waits for it
+let ackAnswers = () => {}, catchUp = () => {}, catching = Promise.resolve(); // catching: the fetch of answers given while the stream was down; subscribe waits for it
 class Unreachable extends Error { constructor(message) { super(explainError(message, { next: "run node src/cli.js open and set NAPKIN_URL to its printed address." })); } }
 async function makeRemote() {
   const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) }).catch((e) => { throw new Unreachable(e.message); });
@@ -90,14 +90,17 @@ async function makeRemote() {
   };
   await newSession();
   // After the stream comes back (a server restart), answers given while it was down are fetched, so none is lost (WPC-19/20).
-  catchUp = () => { catching = fetchAnswers(); };
-  const fetchAnswers = async () => {
+  catchUp = () => { catching = fetchAnswers(lastAt); };
+  // A fresh process asks with no `since`: the server gives everything this agent name has not acknowledged (answers given while no process ran).
+  const fetchAnswers = async (since) => {
     try {
-      const r = await authed(new URL(`api/proposals/answered?by=${encodeURIComponent(AGENT)}&since=${lastAt}`, BASE), { method: 'GET', headers: {} });
+      const r = await authed(new URL(`api/proposals/answered?by=${encodeURIComponent(AGENT)}${since === undefined ? '' : `&since=${since}`}`, BASE), { method: 'GET', headers: {} });
       const list = await r.json();
       if (Array.isArray(list)) for (const f of list) resolvedNotice(f);
     } catch { /* the next reconnect tries again */ }
   };
+  catching = fetchAnswers();
+  ackAnswers = (at) => authed(new URL(`api/proposals/answered?by=${encodeURIComponent(AGENT)}&ack=${at}`, BASE), { method: 'GET', headers: {} }).catch(() => {});
   const refused = async (r) => r.status === 401 && /identity required/.test(await r.clone().text().catch(() => ''));
   const refusedToConnect = (e) => ['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET'].includes(e?.cause?.code ?? e?.code);
   // fetch with the current token; one fresh session on an identity refusal; a few short waits while the server is coming back
@@ -201,6 +204,8 @@ async function callTool(name, a = {}) {
         got = got.concat(drain(pending)); res = drain(pendingResolved);
       }
     }
+    const top = Math.max(0, ...res.map((n) => n.at || 0));
+    if (top) ackAnswers(top); // the server remembers what this agent has heard
     return { changes: got, resolved: res };
   }
   if (name === 'apply_edits' || name === 'add_variant') {
