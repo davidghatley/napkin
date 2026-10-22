@@ -1,0 +1,7 @@
+PRF-01
+PASS: p50 1043 ms (bar <= 1500 ms), p95 1060 ms, five cold opens of 40 components.
+
+Re-run: node bench/perf.js --id PRF-01
+Measured: 2026-10-22T05:42:07.577Z
+v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
+Raw samples and method: docs/evidence/PRF-01.json

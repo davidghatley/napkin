@@ -1,0 +1,242 @@
+{
+  "id": "REL-04",
+  "command": "node bench/soak.js --duration 1800 --size 200 --interval 1000 --seed 1729",
+  "machine": {
+    "at": "2026-10-22T06:13:26.247Z",
+    "node": "v26.8.2",
+    "chromium": "Chromium 152.0.7977.82 Arch Linux",
+    "os": "linux 7.2.5-3-omarchy",
+    "cpu": "12th Gen Intel(R) Core(TM) i5-12500",
+    "logicalCPUs": 12,
+    "gpu": false
+  },
+  "sourceHashes": {
+    "src/server.js": "bcb5339f1b12e565a026ac02208039117583ad3def92479ca5b00d1951ec1d67",
+    "src/workspace.js": "720582422763b69f965723cd7f16934805ed59a1532ac549c0af09f5cf9f74ef",
+    "src/bundle.js": "0dfbdecdd9a91e3b537e37f87bd259d81d0c88f8ae4f941ff1c948395422dc70",
+    "src/store.js": "f97d5b96e277ea22b39fea4905d3bef051298cfa236ba0113cd0a46bc80b544b",
+    "src/api.js": "37585ef3907e505190b6286c7ecc2f6b719131c4d7fd35daae75ea22c22bb527",
+    "src/canvas-client.js": "a826a952cd152bffbb1077c7554a0957a2b52e903b2e8202960006335ba3fcc7",
+    "src/codecs.js": "e395049f196a546880adc7d6d4fbaec3f774a9d80ad9f8738a6baa850f0c65e1",
+    "src/tsx/read.js": "62c1fff442baf73f71e1940f61dafbb85871b17724eadceba1341fbb7ecc1891",
+    "src/tsx/write.js": "567b0d19c8f0179a17fa6275d018df5610c89ce807550c1b2ff0faaf3499d61b",
+    "public/canvas/main.js": "281273e8052ea6699d737ad887b08ac7635e78b0a29ed386b943440f3f74b879",
+    "public/canvas/stage.js": "1341e55fd2bfd593fb94115d69db1a8a2f37a839a5f156e71ff71e6a137a8b0d",
+    "public/canvas/panel.js": "0f0fc6d59138958d280396ed199aa23eea293a64bc545bae758c04bbf0fb2187",
+    "public/canvas/view.js": "6ff8d9e7cdf99c6d8340a4d11286a5804ea2aedd9eb4b563b918e4f2ca194b0a",
+    "bench/common.js": "e30050192376eea445567f2e7cb5619c37a51ae1e140102bc0b1b406cd665882",
+    "bench/corpus.js": "544f596855a8c21532e3266655deb224b03baf50dc6d0b573cdaf237efd5e479",
+    "bench/perf.js": "c3e03aaa21887f5f8db4d255c41cdb7299f9882026c05e9c2000a89aa8567f6d",
+    "bench/soak.js": "6b9541054c6a563964754ce425ca990980b1e33b06c49e1779dcfff10a49c0c9",
+    "test/helpers/cdp.js": "5d5cacd9c44f8a1ae2278d1ee02cbdab00b6f1f37dc18f481e7a7e6338c83b27",
+    "test/helpers/harness.js": "eb9b148a86663724040667b2e2530c78d77f670f450b2c1d81d41380fd7bc313"
+  },
+  "pass": true,
+  "duration": 1800,
+  "elapsedSeconds": 1800.193032043,
+  "size": 200,
+  "cells": 1131,
+  "interval": 1000,
+  "seed": 1729,
+  "operations": 3660,
+  "staleRetries": 0,
+  "validationCount": 6200,
+  "baselineRSSMB": 124.859375,
+  "peakRSSMB": 140.35546875,
+  "growthPercent": 12.410837191840818,
+  "samples": [
+    {
+      "seconds": 0,
+      "rssMB": 124.859375,
+      "heapMB": 27.79035186767578
+    },
+    {
+      "seconds": 60.259808971,
+      "rssMB": 125.6875,
+      "heapMB": 17.043498992919922,
+      "operations": 220
+    },
+    {
+      "seconds": 120.19037796999999,
+      "rssMB": 125.640625,
+      "heapMB": 17.86175537109375,
+      "operations": 338
+    },
+    {
+      "seconds": 180.19161536200002,
+      "rssMB": 126.1953125,
+      "heapMB": 17.997074127197266,
+      "operations": 456
+    },
+    {
+      "seconds": 240.182785007,
+      "rssMB": 126.2421875,
+      "heapMB": 17.297821044921875,
+      "operations": 576
+    },
+    {
+      "seconds": 300.194770242,
+      "rssMB": 126.80859375,
+      "heapMB": 17.26468276977539,
+      "operations": 694
+    },
+    {
+      "seconds": 360.182376978,
+      "rssMB": 127.09375,
+      "heapMB": 16.89712905883789,
+      "operations": 812
+    },
+    {
+      "seconds": 420.21854917900004,
+      "rssMB": 127.16015625,
+      "heapMB": 17.41781997680664,
+      "operations": 932
+    },
+    {
+      "seconds": 480.181966192,
+      "rssMB": 127.20703125,
+      "heapMB": 17.694778442382812,
+      "operations": 1050
+    },
+    {
+      "seconds": 540.1925525739999,
+      "rssMB": 127.48828125,
+      "heapMB": 17.65837860107422,
+      "operations": 1168
+    },
+    {
+      "seconds": 600.18749641,
+      "rssMB": 132.3125,
+      "heapMB": 17.62836456298828,
+      "operations": 1286
+    },
+    {
+      "seconds": 660.18908873,
+      "rssMB": 132.859375,
+      "heapMB": 17.55691909790039,
+      "operations": 1404
+    },
+    {
+      "seconds": 720.197482396,
+      "rssMB": 132.3984375,
+      "heapMB": 16.586517333984375,
+      "operations": 1524
+    },
+    {
+      "seconds": 780.1897607530001,
+      "rssMB": 133.32421875,
+      "heapMB": 16.604644775390625,
+      "operations": 1642
+    },
+    {
+      "seconds": 840.1888145119999,
+      "rssMB": 133.6953125,
+      "heapMB": 16.785400390625,
+      "operations": 1760
+    },
+    {
+      "seconds": 900.187683754,
+      "rssMB": 134.8046875,
+      "heapMB": 16.880844116210938,
+      "operations": 1878
+    },
+    {
+      "seconds": 960.188125292,
+      "rssMB": 135.27734375,
+      "heapMB": 17.391849517822266,
+      "operations": 1998
+    },
+    {
+      "seconds": 1020.194179238,
+      "rssMB": 137.04296875,
+      "heapMB": 17.63074493408203,
+      "operations": 2116
+    },
+    {
+      "seconds": 1080.1926037269998,
+      "rssMB": 135.6953125,
+      "heapMB": 17.803504943847656,
+      "operations": 2234
+    },
+    {
+      "seconds": 1140.178141604,
+      "rssMB": 136.37109375,
+      "heapMB": 16.720924377441406,
+      "operations": 2352
+    },
+    {
+      "seconds": 1200.1831664659999,
+      "rssMB": 136.54296875,
+      "heapMB": 17.15304183959961,
+      "operations": 2472
+    },
+    {
+      "seconds": 1260.1830397329998,
+      "rssMB": 136.58203125,
+      "heapMB": 17.338607788085938,
+      "operations": 2590
+    },
+    {
+      "seconds": 1320.1854967129998,
+      "rssMB": 137.20703125,
+      "heapMB": 17.880443572998047,
+      "operations": 2708
+    },
+    {
+      "seconds": 1380.1777227889997,
+      "rssMB": 138.0703125,
+      "heapMB": 17.006080627441406,
+      "operations": 2826
+    },
+    {
+      "seconds": 1440.179806715,
+      "rssMB": 138.1640625,
+      "heapMB": 16.85137939453125,
+      "operations": 2946
+    },
+    {
+      "seconds": 1500.1782975929998,
+      "rssMB": 139.03125,
+      "heapMB": 17.095256805419922,
+      "operations": 3064
+    },
+    {
+      "seconds": 1560.1817877839999,
+      "rssMB": 139.2578125,
+      "heapMB": 17.828670501708984,
+      "operations": 3182
+    },
+    {
+      "seconds": 1620.1885138599998,
+      "rssMB": 139.7578125,
+      "heapMB": 17.42613983154297,
+      "operations": 3302
+    },
+    {
+      "seconds": 1680.182492171,
+      "rssMB": 140.01171875,
+      "heapMB": 17.512039184570312,
+      "operations": 3420
+    },
+    {
+      "seconds": 1740.1842519119998,
+      "rssMB": 140.27734375,
+      "heapMB": 17.841022491455078,
+      "operations": 3538
+    },
+    {
+      "seconds": 1800.1905963959998,
+      "rssMB": 140.35546875,
+      "heapMB": 17.95203399658203,
+      "operations": 3660
+    },
+    {
+      "seconds": 1800.193032043,
+      "rssMB": 140.35546875,
+      "heapMB": 17.962860107421875,
+      "operations": 3660
+    }
+  ],
+  "errors": [],
+  "method": "200 real components, full grids; 100 warmup edits then timed soak; two HTTP agents pick seeded random valid set/setDefault edits; each accepted revision or a newer coalesced revision must draw; all files parsed each minute and at end; RSS growth uses maximum sampled server RSS vs warmed baseline. esbuild child RSS is separate from server RSS."
+}

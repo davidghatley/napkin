@@ -1,0 +1,7 @@
+PRF-06
+PASS: edit #1 18.61 ms; edit #2000 9.18 ms; ratio 0.493 (<= 2). Mean of the last 100 / first 100: 0.936.
+
+Re-run: node bench/perf.js --id PRF-06
+Measured: 2026-10-22T05:42:57.752Z
+v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
+Raw samples and method: docs/evidence/PRF-06.json

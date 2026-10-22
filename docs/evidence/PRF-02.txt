@@ -1,0 +1,7 @@
+PRF-02
+PASS: panel edit to pixels p50 73.6 ms, p95 74.6 ms (bar < 100 ms); 1131 cells; 0/30 timeouts.
+
+Re-run: node bench/perf.js --id PRF-02
+Measured: 2026-10-22T05:42:17.612Z
+v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
+Raw samples and method: docs/evidence/PRF-02.json
