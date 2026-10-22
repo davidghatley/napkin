@@ -128,7 +128,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       let p;
       try { p = await consumerPlan(e, req); } catch (err) { return { ok: false, error: explainError(`invalid edit #0: ${err.message}`) }; }
       if (!p) return raw(req, meta);
-      if (p.error) return { ok: false, error: `invalid edit #0: ${p.error}` };
+      if (p.error) return { ok: false, error: explainError(`invalid edit #0: ${p.error}`) };
       if (req.dryRun) return raw(req, meta);
       const names = p.plan.map((x) => x.user.name);
       const what = req.edits.filter((x) => SHAPE_OPS.has(x?.op)).map((x) => (x.op === 'renameProp' ? `${x.name} to ${x.to}` : x.op === 'renameVariant' ? `${x.axis}=${x.value} to ${x.to}` : `${x.axis ?? x.name}`)).join(', ');
@@ -140,7 +140,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       for (const { user, edits } of p.plan) {
         let res;
         try { res = await user.store.apply({ baseRevision: (await user.store.read()).revision, edits, by: req.by, origin: req.origin }, { summary: `renamed ${e.name} ${what} (${user.name} follows)` }); }
-        catch (err) { res = { ok: false, error: err.message }; }
+        catch (err) { res = { ok: false, error: `${err.message}. Next: retry` }; }
         if (!res.ok) { // put everything back, newest first, the host last
           const back = `rolled back: ${user.name} could not follow ${e.name} ${what}`;
           for (const d of done.reverse()) await d.store.revert(before.get(d), req.by, back).catch(() => {});
