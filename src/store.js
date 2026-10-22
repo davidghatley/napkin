@@ -170,6 +170,7 @@ export async function openStore(file, start = {}) {
         return { ok: false, error: `stale revision: ${basename(file)} changed on disk while saving; reread and retry`, currentRevision: revision, plain: true };
       }
     }
+    if (saved.text === text && !meta.kind && edits.every((e) => e?.op === 'move')) { state = saved.state; return { ok: true, revision, doc, noop: true }; } // a move to the place the node already has: no new revision, nothing to undo (a set to the same value still counts as a claim on that key)
     text = saved.text; state = saved.state;
     commit(next, keys, by, edits, origin, meta);
     if (meta.kind !== 'undo' && meta.kind !== 'redo') { // an ordinary edit (or a restore) can be undone, and it ends this caller's redo line
@@ -241,6 +242,23 @@ export async function openStore(file, start = {}) {
     return applyRetrying({ baseRevision: revision, edits, by, origin }, { restoreText: t.text, kind: 'restore', restoreOf: target, summary: `restore to r${target}: ${t.summary}` });
   }
 
+  // Server-internal: a change that spanned several files failed in a later one, so this file goes back to exactly the text it had at `target`
+  // (a new revision by the caller, never a rewrite of history). Undo cannot do this for renames, which it cannot reverse exactly.
+  function revertNow(target, by, summary) {
+    if (readOnly) return refuse(`read-only: ${readOnly}`);
+    const i = where(target), t = history[i];
+    if (!t?.text) return refuse(`revision ${target} is not in the history this server keeps`);
+    if (t.text === text) return { ok: true, revision, doc, noop: true };
+    let loaded;
+    try { loaded = codec.load(t.text, file, { ...start, writeSidecars: false }); } catch (e) { return refuse(`cannot go back: ${reason(e)}`); }
+    const keys = new Set(history.slice(i + 1).flatMap((h) => [...h.keys]));
+    try { writeComponent(file, t.text, { guard: text, check: () => { let now; try { now = readFileSync(file, 'utf8'); } catch { return; } if (now !== text) throw new Raced(); } }); }
+    catch (e) { if (e instanceof Raced || e instanceof HandSave) { absorbDisk(); return refuse(`stale revision: ${basename(file)} changed on disk while going back`); } throw e; }
+    text = t.text; state = loaded.state;
+    commit(loaded.doc, keys, by, undefined, undefined, { kind: 'revert', summary });
+    return { ok: true, revision, doc };
+  }
+
   const settle = () => { queue = queue.then(() => { absorbDisk(); }).catch(() => {}); };
   // The directory, not the file: an atomic rename (ours or git's) replaces the inode.
   const watcher = watch(dirname(file), (_, name) => {
@@ -264,12 +282,13 @@ export async function openStore(file, start = {}) {
     events,
     async read() { await queue; return { revision, doc, source: text, classification, ...(readOnly && { readOnly }), ...(broken && { problem: broken }) }; },
     // meta is for the server's own callers (approvedBy); HTTP bodies never reach it.
-    apply(req, meta = {}) { const p = queue.then(() => { const r = applyRetrying(req, { approvedBy: meta.approvedBy }); if (!r.ok && !r.problem && !r.plain) r.error = explainError(r.error, { file: displayFile }); return r; }); queue = p.catch(() => {}); return p; },
+    apply(req, meta = {}) { const p = queue.then(() => { const r = applyRetrying(req, { approvedBy: meta.approvedBy, ...(meta.summary && { summary: meta.summary }) }); if (!r.ok && !r.problem && !r.plain) r.error = explainError(r.error, { file: displayFile }); return r; }); queue = p.catch(() => {}); return p; },
     // Look at the disk now; resolves null when the file is fine, else the reason it does not parse (file-level writes ask before they touch it).
     sync() { const p = queue.then(() => absorbDisk()); queue = p.catch(() => {}); return p; },
     moveCanvas(x, y) { const p = queue.then(() => moveCanvas(x, y)); queue = p.catch(() => {}); return p; },
     undo(by, origin, opts = {}) { const p = queue.then(() => undoNow(by, origin, !!opts.skip)); queue = p.catch(() => {}); return p; },
     redo(by, origin, opts = {}) { const p = queue.then(() => redoNow(by, origin, !!opts.skip)); queue = p.catch(() => {}); return p; },
+    revert(target, by, summary) { const p = queue.then(() => revertNow(target, by, summary)); queue = p.catch(() => {}); return p; },
     restore(target, by, origin) { const p = queue.then(() => restoreNow(target, by, origin)); queue = p.catch(() => {}); return p; },
     // Everything a restore to `rev` would take back: the revisions after it, [{ revision, by, summary, kind }], oldest first; null if unknown.
     overwrittenBy(rev) { const i = where(rev); return i < 0 ? null : history.slice(i + 1).map((h) => ({ revision: h.revision, by: h.by, summary: h.summary, kind: h.kind })); },

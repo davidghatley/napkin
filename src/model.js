@@ -89,6 +89,7 @@ export function touched(edits) {
       case 'rename': keys.add(`node:${e.id}`); keys.add(`node:${e.to}`); break;
       case 'insertInstance': keys.add(`children:${e.parent}`); keys.add(`node:${e.id}`); break;
       case 'swapInstance': keys.add(`node:${e.id}`); break;
+      case 'renameInstanceProp': case 'renameInstanceValue': keys.add(`uses:${e.component}`); break;
       case 'move': keys.add(`node:${e.id}`); keys.add(`children:${e.parent}`); break;
       case 'duplicate': case 'paste': keys.add(`children:${e.op === 'paste' ? e.parent : `of:${e.id}`}`); break;
       case 'wrap': for (const id of e.ids || []) keys.add(`node:${id}`); keys.add(`node:${e.id}`); keys.add(`children:of:${e.ids?.[0]}`); break;
@@ -460,6 +461,19 @@ export function applyEdits(doc, edits) {
         if (typeof e.component !== 'string' || !COMPONENT_NAME.test(e.component)) throw new EditError(i, `bad component name "${e.component}"`);
         if (e.component === next.name) throw new EditError(i, `${next.name} cannot use itself`);
         node.tag = e.component; node.instance.component = e.component;
+        break;
+      }
+      // The workspace's own ops, sent to the components that use another one when that one renames a prop or a variant value.
+      case 'renameInstanceProp': { // {component, name, to}: every instance of `component` passes `to` where it passed `name` (same place in the tag)
+        for (const n of byId.values()) {
+          if (n.instance?.component !== e.component || !(e.name in n.instance.props)) continue;
+          if (e.to in n.instance.props) throw new EditError(i, `"${n.id}" already passes ${e.to}`);
+          n.instance.props = Object.fromEntries(Object.entries(n.instance.props).map(([k, v]) => [k === e.name ? e.to : k, v]));
+        }
+        break;
+      }
+      case 'renameInstanceValue': { // {component, axis, value, to}: instances that pass the value as text pass the new one
+        for (const n of byId.values()) if (n.instance?.component === e.component && n.instance.props[e.axis] === e.value) n.instance.props[e.axis] = e.to;
         break;
       }
       case 'renameProp': { // {name, to}: the prop, every element that shows it, and (for a variant axis) its overrides

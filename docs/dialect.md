@@ -97,11 +97,13 @@ Files napkin creates, and the lines it writes into others, match prettier 3.9.9 
 |---|---|
 | set style (change / add / remove one property) | 1/1, 1/0, 0/1 (+2 if its node gets or loses a block) |
 | set text, set `src`/`alt` | 1/1 |
-| setDefault | 1/1 |
+| setDefault | 1/1, or the whole parameter list when the signature changes layout (a default that makes it too long splits it one prop per line; a shorter one lets it collapse back to one line when it fits in 80 columns) |
+| addProp / removeProp | the interface member + the parameter list (one line, or the whole list when it splits or collapses the same way) |
 | addVariant value | 1/1 (the union line) + the new value block only when you add overrides |
 | override | +1 per property (+2 per new wrapper block: node, value, axis) |
 | rename prop / variant value | only the lines that name it |
-| move node | its own JSX lines |
+| move node | its own JSX lines; a move to the place the node already has changes nothing and makes no revision |
+| rename a prop or variant value of a used component | the host's lines, plus one line in each consumer (the attribute is renamed in place; the tag is laid out again if the longer name no longer fits) |
 | canvas position | sidecar only (1-2 lines) |
 
 | set / clear a condition | 1/1 when the line stays on one line; else the element is indented inside `{flag && (` ... `)}` (its lines + 2 added, its lines removed) |
@@ -121,3 +123,4 @@ Adjacent changed lines conflict in any git merge, so two branches editing neighb
 - An instance with a conditional wrapper, edited so its tag stops fitting, is laid out again (its lines + 2).
 - Slot text shown on the canvas is a preview kept in the sidecar (`slots`), never in the `.tsx`.
 - The dialect needs `const v` in every component; a file without it is read-only.
+- Changing a component that others use: `renameProp` and `renameVariant` also rewrite what every consumer passes (the host first, then the consumers in name order, one revision per file, all with the same summary; if a consumer cannot be written the others are put back). `removeProp` and `removeVariant` are refused while a consumer passes the prop or value, e.g. `Card.footer is passed by Shell (line 30); remove it there first`. A consumer that is read-only stops the change before anything is written. Undo of such a rename in the host alone is not coordinated with the consumers.
