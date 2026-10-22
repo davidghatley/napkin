@@ -54,14 +54,14 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | OPN-04 | OPN | open | pass | r2 0/61 editable; address in 223 ms on 3674 files | docs/evidence/OPN-04.txt | ec22ab6 |
 | AGT-01 | AGT | agents | pass | r2 pass: 10 tools, oneOf schema | test/mcp/schema.test.js | ed6ea70 |
 | AGT-02 | AGT | agents | pass | r2 pass: p95 82 ms; 8-way p95 335 ms | docs/evidence/AGT-02.txt | ed6ea70 |
-| AGT-03 | AGT | agents-ui | critic-pass | r2 critic pass; tag overlap defect being fixed | test/agents-ui/presence.test.js | c033a57 |
-| AGT-04 | AGT | agents | pass | r2 pass (server/MCP); canvas UI later | test/agents/propose.test.js | ed6ea70 |
+| AGT-03 | AGT | agents-ui | pass | r2 critic pass; clears 0.7 s; tags lifted apart | test/agents-ui/presence.test.js | 8a99adb |
+| AGT-04 | AGT | agents | pass | r2 pass server + canvas UI (ghost, per-edit accept/reject) | test/agents-ui/proposals.test.js | 8a99adb |
 | AGT-05 | AGT | agents | pass | r3 pass; follow-ups: git attribution, approver in history | test/agents/identity.test.js | ed6ea70 |
 | AGT-06 | AGT | agents | pass | r2 pass 100/100 | docs/evidence/AGT-06.txt | ed6ea70 |
 | AGT-07 | AGT | agents | pass | r2 pass 16/16; guide = 2.3x fewer turns | docs/evidence/AGT-07.txt | ed6ea70 |
 | AGT-08 | AGT | agents | pass | r2 pass; server lock | test/mcp/fallback.test.js | ed6ea70 |
-| AGT-09 | AGT | agents | pass | r1 pass (data); UI later | test/agents/attribution.test.js | ed6ea70 |
-| AGT-10 | AGT | agents | pass | r1 pass (server); chip UI later | test/agents/attribution.test.js | ed6ea70 |
+| AGT-09 | AGT | agents | pass | data + UI: row in 14 ms, click focuses | test/agents-ui/activity.test.js | 8a99adb |
+| AGT-10 | AGT | agents | pass | server + clash chip UI | test/agents-ui/clash.test.js | 8a99adb |
 | AGT-11 | AGT | agents | pass | r3 pass (0005 amendment) | test/agents/identity.test.js | ed6ea70 |
 | HIS-01 | HIS | history | pass | r2 pass: 5 fast undos; precise conflicts; skip | test/history/undo.test.js | 0494065 |
 | HIS-02 | HIS | history | pass | r1 pass 100/100 | test/history/undo.test.js | 0494065 |
