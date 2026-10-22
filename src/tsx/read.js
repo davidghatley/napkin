@@ -111,6 +111,13 @@ export function locate(ast) {
   return parts;
 }
 
+// The JSDoc comment right above an interface member is the prop's description (one line; several lines are joined with spaces).
+function descriptionOf(m) {
+  const c = [...(m.leadingComments || [])].reverse().find((x) => x.type === 'CommentBlock' && x.value.startsWith('*'));
+  if (!c) return '';
+  return c.value.replace(/^\*/, '').split('\n').map((l) => l.replace(/^\s*\*?\s?/, '').trim()).filter(Boolean).join(' ');
+}
+
 function readProps(parts) {
   const props = [];
   const defaults = new Map();
@@ -137,6 +144,8 @@ function readProps(parts) {
       prop = { name, type: 'enum', options: [t.literal.value] };
     } else throw new DialectError(m, `prop ${name}: type must be string, boolean or a union of strings`);
     if (defaults.has(name)) prop.default = defaults.get(name);
+    const note = descriptionOf(m);
+    if (note) prop.description = note;
     if (prop.type === 'enum') {
       if (!defaults.has(name)) throw new DialectError(m, `variant axis ${name} needs a default (its base value)`);
       if (!prop.options.includes(prop.default)) throw new DialectError(m, `default for ${name} is not one of its values`);

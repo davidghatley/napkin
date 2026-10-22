@@ -123,13 +123,19 @@ function typeText(p, indent, unit, eol, name) {
 }
 
 // --- the interface ---
+// A description is the JSDoc comment right above a member: `/** text */` on one line.
+const JSDOC = /[ \t]*\/\*\*[\s\S]*?\*\/[ \t]*\r?\n/g;
+const docLine = (indent, text, eol) => `${indent}/** ${text} */${eol}`;
+// The JSDoc block in the text above a member (its last match), if any.
+function jsdocIn(pre) { let last = null; for (const m of pre.matchAll(JSDOC)) last = m; return last; }
 function ifaceSplices(text, parts, before, after, st) {
   const iface = parts.iface;
-  if (!iface || same(before.props.map((p) => [p.name, p.type, p.options]), after.props.map((p) => [p.name, p.type, p.options]))) return [];
+  const key = (p) => [p.name, p.type, p.options, p.description];
+  if (!iface || same(before.props.map(key), after.props.map(key))) return [];
   const eol = text.includes('\r\n') ? '\r\n' : '\n';
   const outer = lineIndent(text, parts.ifaceStmt.start);
   const indent = parts.iface.body.body.length ? indentOfLine(text, parts.iface.body.body[0].start) : outer + st.unit;
-  const member = (p) => `${indent}${p.name}?: ${typeText(p, indent, st.unit, eol, p.name)};`;
+  const member = (p) => `${p.description ? docLine(indent, p.description, eol) : ''}${indent}${p.name}?: ${typeText(p, indent, st.unit, eol, p.name)};`;
   const body = iface.body;
   const members = body.body;
   if (!after.props.length) return members.length ? [{ start: body.start, end: body.end, text: '{}' }] : [];
@@ -138,17 +144,47 @@ function ifaceSplices(text, parts, before, after, st) {
   }
   const was = new Map(before.props.map((p) => [p.name, p]));
   const now = new Map(after.props.map((p) => [p.name, p]));
-  const out = [];
   const renamed = new Map(st.renames.props);
-  for (const m of members) {
-    const name = keyName(m.key), p = now.get(renamed.get(name) ?? name), old = was.get(name);
-    if (!p) out.push({ start: lineStart(text, m.start), end: lineEnd(text, m.end), text: '' });
-    else if (old && old.name !== p.name && old.type === p.type && same(old.options, p.options)) out.push({ start: m.key.start, end: m.key.end, text: p.name }); // a rename: only the name changes
-    else if (old && (old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member(p).slice(indent.length) });
+  const nameAfter = (m) => renamed.get(keyName(m.key)) ?? keyName(m.key);
+  // Where each member's own lines are: the text above it (comments), then its line(s).
+  const spans = members.map((m, i) => ({ m, from: i ? lineEnd(text, members[i - 1].end) : lineEnd(text, body.start), line: lineStart(text, m.start), to: lineEnd(text, m.end) }));
+  const kept = spans.filter((x) => now.has(nameAfter(x.m)));
+  const keptNames = kept.map((x) => nameAfter(x.m));
+  // The members that stay change their order: the interior is written again from the members' own text, in the new order.
+  if (keptNames.join() !== after.props.map((p) => p.name).filter((n) => keptNames.includes(n)).join()) {
+    const chunk = (x) => {
+      const p = now.get(nameAfter(x.m)), old = was.get(keyName(x.m.key));
+      let pre = text.slice(x.from, x.line), line = text.slice(x.line, x.to);
+      if (old && (old.type !== p.type || !same(old.options, p.options))) line = member({ ...p, description: undefined }) + eol;
+      else if (old && old.name !== p.name) line = line.replace(keyName(x.m.key), p.name);
+      if (old && old.description !== p.description) {
+        const j = jsdocIn(pre);
+        if (j && p.description) pre = pre.slice(0, j.index) + docLine(indent, p.description, eol) + pre.slice(j.index + j[0].length);
+        else if (j) pre = pre.slice(0, j.index) + pre.slice(j.index + j[0].length);
+        else if (p.description) pre += docLine(indent, p.description, eol);
+      }
+      return pre + line;
+    };
+    const byName = new Map(kept.map((x) => [nameAfter(x.m), x]));
+    const interior = after.props.map((p) => (byName.has(p.name) ? chunk(byName.get(p.name)) : member(p) + eol)).join('');
+    return [{ start: spans[0].from, end: lineStart(text, body.end - 1), text: interior }];
   }
-  const have = new Set(members.map((m) => renamed.get(keyName(m.key)) ?? keyName(m.key)));
+  const out = [];
+  for (const x of spans) {
+    const m = x.m, p = now.get(nameAfter(m)), old = was.get(keyName(m.key));
+    const j = jsdocIn(text.slice(x.from, x.line));
+    const at = j ? x.from + j.index : x.line;
+    if (!p) { out.push({ start: at, end: x.to, text: '' }); continue; }
+    if (old && old.name !== p.name && old.type === p.type && same(old.options, p.options)) out.push({ start: m.key.start, end: m.key.end, text: p.name }); // a rename: only the name changes
+    else if (old && (old.type !== p.type || !same(old.options, p.options))) out.push({ start: m.start, end: m.end, text: member({ ...p, description: undefined }).slice(indent.length) });
+    if (old && old.description !== p.description) {
+      if (j) out.push({ start: at, end: at + j[0].length, text: p.description ? docLine(indent, p.description, eol) : '' });
+      else if (p.description) out.push({ start: x.line, end: x.line, text: docLine(indent, p.description, eol) });
+    }
+  }
+  const have = new Set(members.map(nameAfter));
   const added = after.props.filter((p) => !have.has(p.name));
-  if (added.length) { const at = lineStart(text, body.end - 1); out.push({ start: at, end: at, text: added.map((p) => member(p) + eol).join('') }); }
+  if (added.length) { const a = lineStart(text, body.end - 1); out.push({ start: a, end: a, text: added.map((p) => member(p) + eol).join('') }); }
   return out;
 }
 
@@ -442,7 +478,7 @@ function findRenames(before, after) {
   if (before.props.length === after.props.length) {
     before.props.forEach((p, i) => {
       const q = after.props[i];
-      if (p.name !== q.name && p.type === q.type && same(p.options, q.options) && p.default === q.default) props.push([p.name, q.name]);
+      if (p.name !== q.name && !after.props.some((x) => x.name === p.name) && !before.props.some((x) => x.name === q.name) && p.type === q.type && same(p.options, q.options) && p.default === q.default) props.push([p.name, q.name]);
     });
   }
   const renamedAxis = new Map(props);

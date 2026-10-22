@@ -85,9 +85,9 @@ export function touched(edits) {
       case 'duplicate': case 'paste': keys.add(`children:${e.op === 'paste' ? e.parent : `of:${e.id}`}`); break;
       case 'wrap': for (const id of e.ids || []) keys.add(`node:${id}`); keys.add(`node:${e.id}`); keys.add(`children:of:${e.ids?.[0]}`); break;
       case 'unwrap': keys.add(`node:${e.id}`); keys.add(`children:of:${e.id}`); break;
-      case 'addProp': case 'removeProp': case 'setDefault': keys.add(`prop:${e.name}`); break;
+      case 'addProp': case 'removeProp': case 'setDefault': case 'describeProp': case 'reorderProp': keys.add(`prop:${e.name}`); break;
       case 'renameProp': keys.add(`prop:${e.name}`); keys.add(`prop:${e.to}`); break;
-      case 'renameVariant': keys.add(`prop:${e.axis}`); break;
+      case 'renameVariant': case 'reorderVariant': keys.add(`prop:${e.axis}`); break;
       case 'bindText': keys.add(`${e.id}.text`); if (e.prop) keys.add(`prop:${e.prop}`); break;
       case 'addVariant': case 'removeVariant': keys.add(`prop:${e.axis}`); break;
       default: keys.add(`op:${e?.op}`);
@@ -162,6 +162,10 @@ function checkValue(i, path, value) {
 function checkText(i, text) {
   if (typeof text !== 'string') throw new EditError(i, 'text must be a string');
   if (/[\n`]/.test(text) || text.length > 500) throw new EditError(i, 'text must be one line, at most 500 characters');
+}
+function checkDescription(i, text) {
+  if (typeof text !== 'string' || /[\n\r]|\*\//.test(text) || text.length > 200) throw new EditError(i, 'a description is one line, at most 200 characters, without */');
+  return text.trim();
 }
 function checkPropValue(i, prop, value) {
   if (value === undefined) return;
@@ -333,7 +337,32 @@ export function applyEdits(doc, edits) {
           p.default = e.default ?? e.options[0];
         } else if (e.default !== undefined) p.default = e.default;
         checkPropValue(i, p, p.default);
+        if (e.description !== undefined && e.description !== null && e.description !== '') p.description = checkDescription(i, e.description);
         next.props.push(p);
+        break;
+      }
+      case 'describeProp': { // {name, text}: the prop's description, written as a /** */ comment above it in the file; '' or null removes it
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        delete p.description;
+        if (e.text !== null && e.text !== undefined && e.text !== '') p.description = checkDescription(i, e.text);
+        break;
+      }
+      case 'reorderProp': { // {name, to}: move a prop to position `to` (0 = first); a variant axis keeps its place among the axes in the order the props are listed
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        if (!Number.isInteger(e.to) || e.to < 0 || e.to >= next.props.length) throw new EditError(i, `bad position ${e.to} (0 to ${next.props.length - 1})`);
+        next.props = next.props.filter((x) => x !== p);
+        next.props.splice(e.to, 0, p);
+        break;
+      }
+      case 'reorderVariant': { // {axis, value, to}: move a value of a variant axis to position `to`; the base value stays the base wherever it sits
+        const p = propOf(next, e.axis);
+        if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
+        if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
+        if (!Number.isInteger(e.to) || e.to < 0 || e.to >= p.options.length) throw new EditError(i, `bad position ${e.to} (0 to ${p.options.length - 1})`);
+        p.options = p.options.filter((o) => o !== e.value);
+        p.options.splice(e.to, 0, e.value);
         break;
       }
       case 'removeProp': {
@@ -483,7 +512,7 @@ export function applyEdits(doc, edits) {
         break;
       }
       default:
-        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename, renameProp, renameVariant`);
+        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename, renameProp, renameVariant, describeProp, reorderProp, reorderVariant`);
     }
   });
   return next;
