@@ -77,14 +77,14 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | INS-03 | INS | history | pass | r2 pass: 100/100 byte-identical | test/history/ui-inspect.test.js | 0494065 |
 | INS-04 | INS | history | pass | r2 Sonnet WIN; Codex napkin better both orders; read-only verified | test/history/docs.test.js | 0494065 |
 | INS-05 | INS | history | pass | r1 pass | test/history/visual-diff.test.js | 0494065 |
-| PRF-01 | PRF | engine | critic-pass | critic p50 1097 ms | docs/evidence/PRF-01.txt | da7ddc3 |
-| PRF-02 | PRF | engine | critic-pass | critic p95 99.5/97.5/74.4 ms (marginal) | docs/evidence/PRF-02.txt | da7ddc3 |
-| PRF-03 | PRF | engine | critic-pass | critic p95 87.6 ms | docs/evidence/PRF-03.txt | da7ddc3 |
-| PRF-04 | PRF | engine | critic-fail | pan+zoom p95 33.3 ms; whole missed vsyncs; >16 ms task per wheel with a selection | docs/evidence/PRF-04.txt | da7ddc3 |
-| PRF-05 | PRF | engine | critic-pass | critic p95 8.6 ms | docs/evidence/PRF-05.txt | da7ddc3 |
-| PRF-06 | PRF | engine | critic-pass | critic 0.445x (last/first-100 mean 0.92) | docs/evidence/PRF-06.txt | da7ddc3 |
-| PRF-07 | PRF | engine | critic-pass | critic 108 MB / 17 MB heap | docs/evidence/PRF-07.txt | da7ddc3 |
-| PRF-08 | PRF | engine | critic-pass | critic p95 45-47 ms (1 of 8 runs crashed) | docs/evidence/PRF-08.txt | da7ddc3 |
+| PRF-01 | PRF | engine | pass | critic p50 1097; merged p50 1105 ms | docs/evidence/PRF-01.txt | da57ab8 |
+| PRF-02 | PRF | engine | pass | critic p95 <=99.5; merged p95 82.8 ms (thin margin) | docs/evidence/PRF-02.txt | da57ab8 |
+| PRF-03 | PRF | engine | pass | critic p95 87.6; merged 87.6 ms | docs/evidence/PRF-03.txt | da57ab8 |
+| PRF-04 | PRF | engine | building | critic-fail: pan+zoom with a selection misses vsyncs | docs/evidence/PRF-04.txt | da57ab8 |
+| PRF-05 | PRF | engine | pass | merged p95 8.3 ms | docs/evidence/PRF-05.txt | da57ab8 |
+| PRF-06 | PRF | engine | pass | merged ratio 0.477 | docs/evidence/PRF-06.txt | da57ab8 |
+| PRF-07 | PRF | engine | pass | merged 109 MB / 17 MB heap | docs/evidence/PRF-07.txt | da57ab8 |
+| PRF-08 | PRF | engine | pass | merged p95 46.6 ms (thin margin) | docs/evidence/PRF-08.txt | da57ab8 |
 | FMT-01 | FMT | files | pass | r1 pass: cold walk | docs/dialect.md | 9179fbb |
 | FMT-02 | FMT | files | pass | r6 PASS: table + hand files | test/invariants/diff-budget.test.js | 9e66f9d |
 | FMT-03 | FMT | files | pass | r2 pass: prettier(singleQuote)+tsc+eslint 0 | test/invariants/format.test.js | 9179fbb |
@@ -99,9 +99,9 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | ONB-05 | ONB | open | pass | r1 pass: README as written; MCP snippet connects | test/onboarding/readme.test.js | ec22ab6 |
 | REL-01 | REL | files | pass | r2 pass 50/50 + INV-01 kills | test/invariants/truth.test.js | 9179fbb |
 | REL-02 | REL | files | pass | r5 pass: one lock | test/invariants/lock.test.js | 9179fbb |
-| REL-03 | REL | engine | critic-pass | critic worst 208 ms; small corpus | docs/evidence/REL-03.txt | da7ddc3 |
-| REL-04 | REL | engine | critic-pass | critic 1800 s, 0 errors, 9.0% growth (one seed) | docs/evidence/REL-04.txt | da7ddc3 |
-| REL-05 | REL | engine | critic-pass | critic 695 ms | docs/evidence/REL-05.txt | da7ddc3 |
+| REL-03 | REL | engine | pass | worst 208 ms, 0 silent losses | docs/evidence/REL-03.txt | da57ab8 |
+| REL-04 | REL | engine | pass | critic soak 1800 s, 0 errors, 9.0% growth (pre-merge code, one seed) | docs/evidence/REL-04.txt | da57ab8 |
+| REL-05 | REL | engine | pass | merged 685 ms | docs/evidence/REL-05.txt | da57ab8 |
 | FEEL-01 | FEEL | canvas | building |  |  |  |
 | FEEL-02 | FEEL | layout | needs-david | 6 rounds: Sonnet tie; Codex prefers Figma help imagery in both orders | test/23-layout-panel.test.js | a4a87dd |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
