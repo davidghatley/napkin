@@ -52,9 +52,11 @@
   --cell-line: #d3d7e0; --head-line: #e7e9ee; --kbd: #2b2f37; --shadow-pop: 0 18px 50px -10px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08);
 }
 
-* { box-sizing: border-box; }
+/* Cell isolation (decision 0012): chrome rules never reach a component. A cell must look as the component does in a plain page with no app CSS,
+   so every element rule below is scoped out of .mount (and the ghost/preview .preview-inner), and .mount itself resets inheritance (tokens are custom properties, which still flow in). */
+*:where(:not(:is(.mount, .preview-inner) *)) { box-sizing: border-box; }
 html { background: var(--bg); scrollbar-width: thin; }
-* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+*:where(:not(:is(.mount, .preview-inner) *)) { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
 body {
   margin: 0; height: 100vh; overflow: hidden;
   font: 12px/1.45 var(--sans); font-feature-settings: "cv11", "ss03"; letter-spacing: -.003em;
@@ -63,11 +65,11 @@ body {
   grid-template-areas: "top top top" "side stage insp" "side dock insp" "status status status";
   -webkit-font-smoothing: antialiased;
 }
-button, input, select { font: inherit; color: inherit; }
-button { cursor: pointer; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-kbd { font: 500 10px/1 var(--mono); padding: 2px 4px; border-radius: 4px; background: var(--kbd); color: var(--text-2); border: 1px solid var(--line); }
-code { font-family: var(--mono); }
+button:where(:not(:is(.mount, .preview-inner) *)), input:where(:not(:is(.mount, .preview-inner) *)), select:where(:not(:is(.mount, .preview-inner) *)) { font: inherit; color: inherit; }
+button:where(:not(:is(.mount, .preview-inner) *)) { cursor: pointer; }
+:focus-visible:where(:not(:is(.mount, .preview-inner) *)) { outline: 2px solid var(--accent); outline-offset: 1px; }
+kbd:where(:not(:is(.mount, .preview-inner) *)) { font: 500 10px/1 var(--mono); padding: 2px 4px; border-radius: 4px; background: var(--kbd); color: var(--text-2); border: 1px solid var(--line); }
+code:where(:not(:is(.mount, .preview-inner) *)) { font-family: var(--mono); }
 .skip { position: absolute; left: 8px; top: -40px; z-index: 100; padding: 6px 10px; background: var(--chrome); color: var(--text); border-radius: 6px; }
 .skip:focus { top: 8px; }
 
@@ -189,7 +191,8 @@ body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; 
 .rowhead span { position: absolute; right: 10px; top: 50%; transform: translateY(-50%) scale(var(--ls)); transform-origin: 100% 50%; white-space: nowrap; font-weight: 600; color: #333a4b; }
 .is-base span::after { content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 5px; border-radius: 50%; background: #a2a9b8; vertical-align: 1px; }
 .cell { margin: 0; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 16px 18px; border: 1px dashed var(--cell-line); border-radius: 8px; min-width: 96px; min-height: 66px; }
-.cell .mount { display: grid; place-items: center; min-width: 24px; min-height: 18px; }
+.mount, .preview-inner { all: initial; color-scheme: light; pointer-events: inherit; visibility: inherit; /* keep the stage's dimming and ghost hiding working across the reset */ }
+.cell .mount { display: block; /* a block, like body, so the component is a block child and not a grid item */ min-width: 24px; min-height: 18px; }
 .cell .mount [data-n] { cursor: default; }
 .cell figcaption { position: absolute; top: calc(100% + 4px); left: -10px; right: -10px; text-align: center; font: 10px/1.35 var(--mono); color: #7a8294; visibility: hidden; overflow-wrap: anywhere; }
 #stage[data-zoom-band="near"] .cell figcaption { visibility: visible; }

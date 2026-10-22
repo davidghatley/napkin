@@ -3,7 +3,7 @@
 // browser (getComputedStyle on the rendered element), and where each value comes from:
 //   base            declared in the node's base style
 //   <axis>=<value>  declared by that variant's override (the last axis that sets it wins, as in the file)
-//   inherited       not declared here; the browser passes it down (names the ancestor that declares it, else the page)
+//   inherited       not declared here; the browser passes it down (names the ancestor that declares it)
 //   browser default nothing declares it
 // Copy usage: the JSX line that draws this cell in an app: <Button size="sm" label="Button" />.
 import { h } from './drawer.js';
@@ -64,7 +64,7 @@ export function initInspect(ctx, drawer) {
         const f = declaredFrom(doc, cur.id, variant, prop.replace(/-([a-z])/g, (_, c) => c.toUpperCase()));
         if (f) { from = `inherited from ${cur.id} (${f})`; break; }
       }
-      if (from === 'browser default' && byId.parentOf.get(node)) from = 'inherited from the page';
+      // cells are isolated from the editor's CSS (decision 0012): an undeclared inherited value is the browser's own default, as on a blank page
       rest.push({ prop, computed: cs.getPropertyValue(prop), from });
     }
     const box = ['width', 'height', 'display'].filter((p) => !own.has(p)).map((prop) => ({ prop, computed: cs.getPropertyValue(prop), from: 'computed by the browser' }));
