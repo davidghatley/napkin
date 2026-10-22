@@ -1,6 +1,7 @@
 // Shared by the components lane's panel parts (props.js, variants.js): escaping, small icons, one place for
 // errors, and `run`, which sends a batch through ctx.sendEdits (the one commit path) and redraws the panel.
 // Nothing here writes a file.
+import { stripNext } from './words.js';
 import { renderPanel, forgetDraft } from './panel.js';
 
 export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -36,7 +37,7 @@ export async function run(ctx, key, edits, clear = []) {
   const was = ctx.state.components.get(s.component)?.revision;
   try { r = await ctx.sendEdits(s.component, edits); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
   clear.forEach(forgetDraft);
-  if (r.ok) delete errors[key]; else errors[key] = r.error;
+  if (r.ok) delete errors[key]; else errors[key] = stripNext(r.error);
   // A batch that changed the file is followed by a render, which redraws the panel after the new pixels (PRF-02, as panel.js does).
   // A refusal or a batch that changed nothing (same revision) has no render coming: redraw now.
   if (!r.ok || r.revision === was) setTimeout(() => renderPanel(ctx), 0);

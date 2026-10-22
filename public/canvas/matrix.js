@@ -31,13 +31,13 @@ export function initMatrix(ctx) {
   const section = (id) => document.querySelector(`section.cmp[data-component="${CSS.escape(id)}"]`);
 
   // Make the DOM match the state: cells, headers, groups, grid columns. Cheap: only class and style writes.
-  function apply(id) {
+  // The filter bar alone. The stage calls it before it places a new frame, so the title row's height (bar included) is known then.
+  function bar(id) {
     const sec = section(id), c = ctx.state.components.get(id);
-    if (!sec || !c?.doc) return;
+    if (!sec || !c?.doc) return null;
     const ax = axes(c.doc), s = stateOf(id);
-    const hidden = (a, v) => !!s.hide[a]?.has(v);
     const total = ax.reduce((n, a) => n * a.options.length, 1);
-    const [across, down] = ax;
+    const hidden = (a, v) => !!s.hide[a]?.has(v);
     // controls in the title
     let ctl = sec.querySelector('.mctl');
     const filtering = Object.values(s.hide).some((v) => v.size);
@@ -48,8 +48,19 @@ export function initMatrix(ctx) {
       const groups = ax.length > 2;
       const html = ax.map((a) => `<div class="mrow" data-axis="${esc(a.name)}"><span class="mname">${esc(a.name)}</span><button type="button" class="mchip mall" data-axis="${esc(a.name)}" data-value="" aria-pressed="${!s.hide[a.name]?.size}" title="Show every ${esc(a.name)}">All</button>${a.options.map((o) => `<button type="button" class="mchip" data-axis="${esc(a.name)}" data-value="${esc(o)}" aria-pressed="${!!s.hide[a.name]?.size && !hidden(a.name, o)}" title="Show only ${esc(o)}. Shift-click adds or removes it.">${esc(o)}</button>`).join('')}</div>`).join('')
         + `<div class="mrow mtools">${filtering ? '<button type="button" class="mtool" data-act="show-all">Show all values</button>' : ''}${groups ? '<button type="button" class="mtool" data-act="collapse-all">Collapse groups</button><button type="button" class="mtool" data-act="expand-all">Expand groups</button>' : ''}<span class="mcount" id="mcount-${esc(id)}"></span></div>`;
-      if (ctl.dataset.html !== html) { ctl.innerHTML = html; ctl.dataset.html = html; }
+      if (ctl.dataset.html !== html) {
+        const had = ctl.contains(document.activeElement) ? document.activeElement : null, at = had && { axis: had.dataset.axis, value: had.dataset.value, act: had.dataset.act };
+        ctl.innerHTML = html; ctl.dataset.html = html;
+        if (at) ctl.querySelector(at.act ? `[data-act="${at.act}"]` : `.mchip[data-axis="${CSS.escape(at.axis)}"][data-value="${CSS.escape(at.value)}"]`)?.focus({ preventScroll: true }); // a keyboard press keeps its place
+      }
     }
+    return { sec, c, ax, s, total, hidden };
+  }
+  function apply(id) {
+    const made = bar(id);
+    if (!made) return;
+    const { sec, ax, s, total, hidden } = made;
+    const [across, down] = ax;
     let shown = 0;
     for (const cell of sec.querySelectorAll('.cell')) {
       const v = JSON.parse(cell.dataset.variant);
@@ -92,12 +103,28 @@ export function initMatrix(ctx) {
     const count = sec.querySelector('.mcount');
     if (count) count.textContent = `${shown} of ${total} shown`;
     sec.dataset.shown = String(shown);
+    rove(sec);
     ctx.stage?.measureAll(id);
     ctx.stage?.refreshOverlays();
   }
 
+  // WPC-07: tab order. Each row of filter chips is one Tab stop and all the group bars of a component are one Tab stop;
+  // arrow keys move inside the set (roving tabindex), so 30 "Collapse group" buttons no longer flood the tab order.
+  const setOf = (el) => (el.matches('.gtoggle') ? [...el.closest('section.cmp').querySelectorAll('.gtoggle')] : [...el.closest('.mrow').querySelectorAll('button')]);
+  function rove(sec) {
+    const sets = [[...sec.querySelectorAll('.gtoggle')], ...[...sec.querySelectorAll('.mctl .mrow')].map((r) => [...r.querySelectorAll('button')])];
+    // only the selected component's bars are Tab stops (Cmd-K or a click selects one); the rest stay clickable but out of the way
+    const mine = sec.dataset.component === ctx.state.selection?.component || sec.contains(document.activeElement);
+    for (const set of sets) {
+      if (!set.length) continue;
+      if (!mine) { for (const b of set) b.tabIndex = -1; continue; }
+      const cur = set.find((b) => b.dataset.rove === '1' && b.isConnected && !b.closest('.mhide')) ?? set.find((b) => !b.closest('.mhide')) ?? set[0];
+      for (const b of set) { b.tabIndex = b === cur ? 0 : -1; if (b === cur) b.dataset.rove = '1'; else delete b.dataset.rove; }
+    }
+  }
   function changed(id) { save(id); apply(id); ctx.emit('matrix', { component: id }); }
   const api = {
+    bar,
     state: (id) => { const s = stateOf(id); return { hide: Object.fromEntries(Object.entries(s.hide).map(([a, v]) => [a, [...v]])), collapsed: [...s.collapsed] }; },
     // click: show only `value` (again: show all of that axis); add: toggle it in or out of the shown set
     filter(id, axis, value, { add = false } = {}) {
@@ -120,6 +147,7 @@ export function initMatrix(ctx) {
   };
   ctx.matrix = api;
   ctx.on('render', ({ component }) => apply(component));
+  ctx.on('select', () => { for (const sec of document.querySelectorAll('section.cmp')) rove(sec); });
 
   document.querySelector('#world').addEventListener('click', (ev) => {
     const t = ev.target;
@@ -130,5 +158,21 @@ export function initMatrix(ctx) {
     else if (chip) api.filter(id, chip.dataset.axis, chip.dataset.value, { add: ev.shiftKey || ev.metaKey || ev.ctrlKey });
     else if (tool) { const a = tool.dataset.act; if (a === 'show-all') api.showAll(id); else if (a === 'collapse-all') api.collapseAll(id); else api.expandAll(id); }
     else if (title && title.closest('.group').dataset.group !== '{}') api.collapse(id, title.closest('.group').dataset.group);
+  });
+
+  const world = document.querySelector('#world');
+  world.addEventListener('focusin', (ev) => {
+    const b = ev.target.closest?.('.gtoggle, .mctl button');
+    if (!b || b.tabIndex === 0) return;
+    for (const x of setOf(b)) { x.tabIndex = x === b ? 0 : -1; if (x === b) x.dataset.rove = '1'; else delete x.dataset.rove; }
+  });
+  world.addEventListener('keydown', (ev) => {
+    const b = ev.target.closest?.('.gtoggle, .mctl button');
+    if (!b || ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing) return;
+    const set = setOf(b).filter((x) => !x.closest('.mhide') && x.offsetParent !== null), i = set.indexOf(b);
+    const to = { ArrowRight: i + 1, ArrowDown: i + 1, ArrowLeft: i - 1, ArrowUp: i - 1, Home: 0, End: set.length - 1 }[ev.key];
+    if (to === undefined || i < 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    set[Math.max(0, Math.min(set.length - 1, to))].focus();
   });
 }

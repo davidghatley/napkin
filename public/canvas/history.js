@@ -1,6 +1,7 @@
 // HIS-01..03 on the page: Cmd/Ctrl+Z and Shift+Cmd+Z undo and redo YOUR edits (the server keeps one stack per caller and
 // refuses with who and which revision when someone else changed the same property), and the History tab: a timeline of
 // revisions per component, scrub to preview an older state read-only on the canvas, Restore = one new revision.
+import { plain } from './words.js';
 import { h } from './drawer.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -21,7 +22,7 @@ export function initHistory(ctx, drawer) {
   const step = (verb, component, skip = false) => (chain = chain.then(() => run(verb, component, skip)).catch(() => null));
   let toast;
   function showToast(message, verb, component) {
-    toast ??= h('div', { id: 'undo-toast', role: 'status' }, h('span', { class: 'ut-msg' }), h('button', { type: 'button', id: 'undo-skip', text: 'Skip this step' }), h('button', { type: 'button', id: 'undo-dismiss', 'aria-label': 'Dismiss', text: '×' }));
+    toast ??= h('div', { id: 'undo-toast', role: 'status', 'data-nodrag': '1' }, h('span', { class: 'ut-msg' }), h('button', { type: 'button', id: 'undo-skip', text: 'Skip this step' }), h('button', { type: 'button', id: 'undo-dismiss', 'aria-label': 'Dismiss', text: '×' }));
     if (!toast.isConnected) document.querySelector('#stage').append(toast);
     toast.querySelector('.ut-msg').textContent = message;
     toast.querySelector('#undo-skip').onclick = () => { hideToast(); step(verb, component, true); };
@@ -35,7 +36,7 @@ export function initHistory(ctx, drawer) {
     const j = await r.json().catch(() => ({ ok: false, error: `${verb} failed (${r.status})` }));
     if (j.ok) { hideToast(); ctx.hint(`${j.skipped ? `Skipped "${j.skipped.summary}". ` : ''}${verb === 'undo' ? 'Undid' : 'Redid'}: ${(j.undone || j.redone)?.summary ?? 'your last edit'}`); }
     else if (j.refused) showToast(`Can't ${verb}: ${j.refused.by} changed ${j.refused.keys.join(', ')} in revision ${j.refused.revision}. Skip this step to ${verb} the one before it.`, verb, component ?? j.component);
-    else { hideToast(); ctx.hint(`Can't ${verb}: ${String(j.error).replace(/^(undo|redo) refused: /, '')}`); }
+    else { hideToast(); ctx.hint(/nothing to/i.test(j.error) ? plain(j.error) : `Can't ${verb}: ${plain(j.error)}`); }
     return j;
   }
   ctx.undo = () => step('undo'); ctx.redo = () => step('redo');
@@ -130,7 +131,7 @@ export function initHistory(ctx, drawer) {
     const token = ++S.token, id = S.component;
     const res = await fetch(`/bundle-at/${encodeURIComponent(id)}.js?revision=${encodeURIComponent(row.revision)}`);
     if (token !== S.token) return;
-    if (!res.ok) { ctx.hint((await res.json().catch(() => ({}))).error || 'could not draw that revision'); return; }
+    if (!res.ok) { ctx.hint(plain((await res.json().catch(() => ({}))).error || 'could not draw that revision')); return; }
     const url = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
     try { S.mod = await import(url); } finally { URL.revokeObjectURL(url); }
     if (token !== S.token) return;
@@ -165,7 +166,7 @@ export function initHistory(ctx, drawer) {
     const r = await ctx.fetch(`/api/components/${encodeURIComponent(id)}/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ revision: rev }) });
     const j = await r.json().catch(() => ({ ok: false, error: 'restore failed' }));
     exitPreview();
-    ctx.hint(j.ok ? (j.noop ? `Already the same as r${rev}` : `Restored r${rev} as r${j.revision}`) : `Can't restore: ${j.error}`);
+    ctx.hint(j.ok ? (j.noop ? `Already the same as r${rev}` : `Restored r${rev} as r${j.revision}`) : `Can't restore: ${plain(j.error)}`);
   }
 
   function build(p) {

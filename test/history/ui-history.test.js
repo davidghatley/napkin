@@ -41,7 +41,7 @@ test('history on the page', { timeout: 170000 }, async (t) => {
       await p.settled('Button');
       const n = (await p.history('Button')).length;
       await io.key('z', { ctrl: true });
-      await waitFor(async () => /Can't undo: nothing to undo/.test(await text('#hint')), 3000);
+      await waitFor(async () => /^Nothing to undo yet\.$/.test(await text('#hint')), 3000);
       assert.equal((await p.history('Button')).length, n, 'no revision was made');
       assert.match(p.read('Button'), /fontWeight: 900/);
     });
@@ -86,7 +86,7 @@ test('history on the page', { timeout: 170000 }, async (t) => {
       let ended = false;
       for (let i = 0; i < 8 && !ended; i++) {
         await q(`document.querySelector('#undo-skip').click()`);
-        await waitFor(async () => /Undid|Skipped|nothing to undo/.test(await text('#hint')) || await q(`!document.querySelector('#undo-toast').hidden`), 4000);
+        await waitFor(async () => /Undid|Skipped|nothing to undo/i.test(await text('#hint')) || await q(`!document.querySelector('#undo-toast').hidden`), 4000);
         ended = await q(`document.querySelector('#undo-toast').hidden`);
       }
       assert.equal(ended, true, 'the toast went away: the stack ended or an older step was undone');

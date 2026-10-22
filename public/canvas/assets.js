@@ -2,6 +2,7 @@
 // node gets a new <img> inside it. The server copies the bytes to assets/<sha8>.<ext> next to the components (the same bytes are
 // stored once) and makes ONE edit. The Assets tab lists every image and SVG in the repo. A src that does not load shows a badge
 // with its path on the cell; nothing else breaks.
+import { plain } from './words.js';
 import { h } from './drawer.js';
 import { index } from '/src/model.js';
 
@@ -72,7 +73,7 @@ export function initAssets(ctx, drawer) {
   async function place(component, body) {
     const r = await ctx.fetch(`/api/components/${encodeURIComponent(component)}/image`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const j = await r.json().catch(() => ({ ok: false, error: `image failed (${r.status})` }));
-    ctx.hint(j.ok ? `${j.created ? 'Added' : 'Already stored:'} ${j.path}` : `Can't place the image: ${j.error}`);
+    ctx.hint(j.ok ? `${j.created ? 'Added' : 'Already stored:'} ${j.path}` : `Can't place the image: ${plain(j.error)}`);
     if (j.ok && drawer.active === 'assets') load();
     return j;
   }

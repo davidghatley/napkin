@@ -5,6 +5,7 @@
 // Select-tool niceties live here too: Delete removes the selected node, Alt+Up/Down moves it among its siblings,
 // double-click edits a text node in place.
 //   initTools(ctx) -> { tools, use(id), editText(selection), createComponent(name) }; also set as ctx.tools.
+import { plain } from './words.js';
 import { index, variantGrid, VOID } from '/src/model.js';
 
 const svg = (d) => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -112,7 +113,7 @@ export function initTools(ctx) {
     ev.preventDefault();
     newErr.textContent = '';
     const r = await createComponent(nameInput.value);
-    if (!r.ok) { newErr.textContent = r.error; nameInput.focus(); return; }
+    if (!r.ok) { newErr.textContent = plain(r.error); nameInput.focus(); return; }
     closeNew(); say('');
   });
 

@@ -85,11 +85,15 @@ body[data-play] .cell .mount button { cursor: pointer; }
 #panel .linked { font: 12px var(--sans); color: var(--text-2); }
 #panel .linked code { font: 11.5px var(--mono); color: var(--accent-text); }
 #panel .picker { display: flex; flex-wrap: wrap; gap: 6px; }
-.cmp-head:has(.mctl) { max-width: max(var(--w), 300px); }
+/* WPC-15: the bar stacks one row per axis (its height no longer depends on the zoom), so it stays inside the frame it belongs to */
+.cmp-head:has(.mctl) { max-width: none; }
+.cmp-head .mctl { flex-direction: column; align-items: stretch; gap: 4px; width: max-content; }
+.cmp-head .mctl .mrow { flex-wrap: wrap; }
+.cmp-head .mctl .mrow + .mrow { padding-left: 0; border-left: 0; }
 .cmp-head .mctl { flex-wrap: wrap; white-space: normal; }
 .group-title { min-width: 280px; }
 section.cmp:has(.mctl) .ghint { display: none; }
-.cmp-head .mctl { max-width: max(var(--w), 300px); box-sizing: border-box; }
+.cmp-head .mctl { max-width: 100%; box-sizing: border-box; }
 #panel .srcblock { display: grid; gap: 4px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
 
 /* CMP-01: Settings as a table (Name | Control); structure editing behind "Edit settings" */

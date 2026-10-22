@@ -8,6 +8,7 @@
 // Also here: the canvas labels. A nested component draws its own elements (their data-n are the inner file's); after each
 // render the instance's root takes the instance's id as data-n and the inner elements stay unlabelled, so a click on a
 // nested Button selects the instance in the host, not an element of Button.
+import { plain, stripNext } from './words.js';
 import { index, propOf, axes, instancePropFits } from '/src/model.js';
 import { esc, errorLine, errors, run, ctxDoc } from './cmp-core.js';
 import { renderPanel } from './panel.js';
@@ -113,7 +114,7 @@ export function initInstances(ctx) {
     const id = freeId(host.doc, name);
     const r = await ctx.sendEdits(componentId, [{ op: 'insertInstance', parent: parentNode, id, component: name }]);
     if (r.ok) { ctx.hint(`${name} added to ${host.name} as ${id}`); ctx.select({ component: componentId, node: id, variant: ctx.state.selection?.variant ?? {} }); }
-    else ctx.hint(r.error.replace(/^invalid edit #\d+: /, ''));
+    else ctx.hint(plain(r.error));
     return r;
   };
 
@@ -122,7 +123,7 @@ export function initInstances(ctx) {
     const name = panel.querySelector('#extract-name')?.value.trim();
     if (!s || !doc) return;
     const r = await (await ctx.fetch(`/api/components/${encodeURIComponent(s.component)}/extract`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: s.node, name }) })).json();
-    if (!r.ok) { errors.extract = r.error; rerender(); return; }
+    if (!r.ok) { errors.extract = stripNext(r.error); rerender(); return; }
     delete errors.extract; delete errors.extractOpen;
     ctx.hint(`${name} made from ${s.node}. It is a new file next to ${comp.name}.`);
     setTimeout(rerender, 0);
@@ -158,7 +159,7 @@ export function initInstances(ctx) {
       else if (t.value) await run(ctx, 'compose', [{ op: 'set', path: `${s.node}.@slot`, value: t.value }]);
     } else if (a === 'slot-preview') {
       const r = await (await ctx.fetch(`/api/components/${encodeURIComponent(s.component)}/slot-preview`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prop: t.dataset.slot, text: t.value === '' ? null : t.value }) })).json();
-      if (!r.ok) { errors.compose = r.error; rerender(); } else delete errors.compose;
+      if (!r.ok) { errors.compose = stripNext(r.error); rerender(); } else delete errors.compose;
     } else if (a === 'value') {
       const raw = t.value.trim();
       const value = raw === '' ? null : t.dataset.kind === 'number' ? Number(raw) : raw;

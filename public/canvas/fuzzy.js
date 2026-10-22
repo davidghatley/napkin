@@ -30,7 +30,7 @@ export function match(q, t) {
   return { score: score - at[0] * 0.3 - lt.length * 0.05, at };
 }
 
-const KIND_RANK = { action: 0, component: 1, node: 2 };
+const KIND_RANK = { action: 0, property: 0.5, component: 1, node: 2 };
 export function search(items, query, limit = 30) {
   const out = [];
   const q = query.trim();

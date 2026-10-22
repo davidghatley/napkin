@@ -58,3 +58,11 @@
 #token-theme-label { flex: none; white-space: nowrap; }
 .top-right .meta:has(#revision) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #theme-toggle { flex: none; }
+
+/* WPC-11: headers, group chips and captions inside a frame that takes the theme's surface follow the theme's ink, not the fixed light-grey ones */
+#world[data-frame-theme="1"] .group-title, #world[data-frame-theme="1"] .colhead, #world[data-frame-theme="1"] .rowhead, #world[data-frame-theme="1"] .corner,
+#world[data-frame-theme="1"] .colhead span, #world[data-frame-theme="1"] .rowhead span, #world[data-frame-theme="1"] .ghint, #world[data-frame-theme="1"] .gcount,
+#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { color: var(--frame-ink); }
+#world[data-frame-theme="1"] .cell figcaption, #world[data-frame-theme="1"] .group-title i, #world[data-frame-theme="1"] .gchip i { color: color-mix(in srgb, var(--frame-ink) 70%, var(--frame)); }
+#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { background: color-mix(in srgb, var(--frame-ink) 14%, var(--frame)); }
+#world[data-frame-theme="1"] .gtoggle:hover { background: color-mix(in srgb, var(--frame-ink) 24%, var(--frame)); }

@@ -5,7 +5,7 @@ import { search } from './fuzzy.js';
 import { variantGrid } from '/src/model.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const KIND = { component: 'Component', node: 'Layer', action: 'Action' };
+const KIND = { component: 'Component', node: 'Layer', action: 'Action', property: 'Property' };
 const MAX = 10; // the list never scrolls
 
 export function initQuick(ctx) {
@@ -33,7 +33,30 @@ export function initQuick(ctx) {
         n.children.forEach(walk);
       })(c.doc.root);
     }
+    // WPC-07: the inspector's fields of the current selection, so Cmd-K + "rad" + Enter lands in Radius
+    const sel = ctx.state.selection;
+    if (sel) {
+      const where = `${ctx.state.components.get(sel.component)?.name ?? ''} › ${sel.node}`, seen = new Set();
+      for (const lab of document.querySelectorAll('#panel label[for]')) {
+        const name = (lab.querySelector('.lt') || lab).textContent.trim(), input = document.getElementById(lab.htmlFor);
+        if (!name || !input || input.disabled || seen.has(lab.htmlFor)) continue;
+        seen.add(lab.htmlFor);
+        items.push({ kind: 'property', label: name, hint: where, field: lab.htmlFor, boost: 6 });
+      }
+    }
     return items;
+  }
+  // Focus an inspector control (opening its section if folded). Used by property results and Alt+I.
+  function focusField(el) {
+    if (!el) return false;
+    for (let d = el.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+    el.focus({ preventScroll: false }); el.select?.();
+    return document.activeElement === el;
+  }
+  function focusInspector() {
+    if (!ctx.state.selection) { ctx.hint('Select something first, then Alt+I jumps to its properties'); return false; }
+    const first = document.querySelector('#panel label[for]'), el = first && document.getElementById(first.htmlFor);
+    return focusField(el && !el.disabled ? el : document.querySelector('#panel input:not([disabled]), #panel button:not([disabled])'));
   }
   function query(q) {
     const t0 = performance.now();
@@ -78,10 +101,13 @@ export function initQuick(ctx) {
     if (!item) return;
     close();
     if (item.kind === 'action') { item.run(); return; }
+    if (item.kind === 'property') { focusField(document.getElementById(item.field)); return; }
     const c = ctx.state.components.get(item.component);
     if (!c) return;
     ctx.stage.live(c.component);
-    if (!c.doc) { const rect = ctx.stage.componentRect(c.component); if (rect) ctx.view.flyTo(rect, { pad: 96, max: 1.5 }); return; }
+    if (!c.doc) {
+      ctx.hint(`${c.name} is read-only${c.readOnly ? ` (${String(c.readOnly).replace(/\.$/, '')})` : ''}, so there is nothing to select. Open it in your editor to change it.`);
+      const rect = ctx.stage.componentRect(c.component); if (rect) ctx.view.flyTo(rect, { pad: 96, max: 1.5 }); return; }
     const variant = variantGrid(c.doc)[0];
     if (item.kind === 'component') {
       ctx.select({ component: c.component, node: c.doc.root.id, variant });
@@ -109,11 +135,12 @@ export function initQuick(ctx) {
   list.addEventListener('mousemove', (ev) => { const li = ev.target.closest('[data-i]'); if (li && Number(li.dataset.i) !== active) { active = Number(li.dataset.i); paint(); } });
   root.querySelector('[data-close]').addEventListener('click', close);
   addEventListener('keydown', (ev) => {
+    if (ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && ev.code === 'KeyI' && !ev.isComposing && root.hidden && !document.body.dataset.modal) { ev.preventDefault(); ev.stopPropagation(); focusInspector(); return; }
     if ((ev.metaKey || ev.ctrlKey) && !ev.altKey && ev.key.toLowerCase() === 'k') { ev.preventDefault(); ev.stopPropagation(); root.hidden ? open() : close(); }
   }, true);
   document.querySelector('#quick-open').addEventListener('click', open);
 
-  const api = { open, close, search: (q) => query(q).map((r) => r.item), build, lastMs: 0, isOpen: () => !root.hidden }; // build() first, then search(): the index is rebuilt on open
+  const api = { open, close, focusInspector, search: (q) => query(q).map((r) => r.item), build, lastMs: 0, isOpen: () => !root.hidden }; // build() first, then search(): the index is rebuilt on open
   ctx.quick = api;
   return api;
 }

@@ -1,0 +1,15 @@
+FEEL-05  S1 keyboard only (no mouse events), re-walked after the keys lane (WPC-07/08/11/13/14/15).
+Re-run: EVIDENCE=1 node --test test/keys/keys.test.js
+Repo: 40 components (Button, Card, Chip, Badge + 36 Chip copies), tokens configured, 1440x900 Chromium, real CDP key events.
+Every key below is a real key press (Shift not needed for letters; typed text counts one key per character).
+
+  7 keys  Ctrl+K, B-a-d-g-e, Enter: Badge root selected, inspector shows it (walk 1: needed a second Enter)
+  5 keys  Ctrl+K, r-a-d, Enter: caret in Radius (walk 1: "Nothing matches", then 86 Tabs)
+  3 keys  2, 4, Enter: radius 24 written
+ 17 Tabs  plain Tab walk from the page to Radius with Badge selected (walk 1: 86); no cell content, one stop per matrix group set
+ 15 keys  Alt+I (jump to inspector) then Tab to Radius
+
+Selection -> any property: 5 keys (bar: <= 5). Open -> Badge root selected -> Radius focused: 12 keys, then 3 to set 24.
+git diff of the whole walk: 1 file changed, 1 insertion(+)
++    borderRadius: 24,
+VERDICT: COMPLETED keyboard-only in 15 keys with no Tab flood.

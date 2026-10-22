@@ -4,6 +4,7 @@
 // Every control still writes CSS through ctx.sendEdits: one `set` per property, and one batch per change
 // (several selected nodes = one revision). The panel never writes files. Text typed into a field survives a
 // rebuild (ui.draft) until it is saved.
+import { plain, stripNext } from './words.js';
 import { index, axes, resolveStyle, propOf } from '/src/model.js';
 import { isFlex, isGrid, mainProp, sizeMode, sizePatch, pinPatch, pinsOf, tracks, placementOf, placePatch } from '/src/layout.js';
 import { parseColor, formatColor, fileSpace, documentColors, colorsIn } from '/src/color.js';
@@ -474,7 +475,7 @@ function wire(ctx, el) {
       if (r.revision === was) setTimeout(rerender, 0);
     } else if (r.stale?.length) { delete ui.errors[key]; rerender(); // clash.js shows a chip with both values
     } else {
-      ui.errors[key] = { text: r.error, retry: /^stale revision/.test(r.error) ? { component, edits, opts: { clear, close } } : null };
+      ui.errors[key] = { text: stripNext(r.error), retry: /^stale revision/.test(r.error) ? { component, edits, opts: { clear, close } } : null };
       rerender();
     }
     return r;

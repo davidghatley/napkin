@@ -124,3 +124,11 @@
 .top-right { padding-left: 6px; }
 .top-right .meta { width: 64px; }
 .top-right .slot { width: 164px; flex: 0 1 164px; min-width: 56px; } /* gives way (never the chrome switch) when the token theme picker shares the bar */
+/* WPC-15: the top-right group is as wide as its content (theme picker, revision, avatars, chrome switch) instead of a fixed
+   280 px column that clipped the revision to "r"; the toolbar and Jump to... share what is left. */
+#topbar { grid-template-columns: 236px minmax(0, 1fr) auto; }
+.top-right .meta { width: auto; flex: none; overflow: visible; }
+/* with the theme picker present the toolbar drops its key hints and Jump to... narrows, so nothing overlaps at 1440 */
+#topbar:has(#token-theme-label:not([hidden])) #toolbar kbd { display: none; }
+#topbar:has(#token-theme-label:not([hidden])) #quick-open { width: 154px; }
+#revision { display: inline-block; min-width: 9ch; white-space: nowrap; } /* the label's width is the same before and after the first revision arrives: no layout shift */
