@@ -2,12 +2,14 @@ import { explainError } from './errors.js';
 // The component model (napkin/1, decision 0003) and its one edit path (F02).
 // A model is what napkin reads out of a component .tsx file:
 //   { format: 'napkin/1', name, props, root, variants }
-//   props:    [{ name, type: 'string' | 'boolean' | 'enum', options?: [..], default? }]
-//             an enum prop is a variant axis; its default is the axis's base value
-//   root:     { id, tag, style: {}, text?: string, textProp?: string, attrs?: { src?, alt? }, children: [] }
-//             a node holds child elements OR one text (a string, or a prop: "a setting")
+//   props:    [{ name, type: 'string' | 'boolean' | 'enum' | 'number' | 'node', options?: [..], default? }]
+//             an enum prop is a variant axis; its default is the axis's base value; a 'node' prop is a ReactNode slot (decision 0004)
+//   root:     { id, tag, style: {}, text?: string, textProp?: string, attrs?: { src?, alt? }, children: [], when?: 'boolProp', slot?: 'nodeProp', instance?: { component, props } }
+//             a node holds child elements OR one text (a string, or a prop: "a setting") OR a slot ({children});
+//             `when` shows it only while that boolean prop is true; `instance` makes it another component (tag = its name)
 //   variants: { [axis]: { [value]: { [nodeId]: { [cssProp]: value } } } }   overrides only
 // Pure: no Node imports, so the canvas page can load it too.
+import { CSS_PROPS, CSS_NUMBER_PROPS } from './css-props.js';
 
 export class EditError extends Error {
   constructor(index, message) {
@@ -23,6 +25,11 @@ const CSS_PROP = /^[a-z][a-zA-Z]*$/;
 const NODE_ID = /^[a-z][a-zA-Z0-9_]*$/;
 const PROP_NAME = /^[a-z][a-zA-Z0-9]*$/;
 const OPTION = /^[a-zA-Z0-9_-]+$/;
+const COMPONENT_NAME = /^[A-Z][A-Za-z0-9]*$/;
+export const PROP_TYPES = ['string', 'boolean', 'enum', 'number', 'node'];
+// A node that can hold child elements: not an <img>, not another component, not showing text or a slot.
+const holdsText = (n) => n.text !== undefined || !!n.textProp || !!n.slot;
+const canHold = (n) => !VOID.has(n.tag) && !n.instance && !holdsText(n);
 const RESERVED = new Set(['v', 's', 'base', 'variants', 'children', 'key', 'ref', 'style', 'class', 'default', 'new', 'delete', 'function', 'return', 'const', 'let', 'var', 'this']);
 
 export function index(doc) {
@@ -80,11 +87,16 @@ export function touched(edits) {
       case 'insert': keys.add(`children:${e.parent}`); keys.add(`node:${e.node?.id}`); break;
       case 'delete': keys.add(`node:${e.id}`); break;
       case 'rename': keys.add(`node:${e.id}`); keys.add(`node:${e.to}`); break;
+      case 'insertInstance': keys.add(`children:${e.parent}`); keys.add(`node:${e.id}`); break;
+      case 'swapInstance': keys.add(`node:${e.id}`); break;
+      case 'renameInstanceProp': case 'renameInstanceValue': keys.add(`uses:${e.component}`); break;
       case 'move': keys.add(`node:${e.id}`); keys.add(`children:${e.parent}`); break;
       case 'duplicate': case 'paste': keys.add(`children:${e.op === 'paste' ? e.parent : `of:${e.id}`}`); break;
       case 'wrap': for (const id of e.ids || []) keys.add(`node:${id}`); keys.add(`node:${e.id}`); keys.add(`children:of:${e.ids?.[0]}`); break;
       case 'unwrap': keys.add(`node:${e.id}`); keys.add(`children:of:${e.id}`); break;
-      case 'addProp': case 'removeProp': case 'setDefault': keys.add(`prop:${e.name}`); break;
+      case 'addProp': case 'removeProp': case 'setDefault': case 'describeProp': case 'reorderProp': keys.add(`prop:${e.name}`); break;
+      case 'renameProp': keys.add(`prop:${e.name}`); keys.add(`prop:${e.to}`); break;
+      case 'renameVariant': case 'reorderVariant': keys.add(`prop:${e.axis}`); break;
       case 'bindText': keys.add(`${e.id}.text`); if (e.prop) keys.add(`prop:${e.prop}`); break;
       case 'addVariant': case 'removeVariant': keys.add(`prop:${e.axis}`); break;
       default: keys.add(`op:${e?.op}`);
@@ -111,7 +123,9 @@ export function diffKeys(before, after) {
   for (const id of new Set([...A.keys(), ...B.keys()])) {
     const a = A.get(id), b = B.get(id);
     if (!a || !b || a.tag !== b.tag) { keys.add(`node:${id}`); continue; }
-    if (a.text !== b.text || a.textProp !== b.textProp) keys.add(`${id}.text`);
+    if (a.text !== b.text || a.textProp !== b.textProp || a.slot !== b.slot) keys.add(`${id}.text`);
+    if (a.when !== b.when) keys.add(`${id}.@when`);
+    if (!same(a.instance, b.instance)) keys.add(`node:${id}`);
     for (const p of new Set([...Object.keys(a.style), ...Object.keys(b.style)])) if (a.style[p] !== b.style[p]) keys.add(`${id}.${p}`);
     for (const p of ATTRS) if (a.attrs?.[p] !== b.attrs?.[p]) keys.add(`${id}.@${p}`);
     if (!same(a.children.map((c) => c.id), b.children.map((c) => c.id))) keys.add(`children:${id}`);
@@ -119,6 +133,8 @@ export function diffKeys(before, after) {
   for (const name of new Set([...before.props, ...after.props].map((p) => p.name))) {
     if (!same(propOf(before, name), propOf(after, name))) keys.add(`prop:${name}`);
   }
+  const order = (d) => d.props.map((p) => p.name).filter((n) => propOf(before, n) && propOf(after, n));
+  if (order(before).join() !== order(after).join()) for (const n of order(after)) keys.add(`prop:${n}`); // props reordered
   const flat = (doc) => {
     const m = new Map();
     for (const [axis, vals] of Object.entries(doc.variants)) for (const [val, nodes] of Object.entries(vals))
@@ -145,7 +161,14 @@ export function unsafeCssValue(value) {
   return d !== 0 || q !== '';
 }
 function checkValue(i, path, value) {
-  if (typeof value === 'number') { if (!Number.isFinite(value)) throw new EditError(i, `value for ${path} must be finite`); return; }
+  // only real CSS properties, and numbers only where React's CSSProperties takes them: the file must pass `tsc --strict`
+  const prop = path.slice(path.lastIndexOf('.') + 1);
+  if (!CSS_PROPS.has(prop)) throw new EditError(i, `unknown CSS property "${prop}"`);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new EditError(i, `value for ${path} must be finite`);
+    if (!CSS_NUMBER_PROPS.has(prop)) throw new EditError(i, `${prop} takes text such as '8px' or 'red', not the number ${value}`);
+    return;
+  }
   if (typeof value !== 'string') throw new EditError(i, `value for ${path} must be a string or number`);
   if (unsafeCssValue(value)) throw new EditError(i, `unsafe value for ${path}`);
 }
@@ -153,11 +176,17 @@ function checkText(i, text) {
   if (typeof text !== 'string') throw new EditError(i, 'text must be a string');
   if (/[\n`]/.test(text) || text.length > 500) throw new EditError(i, 'text must be one line, at most 500 characters');
 }
+function checkDescription(i, text) {
+  if (typeof text !== 'string' || /[\n\r]|\*\//.test(text) || text.length > 200) throw new EditError(i, 'a description is one line, at most 200 characters, without */');
+  return text.trim();
+}
 function checkPropValue(i, prop, value) {
   if (value === undefined) return;
   if (prop.type === 'string') checkText(i, value);
   else if (prop.type === 'boolean' && typeof value !== 'boolean') throw new EditError(i, `default for ${prop.name} must be true or false`);
   else if (prop.type === 'enum' && !prop.options.includes(value)) throw new EditError(i, `default for ${prop.name} must be one of ${prop.options.join(', ')}`);
+  else if (prop.type === 'number' && !(typeof value === 'number' && Number.isFinite(value))) throw new EditError(i, `default for ${prop.name} must be a number`);
+  else if (prop.type === 'node') throw new EditError(i, `${prop.name} is a slot (ReactNode): it has no default; its preview text lives in the sidecar`);
 }
 function cleanVariants(doc) {
   for (const [axis, vals] of Object.entries(doc.variants)) {
@@ -188,19 +217,36 @@ function cloneTree(node, taken, map) {
   if (node.text !== undefined) out.text = node.text;
   if (node.textProp) out.textProp = node.textProp;
   if (node.attrs) out.attrs = { ...node.attrs };
+  if (node.when) out.when = node.when;
+  if (node.slot) out.slot = node.slot;
+  if (node.instance) out.instance = structuredClone(node.instance);
   out.children = (node.children || []).map((c) => cloneTree(c, taken, map));
   return out;
 }
 // Validates a pasted tree the way `insert` validates a node, recursively.
 function checkTree(i, n, depth = 0) {
   if (!n || typeof n.id !== 'string' || typeof n.tag !== 'string') throw new EditError(i, 'node needs id and tag');
-  if (!TAGS.has(n.tag)) throw new EditError(i, `tag "${n.tag}" is not supported`);
+  if (!(n.instance ? COMPONENT_NAME.test(n.tag) && n.instance.component === n.tag : TAGS.has(n.tag))) throw new EditError(i, `tag "${n.tag}" is not supported`);
   if (depth > 40) throw new EditError(i, 'tree is too deep');
   for (const [k, v] of Object.entries(n.style || {})) { if (!CSS_PROP.test(k)) throw new EditError(i, `bad property "${k}"`); checkValue(i, `${n.id}.${k}`, v); }
   if (n.text !== undefined) { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); }
   for (const [k, v] of Object.entries(n.attrs || {})) { if (!ATTRS.includes(k)) throw new EditError(i, `unknown attribute "${k}"`); checkText(i, v); }
-  if ((n.children || []).length && (n.text !== undefined || VOID.has(n.tag))) throw new EditError(i, `"${n.id}" cannot hold both text and elements`);
+  if ((n.children || []).length && (n.text !== undefined || n.slot || n.instance || VOID.has(n.tag))) throw new EditError(i, `"${n.id}" cannot hold both text and elements`);
   (n.children || []).forEach((c) => checkTree(i, c, depth + 1));
+}
+
+// Props of an instance that are the component's own business, not the target's.
+const INSTANCE_RESERVED = new Set(['key', 'ref', 'style', 'className', 'data-n', 'id']);
+// An instance prop value: text, a finite number, true/false, or { prop: 'name' } to pass one of the host's own props through.
+function checkInstanceValue(i, doc, v) {
+  if (typeof v === 'string') return checkText(i, v);
+  if (typeof v === 'number') { if (!Number.isFinite(v)) throw new EditError(i, 'a number prop must be finite'); return; }
+  if (typeof v === 'boolean') return;
+  if (v && typeof v === 'object' && Object.keys(v).length === 1 && typeof v.prop === 'string') {
+    if (!propOf(doc, v.prop)) throw new EditError(i, `no prop "${v.prop}" to pass through`);
+    return;
+  }
+  throw new EditError(i, 'an instance prop is a text, a number, true/false or { prop: "name" }');
 }
 
 // Put prop into a style object; `at` (optional, only used by undo and restore) is where a NEW key goes in the object's order.
@@ -228,10 +274,39 @@ export function applyEdits(doc, edits) {
         if (prop === 'text') {
           if (e.variant) throw new EditError(i, 'text cannot differ per variant; make it a setting instead');
           if (node.children.length) throw new EditError(i, `"${id}" has child elements, so it cannot hold text`);
-          if (VOID.has(node.tag)) throw new EditError(i, `<${node.tag}> cannot hold text`);
-          if (e.value === null) { delete node.text; delete node.textProp; break; }
+          if (VOID.has(node.tag) || node.instance) throw new EditError(i, `<${node.tag}> cannot hold text`);
+          if (e.value === null || e.value === '') { delete node.text; delete node.textProp; delete node.slot; break; } // empty text is no text: the file can't tell them apart
           checkText(i, e.value);
-          delete node.textProp; node.text = e.value;
+          delete node.textProp; delete node.slot; node.text = e.value;
+          break;
+        }
+        if (prop === '@when') { // show the node only while a boolean prop is true
+          if (e.variant) throw new EditError(i, 'a condition cannot differ per variant');
+          if (!parentOf.get(id)) throw new EditError(i, 'the root is always shown, so it cannot have a condition');
+          if (e.value === null) { delete node.when; break; }
+          const p = propOf(next, e.value);
+          if (!p || p.type !== 'boolean') throw new EditError(i, `"${e.value}" is not a true/false prop; add one first (addProp type boolean)`);
+          node.when = e.value;
+          break;
+        }
+        if (prop === '@slot') { // the node shows what the caller passes in this ReactNode prop
+          if (e.variant) throw new EditError(i, 'a slot cannot differ per variant');
+          if (e.value === null) { delete node.slot; break; }
+          const p = propOf(next, e.value);
+          if (!p || p.type !== 'node') throw new EditError(i, `"${e.value}" is not a slot prop; add one first (addProp type node)`);
+          if (node.children.length || node.instance || VOID.has(node.tag)) throw new EditError(i, `"${id}" cannot hold a slot (it has child elements, or is an image or another component)`);
+          delete node.text; delete node.textProp;
+          node.slot = e.value;
+          break;
+        }
+        if (prop.startsWith('prop:')) { // an instance's prop: a text, a number, true/false, or { prop: 'ours' } to pass one of this component's props through
+          const name = prop.slice(5);
+          if (!node.instance) throw new EditError(i, `"${id}" is not another component`);
+          if (e.variant) throw new EditError(i, 'instance props cannot differ per variant');
+          if (!PROP_NAME.test(name) || INSTANCE_RESERVED.has(name)) throw new EditError(i, `bad prop name "${name}"`);
+          if (e.value === null) { delete node.instance.props[name]; break; }
+          checkInstanceValue(i, next, e.value);
+          node.instance.props[name] = e.value;
           break;
         }
         if (prop.startsWith('@')) {
@@ -243,6 +318,7 @@ export function applyEdits(doc, edits) {
           node.attrs = { ...(node.attrs || {}), [attr]: e.value };
           break;
         }
+        if (node.instance) throw new EditError(i, `"${id}" is another component, so it has no styles of its own; set its props, or style it from its own file`);
         if (!CSS_PROP.test(prop)) throw new EditError(i, `bad property "${prop}"`);
         if (e.at !== undefined && !(Number.isInteger(e.at) && e.at >= 0)) throw new EditError(i, 'at must be a whole number from 0');
         if (e.value !== null) checkValue(i, e.path, e.value);
@@ -266,8 +342,7 @@ export function applyEdits(doc, edits) {
       case 'insert': {
         const parent = byId.get(e.parent);
         if (!parent) throw new EditError(i, `no parent "${e.parent}"`);
-        if (parent.text !== undefined || parent.textProp) throw new EditError(i, `"${e.parent}" holds text, so it cannot hold elements`);
-        if (VOID.has(parent.tag)) throw new EditError(i, `<${parent.tag}> cannot hold elements`);
+        if (!canHold(parent)) throw new EditError(i, `"${e.parent}" shows text, a slot or an image, or is another component, so it cannot hold elements`);
         const n = e.node;
         if (!n || typeof n.id !== 'string' || typeof n.tag !== 'string') throw new EditError(i, 'node needs id and tag');
         if (!NODE_ID.test(n.id)) throw new EditError(i, `bad id "${n.id}" (letters, digits, _; starts lowercase)`);
@@ -275,7 +350,7 @@ export function applyEdits(doc, edits) {
         if (!TAGS.has(n.tag)) throw new EditError(i, `tag "${n.tag}" is not supported`);
         const node = { id: n.id, tag: n.tag, style: {}, children: [] };
         for (const [k, v] of Object.entries(n.style || {})) { if (!CSS_PROP.test(k)) throw new EditError(i, `bad property "${k}"`); checkValue(i, `${n.id}.${k}`, v); node.style[k] = v; }
-        if (n.text !== undefined) { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); node.text = n.text; }
+        if (n.text !== undefined && n.text !== '') { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); node.text = n.text; }
         for (const [k, v] of Object.entries(n.attrs || {})) { if (!ATTRS.includes(k)) throw new EditError(i, `unknown attribute "${k}"`); checkText(i, v); (node.attrs ??= {})[k] = v; }
         const at = e.index ?? parent.children.length;
         if (!Number.isInteger(at) || at < 0 || at > parent.children.length) throw new EditError(i, `bad index ${e.index}`);
@@ -294,7 +369,7 @@ export function applyEdits(doc, edits) {
         const node = byId.get(e.id), from = parentOf.get(e.id), to = byId.get(e.parent);
         if (!node || !from) throw new EditError(i, `cannot move "${e.id}"`);
         if (!to) throw new EditError(i, `no parent "${e.parent}"`);
-        if (to.text !== undefined || to.textProp || VOID.has(to.tag)) throw new EditError(i, `"${e.parent}" cannot hold elements`);
+        if (!canHold(to)) throw new EditError(i, `"${e.parent}" cannot hold elements`);
         for (let p = to; p; p = parentOf.get(p.id)) if (p === node) throw new EditError(i, 'cannot move a node into itself');
         from.children = from.children.filter((c) => c.id !== e.id);
         const at = e.index ?? to.children.length;
@@ -313,9 +388,9 @@ export function applyEdits(doc, edits) {
         break;
       }
       case 'addProp': {
-        if (typeof e.name !== 'string' || !PROP_NAME.test(e.name) || RESERVED.has(e.name)) throw new EditError(i, `bad prop name "${e.name}"`);
+        if (typeof e.name !== 'string' || !PROP_NAME.test(e.name) || (RESERVED.has(e.name) && !(e.name === 'children' && e.type === 'node'))) throw new EditError(i, `bad prop name "${e.name}"`);
         if (propOf(next, e.name)) throw new EditError(i, `prop "${e.name}" already exists`);
-        if (!['string', 'boolean', 'enum'].includes(e.type)) throw new EditError(i, 'type must be string, boolean or enum');
+        if (!PROP_TYPES.includes(e.type)) throw new EditError(i, 'type must be string, boolean, number, enum or node (a slot)');
         const p = { name: e.name, type: e.type };
         if (e.type === 'enum') {
           if (!Array.isArray(e.options) || !e.options.length || e.options.some((o) => typeof o !== 'string' || !OPTION.test(o)) || new Set(e.options).size !== e.options.length) throw new EditError(i, 'enum needs distinct options (letters, digits, _ or -)');
@@ -323,14 +398,42 @@ export function applyEdits(doc, edits) {
           p.default = e.default ?? e.options[0];
         } else if (e.default !== undefined) p.default = e.default;
         checkPropValue(i, p, p.default);
+        if (e.description !== undefined && e.description !== null && e.description !== '') p.description = checkDescription(i, e.description);
         next.props.push(p);
+        break;
+      }
+      case 'describeProp': { // {name, text}: the prop's description, written as a /** */ comment above it in the file; '' or null removes it
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        delete p.description;
+        if (e.text !== null && e.text !== undefined && e.text !== '') p.description = checkDescription(i, e.text);
+        break;
+      }
+      case 'reorderProp': { // {name, to}: move a prop to position `to` (0 = first); a variant axis keeps its place among the axes in the order the props are listed
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        if (!Number.isInteger(e.to) || e.to < 0 || e.to >= next.props.length) throw new EditError(i, `bad position ${e.to} (0 to ${next.props.length - 1})`);
+        next.props = next.props.filter((x) => x !== p);
+        next.props.splice(e.to, 0, p);
+        break;
+      }
+      case 'reorderVariant': { // {axis, value, to}: move a value of a variant axis to position `to`; the base value stays the base wherever it sits
+        const p = propOf(next, e.axis);
+        if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
+        if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
+        if (!Number.isInteger(e.to) || e.to < 0 || e.to >= p.options.length) throw new EditError(i, `bad position ${e.to} (0 to ${p.options.length - 1})`);
+        p.options = p.options.filter((o) => o !== e.value);
+        p.options.splice(e.to, 0, e.value);
         break;
       }
       case 'removeProp': {
         const p = propOf(next, e.name);
         if (!p) throw new EditError(i, `no prop "${e.name}"`);
-        const user = [...byId.values()].find((n) => n.textProp === e.name);
-        if (user) throw new EditError(i, `"${user.id}" shows ${e.name}; unbind its text first`);
+        const user = [...byId.values()].find((n) => n.textProp === e.name || n.slot === e.name || n.when === e.name || Object.values(n.instance?.props || {}).some((v) => v?.prop === e.name));
+        if (user) {
+          const how = user.textProp === e.name ? ['shows', 'unbind its text first'] : user.slot === e.name ? ['holds', 'clear its slot first'] : user.when === e.name ? ['is shown only when', 'clear its condition first'] : ['passes', 'remove that instance prop first'];
+          throw new EditError(i, `"${user.id}" ${how[0]} ${e.name}; ${how[1]}`);
+        }
         next.props = next.props.filter((x) => x !== p);
         delete next.variants[e.name];
         break;
@@ -347,14 +450,98 @@ export function applyEdits(doc, edits) {
         p.default = e.value;
         break;
       }
+      case 'insertInstance': { // {parent, index?, id, component, props?, when?}: another component, from a sibling file, as a child
+        const parent = byId.get(e.parent);
+        if (!parent) throw new EditError(i, `no parent "${e.parent}"`);
+        if (!canHold(parent)) throw new EditError(i, `"${e.parent}" shows text, a slot or an image, or is another component, so it cannot hold elements`);
+        if (typeof e.id !== 'string' || !NODE_ID.test(e.id)) throw new EditError(i, `bad id "${e.id}" (letters, digits, _; starts lowercase)`);
+        if (byId.has(e.id)) throw new EditError(i, `id "${e.id}" already exists`);
+        if (typeof e.component !== 'string' || !COMPONENT_NAME.test(e.component)) throw new EditError(i, `bad component name "${e.component}" (PascalCase, the name of a sibling file)`);
+        if (e.component === next.name) throw new EditError(i, `${next.name} cannot use itself`);
+        const props = {};
+        for (const [k, v] of Object.entries(e.props || {})) {
+          if (!PROP_NAME.test(k) || INSTANCE_RESERVED.has(k)) throw new EditError(i, `bad prop name "${k}"`);
+          checkInstanceValue(i, next, v);
+          props[k] = v;
+        }
+        const node = { id: e.id, tag: e.component, style: {}, children: [], instance: { component: e.component, props } };
+        if (e.when !== undefined && e.when !== null) {
+          const w = propOf(next, e.when);
+          if (!w || w.type !== 'boolean') throw new EditError(i, `"${e.when}" is not a true/false prop`);
+          node.when = e.when;
+        }
+        const at = e.index ?? parent.children.length;
+        if (!Number.isInteger(at) || at < 0 || at > parent.children.length) throw new EditError(i, `bad index ${e.index}`);
+        parent.children.splice(at, 0, node);
+        break;
+      }
+      case 'extractComponent': { // {id, component}: the node (and everything in it) becomes an instance of `component`, whose file already holds the subtree (see extractPlan)
+        if (typeof e.component !== 'string' || !COMPONENT_NAME.test(e.component)) throw new EditError(i, `bad component name "${e.component}" (PascalCase)`);
+        if (e.component === next.name) throw new EditError(i, `${next.name} cannot use itself`);
+        let plan; try { plan = extractPlan(next, e.id); } catch (err) { throw new EditError(i, err.message); }
+        const parent = parentOf.get(e.id), node = byId.get(e.id);
+        removeOverrides(next, subtreeIds(node)); cleanVariants(next);
+        const inst = { id: e.id, tag: e.component, style: {}, children: [], instance: { component: e.component, props: Object.fromEntries(plan.props.map((p) => [p.name, { prop: p.name }])) } };
+        if (node.when) inst.when = node.when;
+        parent.children.splice(parent.children.indexOf(node), 1, inst);
+        break;
+      }
+      case 'swapInstance': { // {id, component}: the same place and props, another component (props the new one lacks are dropped by the store, which can read it)
+        const node = byId.get(e.id);
+        if (!node?.instance) throw new EditError(i, `"${e.id}" is not another component`);
+        if (typeof e.component !== 'string' || !COMPONENT_NAME.test(e.component)) throw new EditError(i, `bad component name "${e.component}"`);
+        if (e.component === next.name) throw new EditError(i, `${next.name} cannot use itself`);
+        node.tag = e.component; node.instance.component = e.component;
+        break;
+      }
+      // The workspace's own ops, sent to the components that use another one when that one renames a prop or a variant value.
+      case 'renameInstanceProp': { // {component, name, to}: every instance of `component` passes `to` where it passed `name` (same place in the tag)
+        for (const n of byId.values()) {
+          if (n.instance?.component !== e.component || !(e.name in n.instance.props)) continue;
+          if (e.to in n.instance.props) throw new EditError(i, `"${n.id}" already passes ${e.to}`);
+          n.instance.props = Object.fromEntries(Object.entries(n.instance.props).map(([k, v]) => [k === e.name ? e.to : k, v]));
+        }
+        break;
+      }
+      case 'renameInstanceValue': { // {component, axis, value, to}: instances that pass the value as text pass the new one
+        for (const n of byId.values()) if (n.instance?.component === e.component && n.instance.props[e.axis] === e.value) n.instance.props[e.axis] = e.to;
+        break;
+      }
+      case 'renameProp': { // {name, to}: the prop, every element that shows it, and (for a variant axis) its overrides
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        if (typeof e.to !== 'string' || !PROP_NAME.test(e.to) || RESERVED.has(e.to)) throw new EditError(i, `bad prop name "${e.to}"`);
+        if (propOf(next, e.to)) throw new EditError(i, `prop "${e.to}" already exists`);
+        p.name = e.to;
+        for (const n of byId.values()) {
+          if (n.textProp === e.name) n.textProp = e.to;
+          if (n.slot === e.name) n.slot = e.to;
+          if (n.when === e.name) n.when = e.to;
+          for (const [k, v] of Object.entries(n.instance?.props || {})) if (v?.prop === e.name) n.instance.props[k] = { prop: e.to };
+        }
+        if (next.variants[e.name]) next.variants = Object.fromEntries(Object.entries(next.variants).map(([k, v]) => [k === e.name ? e.to : k, v]));
+        break;
+      }
+      case 'renameVariant': { // {axis, value, to}: a value of a variant axis, including its overrides (and the base, if it is the base)
+        const p = propOf(next, e.axis);
+        if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
+        if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
+        if (typeof e.to !== 'string' || !OPTION.test(e.to)) throw new EditError(i, `bad variant value "${e.to}"`);
+        if (p.options.includes(e.to)) throw new EditError(i, `${e.axis} already has "${e.to}"`);
+        p.options = p.options.map((o) => (o === e.value ? e.to : o));
+        if (p.default === e.value) p.default = e.to;
+        const vals = next.variants[e.axis];
+        if (vals?.[e.value]) next.variants[e.axis] = Object.fromEntries(Object.entries(vals).map(([k, v]) => [k === e.value ? e.to : k, v]));
+        break;
+      }
       case 'bindText': {
         const node = byId.get(e.id);
         if (!node) throw new EditError(i, `no node "${e.id}"`);
-        if (node.children.length || VOID.has(node.tag)) throw new EditError(i, `"${e.id}" cannot hold text`);
+        if (node.children.length || VOID.has(node.tag) || node.instance) throw new EditError(i, `"${e.id}" cannot hold text`);
         if (e.prop === null) {
           if (!node.textProp) throw new EditError(i, `"${e.id}" is not bound to a setting`);
           const p = propOf(next, node.textProp);
-          node.text = typeof p?.default === 'string' ? p.default : '';
+          if (typeof p?.default === 'string' && p.default !== '') node.text = p.default; // an empty default is no text: the file can't tell them apart
           delete node.textProp;
           break;
         }
@@ -362,7 +549,7 @@ export function applyEdits(doc, edits) {
         let p = propOf(next, e.prop);
         if (!p) { p = { name: e.prop, type: 'string', ...(node.text !== undefined ? { default: node.text } : {}) }; next.props.push(p); }
         if (p.type !== 'string') throw new EditError(i, `prop "${e.prop}" is not a string`);
-        delete node.text; node.textProp = e.prop;
+        delete node.text; delete node.slot; node.textProp = e.prop;
         break;
       }
       case 'addVariant': {
@@ -385,7 +572,11 @@ export function applyEdits(doc, edits) {
         if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
         if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
         if (p.default === e.value) throw new EditError(i, `"${e.value}" is the base of ${e.axis}`);
-        if (p.options.length <= 2) { next.props = next.props.filter((x) => x !== p); delete next.variants[e.axis]; break; }
+        if (p.options.length <= 2) {
+          const user = [...byId.values()].find((n) => Object.values(n.instance?.props || {}).some((v) => v?.prop === e.axis));
+          if (user) throw new EditError(i, `"${user.id}" passes ${e.axis} to another component; free it first`);
+          next.props = next.props.filter((x) => x !== p); delete next.variants[e.axis]; break;
+        }
         p.options = p.options.filter((o) => o !== e.value);
         if (next.variants[e.axis]) delete next.variants[e.axis][e.value];
         cleanVariants(next);
@@ -403,7 +594,7 @@ export function applyEdits(doc, edits) {
       case 'paste': {
         const parent = byId.get(e.parent);
         if (!parent) throw new EditError(i, `no parent "${e.parent}"`);
-        if (parent.text !== undefined || parent.textProp || VOID.has(parent.tag)) throw new EditError(i, `"${e.parent}" cannot hold elements`);
+        if (!canHold(parent)) throw new EditError(i, `"${e.parent}" cannot hold elements`);
         checkTree(i, e.tree);
         const map = new Map(), copy = cloneTree(e.tree, new Set(byId.keys()), map);
         // a text bound to a setting this component lacks becomes plain text (the tree carries the setting's default as `text`)
@@ -444,15 +635,95 @@ export function applyEdits(doc, edits) {
         const node = byId.get(e.id), parent = parentOf.get(e.id);
         if (!node) throw new EditError(i, `no node "${e.id}"`);
         if (!parent) throw new EditError(i, 'cannot unwrap the root');
-        if (node.text !== undefined || node.textProp || !node.children.length) throw new EditError(i, `"${e.id}" holds no elements to lift out`);
+        if (holdsText(node) || node.instance || !node.children.length) throw new EditError(i, `"${e.id}" holds no elements to lift out`);
         removeOverrides(next, [e.id]); cleanVariants(next);
         const at = parent.children.indexOf(node);
         parent.children.splice(at, 1, ...node.children);
         break;
       }
       default:
-        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename`);
+        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename, renameProp, renameVariant, insertInstance, swapInstance, extractComponent, describeProp, reorderProp, reorderVariant`);
     }
   });
   return next;
+}
+
+// Checks every instance in `doc` against the components it uses. `lookup(name)` returns { doc, uses: Set<string> } for a sibling
+// component, or null when there is none; a missing resolver skips the checks. Returns an error text, or null.
+//   - the component exists and is not the host itself, and no import cycle (the target must not, through its own uses, reach the host);
+//   - every prop passed is a prop of the target, and its value fits the target's type (number, true/false, text, one of an enum's values);
+//   - a pass-through ({ prop: 'x' }) must have the same kind of type on both sides.
+const kindOf = (p) => (p.type === 'enum' ? 'string' : p.type);
+// Does value `v` (as passed by `hostDoc`) fit target prop `tp`?
+export function instancePropFits(hostDoc, v, tp) {
+  if (v && typeof v === 'object') {
+    const mine = propOf(hostDoc, v.prop);
+    if (!mine) return false;
+    if (tp.type === 'enum') return mine.type === 'enum' && mine.options.every((o) => tp.options.includes(o)); // tsc: every value ours can be must be one it takes
+    return kindOf(mine) === kindOf(tp);
+  }
+  if (tp.type === 'enum') return tp.options.includes(v);
+  if (tp.type === 'boolean') return typeof v === 'boolean';
+  if (tp.type === 'number') return typeof v === 'number';
+  if (tp.type === 'string') return typeof v === 'string';
+  return false; // a slot takes content, which a file cannot hold here
+}
+// After a swapInstance: keep the props the new component also has (with a fitting value), drop the rest.
+export function pruneSwapped(doc, edits, lookup) {
+  if (!lookup) return doc;
+  const byId = index(doc).byId;
+  for (const e of edits) {
+    if (e?.op !== 'swapInstance') continue;
+    const node = byId.get(e.id), target = lookup(e.component)?.doc;
+    if (!node?.instance || !target) continue;
+    for (const [k, v] of Object.entries(node.instance.props)) { const tp = propOf(target, k); if (!tp || !instancePropFits(doc, v, tp)) delete node.instance.props[k]; }
+  }
+  return doc;
+}
+export function checkInstances(doc, lookup) {
+  if (!lookup) return null;
+  for (const n of index(doc).byId.values()) {
+    if (!n.instance) continue;
+    const name = n.instance.component;
+    if (name === doc.name) return `${doc.name} cannot use itself ("${n.id}")`;
+    const target = lookup(name);
+    if (!target) return `"${n.id}" uses ${name}, but there is no ${name}.tsx next to this file`;
+    if (target.reaches?.(doc.name)) return `"${n.id}" would make an import cycle: ${name} already uses ${doc.name}`;
+    if (!target.doc) return `"${n.id}" uses ${name}, which is not editable here (read-only), so its props are unknown`;
+    for (const [k, v] of Object.entries(n.instance.props)) {
+      const tp = propOf(target.doc, k);
+      if (!tp) return `${name} has no prop "${k}" (on "${n.id}")`;
+      if (!instancePropFits(doc, v, tp)) {
+        if (v && typeof v === 'object') return `"${n.id}" passes ${v.prop} to ${name}.${k}, but they are different kinds of prop`;
+        return `${name}.${k} takes ${tp.type === 'enum' ? `one of ${tp.options.join(', ')}` : tp.type === 'node' ? 'content, which cannot be set from a file here' : tp.type}, not ${JSON.stringify(v)} (on "${n.id}")`;
+      }
+    }
+  }
+  return null;
+}
+
+// What moving the subtree under `id` into a component of its own takes with it: the subtree (its root without any condition,
+// which stays on the instance), the props the subtree uses (text settings, conditions, slots, passed-through props, variant
+// axes that override a node in it) and the overrides of its nodes. Pure; throws Error(text) when it cannot be done.
+export function extractPlan(doc, id) {
+  const { byId, parentOf } = index(doc);
+  const node = byId.get(id);
+  if (!node) throw new Error(`no node "${id}". Next: use the id of a node in this component.`);
+  if (!parentOf.get(id)) throw new Error('the root cannot be extracted: it is the component. Next: pick a node inside it.');
+  if (node.instance) throw new Error(`"${id}" is already another component. Next: pick a plain element.`);
+  const ids = new Set(subtreeIds(node));
+  if ([...ids].some((x) => x === 'root' && x !== id)) throw new Error('a node called "root" is inside; rename it first, the new component needs the name for its own root. Next: rename that node.');
+  const used = new Set();
+  for (const n of [...ids].map((x) => byId.get(x))) {
+    if (n.textProp) used.add(n.textProp);
+    if (n.slot) used.add(n.slot);
+    if (n.when && n !== node) used.add(n.when);
+    for (const v of Object.values(n.instance?.props || {})) if (v && typeof v === 'object') used.add(v.prop);
+  }
+  const variants = {};
+  for (const [axis, vals] of Object.entries(doc.variants)) for (const [val, nodes] of Object.entries(vals)) for (const [nid, st] of Object.entries(nodes)) if (ids.has(nid)) { ((variants[axis] ??= {})[val] ??= {})[nid] = { ...st }; used.add(axis); }
+  const props = doc.props.filter((p) => used.has(p.name)).map((p) => structuredClone(p));
+  const root = structuredClone(node);
+  delete root.when;
+  return { node: root, props, variants };
 }

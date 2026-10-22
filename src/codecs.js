@@ -4,20 +4,25 @@
 //   save(state, before, after) -> { text, state }
 import { explainError } from './errors.js';
 import { readFileSync, existsSync } from 'node:fs';
-import { writeSidecar } from './commit.js';
+import { writeSidecar as commitSidecar, createSidecar } from './commit.js';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import * as model from './model.js';
 import { readComponent } from './tsx/read.js';
 import { writeComponent } from './tsx/write.js';
 
-// Sidecar <Name>.napkin.json: what isn't code (the stable component id, canvas position).
+// Sidecar <Name>.napkin.json: what isn't code (the stable component id, canvas position, preview data).
+// Always written the same way (FMT-06): keys sorted at every level, two-space indent, one trailing newline,
+// so moving a component is a one- or two-line diff in this file and nothing in the .tsx.
+const sortKeys = (v) => (Array.isArray(v) ? v.map(sortKeys) : v && typeof v === 'object' ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys(v[k])])) : v);
+export const sidecarText = (side) => JSON.stringify(sortKeys(side), null, 2) + '\n';
+export function writeSidecar(file, side) { commitSidecar(sidecarPath(file), sidecarText(side)); }
 export function sidecarPath(file) { return file.replace(/\.tsx$/, '.napkin.json'); }
 export function readSidecar(file, name, { create = false } = {}) {
   const p = sidecarPath(file);
   if (existsSync(p)) { try { return JSON.parse(readFileSync(p, 'utf8')); } catch (e) { throw new Error(explainError(e.message, { file: p, next: 'fix the sidecar JSON or restore it from git, then reopen the component.' })); } }
   const side = { id: `cmp_${name.replace(/[A-Z]/g, (c, i) => (i ? '_' : '') + c.toLowerCase())}_${createHash('sha256').update(file).digest('hex').slice(0, 16)}`, canvas: { x: 0, y: 0 } };
-  if (create) writeSidecar(p, JSON.stringify(side, null, 2) + '\n');
+  if (create) { try { createSidecar(p, sidecarText(side)); } catch (e) { if (e.code === 'EEXIST') return JSON.parse(readFileSync(p, 'utf8')); throw e; } }
   return side;
 }
 

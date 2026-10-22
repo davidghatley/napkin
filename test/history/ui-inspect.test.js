@@ -181,7 +181,7 @@ test('code strip, inspect, usage and assets on the page', { timeout: 175000 }, a
         el.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true, clientX: r.left + 2, clientY: r.top + 2 }));
       })()`);
       await waitFor(() => p.read('Card') !== before, 4000);
-      assert.match(p.read('Card'), /<img data-n="image1"[^>]*src="assets\/[0-9a-f]{8}\.svg"/);
+      assert.match(p.read('Card'), /<img\s+data-n="image1"[^>]*src="assets\/[0-9a-f]{8}\.svg"/);
       assert.equal(readdirSync(join(p.compDir, 'assets')).filter((f) => f.endsWith('.svg')).length, 1);
       await q(`napkin.drawer.close()`);
     });

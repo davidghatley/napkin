@@ -17,6 +17,7 @@ const SYNC = WRITERS.filter((w) => w.endsWith('Sync'));
 test('static: only src/commit.js writes component files; other fs writers in src/ are listed and justified', () => {
   const ALLOWED = {
     'commit.js': 'the commit path',
+    'atomic.js': 'temp file + fsync + rename, called only by commit.js (REL-01)',
     'codecs.js': 'sidecar .napkin.json only',
     'atomic-write.js': 'temp + fsync + rename helper that commit.js uses for sidecars (never a component .tsx)',
     'lock.js': '.napkin/lock files only',
@@ -42,7 +43,7 @@ test('runtime: every .tsx write, create, move and remove made by edits, create, 
     const original = fs[name];
     const m = mock.method(fs, name, function (...args) {
       const target = String(args[0]), also = typeof args[1] === 'string' ? args[1] : '';
-      if (/\.tsx/.test(target) || /\.tsx/.test(also)) calls.push({ name, target, from: (new Error().stack.split('\n').slice(2).find((l) => l.includes(`${ROOT}/src/`)) || '').trim() });
+      if (/\.tsx/.test(target) || /\.tsx/.test(also)) calls.push({ name, target, from: new Error().stack.split('\n').slice(2).filter((l) => l.includes(`${ROOT}/src/`)).map((l) => l.trim()).join(' <- ') }); // (the chain inside src/: atomic.js is called by commit.js)
       return original.apply(this, args);
     });
     restore.push(m);
@@ -60,13 +61,13 @@ test('runtime: every .tsx write, create, move and remove made by edits, create, 
     assert.equal(first.status, 200, JSON.stringify(first.json) + ' rev=' + rev + ' entries=' + ws.entries().length);
     assert.equal((await call('POST', '/api/components', { name: 'Badge' })).status, 201);
     assert.equal((await call('POST', '/api/components/Badge/rename', { name: 'Chip' })).status, 200);
-    const p = (await call('POST', '/api/components/Card/edits', { baseRevision: rev + 1, edits: [{ op: 'set', path: 'title.color', value: 'red' }], propose: true })).json.proposal;
+    const p = (await call('POST', '/api/components/Card/edits', { baseRevision: first.json.revision, edits: [{ op: 'set', path: 'title.color', value: 'red' }], propose: true })).json.proposal;
     assert.equal((await call('POST', `/api/proposals/${p.id}/accept`, {})).status, 200);
     assert.equal((await call('DELETE', '/api/components/Chip')).status, 200);
     await sleep(300);
     assert.ok(calls.length >= 8, `spy saw ${calls.length} .tsx fs calls`);
     const kinds = new Set(calls.map((c) => c.name));
-    for (const k of ['writeFileSync', 'renameSync', 'unlinkSync']) assert.ok(kinds.has(k), `saw ${k}`);
+    for (const k of ['linkSync', 'renameSync', 'unlinkSync']) assert.ok(kinds.has(k), `saw ${k}`);
     for (const c of calls) assert.match(c.from, /src\/commit\.js/, `${c.name} ${c.target} came from ${c.from || 'outside src/'}`);
     // every one of them was recorded: a frame with who and a summary
     const done = frames.filter((f) => f.by && f.by !== 'file');

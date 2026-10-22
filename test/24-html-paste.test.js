@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { lab } from './helpers/lab.js';
-import { renderPasted } from './helpers/ssr.js';
+import { renderPasted } from './helpers/paste-oracle.js';
 import { evidence } from './helpers/agents.js';
 
 const CORPUS = JSON.parse(readFileSync(new URL('./fixtures/lay10-corpus.json', import.meta.url), 'utf8'));

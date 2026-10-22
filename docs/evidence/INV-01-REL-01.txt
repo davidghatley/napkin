@@ -1,0 +1,4 @@
+INV-01: 100/100 kill points ok (596 committed edits seen; 50 killed by the parent at random times, 50 killed at a random step of the write protocol; disk held the last committed file 92x and the file being written 8x; 10 kills left a temp file behind = killed mid-write)
+✔ INV-01: 100 random SIGKILLs during edits; after restart the model is exactly what is on disk (12624.971167ms)
+REL-01: 200/200 atomic trials whole (A 102, B 98; 81 left a temp file); control (truncate+write in place): 14/20 torn
+✔ REL-01: 200 kill -9 trials during atomic writes: the file is whole every time (control: in-place writes tear) (36847.398572ms)

@@ -26,7 +26,7 @@ test('rename through the store is one revision and a small diff (root: base key,
   const { revision } = await store.read();
   const r = await store.apply({ baseRevision: revision, by: 'test', edits: [{ op: 'rename', id: 'label', to: 'caption' }] });
   assert.equal(r.ok, true, r.error);
-  assert.equal(r.revision, revision + 1);
+  assert.notEqual(r.revision, revision); // one new revision (a content hash)
   const text = readFileSync(file, 'utf8');
   assert.match(text, /<span data-n="caption" style=\{s\('caption', v\)\}>/);
   assert.equal(readComponent(text).doc.root.children[0].id, 'caption');

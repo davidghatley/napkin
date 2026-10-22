@@ -10,8 +10,10 @@ import { openStore } from '../src/store.js';
 import { tsxCodec } from '../src/codecs.js';
 import { readComponent } from '../src/tsx/read.js';
 import { newComponentSource } from '../src/tsx/write.js';
-import { applyEdits, resolveStyle, variantGrid, index, EditError } from '../src/model.js';
+import { applyEdits, resolveStyle, variantGrid } from '../src/model.js';
 import { ROOT } from './helpers/harness.js';
+import { rng, nextValidEdit } from './helpers/fuzz.js';
+import { siblingDocs } from './helpers/siblings.js';
 
 const fixture = (name) => join(ROOT, 'fixtures', name, `${name}.tsx`);
 
@@ -113,52 +115,32 @@ test('the sidecar keeps a stable component id across reopen (F09)', async () => 
   assert.equal(id1, id2);
 });
 
-// A small seeded PRNG so failures reproduce.
-function rng(seed) { return () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
-
-test('200 random edits keep the file parseable, in the dialect, and equal to the model', () => {
+// FMT-05: the fuzz length is 200 by default (fast) and 2,000 with FUZZ=2000 (output kept in docs/evidence/FMT-05.txt).
+const FUZZ = Number(process.env.FUZZ || 200);
+test(`${FUZZ} random edits keep the file parseable, in the dialect, and equal to the model`, () => {
   const rand = rng(20261020);
-  const pick = (a) => a[Math.floor(rand() * a.length)];
-  const PROPS = ['padding', 'gap', 'borderRadius', 'background', 'color', 'fontSize', 'margin', 'width'];
-  const VALUES = [0, 4, 8, 12, 16, '1px solid #000', '#2236b0', '50%', 'auto', '8px 16px', -2];
-  const TAGS = ['div', 'span', 'img', 'p', 'button', 'small'];
+  const siblings = siblingDocs(); // other components the fuzz may put in as instances (decision 0004)
   let text = readFileSync(fixture('Button'), 'utf8');
   let { doc, state } = tsxCodec.load(text);
-  let n = 0, applied = 0;
-  while (applied < 200 && n < 2000) {
-    n++;
-    const nodes = [...index(doc).byId.values()];
-    const holders = nodes.filter((x) => x.text === undefined && !x.textProp && x.tag !== 'img');
-    const leaves = nodes.filter((x) => !x.children.length && x.tag !== 'img');
-    const axesNow = doc.props.filter((p) => p.type === 'enum');
-    const kind = pick(['set', 'set', 'set', 'override', 'override', 'insert', 'delete', 'move', 'text', 'bind', 'variant', 'removeVariant', 'attr', 'unset']);
-    let edit;
-    if (kind === 'set') edit = { op: 'set', path: `${pick(nodes).id}.${pick(PROPS)}`, value: pick(VALUES) };
-    else if (kind === 'unset') { const x = pick(nodes); const k = Object.keys(x.style)[0]; if (!k) continue; edit = { op: 'set', path: `${x.id}.${k}`, value: null }; }
-    else if (kind === 'override') {
-      const a = pick(axesNow); if (!a) continue; const val = pick(a.options.filter((o) => o !== a.default)); if (!val) continue;
-      edit = { op: 'set', path: `${pick(nodes).id}.${pick(PROPS)}`, value: rand() < 0.2 ? null : pick(VALUES), variant: { [a.name]: val } };
-    } else if (kind === 'insert') {
-      if (!holders.length) continue;
-      const tag = pick(TAGS);
-      edit = { op: 'insert', parent: pick(holders).id, index: 0, node: { id: `n${n}`, tag, ...(tag !== 'img' && rand() < 0.5 ? { text: pick(['Hi', 'Buy now', 'a < b', "it's", '']) } : {}), ...(rand() < 0.5 ? { style: { padding: pick(VALUES) } } : {}) } };
-    } else if (kind === 'delete') { const x = pick(nodes.filter((y) => y.id !== doc.root.id)); if (!x) continue; edit = { op: 'delete', id: x.id }; }
-    else if (kind === 'move') { const x = pick(nodes.filter((y) => y.id !== doc.root.id)); if (!x || !holders.length) continue; edit = { op: 'move', id: x.id, parent: pick(holders).id }; }
-    else if (kind === 'text') { if (!leaves.length) continue; edit = { op: 'set', path: `${pick(leaves).id}.text`, value: pick(['Go', 'Save {draft}', 'x & y', '  padded ', 'Done']) }; }
-    else if (kind === 'bind') { if (!leaves.length) continue; edit = { op: 'bindText', id: pick(leaves).id, prop: rand() < 0.3 ? null : pick(['label', 'hint', 'title']) }; }
-    else if (kind === 'variant') edit = { op: 'addVariant', axis: pick(['size', 'state', 'tone']), value: `v${n}` };
-    else if (kind === 'removeVariant') { const a = pick(axesNow); if (!a) continue; const val = pick(a.options.filter((o) => o !== a.default)); edit = { op: 'removeVariant', axis: a.name, value: val }; }
-    else if (kind === 'attr') { const imgs = nodes.filter((x) => x.tag === 'img'); if (!imgs.length) continue; edit = { op: 'set', path: `${pick(imgs).id}.@${pick(['src', 'alt'])}`, value: rand() < 0.2 ? null : pick(['/a.png', 'An "icon"', '']) }; }
-    let next;
-    try { next = applyEdits(doc, [edit]); } catch (e) { if (e instanceof EditError) continue; throw e; }
+  const kinds = {};
+  let applied = 0;
+  for (let n = 0; applied < FUZZ && n < FUZZ * 20; n++) {
+    const r = nextValidEdit(doc, rand, n, 50, { siblings });
+    if (!r) continue;
+    const { edit, next } = r;
     const saved = tsxCodec.save(state, doc, next);
     const reread = readComponent(saved.text).doc;
     const { id, ...expected } = next;
     assert.deepEqual(reread, expected, `edit ${applied}: ${JSON.stringify(edit)}\n${saved.text}`);
     assert.doesNotMatch(saved.text, /\n\s*\n\s*\n/, `edit ${applied} left a double blank line`);
+    // load -> save with no change gives the same bytes (round trip)
+    const again = tsxCodec.load(saved.text);
+    assert.equal(tsxCodec.save(again.state, again.doc, again.doc).text, saved.text, `edit ${applied}: no-op save changed bytes`);
     ({ text } = saved); state = saved.state; doc = next; applied++;
+    kinds[r.kind] = (kinds[r.kind] || 0) + 1;
   }
-  assert.equal(applied, 200);
+  assert.equal(applied, FUZZ);
+  console.log(`fuzz: ${applied} edits applied; kinds ${JSON.stringify(kinds)}`);
 });
 
 test('setDefault changes a default in place: one-line diff, prop order kept, enum base guarded', async () => {

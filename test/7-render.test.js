@@ -99,7 +99,9 @@ test('the canvas follows the files: grid, live edits, broken edits, branch switc
       assert.ok(ms < 1000);
       assert.equal(await q(`document.querySelector('#sel-node').textContent.startsWith('title')`), true, 'selection kept');
       assert.equal(await q(`getComputedStyle(document.querySelector('#overlay-select')).display`), 'block');
-      assert.equal(await q(`${sec('Card')}.dataset.revision`), '2');
+      // revisions are opaque (content hashes); the page shows the one the server holds
+      const served = (await (await fetch(new URL('api/components/Card', server.url))).json()).revision;
+      assert.equal(await q(`${sec('Card')}.dataset.revision`), served);
     });
 
     await t.test('a broken hand edit keeps the last good render and reports the line', async () => {

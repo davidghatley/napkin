@@ -46,7 +46,10 @@ const formatError = async (e) => {
 
 export function createBundler() {
   const contexts = new Map();
-  const options = (file, name, displayFile) => ({
+  // `shared`: React stays an import ('react', 'react-dom/client', ...) that the canvas page maps to ONE copy (src/vendor.js), so a component
+  // is a small module and drawing it again after a change does not evaluate React again (CMP-06 < 100 ms).
+  const SHARED = ['react', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-dom', 'react-dom/client'];
+  const options = (file, name, displayFile, shared = false) => ({
     absWorkingDir: dirname(file),
     stdin: { contents: entry(file, name, displayFile), resolveDir: dirname(file), loader: 'js', sourcefile: 'napkin-canvas-entry.js' },
     bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
@@ -55,13 +58,15 @@ export function createBundler() {
     nodePaths: [join(ROOT, 'node_modules')],
     define: { 'process.env.NODE_ENV': '"production"' },
     logLevel: 'silent', minify: false,
+    ...(shared && { external: SHARED }),
   });
   return {
-    async build(file, name, displayFile = basename(file)) {
+    async build(file, name, displayFile = basename(file), { shared = false } = {}) {
       const t0 = performance.now();
       try {
-        let ctx = contexts.get(file);
-        if (!ctx) { ctx = await esbuild.context(options(file, name, displayFile)); contexts.set(file, ctx); }
+        const key = shared ? `${file}#shared` : file;
+        let ctx = contexts.get(key);
+        if (!ctx) { ctx = await esbuild.context(options(file, name, displayFile, shared)); contexts.set(key, ctx); }
         const r = await ctx.rebuild();
         return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
       } catch (e) {
@@ -83,7 +88,7 @@ export function createBundler() {
         return { ok: false, error: `${basename(file)}: ${await formatError(e)}\nNext: fix the reported error, then reload.`, ms: performance.now() - t0 };
       }
     },
-    async dispose(file) { const c = contexts.get(file); contexts.delete(file); await c?.dispose(); },
-    async close() { for (const f of [...contexts.keys()]) await this.dispose(f); },
+    async dispose(file) { for (const key of [file, `${file}#shared`]) { const c = contexts.get(key); contexts.delete(key); await c?.dispose(); } },
+    async close() { for (const f of [...contexts.keys()]) { const c = contexts.get(f); contexts.delete(f); await c?.dispose(); } },
   };
 }

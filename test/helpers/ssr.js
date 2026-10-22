@@ -1,31 +1,18 @@
-// The independent oracle for HTML paste: write nodes into a component through the real store, render the file with real React on the
-// server (esbuild + react-dom/server), and return the markup of the pasted part.
-import { createRequire } from 'node:module';
-import { readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+// Renders a component file to HTML with react-dom/server, the way the screen would (siblings it imports are bundled in).
 import * as esbuild from 'esbuild';
-import { openStore } from '../../src/store.js';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { ROOT } from './harness.js';
-import { tsx } from './lab.js';
 
-const PROBE = tsx('Probe', { id: 'box', tag: 'div', style: { display: 'block' } });
-export async function renderPasted(trees) {
-  const d = mkdtempSync(join(tmpdir(), 'napkin-ssr-'));
-  const file = join(d, 'Probe.tsx');
-  writeFileSync(file, PROBE);
-  const store = await openStore(file);
+export async function renderHtml(file, name, props = {}) {
+  const work = mkdtempSync(join(ROOT, 'node_modules', '.napkin-ssr-')); // inside the repo so `react` resolves
   try {
-    let { revision } = await store.read();
-    for (const tree of trees) {
-      const r = await store.apply({ baseRevision: revision, by: 'ssr', edits: [{ op: 'paste', parent: 'box', tree }] });
-      if (!r.ok) return { ok: false, error: r.error };
-      revision = r.revision;
-    }
-  } finally { await store.close(); }
-  const res = await esbuild.build({ stdin: { contents: `import {createElement} from 'react'; import {renderToStaticMarkup} from 'react-dom/server'; import {Probe} from './Probe.tsx'; export default renderToStaticMarkup(createElement(Probe));`, resolveDir: d, loader: 'js' }, bundle: true, write: false, format: 'cjs', platform: 'node', nodePaths: [join(ROOT, 'node_modules')], logLevel: 'silent', jsx: 'automatic' });
-  const m = { exports: {} };
-  new Function('module', 'exports', 'require', res.outputFiles[0].text)(m, m.exports, createRequire(import.meta.url));
-  const markup = m.exports.default;
-  return { ok: true, markup, inner: markup.replace(/^(<link[^>]*>)+/, '').replace(/^<div[^>]*>/, '').replace(/<\/div>$/, ''), source: readFileSync(file, 'utf8') };
+    const r = await esbuild.build({
+      stdin: { contents: `import { createElement } from 'react'; import { renderToStaticMarkup } from 'react-dom/server'; import { ${name} } from ${JSON.stringify(file)}; export default (props) => renderToStaticMarkup(createElement(${name}, props));`, resolveDir: ROOT, loader: 'js' },
+      bundle: true, write: false, format: 'esm', platform: 'node', jsx: 'automatic', loader: { '.tsx': 'tsx' }, packages: 'external', define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent',
+    });
+    writeFileSync(join(work, 'ssr.mjs'), r.outputFiles[0].text);
+    return (await import(pathToFileURL(join(work, 'ssr.mjs')))).default(props);
+  } finally { rmSync(work, { recursive: true, force: true }); }
 }

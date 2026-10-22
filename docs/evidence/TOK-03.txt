@@ -1,0 +1,2 @@
+Re-run: EVIDENCE=1 node --test test/tokens/source.test.js test/tokens/s5.test.js
+7/7 off-token literal fixtures flagged (100%); nearest colour uses Cartesian OKLab; lengths use absolute difference. S5 verifies all four off-token fields in the selected fixture, picker and one-line snap.

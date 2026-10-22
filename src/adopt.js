@@ -161,10 +161,10 @@ export function ${fn.id.name}(${params}) {
 // CLI starter uses the same reviewed dialect template, and commit.js creates the file.
 export function starterSource(name = 'Welcome') {
   return newComponentSource(name, 'button')
-    .replace(`export interface ${name}Props {\n}`, `export interface ${name}Props {\n  label?: string;\n  size?: 'md' | 'sm' | 'lg';\n}`)
+    .replace(`export interface ${name}Props {}`, `export interface ${name}Props {\n  label?: string;\n  size?: 'md' | 'sm' | 'lg';\n}`)
     .replace("flexDirection: 'column',", "alignItems: 'center',\n    border: 'none',\n    borderRadius: 8,\n    background: '#4f46e5',\n    color: '#ffffff',\n    fontFamily: 'system-ui, sans-serif',\n    fontSize: 15,\n    cursor: 'pointer',")
     .replace('    padding: 16,', "    padding: '10px 18px',")
-    .replace('const variants: Record<string, Record<string, Record<string, CSSProperties>>> = {\n};', "const variants: Record<string, Record<string, Record<string, CSSProperties>>> = {\n  size: {\n    sm: { root: { padding: '6px 12px', fontSize: 13 } },\n    lg: { root: { padding: '14px 24px', fontSize: 18 } },\n  },\n};")
+    .replace('const variants: Record<string, Record<string, Styles>> = {};', "const variants: Record<string, Record<string, Styles>> = {\n  size: {\n    sm: { root: { padding: '6px 12px', fontSize: 13 } },\n    lg: { root: { padding: '14px 24px', fontSize: 18 } },\n  },\n};")
     .replace(`export function ${name}({}: ${name}Props)`, `export function ${name}({ label = 'Make something', size = 'md' }: ${name}Props)`)
     .replace('const v = {};', 'const v = { size };')
     .replace(`<button data-n="root" style={s('root', v)} />`, `<button data-n="root" style={s('root', v)}>{label}</button>`);

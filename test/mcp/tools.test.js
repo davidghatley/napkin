@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tempRepo, startServer, startMcp } from '../helpers/harness.js';
 
-const EXPECTED = ['add_variant', 'apply_edits', 'create_component', 'delete_component', 'list_components', 'propose_adoption', 'read_component', 'rename_component', 'render_component', 'search', 'subscribe'];
+const EXPECTED = ['add_variant', 'apply_edits', 'create_component', 'delete_component', 'list_components', 'list_tokens', 'propose_adoption', 'read_component', 'rename_component', 'render_component', 'search', 'subscribe'];
 
 test('tools/list lists every tool with an object input schema and a description; apply_edits has dryRun and propose', async () => {
   const { compDir } = tempRepo();

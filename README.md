@@ -104,3 +104,5 @@ A file napkin can't read fully opens read-only with a badge, and napkin never re
 **Not in this build:** a tokens panel, Figma/HTML import, hosting. See FEATURES.md.
 
 Contract the tests rely on: [test/CONTRACT.md](test/CONTRACT.md). Decisions: [docs/decisions/](docs/decisions/).
+
+**Tokens:** `node src/server.js --port 0` opens the disposable demo with 20 fixture tokens. Choose a component, use the ◇ beside a colour, padding, gap, radius or font size to bind a token; orange dots snap literals to the nearest token. The top-bar **Theme** previews modes across cells; the **Tokens** drawer edits the token source. To use your own local source, add `"tokens": { "source": "tokens/tokens.json", "css": "tokens/tokens.css" }` to `napkin.json` (paths relative to it), and import the CSS in your app. Externally generated CSS is left to your token build. See [decision 0010](docs/decisions/0010-tokens.md) for source shapes and write behavior, and [the S5 walk](test/tokens/s5.test.js) for a reproducible demo. Re-run token checks with `node --test test/tokens/`; performance evidence with `node bench/tokens.js`.

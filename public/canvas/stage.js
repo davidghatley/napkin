@@ -134,7 +134,7 @@ export function createStage(ctx, root, world, view) {
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     sec.pending = false;
-    const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
+    const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}&shared=1`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
       sec.unmounts.forEach(u => u()); sec.unmounts = [];
@@ -155,7 +155,7 @@ export function createStage(ctx, root, world, view) {
       const pw = c.preview?.[JSON.stringify(variant)];
       if (pw) { mount.style.width = `${pw}px`; fig.dataset.pw = String(pw); }
       fig.append(mount, cap, grip);
-      try { unmounts.push(mod.mount(mount, variant)); }
+      try { unmounts.push(mod.mount(mount, { ...variant, ...(c.slots || {}), ...(ctx.play?.props(id) ?? {}) })); }
       catch (e) { mount.replaceChildren(errorCard(`${c.path || c.name + '.tsx'}: render failed: ${e.message}`)); }
       return fig;
     };
@@ -165,7 +165,7 @@ export function createStage(ctx, root, world, view) {
     sec.unmounts = unmounts;
     queueMicrotask(() => old.forEach((u) => u()));
     sec.el.dataset.revision = c.revision; sec.el.dataset.ready = '1';
-    sec.el.querySelector('.rev').textContent = `r${c.revision}`;
+    sec.el.querySelector('.rev').textContent = `r${String(c.revision).slice(0, 7)}`; // revisions are content hashes; show them short
     finish(sec, id, c.revision);
     // Keep the selection while its nodes still exist; drop the ones that are gone.
     const sels = ctx.state.selections.filter((s) => !(s.component === id && !(c.doc && index(c.doc).byId.has(s.node))));
@@ -206,39 +206,80 @@ export function createStage(ctx, root, world, view) {
     sec.el.dataset.pos = '1';
   }
   const placed = (id) => { const s = ctx.state.components.get(id)?.canvas; return !!s && (s.x !== 0 || s.y !== 0); };
+  // What a frame takes on the canvas besides its body: the title row and filter bar above it (drawn at a size that stays readable,
+  // so in canvas units they grow as the view zooms out) and a gap of at least CLEAR px. Packing reserves it, so frames never overlap.
+  const CLEAR = 24;
+  const headBox = (sec, z) => {
+    const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
+    const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
+    if (head && z < 0.33) { // far out the axis strip shows under the title (hidden now, so measured by its text)
+      const strip = head.querySelector('.axes-strip')?.textContent || '';
+      if (strip) { nat.h += 20; nat.w = Math.max(nat.w, Math.ceil(strip.length * 6.8)); }
+    }
+    return { w: Math.max(sec.size.w, Math.ceil(nat.w * lf)), top: Math.ceil((nat.h + 8) * lf) + CLEAR };
+  };
   // Components with no saved position are packed once (alphabetically, in rows). Nothing is ever re-packed.
+  function pack(ids, taken, z) {
+    let y = taken.length ? Math.max(...taken.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + CLEAR : 0;
+    const boxes = new Map(ids.map((id) => [id, headBox(sections.get(id), z)]));
+    const area = ids.reduce((a, id) => a + (boxes.get(id).w + GAP_X) * (sections.get(id).size.h + boxes.get(id).top), 0);
+    const width = Math.max(1400, ...ids.map((id) => boxes.get(id).w), Math.round(Math.sqrt(area * 1.7)));
+    const out = new Map();
+    const rows = [[]];
+    for (const id of ids) {
+      const { w } = boxes.get(id);
+      const cur = rows.at(-1);
+      const used = cur.reduce((a, i) => a + boxes.get(i).w + GAP_X, 0);
+      if (cur.length && used + w > width) rows.push([id]); else cur.push(id);
+    }
+    for (const row of rows) {
+      if (!row.length) continue;
+      const top = Math.max(...row.map((id) => boxes.get(id).top));
+      y += top;
+      let cx = 0;
+      for (const id of row) { out.set(id, { x: cx, y }); cx += boxes.get(id).w + GAP_X; }
+      y += Math.max(...row.map((id) => sections.get(id).size.h));
+    }
+    return { out, width, bottom: y };
+  }
   function layoutAll() {
     const ids = [...sections.keys()];
     for (const id of ids) if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); }
     const todo = ids.filter((id) => !placed(id) && !auto.has(id)).sort(byName);
     const taken = ids.filter(placed);
-    let y = taken.length ? Math.max(...taken.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + GAP_Y : 0;
-    // rows about 1.7 times wider than tall, so a handful of components fits on screen as one block
-    const area = todo.reduce((a, id) => a + (sections.get(id).size.w + GAP_X) * (sections.get(id).size.h + GAP_Y), 0);
-    SHELF_W = Math.max(1400, ...todo.map((id) => sections.get(id).size.w), Math.round(Math.sqrt(area * 1.7)));
-    let x = 0, rowH = 0;
-    for (const id of todo) {
-      const { w, h } = sections.get(id).size;
-      if (x > 0 && x + w > SHELF_W) { x = 0; y += rowH + GAP_Y; rowH = 0; }
-      auto.set(id, { x, y }); moveTo(id, x, y);
-      x += w + GAP_X; rowH = Math.max(rowH, h);
+    // the reserve depends on the zoom the whole layout will be viewed at, which depends on the reserve: settle it in a few steps
+    const box = view.stageBox();
+    const fitZoom = (res) => { // what Shift+1 will show: the frames and their 36 px title strip, 72 px padding, at most 100%
+      const rects = [...taken.map((id) => ({ x: sections.get(id).pos.x, y: sections.get(id).pos.y, w: sections.get(id).size.w, h: sections.get(id).size.h })), ...todo.map((id) => ({ ...res.out.get(id), w: sections.get(id).size.w, h: sections.get(id).size.h }))];
+      const x0 = Math.min(...rects.map((r) => r.x)), x1 = Math.max(...rects.map((r) => r.x + r.w)), y0 = Math.min(...rects.map((r) => r.y)) - 36, y1 = Math.max(...rects.map((r) => r.y + r.h));
+      return Math.max(1 / 16, Math.min(1, (box.width - 144) / Math.max(1, x1 - x0), (box.height - 144) / Math.max(1, y1 - y0)));
+    };
+    let z = 1, res = pack(todo, taken, z);
+    for (let i = 0; i < 8 && todo.length; i++) {
+      const next = fitZoom(res);
+      if (Math.abs(Math.round(Math.min(16, 1 / next) * 20) - Math.round(Math.min(16, 1 / z) * 20)) <= 1) break;
+      z = next; res = pack(todo, taken, z);
     }
-    shelf = { x, y, h: rowH };
+    for (const id of todo) { const p = res.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
+    SHELF_W = res.width;
+    const last = todo.at(-1);
+    shelf = last ? { x: res.out.get(last).x + headBox(sections.get(last), z).w + GAP_X, y: res.out.get(last).y, h: sections.get(last).size.h } : { x: 0, y: 0, h: 0 };
     laidOut = true;
     ctx.emit('layout', {});
   }
   // A component that appears later goes into the first free slot, so nothing else moves.
   function placeNew(id) {
     if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); return; }
-    const me = sections.get(id), others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([, s]) => ({ x: s.pos.x, y: s.pos.y, w: s.size.w, h: s.size.h }));
-    const { w, h } = me.size;
+    const me = sections.get(id), z = Math.min(1, view.get().z);
+    const others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([k, s]) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
+    const mine = headBox(me, z), { h } = me.size, w = mine.w;
     SHELF_W = Math.max(SHELF_W, w);
-    if (shelf.x && shelf.x + w > SHELF_W) shelf = { x: 0, y: shelf.y + shelf.h + GAP_Y, h: 0 };
-    const hit = o => shelf.x < o.x + o.w + GAP_X && shelf.x + w + GAP_X > o.x && shelf.y < o.y + o.h + GAP_Y * 0.6 && shelf.y + h + GAP_Y * 0.6 > o.y;
-    if (others.some(hit)) shelf = { x: 0, y: Math.max(0, ...others.map(o => o.y + o.h)) + GAP_Y, h: 0 };
-    const pos = { x: shelf.x, y: shelf.y };
-    shelf.x += w + GAP_X; shelf.h = Math.max(shelf.h, h);
-    auto.set(id, pos); moveTo(id, pos.x, pos.y);
+    let x = shelf.x, y = shelf.y;
+    if (x && x + w > SHELF_W) { x = 0; y = y + shelf.h + CLEAR; }
+    const hit = (px, py) => others.some((o) => px < o.x + o.w + GAP_X && px + w + GAP_X > o.x && py - mine.top < o.y + o.h + CLEAR && py + h + CLEAR > o.y);
+    if (hit(x, y)) { x = 0; y = Math.max(0, ...others.map((o) => o.y + o.h)) + CLEAR + mine.top; }
+    shelf = { x: x + w + GAP_X, y, h: Math.max(h, x ? shelf.h : 0) };
+    auto.set(id, { x, y }); moveTo(id, x, y);
   }
 
   // ---------------------------------------------------------------------------------------------- rectangles (canvas units)
@@ -360,9 +401,9 @@ export function createStage(ctx, root, world, view) {
     return el && cell && { el, id: cell.closest('.cmp').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
-  root.addEventListener('mousedown', (ev) => { if (ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
+  root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
   const setHoverEl = (el, h) => { hoverEl = el; ctx.emit('hover', h ? { component: h.id, node: h.el.dataset.n } : null); refreshOverlays(); };
-  root.addEventListener('mouseover', (ev) => { const h = hit(ev.target); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mouseover', (ev) => { if (document.body.dataset.play) return; const h = hit(ev.target); setHoverEl(h?.el ?? null, h); });
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
   function hoverNode(sel) {
@@ -371,10 +412,11 @@ export function createStage(ctx, root, world, view) {
   }
   let suppressClick = 0;
   root.addEventListener('click', (ev) => {
+    if (document.body.dataset.play) return; // play mode: the click belongs to the component
     if (suppressClick && Date.now() - suppressClick < 300) { suppressClick = 0; return; }
     const h = hit(ev.target);
     if (h) ev.preventDefault();
-    if (ev.target.closest?.('.cmp-head, .build-error')) return; // handled by the frame drag (a click on a title selects the component's root)
+    if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
     const sel = { component: h.id, node: h.el.dataset.n, variant: h.variant };
     if (ev.shiftKey || ev.metaKey || ev.ctrlKey) ctx.toggle(sel); else ctx.select(sel);
@@ -430,7 +472,7 @@ export function createStage(ctx, root, world, view) {
     // by the title, or by any empty part of the frame (never by a component's own elements)
     const head = ev.target.closest?.('.cmp-head');
     const body = !head && ctx.state.tool === 'select' && ev.pointerType !== 'touch' && !ev.target.closest('.mount [data-n]') ? ev.target.closest?.('.frame') : null;
-    if (ev.target.closest('details, summary, pre')) return;
+    if (ev.target.closest('details, summary, pre, [data-nodrag]')) return;
     if (!(head || body) || ev.button !== 0 || view.isPanning()) return;
     const id = (head || body).closest('.cmp').dataset.component, sec = sections.get(id);
     if (!sec?.pos) return;
@@ -445,13 +487,17 @@ export function createStage(ctx, root, world, view) {
     const z = view.get().z;
     moveTo(drag.id, Math.round(drag.from.x + (ev.clientX - drag.x) / z), Math.round(drag.from.y + (ev.clientY - drag.y) / z));
     refreshOverlays();
+    ctx.emit('framedrag', { id: drag.id, x: ev.clientX, y: ev.clientY });
   });
-  addEventListener('pointerup', async () => {
+  addEventListener('pointerup', async (ev) => {
     if (!drag) return;
     const d = drag; drag = null; delete document.body.dataset.dragging;
+    ctx.emit('framedragend', {});
+    if (d.moved && d.title && ctx.frameDrop?.(d.id, ev.clientX, ev.clientY)) { moveTo(d.id, d.from.x, d.from.y); suppressClick = Date.now(); refreshOverlays(); return; } // dropped onto another component: it became an instance there, and the frame stays where it was
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
+      else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
     }
     suppressClick = Date.now();

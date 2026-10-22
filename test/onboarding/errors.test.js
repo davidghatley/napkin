@@ -76,10 +76,11 @@ test('ONB-04: real parse, read-only and stale failures name the file and preserv
   try {
     const r = await store.apply({ baseRevision: -1, by: 'test', edits: [{ op: 'set', path: 'root.color', value: 'red' }] });
     assert.match(r.error, /^stale revision:.*Button.tsx.*Next:/);
-    const invalid = await store.apply({ baseRevision: 1, by: 'test', edits: [{ op: 'set', path: 'missing.color', value: 'red' }] });
+    const current = (await store.read()).revision; // (a content hash)
+    const invalid = await store.apply({ baseRevision: current, by: 'test', edits: [{ op: 'set', path: 'missing.color', value: 'red' }] });
     assert.match(invalid.error, /^invalid edit #0:.*Button.tsx.*Next:/);
-    const unknown = await store.apply({ baseRevision: 1, by: 'test', edits: [{ op: 'madeUp' }] });
-    assert.match(unknown.error, /unknown op.*valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename/);
+    const unknown = await store.apply({ baseRevision: current, by: 'test', edits: [{ op: 'madeUp' }] });
+    assert.match(unknown.error, /unknown op.*valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename, renameProp, renameVariant/);
   } finally { await store.close(); }
   writeFileSync(file, 'export function Button( { broken');
   const broken = await openStore(file);
