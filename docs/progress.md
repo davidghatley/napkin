@@ -33,16 +33,16 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | LAY-09 | LAY | layout | pass | r1 pass: pasted subtree byte-identical render | test/18-*.test.js | a4a87dd |
 | LAY-10 | LAY | layout | critic-fail | r5 fail: 14 approximations in 290 snippets; redesign: browser parse + render-verify | test/canvas/paste-html.test.js | a4a87dd |
 | LAY-11 | LAY | layout | pass | r1 pass: sidecar only, sha unchanged | test/21-*.test.js | a4a87dd |
-| CMP-01 | CMP | components | open |  |  |  |
-| CMP-02 | CMP | components | open |  |  |  |
-| CMP-03 | CMP | components | open |  |  |  |
-| CMP-04 | CMP | components | open |  |  |  |
-| CMP-05 | CMP | components | open |  |  |  |
-| CMP-06 | CMP | components | open |  |  |  |
-| CMP-07 | CMP | components | open |  |  |  |
-| CMP-08 | CMP | components | open |  |  |  |
-| CMP-09 | CMP | components | open |  |  |  |
-| CMP-10 | CMP | components | open |  |  |  |
+| CMP-01 | CMP | components | building |  |  |  |
+| CMP-02 | CMP | components | building |  |  |  |
+| CMP-03 | CMP | components | building |  |  |  |
+| CMP-04 | CMP | components | building |  |  |  |
+| CMP-05 | CMP | components | building |  |  |  |
+| CMP-06 | CMP | components | building |  |  |  |
+| CMP-07 | CMP | components | building |  |  |  |
+| CMP-08 | CMP | components | building |  |  |  |
+| CMP-09 | CMP | components | building |  |  |  |
+| CMP-10 | CMP | components | building |  |  |  |
 | TOK-01 | TOK | tokens | building |  |  |  |
 | TOK-02 | TOK | tokens | building |  |  |  |
 | TOK-03 | TOK | tokens | building |  |  |  |
@@ -118,7 +118,8 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | Round | Started | Lanes | Builders | Result |
 |---|---|---|---|---|
 | 1 | 2026-10-21 | files, engine, agents, canvas | Sonnet (files, agents, canvas), Codex (engine) | agents + canvas merged; files fixing; engine to rebase |
-| 2 | 2026-10-21 | layout, history (+inspect, assets), open (+onboarding) | Sonnet (layout, history), Codex (open) | running |
+| 2 | 2026-10-21 | layout, history (+inspect, assets), open (+onboarding) | Sonnet (layout, history), Codex (open) | all merged; FEEL-02 to David; LAY-10 redesign in critique |
+| 3 | 2026-10-21 | agents-ui, tokens, files (0004 core), components (UI), engine (rebase) | Sonnet (agents-ui, files, components, engine), Codex (tokens) | running |
 
 ## New dependencies
 
