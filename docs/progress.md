@@ -130,10 +130,10 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-16 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/broken-line.test.js | 5707a23 |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
-| WPC-19 | WPC | agents | critic-pass | critic: ~170 interleaved races, 0 lost | test/agents/agents3.test.js | 6d5fce2 |
-| WPC-20 | WPC | agents | critic-pass | critic: restart + 15 kill -9 rounds, 0 lost; follow-ups: no trace in opened repos, tmp sweep, fresh MCP gets missed answers | test/agents/agents3.test.js | 6d5fce2 |
-| WPC-21 | WPC | agents | critic-pass | critic: clash marked before Accept (API, file, rename); agent told; never overwrites | test/agents-ui/agents3.test.js | 6d5fce2 |
-| WPC-22 | WPC | agents | critic-pass | critic: ghost on arrival, placed like a new frame; follow-up: several ghosts all in view, full name in flag | docs/evidence/agents3-ghost.png | 6d5fce2 |
+| WPC-19 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | test/agents/agents3.test.js | 4d2cdf6 |
+| WPC-20 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | test/agents/agents3.test.js | 4d2cdf6 |
+| WPC-21 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | test/agents-ui/agents3.test.js | 4d2cdf6 |
+| WPC-22 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | docs/evidence/agents3-ghost.png | 4d2cdf6 |
 
 ## Rounds
 
