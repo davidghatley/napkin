@@ -143,16 +143,17 @@ code:where(:not(:is(.mount, .preview-inner) *)) { font-family: var(--nk-mono); }
 #stage {
   grid-area: stage; position: relative; overflow: clip; contain: layout paint; touch-action: none; user-select: none; outline: none;
   background-color: var(--nk-bg);
-  background-image: radial-gradient(circle at 1px 1px, var(--nk-dot) 1px, transparent 1.4px);
-  background-size: 24px 24px; /* (view.js sets the real size and position inline, at every pan and zoom) */
   background-position: 0 0;
 }
-#stage[data-zoom-band="far"] { background-image: none; }
+/* The dot grid is an element of its own (#grid, made by view.js) on its own layer: a pan only moves it by a transform, so panning repaints nothing (a changed
+   background-position on #stage repainted the page on every wheel event, and every repaint re-layerizes every drawn frame). */
+#grid { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; background-image: radial-gradient(circle at 1px 1px, var(--nk-dot) 1px, transparent 1.4px); }
+#stage[data-zoom-band="far"] #grid { display: none; }
 body[data-pan="ready"] #stage { cursor: grab; }
 body[data-pan="drag"] #stage, body[data-pan="drag"] #stage * { cursor: grabbing !important; }
 body[data-dragging="frame"] #stage * { cursor: grabbing !important; }
 #world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; --nk-ls: 1; }
-body.moving #world { will-change: transform; }
+#world { will-change: transform; } /* a layer of its own, so the first event of a gesture does not promote and rasterise the world; view.js drops it for a moment on settle, so the frames are drawn again at the new scale (crisp text) */
 .cmp { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .cmp:not([data-pos]) { visibility: hidden; }
 body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; transition: opacity .18s; }
@@ -160,8 +161,11 @@ body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; 
    every frame (style, pre-paint, layerize) in proportion to their elements, about 17 ms per frame at 200 components (PRF-02, PRF-04). */
 .cmp[data-cull] .frame { box-sizing: border-box; width: var(--nk-w, 200px); height: var(--nk-h, 120px); }
 .cmp[data-cull] .frame > * { display: none; }
+.cmp[data-far] .cmp-head { transform: none; } /* (a scaled title is a layer of its own: only the drawn frames pay for one) */
+.cmp[data-far] { visibility: hidden; } /* (a frame more than a viewport away paints nothing (data-far; one in or near the viewport stays as it was, or its going would shift the page): each painted element is work for every frame that layerizes the page; its box is kept) */
 .cmp[data-presence] .frame { outline: 2px dashed var(--nk-ok); outline-offset: 8px; }
 
+/* (A title is scaled by transform: layout never moves, so nothing shifts when the scale changes. Titles of frames that are not drawn have none: 200 scaled titles were 200 paint layers, 7 to 9 ms of layerizing per pan event, PRF-04.) */
 .cmp-head { position: absolute; left: 0; bottom: 100%; margin-bottom: 8px; transform: scale(var(--nk-lf, 1)); transform-origin: 0 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: grab; white-space: nowrap; width: max-content; }
 .cmp-title { display: inline-flex; align-items: center; gap: 8px; }
 .cmp-title h3 { margin: 0; font: 600 13px/1 var(--nk-sans); color: var(--nk-text); letter-spacing: -.01em; }
@@ -580,3 +584,11 @@ body[data-empty="1"] #statusbar .hints { visibility:hidden; }
 .cmp-title h3 { flex-shrink:0; max-width:calc(var(--nk-w) - 96px); }
 .cmp .badge:not([hidden]) { flex-shrink:1; min-width:60px; }
 .frame .build-error, .mount .error { color:#9f2633; }
+
+/* The chrome (the layers list has a row per component) is its own stacking context: chunks of a stacking context that did not change are not
+   walked again by the layerize pass that every view change triggers, which cost 2 ms per frame at 200 components (PRF-04). */
+#sidebar, #inspector, #topbar, #statusbar { isolation: isolate; }
+
+/* The selection, hover and handle layers are layers of their own: moved or scaled by transform in a gesture, they repaint nothing; as part of the page's
+   root layer each move repainted it, and about 30 raster tasks per zoom step followed (PRF-04). */
+#overlays > *, #handles { will-change: transform; }

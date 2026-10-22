@@ -11,11 +11,11 @@ export const rssMB = (pid) => Number(readFileSync(`/proc/${pid}/status`, 'utf8')
 const MEASURED = ['src/server.js', 'src/workspace.js', 'src/bundle.js', 'src/store.js', 'src/api.js', 'src/canvas-client.js', 'src/codecs.js', 'src/tsx/read.js', 'src/tsx/write.js', 'public/canvas/main.js', 'public/canvas/stage.js', 'public/canvas/panel.js', 'public/canvas/view.js', 'bench/common.js', 'bench/corpus.js', 'bench/perf.js', 'bench/soak.js', 'test/helpers/cdp.js', 'test/helpers/harness.js'];
 export const sourceHashes = () => Object.fromEntries(MEASURED.filter((f) => existsSync(join(ROOT, f))).map((file) => [file, createHash('sha256').update(readFileSync(join(ROOT, file))).digest('hex')]));
 export const machine = () => ({ at: new Date().toISOString(), node: process.version, chromium: execFileSync(process.env.CHROMIUM || 'chromium', ['--version'], { encoding: 'utf8' }).trim(), os: `${platform()} ${release()}`, cpu: cpus()[0].model, logicalCPUs: cpus().length, gpu: false });
-export function record(id, result, summary, command, { dir = join(ROOT, 'docs/evidence') } = {}) {
+export function record(id, result, summary, command, { dir = join(ROOT, 'docs/evidence'), suffix = '' } = {}) {
   mkdirSync(dir, { recursive: true });
   const data = { id, command, machine: machine(), sourceHashes: sourceHashes(), ...result };
-  writeFileSync(join(dir, `${id}.json`), JSON.stringify(data, null, 2) + '\n');
-  writeFileSync(join(dir, `${id}.txt`), `${id}\n${summary}\n\nRe-run: ${command}\nMeasured: ${data.machine.at}\n${data.machine.node}; ${data.machine.chromium}; CPU only\nRaw samples and method: docs/evidence/${id}.json\n`);
+  writeFileSync(join(dir, `${id}${suffix}.json`), JSON.stringify(data, null, 2) + '\n');
+  writeFileSync(join(dir, `${id}${suffix}.txt`), `${id}\n${summary}\n\nRe-run: ${command}\nMeasured: ${data.machine.at}\n${data.machine.node}; ${data.machine.chromium}; ${suffix ? 'GPU raster (ANGLE OpenGL, RTX 3060, headless=new)' : 'CPU only'}\nRaw samples and method: docs/evidence/${id}${suffix}.json\n`);
   console.log(`${id}: ${summary}`);
   return data;
 }
