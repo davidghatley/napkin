@@ -210,7 +210,8 @@ export function initProposals(ctx) {
     const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     const { x, y, z } = ctx.view.get(), b = ctx.view.stageBox();
     const inside = r.x * z + x >= 0 && r.y * z + y >= 0 && (r.x + r.w) * z + x <= b.width && (r.y + r.h) * z + y <= b.height;
-    if (!inside) ctx.view.flyTo(r, { pad: 90, max: Math.max(1, z) });
+    const tiny = r.w * z < 260 && r.h * z < 160; // visible but too small to read at a far-out fit: come closer
+    if (!inside || tiny) ctx.view.flyTo(r, { pad: 90, max: Math.max(1, z) });
   }
   function toggleNew(p) {
     if (S.hiddenNew.has(p.id)) { S.hiddenNew.delete(p.id); showNew(p, true); } else { S.hiddenNew.add(p.id); ctx.stage.removeGhost(p.id); }
