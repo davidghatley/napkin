@@ -154,6 +154,7 @@ function unionSplices(text, m, old, p, st, memberIndent) {
   });
   if (keep.size === 0) return null;
   const present = new Set([...keep].map((i) => renamedTo.get(old.options[i]) ?? old.options[i]));
+  if ([...keep].sort((x, y) => x - y).map((i) => renamedTo.get(old.options[i]) ?? old.options[i]).join() !== p.options.filter((o) => present.has(o)).join()) return null; // the values changed their order: the union is written again
   const added = p.options.filter((o) => !present.has(o));
   if (added.length) {
     const last = lits.at(-1);
