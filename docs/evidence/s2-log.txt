@@ -1,22 +1,22 @@
 S2 "The agent builds a Tooltip while I tune the Button": re-run with
   EVIDENCE=1 EVIDENCE_OUT=docs/evidence node --test test/agents-ui/s2.test.js
 
-+   84 ms  claude is connected: the top bar shows you + 1 agent
-+  128 ms  claude created Tooltip (r1); canvas now has 3 components
-+  249 ms  claude proposed "background": root.background = "#1c1f27"
-+  377 ms  claude proposed "padding": root.padding = "6px 10px"
-+  393 ms  you typed Button padding = 18 in the panel
-+  503 ms  claude proposed "radius": root.borderRadius = 6
-+  630 ms  claude proposed "label": insert label into root
-+  853 ms  your padding landed in Button.tsx (no clash: a different file)
-+  854 ms  presence: claude's outline was on Tooltip · label (name tag "claude")
-+  856 ms  tray: "4 proposals · claude"; Tooltip.tsx unchanged
-+ 1390 ms  ghost: live cell rgba(0, 0, 0, 0), ghost cell rgb(28, 31, 39)
-+ 1461 ms  accepted "background" (click)
-+ 1480 ms  accepted "padding" (click)
-+ 1545 ms  rejected "label" (click): Tooltip.tsx sha unchanged
-+ 1567 ms  accepted "radius" (keyboard: Alt+P, A)
-+ 1571 ms  Tooltip history: r1 claude, r2 claude (approved by you), r3 claude (approved by you), r4 claude (approved by you)
-+ 1573 ms  Button history: r1 file, r2 you
-+ 2085 ms  presence cleared after claude stopped
-+ 2135 ms  activity rows: 7
++   74 ms  claude is connected: the top bar shows you + 1 agent
++  118 ms  claude created Tooltip (r1); canvas now has 3 components
++  235 ms  claude proposed "background": root.background = "#1c1f27"
++  362 ms  claude proposed "padding": root.padding = "6px 10px"
++  382 ms  you typed Button padding = 18 in the panel
++  488 ms  claude proposed "radius": root.borderRadius = 6
++  615 ms  claude proposed "label": insert label into root
++  831 ms  your padding landed in Button.tsx (no clash: a different file)
++  832 ms  presence: claude's outline was on Tooltip · label (name tag "claude")
++  834 ms  tray: "4 proposals · claude"; Tooltip.tsx unchanged
++ 1370 ms  ghost: live cell rgba(0, 0, 0, 0), ghost cell rgb(28, 31, 39)
++ 1452 ms  accepted "background" (click)
++ 1465 ms  accepted "padding" (click)
++ 1497 ms  rejected "label" (click): Tooltip.tsx sha unchanged
++ 1570 ms  accepted "radius" (keyboard: Alt+P, A)
++ 1573 ms  Tooltip history: r1 claude, r2 claude (approved by you), r3 claude (approved by you), r4 claude (approved by you)
++ 1574 ms  Button history: r1 file, r2 you
++ 2097 ms  presence cleared after claude stopped
++ 2148 ms  activity rows: 7
