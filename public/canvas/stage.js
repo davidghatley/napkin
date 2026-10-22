@@ -134,7 +134,7 @@ export function createStage(ctx, root, world, view) {
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     sec.pending = false;
-    const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
+    const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}&shared=1`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
       sec.unmounts.forEach(u => u()); sec.unmounts = [];
@@ -155,7 +155,7 @@ export function createStage(ctx, root, world, view) {
       const pw = c.preview?.[JSON.stringify(variant)];
       if (pw) { mount.style.width = `${pw}px`; fig.dataset.pw = String(pw); }
       fig.append(mount, cap, grip);
-      try { unmounts.push(mod.mount(mount, { ...variant, ...(ctx.play?.props(id) ?? {}) })); }
+      try { unmounts.push(mod.mount(mount, { ...variant, ...(c.slots || {}), ...(ctx.play?.props(id) ?? {}) })); }
       catch (e) { mount.replaceChildren(errorCard(`${c.path || c.name + '.tsx'}: render failed: ${e.message}`)); }
       return fig;
     };
@@ -446,10 +446,13 @@ export function createStage(ctx, root, world, view) {
     const z = view.get().z;
     moveTo(drag.id, Math.round(drag.from.x + (ev.clientX - drag.x) / z), Math.round(drag.from.y + (ev.clientY - drag.y) / z));
     refreshOverlays();
+    ctx.emit('framedrag', { id: drag.id, x: ev.clientX, y: ev.clientY });
   });
-  addEventListener('pointerup', async () => {
+  addEventListener('pointerup', async (ev) => {
     if (!drag) return;
     const d = drag; drag = null; delete document.body.dataset.dragging;
+    ctx.emit('framedragend', {});
+    if (d.moved && d.title && ctx.frameDrop?.(d.id, ev.clientX, ev.clientY)) { moveTo(d.id, d.from.x, d.from.y); suppressClick = Date.now(); refreshOverlays(); return; } // dropped onto another component: it became an instance there, and the frame stays where it was
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });

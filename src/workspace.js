@@ -61,7 +61,14 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
   const log = [];
   const note = (x) => { log.push({ at: Date.now(), ...x }); if (log.length > 200) log.shift(); };
 
+  // The canvas page's flavour of the bundle (React shared, see bundle.js): built after the first request for it, then kept current.
+  const buildShared = (e) => {
+    const prev = e.builtS || Promise.resolve();
+    e.builtS = prev.then(() => bundler.build(e.file, e.name, relative(dir, e.file), { shared: true }));
+    return e.builtS;
+  };
   const build = (e, cause) => {
+    if (e.builtS) buildShared(e);
     // Builds of one component run one after another, and a bundle is always built from the file as it is on disk.
     const prev = e.built || Promise.resolve();
     e.built = prev.then(() => bundler.build(e.file, e.name, relative(dir, e.file))).then((r) => { e.lastBuild = r; events.emit('build', { component: e.id, ok: r.ok, ms: r.ms, error: r.error, ...(cause && { cause }) }); return r; });
@@ -101,6 +108,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     entries.delete(e.id);
     docs.delete(e.file); usesByFile.delete(e.file);
     await e.store.close();
+    await e.builtS?.catch(() => {});
     await e.built?.catch(() => {}); // a build still queued would otherwise open a new esbuild context after the dispose
     await bundler.dispose(e.file);
     for (const d of orphans) { if (d.built) { d.dirty = false; build(d, e.name); } else d.dirty = true; } // they now import a file that is gone: show that
@@ -207,7 +215,11 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (!result.ok) { await rollback(); throw new CreateError(result.error, 409); }
       return { id: e.id, component: made.id, name, node: id, revision: result.revision };
     },
-    async bundle(e) { if (!e.built || e.dirty) { e.dirty = false; build(e); } return e.built; },
+    async bundle(e, { shared = false } = {}) {
+      if (shared) { if (!e.builtS) buildShared(e); return e.builtS; }
+      if (!e.built || e.dirty) { e.dirty = false; build(e); }
+      return e.built;
+    },
     // The bundle of a past revision's source (preview and visual diff); cached per component and revision.
     async bundleAt(e, rev) {
       const past = e.store.at(rev);

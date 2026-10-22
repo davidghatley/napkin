@@ -70,3 +70,16 @@ body[data-play] .cell .mount button { cursor: pointer; }
 #play-bar button { height: 26px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--chrome-2); color: var(--text); font: 500 12px var(--sans); cursor: pointer; }
 #play-bar button:disabled { opacity: .45; cursor: default; }
 #play-bar .phint { color: var(--text-3); }
+
+/* CMP-05: slot drop zones (inside the cells; the component's own CSS is untouched) */
+.cell .mount [data-slot] { outline: 1.5px dashed var(--accent, #3459e2); outline-offset: 2px; position: relative; min-width: 56px; min-height: 22px; }
+.cell .mount [data-slot][data-empty]::before { content: attr(data-slot); display: block; padding: 2px 8px; font: 500 11px/1.4 var(--mono); color: var(--accent-text, #2c52d2); text-align: center; }
+.cell .mount [data-slot].slot-hot { background: var(--accent-soft, #3459e21f); }
+/* CMP-06: the frame a dragged title would drop into, and a nested component's label */
+.cell .mount .drop-target { outline: 2px solid var(--accent, #3459e2); outline-offset: 2px; background: var(--accent-soft, #3459e21f); }
+#panel .instbox { display: grid; gap: 6px; }
+#panel .instrows { display: grid; gap: 6px; }
+#panel .plinkrow { padding-left: 12px; }
+#panel .linked { font: 12px var(--sans); color: var(--text-2); }
+#panel .linked code { font: 11.5px var(--mono); color: var(--accent-text); }
+#panel .picker { display: flex; flex-wrap: wrap; gap: 6px; }

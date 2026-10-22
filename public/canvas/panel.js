@@ -10,6 +10,7 @@ import { parseColor, formatColor, fileSpace, documentColors, colorsIn } from '/s
 import { openColorPicker } from './colorpop.js';
 import { cssSize, relRect } from './geom.js';
 import { settingsBody, wireProps } from './props.js';
+import { composeBody } from './instances.js';
 import { variantsBody, sourcesBody, overriddenCount, wireVariants } from './variants.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -412,7 +413,8 @@ export function renderPanel(ctx) {
   const propsUi = section('props', 'Settings', settingsBody(doc, dis, err), { open: false });
   const variantsUi = section('variants', 'Variants', variantsBody(doc, dis, err), { open: false });
   const nOver = overriddenCount(doc, { node: node.id, variant: sel.variant });
-  const sourcesUi = multi ? '' : section('sources', `Sources${nOver ? ` <span class="srcbadge" id="sources-count">${nOver} from variants</span>` : ''}`, sourcesBody(doc, { node: node.id, variant: sel.variant }, dis), { open: nOver > 0 });
+  const composeUi = multi ? '' : section('compose', 'Composition', composeBody(ctx, doc, node, comp, dis), { open: !!(node.instance || node.slot || node.when) });
+  const sourcesUi = multi || node.instance ? '' : section('sources', `Sources${nOver ? ` <span class="srcbadge" id="sources-count">${nOver} from variants</span>` : ''}`, sourcesBody(doc, { node: node.id, variant: sel.variant }, dis), { open: nOver > 0 });
 
   const vlabel = variantLabel(sel.variant);
   el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="nodename" id="sel-node">${esc(node.id)} <span class="tagname">&lt;${esc(node.tag)}&gt;</span>${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
@@ -420,11 +422,11 @@ export function renderPanel(ctx) {
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec
+    ${node.instance ? '' : isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec
       : node.tag === 'img' ? content + sizeSec + look + stroke + effects + layout
       : container ? layout + sizeSec + look + fill + stroke + effects + (showType ? typeSec : '')
-      : sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + layout}${advanced}
-    <div class="grouphead">Component</div>${sourcesUi}${propsUi}${variantsUi}`;
+      : sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + layout}${node.instance ? '' : advanced}
+    <div class="grouphead">Component</div>${composeUi}${sourcesUi}${propsUi}${variantsUi}`;
 
   for (const sw of el.querySelectorAll('.chipcolor')) {
     const v = sw.dataset.color;
