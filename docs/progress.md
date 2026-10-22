@@ -80,7 +80,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-01 | PRF | engine | pass | critic p50 1097; merged p50 1105 ms | docs/evidence/PRF-01.txt | da57ab8 |
 | PRF-02 | PRF | engine | pass | critic p95 <=99.5; merged p95 82.8 ms (thin margin) | docs/evidence/PRF-02.txt | da57ab8 |
 | PRF-03 | PRF | engine | pass | critic p95 87.6; merged 87.6 ms | docs/evidence/PRF-03.txt | da57ab8 |
-| PRF-04 | PRF | engine | building | builder 07eb159 (grid bench, same-run floor 16.9-17.1): pan 17.3-18.5 ok-ish; pan+zoom/sweep raw p95 ~21 ms, 200-380 ms raster stall on zoom reversal; overview 27-29 ms: fail, round 2 (GPU raster + stall) | docs/evidence/PRF-04.txt | 07eb159 |
+| PRF-04 | PRF | engine | building | builder a1e7e4b: CPU pan at floor (p95 17.1-18.1 vs 17.9, 0-0.3% late); pan+zoom 18.5-19.5; sweep+zoom 20.9-25.4 (3-5% late); GPU raster no better; each zoom step re-rasters world (25-30 ms late frame): last capped round | docs/evidence/PRF-04.txt | a1e7e4b |
 | PRF-05 | PRF | engine | pass | merged p95 8.3 ms | docs/evidence/PRF-05.txt | da57ab8 |
 | PRF-06 | PRF | engine | pass | merged ratio 0.477 | docs/evidence/PRF-06.txt | da57ab8 |
 | PRF-07 | PRF | engine | pass | merged 109 MB / 17 MB heap | docs/evidence/PRF-07.txt | da57ab8 |
