@@ -115,21 +115,21 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-01 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-02 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-03 | WPC | agents | critic-pass | critic: propose create, no file until accept, approvedBy you | test/agents/propose-create.test.js | 0085d7f |
-| WPC-04 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
-| WPC-05 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
-| WPC-06 | WPC | files | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
+| WPC-04 | WPC | docs | critic-pass | critic: dialect example editable; decisions/ excluded by lead ruling | test/onboarding/docs-examples.test.js | 07734c8 |
+| WPC-05 | WPC | docs | critic-fail | critic: 5 doc/UI contradictions (napkin not on PATH, labels, .next, npx); fix round 2 (Codex) | docs/evidence/onboard2-commands.txt | 07734c8 |
+| WPC-06 | WPC | files | critic-fail | critic: ids derived from absolute path change on move/clone; .napkin/lock untracked; fix round 2 (Codex) | test/onboarding/sample.test.js | 07734c8 |
 | WPC-07 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-08 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-09 | WPC | agents | critic-pass | critic: resolved items name id, outcome, edits, who (partly untested by critic) | test/agents/propose-create.test.js | 0085d7f |
-| WPC-10 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
+| WPC-10 | WPC | docs | critic-pass | critic: modes, import line, consumer app all documented and true | test/history/ui-inspect.test.js | 07734c8 |
 | WPC-11 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-12 | WPC | agents | critic-pass | critic: 4 and 10 proposals reachable at 1440x900 | test/agents-ui/propose-create.test.js | 0085d7f |
 | WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-16 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-17 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
-| WPC-18 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
+| WPC-17 | WPC | docs | critic-pass | critic: SIGTERM/SIGINT/startup failure leave no fixtures | test/onboarding/demo-cleanup.test.js | 07734c8 |
+| WPC-18 | WPC | docs | critic-pass | critic: tools/sample-repo.js 40 editable; S1 on it 1-line diff | test/onboarding/sample.test.js | 07734c8 |
 | WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
 | WPC-20 | WPC | agents | open | agents2 critic: Pending proposals (incl. create) vanish on server restart; the agent is not told and its MCP session then fails 'identity required' until restarted. Proposals survive a restart, or the agent gets a dropped event and its session recovers | /tmp/claude-1000/critic-agents2/ |  |
 | WPC-21 | WPC | agents | open | agents2 critic: A name clash with a pending create shows only on Accept; the row has no warning and the agent isn't told. The row marks the clash as soon as it exists; the agent gets an event | /tmp/claude-1000/critic-agents2/ |  |
@@ -171,6 +171,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 - LAY-06: the grid quantizes positions in parent-local coordinates at any zoom; edge and centre snaps within 4 screen px take priority.
 - Blind bars: two judges from different model families (Sonnet, Codex). Codex runs twice with the image order swapped; a verdict that flips counts as a tie. A row passes only when both judges give a win or tie.
 - 0005 amendment: with an `agents` key in napkin.json, unlisted names default to read; Host/Origin guard on every route.
+- WPC-04 scope: docs/decisions/*.md are dated design records and are excluded from "every TSX example in docs/" (0003 shows an elided sketch).
 
 ## Incidents
 
