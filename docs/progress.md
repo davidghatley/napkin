@@ -43,11 +43,11 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | CMP-08 | CMP | components | pass | r1 pass: consumer app pixel diff 0 | test/27-*.test.js | 9e66f9d |
 | CMP-09 | CMP | components | pass | r1 pass: toggle 12-15 ms | test/26-*.test.js | 9e66f9d |
 | CMP-10 | CMP | components | pass | r1 pass ≤2 actions; frames overlap (fixing) | test/26-*.test.js | 9e66f9d |
-| TOK-01 | TOK | tokens | critic-pass | r1 pass: fixture 20/20; real secret-sauce shape 92 tokens | test/tokens/source.test.js | 97c2aed |
-| TOK-02 | TOK | tokens | critic-pass | r1 pass: 1-line var(); consumer app 0 px diff | test/tokens/consumer.test.js | 97c2aed |
-| TOK-03 | TOK | tokens | critic-pass | r1 pass 10/10 flagged; fixing bare-0 false positive | test/tokens/*.test.js | 97c2aed |
-| TOK-04 | TOK | tokens | critic-pass | r1 pass: p50 55 ms, max 72 ms at 200 comps | docs/evidence/TOK-04.txt | 97c2aed |
-| TOK-05 | TOK | tokens | critic-pass | r1 pass: 1/1 diff; 55 ms p50 | docs/evidence/TOK-05.txt | 97c2aed |
+| TOK-01 | TOK | tokens | pass | r1 pass: fixture 20/20; real secret-sauce shape 92 tokens | test/tokens/source.test.js | 8625ada |
+| TOK-02 | TOK | tokens | pass | r1 pass: 1-line var(); consumer app 0 px diff | test/tokens/consumer.test.js | 8625ada |
+| TOK-03 | TOK | tokens | pass | r1 pass 10/10 flagged; fixing bare-0 false positive | test/tokens/*.test.js | 8625ada |
+| TOK-04 | TOK | tokens | pass | r1 pass: p50 55 ms, max 72 ms at 200 comps | docs/evidence/TOK-04.txt | 8625ada |
+| TOK-05 | TOK | tokens | pass | r1 pass: 1/1 diff; 55 ms p50 | docs/evidence/TOK-05.txt | 8625ada |
 | OPN-01 | OPN | open | pass | r2 pass: real causes + lines; "missing const base" wording | test/onboarding/open.test.js | ec22ab6 |
 | OPN-02 | OPN | open | pass | r2 pass: errors contained, 0 overflow | docs/evidence/OPN-02-missing.png | ec22ab6 |
 | OPN-03 | OPN | open | pass | r2 pass; converter formatting gap | test/onboarding/fix-round.test.js | ec22ab6 |
