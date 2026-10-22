@@ -47,6 +47,7 @@ export function blockingConstructs(source, { adoption = false } = {}) {
     }
     if (/^use[A-Z]/.test(call || '')) add('hooks', n);
     if (n.type === 'ExportDefaultDeclaration') add('default export', n);
+    if (n.type === 'ClassDeclaration' || n.type === 'ClassExpression') add('class component', n);
     if (n.type === 'ConditionalExpression' || n.type === 'LogicalExpression' && ['&&', '||', '??'].includes(n.operator)) add('conditional rendering', n);
     if (call === 'map') add('map', n);
     if (n.type === 'ImportDeclaration' && /\.module\.(css|scss|sass|less)$/.test(n.source.value)) add('CSS modules', n);

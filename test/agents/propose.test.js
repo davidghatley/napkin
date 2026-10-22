@@ -141,7 +141,7 @@ test('AGT-11 permissions: read refuses writes, propose turns every apply into a 
     // propose
     const p = await suggester.call('apply_edits', { component: 'Card', baseRevision: rev, edits: EDIT(222) });
     assert.equal(p.isError, false, p.text); assert.equal(p.data.proposed, true);
-    assert.equal((await suggester.call('add_variant', { component: 'Button', baseRevision: 1, axis: 'size', value: 'xl' })).data.proposed, true);
+    assert.equal((await suggester.call('add_variant', { component: 'Button', baseRevision: (await http(server.url, '/api/components/Button')).json.revision, axis: 'size', value: 'xl' })).data.proposed, true);
     assert.equal(sha(card), before, 'propose-only agents never write');
     const held = (await http(server.url, '/api/proposals')).json;
     assert.deepEqual(held.map((x) => x.by), ['suggester', 'suggester']);

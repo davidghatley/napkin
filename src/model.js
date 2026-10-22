@@ -8,6 +8,7 @@ import { explainError } from './errors.js';
 //             a node holds child elements OR one text (a string, or a prop: "a setting")
 //   variants: { [axis]: { [value]: { [nodeId]: { [cssProp]: value } } } }   overrides only
 // Pure: no Node imports, so the canvas page can load it too.
+import { CSS_PROPS, CSS_NUMBER_PROPS } from './css-props.js';
 
 export class EditError extends Error {
   constructor(index, message) {
@@ -85,6 +86,8 @@ export function touched(edits) {
       case 'wrap': for (const id of e.ids || []) keys.add(`node:${id}`); keys.add(`node:${e.id}`); keys.add(`children:of:${e.ids?.[0]}`); break;
       case 'unwrap': keys.add(`node:${e.id}`); keys.add(`children:of:${e.id}`); break;
       case 'addProp': case 'removeProp': case 'setDefault': keys.add(`prop:${e.name}`); break;
+      case 'renameProp': keys.add(`prop:${e.name}`); keys.add(`prop:${e.to}`); break;
+      case 'renameVariant': keys.add(`prop:${e.axis}`); break;
       case 'bindText': keys.add(`${e.id}.text`); if (e.prop) keys.add(`prop:${e.prop}`); break;
       case 'addVariant': case 'removeVariant': keys.add(`prop:${e.axis}`); break;
       default: keys.add(`op:${e?.op}`);
@@ -145,7 +148,14 @@ export function unsafeCssValue(value) {
   return d !== 0 || q !== '';
 }
 function checkValue(i, path, value) {
-  if (typeof value === 'number') { if (!Number.isFinite(value)) throw new EditError(i, `value for ${path} must be finite`); return; }
+  // only real CSS properties, and numbers only where React's CSSProperties takes them: the file must pass `tsc --strict`
+  const prop = path.slice(path.lastIndexOf('.') + 1);
+  if (!CSS_PROPS.has(prop)) throw new EditError(i, `unknown CSS property "${prop}"`);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new EditError(i, `value for ${path} must be finite`);
+    if (!CSS_NUMBER_PROPS.has(prop)) throw new EditError(i, `${prop} takes text such as '8px' or 'red', not the number ${value}`);
+    return;
+  }
   if (typeof value !== 'string') throw new EditError(i, `value for ${path} must be a string or number`);
   if (unsafeCssValue(value)) throw new EditError(i, `unsafe value for ${path}`);
 }
@@ -229,7 +239,7 @@ export function applyEdits(doc, edits) {
           if (e.variant) throw new EditError(i, 'text cannot differ per variant; make it a setting instead');
           if (node.children.length) throw new EditError(i, `"${id}" has child elements, so it cannot hold text`);
           if (VOID.has(node.tag)) throw new EditError(i, `<${node.tag}> cannot hold text`);
-          if (e.value === null) { delete node.text; delete node.textProp; break; }
+          if (e.value === null || e.value === '') { delete node.text; delete node.textProp; break; } // empty text is no text: the file can't tell them apart
           checkText(i, e.value);
           delete node.textProp; node.text = e.value;
           break;
@@ -275,7 +285,7 @@ export function applyEdits(doc, edits) {
         if (!TAGS.has(n.tag)) throw new EditError(i, `tag "${n.tag}" is not supported`);
         const node = { id: n.id, tag: n.tag, style: {}, children: [] };
         for (const [k, v] of Object.entries(n.style || {})) { if (!CSS_PROP.test(k)) throw new EditError(i, `bad property "${k}"`); checkValue(i, `${n.id}.${k}`, v); node.style[k] = v; }
-        if (n.text !== undefined) { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); node.text = n.text; }
+        if (n.text !== undefined && n.text !== '') { if (VOID.has(n.tag)) throw new EditError(i, `<${n.tag}> cannot hold text`); checkText(i, n.text); node.text = n.text; }
         for (const [k, v] of Object.entries(n.attrs || {})) { if (!ATTRS.includes(k)) throw new EditError(i, `unknown attribute "${k}"`); checkText(i, v); (node.attrs ??= {})[k] = v; }
         const at = e.index ?? parent.children.length;
         if (!Number.isInteger(at) || at < 0 || at > parent.children.length) throw new EditError(i, `bad index ${e.index}`);
@@ -347,6 +357,28 @@ export function applyEdits(doc, edits) {
         p.default = e.value;
         break;
       }
+      case 'renameProp': { // {name, to}: the prop, every element that shows it, and (for a variant axis) its overrides
+        const p = propOf(next, e.name);
+        if (!p) throw new EditError(i, `no prop "${e.name}"`);
+        if (typeof e.to !== 'string' || !PROP_NAME.test(e.to) || RESERVED.has(e.to)) throw new EditError(i, `bad prop name "${e.to}"`);
+        if (propOf(next, e.to)) throw new EditError(i, `prop "${e.to}" already exists`);
+        p.name = e.to;
+        for (const n of byId.values()) if (n.textProp === e.name) n.textProp = e.to;
+        if (next.variants[e.name]) next.variants = Object.fromEntries(Object.entries(next.variants).map(([k, v]) => [k === e.name ? e.to : k, v]));
+        break;
+      }
+      case 'renameVariant': { // {axis, value, to}: a value of a variant axis, including its overrides (and the base, if it is the base)
+        const p = propOf(next, e.axis);
+        if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
+        if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
+        if (typeof e.to !== 'string' || !OPTION.test(e.to)) throw new EditError(i, `bad variant value "${e.to}"`);
+        if (p.options.includes(e.to)) throw new EditError(i, `${e.axis} already has "${e.to}"`);
+        p.options = p.options.map((o) => (o === e.value ? e.to : o));
+        if (p.default === e.value) p.default = e.to;
+        const vals = next.variants[e.axis];
+        if (vals?.[e.value]) next.variants[e.axis] = Object.fromEntries(Object.entries(vals).map(([k, v]) => [k === e.value ? e.to : k, v]));
+        break;
+      }
       case 'bindText': {
         const node = byId.get(e.id);
         if (!node) throw new EditError(i, `no node "${e.id}"`);
@@ -354,7 +386,7 @@ export function applyEdits(doc, edits) {
         if (e.prop === null) {
           if (!node.textProp) throw new EditError(i, `"${e.id}" is not bound to a setting`);
           const p = propOf(next, node.textProp);
-          node.text = typeof p?.default === 'string' ? p.default : '';
+          if (typeof p?.default === 'string' && p.default !== '') node.text = p.default; // an empty default is no text: the file can't tell them apart
           delete node.textProp;
           break;
         }
@@ -451,7 +483,7 @@ export function applyEdits(doc, edits) {
         break;
       }
       default:
-        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename`);
+        throw new EditError(i, `unknown op "${e.op}"; valid ops: set, insert, delete, move, addProp, removeProp, setDefault, bindText, addVariant, removeVariant, rename, renameProp, renameVariant`);
     }
   });
   return next;

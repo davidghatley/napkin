@@ -2,6 +2,7 @@
 // Keep machine-tested prefixes at the start, add the affected path and one next step.
 export function explainError(error, { file, next } = {}) {
   let message = String(error?.message ?? error);
+  if (/won't overwrite your text\.?$|changed on disk while saving; reread and retry$/.test(message)) return message; // already says what to do
   const at = message.indexOf('Next:');
   const detail = (at < 0 ? message : message.slice(0, at)).trimEnd().replace(/\.$/, '');
   const context = file && !detail.includes(file) ? ` [${file}]` : '';

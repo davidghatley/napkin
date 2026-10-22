@@ -30,8 +30,8 @@ export async function waitFor(fn, timeout = 3000, step = 10) {
 }
 
 // Starts src/server.js on a free port for a components folder.
-export async function startServer(compDir) {
-  const proc = spawn(process.execPath, [join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+export async function startServer(compDir, { execArgv = [], env = {} } = {}) {
+  const proc = spawn(process.execPath, [...execArgv, join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let out = '';
   const url = await new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error('server did not start: ' + out)), 5000);

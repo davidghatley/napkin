@@ -61,7 +61,8 @@ export async function lab(files, { width = 1440, height = 900, theme } = {}) {
   const api = {
     dir, compDir, server, browser, io, q,
     id: (name) => q(`napkin.find(${JSON.stringify(name)}).component`),
-    rev: (name) => q(`napkin.find(${JSON.stringify(name)}).revision`),
+    // revisions are content hashes (opaque); `seq` counts the revisions this page has seen, so tests can say "one more revision"
+    rev: (name) => q(`napkin.find(${JSON.stringify(name)}).seq`),
     doc: (name) => q(`JSON.stringify(napkin.find(${JSON.stringify(name)}).doc)`).then(JSON.parse),
     select: async (name, node, variant = {}) => { await q(`napkin.select({ component: napkin.find(${JSON.stringify(name)}).component, node: ${JSON.stringify(node)}, variant: ${JSON.stringify(variant)} })`); await sleep(120); },
     // send edits through the page (identity "you"), and wait until the canvas has drawn that revision

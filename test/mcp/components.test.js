@@ -98,7 +98,7 @@ test('apply_edits: stale errors from MCP are structured JSON with the changed ke
     assert.equal(r.data.stale[0].value, 800);
     assert.equal(r.data.stale[0].yours, 600);
     assert.equal(r.data.stale[0].by, 'david');
-    assert.equal(r.data.currentRevision, rev + 1);
+    assert.equal(typeof r.data.currentRevision, 'string'); assert.notEqual(r.data.currentRevision, rev);
     const retry = await mcp.call('apply_edits', { component: 'Card', baseRevision: r.data.currentRevision, edits: [{ op: 'set', path: 'title.fontWeight', value: 600 }] });
     assert.equal(retry.isError, false, retry.text);
     assert.equal(readFileSync(join(compDir, 'Card.tsx'), 'utf8').match(/fontWeight: (\d+)/)[1], '600');

@@ -5,12 +5,13 @@
 //          'problem' { component, error }     a broken hand edit; error null clears it (F22)
 //          'added'   { component, by?, summary? }   a file appeared (snapshot via snapshot()); by/summary when napkin made it (create, rename)
 //          'removed' { component, by?, summary? }   by/summary when napkin removed it (delete, rename)
+//          'canvas'  { component, canvas }    the component was moved on the canvas (sidecar only)
 // workspace.activity(): the last 200 { at, kind: 'change'|'added'|'removed', component, name, by, summary, revision? }
 import { explainError } from './errors.js';
 import { watch, existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative } from 'node:path';
 import { EventEmitter } from 'node:events';
-import { openStore } from './store.js';
+import { openStore, brokenMessage } from './store.js';
 import { readSidecar, sidecarPath } from './codecs.js';
 import { createComponent, removeComponent, moveComponent, writeSidecar, removeSidecar } from './commit.js';
 import { readComponent } from './tsx/read.js';
@@ -71,6 +72,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       events.emit('change', { component: id, ...c });
     });
     store.events.on('problem', (p) => events.emit('problem', { component: id, ...p }));
+    store.events.on('canvas', (c) => events.emit('canvas', { component: id, ...c }));
     if (!progressive) { e.dirty = false; await build(e); }
     note({ kind: 'added', component: id, name: e.name, by: origin?.by ?? 'file', summary: origin?.summary ?? 'file appeared', revision: (await store.read()).revision });
     events.emit('added', { component: id, ...(origin && { by: origin.by, summary: origin.summary }) });
@@ -182,6 +184,8 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       needBy(by);
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
+      const bad = await e.store.sync(); // a file that does not parse holds someone's hand edit: never delete or replace it
+      if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
       const r = await e.store.read();
       if (r.readOnly) throw new CreateError(`read-only: ${e.path}: ${r.readOnly}. Next: keep the source or propose an adoption before deleting it.`, 403);
       const { id, name, file } = e;
@@ -197,6 +201,8 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (!e) throw new CreateError('not found', 404);
       if (!writeSidecars) throw new CreateError(`${e.path}: rename needs a saved component identity. Next: reopen with --write-sidecars to rename it.`, 403);
       if (typeof newName !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(newName)) throw new CreateError(`component name "${newName}" must be PascalCase (letters and digits, starting with a capital)`);
+      const bad = await e.store.sync();
+      if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
       const { readOnly, source, doc, revision } = await e.store.read();
       if (readOnly) throw new CreateError(`read-only: ${readOnly}`, 403);
       const old = doc.name;

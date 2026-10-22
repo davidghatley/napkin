@@ -26,7 +26,7 @@ test('LAY-02: 12 cases, every Hug / Fill / Fixed lands at the expected size, and
         await L.select('Sizes', 'box');
         const r0 = await L.rev('Sizes');
         await L.q(`document.querySelector('#size-${prop}-${mode}').click()`);
-        await L.browser.waitFor(`napkin.find('Sizes').revision > ${r0}`);
+        await L.browser.waitFor(`napkin.find('Sizes').seq > ${r0}`);
         await L.browser.waitFor(`document.querySelector('section[data-name=Sizes]').dataset.revision === String(napkin.find('Sizes').revision)`);
         const size = await L.size('Sizes', 'box');
         const main = dir === 'row' ? 'width' : 'height';
@@ -47,7 +47,7 @@ test('LAY-02: 12 cases, every Hug / Fill / Fixed lands at the expected size, and
       await L.select('Sizes', 'box');
       const r0 = await L.rev('Sizes');
       await L.q(`document.querySelector('#size-width-fill').click()`);
-      await L.browser.waitFor(`napkin.find('Sizes').revision > ${r0}`);
+      await L.browser.waitFor(`napkin.find('Sizes').seq > ${r0}`);
       assert.equal(getValue(await L.doc('Sizes'), 'box.width'), '100%');
       await L.edit('Sizes', [{ op: 'set', path: 'box.maxWidth', value: 120 }]);
       assert.equal((await L.size('Sizes', 'box')).w, 120, 'max width clamps a fill');
@@ -79,14 +79,14 @@ test('LAY-04: 8 cases, a pinned child follows its parent like a Figma constraint
         await L.select('Pins', 'pin');
         let r0 = await L.rev('Pins');
         await L.q(`document.querySelector('#seg-position-absolute').click()`);
-        await L.browser.waitFor(`napkin.find('Pins').revision > ${r0}`);
+        await L.browser.waitFor(`napkin.find('Pins').seq > ${r0}`);
         await L.browser.waitFor(`document.querySelector('#pin-${axis}-${mode}')`);
         r0 = await L.rev('Pins');
         // margins would add to the pins: the panel wrote the absolute box, so clear them before measuring
         await L.edit('Pins', [{ op: 'set', path: 'pin.marginLeft', value: null }, { op: 'set', path: 'pin.marginTop', value: null }]);
         await L.select('Pins', 'pin');
         await L.q(`document.querySelector('#pin-${axis}-${mode}').click()`);
-        await L.browser.waitFor(`napkin.find('Pins').revision > ${r0 + 1}`);
+        await L.browser.waitFor(`napkin.find('Pins').seq > ${r0 + 1}`);
         await L.browser.waitFor(`document.querySelector('section[data-name=Pins]').dataset.revision === String(napkin.find('Pins').revision)`);
         const read = () => L.q(`(() => { const c = document.querySelector('section[data-name=Pins] .cell .mount'); const st = c.querySelector('[data-n=stage]'), p = c.querySelector('[data-n=pin]'); const a = st.getBoundingClientRect(), b = p.getBoundingClientRect(), z = napkin.state.zoom; return JSON.stringify({ x: (b.left - a.left) / z, y: (b.top - a.top) / z, w: b.width / z, h: b.height / z }); })()`).then(JSON.parse);
         const before = await read();
@@ -108,7 +108,7 @@ test('LAY-04: an odd-sized child keeps its place through min -> centre -> min (n
     for (const [axis, mode] of [['h', 'center'], ['h', 'min'], ['v', 'center'], ['v', 'min'], ['h', 'center'], ['v', 'center'], ['h', 'min'], ['v', 'min']]) {
       const r0 = await L.rev('Odd');
       await L.q(`document.querySelector('#pin-${axis}-${mode}').click()`);
-      await L.browser.waitFor(`napkin.find('Odd').revision > ${r0} && document.querySelector('section[data-name=Odd]').dataset.revision === String(napkin.find('Odd').revision)`);
+      await L.browser.waitFor(`napkin.find('Odd').seq > ${r0} && document.querySelector('section[data-name=Odd]').dataset.revision === String(napkin.find('Odd').revision)`);
       await L.select('Odd', 'pin');
       const p = await read();
       assert.deepEqual([p.x, p.y], [40, 30], `after ${axis} ${mode}`);

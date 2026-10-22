@@ -39,7 +39,10 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
   const browser = await launchChromium({ width: 1440, height: 900 });
   const io = input(browser);
   const q = (e) => browser.eval(e);
-  const rev = (name) => q(`napkin.find('${name}').revision`);
+  // revisions are content hashes: "one revision" is counted as one more entry in the history
+  const hist = async (n) => (await (await fetch(new URL(`api/components/${n}/history?limit=500`, server.url))).json()).history;
+  const rev = async (n = 'Button') => (await hist(n)).length;
+  const settled = async (n, k) => { const t0 = Date.now(); while ((await hist(n)).length < k && Date.now() - t0 < 5000) await new Promise((r) => setTimeout(r, 20)); await browser.waitFor(`napkin.find('${n}').revision === '${(await hist(n))[0].revision}'`); };
   const reload = async (hash = '') => { await browser.goto(server.url + hash); await browser.waitFor('document.body.dataset.ready === "1"'); };
   try {
     await reload();
@@ -158,7 +161,7 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       await q(`document.activeElement.select()`);
       await browser.send('Input.insertText', { text: 'heading' });
       await io.key('Enter');
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       await sleep(200);
       assert.equal(await rev('Card'), r0 + 1, 'exactly one revision');
       assert.match(readFileSync(fileOf('Card'), 'utf8'), /data-n="heading" style=\{s\('heading', v\)\}/);
@@ -172,7 +175,7 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       const r0 = await rev('Card');
       const from = await centerOf(browser, row('Card', 'body')), to = await centerOf(browser, row('Card', 'image'));
       await io.drag(from.x, from.y, to.x, to.top + 3);
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       await sleep(200);
       assert.equal(await rev('Card'), r0 + 1, 'exactly one revision');
       const order = (await api(server.url, 'api/components/Card')).doc.root.children.map((x) => x.id);
@@ -195,7 +198,7 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       assert.equal(await q(`document.querySelector('#fontSize').placeholder`), 'Mixed');
       const r0 = await rev('Card');
       await browser.type('#opacity', '50'); // the panel shows percent
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       await sleep(250);
       assert.equal(await rev('Card'), r0 + 1, 'one batch, one revision');
       const doc = (await api(server.url, 'api/components/Card')).doc;
@@ -305,7 +308,7 @@ test('canvas frames, quick open, layers, multi-select, measure, focus', { timeou
       await q(`napkin.selectMany([{ component: '${id}', node: 'body', variant: {} }, { component: '${id}', node: 'image', variant: {} }, { component: '${id}', node: 'card', variant: {} }])`);
       await q(`document.activeElement?.blur()`);
       await io.key('Delete');
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       await sleep(200);
       assert.equal(await rev('Card'), r0 + 1, 'one revision for the whole selection');
       assert.deepEqual((await api(server.url, 'api/components/Card')).doc.root.children.map((x) => x.id), ['heading'], 'body and image are gone, the root stays');

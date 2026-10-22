@@ -16,14 +16,18 @@ test('the design panel reads like a design tool and every control is one small e
   const io = input(browser);
   const q = (e) => browser.eval(e);
   const doc = () => readComponent(readFileSync(fileOf('Button'), 'utf8')).doc;
-  const rev = () => q(`napkin.find('Button').revision`);
+  // revisions are content hashes: "one revision" is counted as one more entry in the history
+  const hist = async (n) => (await (await fetch(new URL(`api/components/${n}/history?limit=500`, server.url))).json()).history;
+  const rev = async (n = 'Button') => (await hist(n)).length;
+  const settled = async (n, k) => { const t0 = Date.now(); while ((await hist(n)).length < k && Date.now() - t0 < 5000) await new Promise((r) => setTimeout(r, 20)); await browser.waitFor(`napkin.find('${n}').revision === '${(await hist(n))[0].revision}'`); };
   const lines = () => git('diff', '--numstat', '--', 'components/Button.tsx').trim();
   const original = readFileSync(fileOf('Button'), 'utf8');
   // back to the committed file; waits until the server has read it and the canvas has drawn it
   const reset = async () => {
     git('checkout', '--', 'components/Button.tsx');
     await waitFor(async () => (await (await fetch(new URL('api/components/Button', server.url))).json()).source === original, 4000);
-    await browser.waitFor(`document.querySelector('section[data-name="Button"]').dataset.revision === String(napkin.find('Button').revision)`);
+    const now = (await (await fetch(new URL('api/components/Button', server.url))).json()).revision; // the page must show exactly the revision the server holds now
+    await browser.waitFor(`document.querySelector('section[data-name="Button"]').dataset.revision === '${now}' && napkin.find('Button').revision === '${now}'`);
     await sleep(120);
   };
   const root = `document.querySelector('section[data-name="Button"] .cell').querySelector('[data-n="root"]')`;
@@ -53,7 +57,7 @@ test('the design panel reads like a design tool and every control is one small e
       assert.equal(await q(`document.querySelector('#borderRadius').value`), '16');
       assert.equal(await rev(), r0, 'nothing written yet');
       await io.release(l.x + 20, l.y);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.borderRadius'), 16);
       assert.equal(lines(), '1\t1\tcomponents/Button.tsx');
       await reset();
@@ -75,7 +79,7 @@ test('the design panel reads like a design tool and every control is one small e
       await q(`document.querySelector('#gap').focus()`);
       for (let i = 0; i < 3; i++) await io.key('ArrowUp');
       await io.key('ArrowUp', { shift: true });
-      await browser.waitFor(`napkin.find('Button').revision > ${r0}`);
+      await settled('Button', r0 + 1);
       await sleep(300);
       assert.equal(await rev(), r0 + 1, 'one revision for the burst');
       assert.equal(getValue(doc(), 'root.gap'), 21);
@@ -86,7 +90,7 @@ test('the design panel reads like a design tool and every control is one small e
     await t.test('segmented controls and the 3x3 alignment matrix', async () => {
       let r0 = await rev();
       await q(`document.querySelector('#seg-flexDirection-column').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.flexDirection'), 'column');
       assert.equal(lines(), '1\t0\tcomponents/Button.tsx', 'one added line');
       await browser.waitFor(`document.querySelector('#seg-flexDirection-column').getAttribute('aria-checked') === 'true'`);
@@ -94,7 +98,7 @@ test('the design panel reads like a design tool and every control is one small e
       r0 = await rev();
       assert.equal(await q(`document.querySelector('#align-11').getAttribute('aria-pressed')`), 'false');
       await q(`document.querySelector('#align-22').click()`); // bottom right, direction row: justify flex-end, align flex-end
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       await sleep(150);
       assert.equal(await rev(), r0 + 1, 'both properties in one batch');
       assert.equal(getValue(doc(), 'root.justifyContent'), 'flex-end');
@@ -106,26 +110,27 @@ test('the design panel reads like a design tool and every control is one small e
     await t.test('Hug / Fill / Fixed', async () => {
       let r0 = await rev();
       await q(`document.querySelector('#size-width-fill').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.width'), '100%');
       r0 = await rev();
       await q(`document.querySelector('#size-width-fixed').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       const w = getValue(doc(), 'root.width');
       assert.equal(typeof w, 'number'); assert.ok(w > 40);
       await browser.waitFor(`document.querySelector('#size-width-fixed').getAttribute('aria-checked') === 'true'`);
       r0 = await rev();
       await q(`document.querySelector('#size-width-hug').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.width'), 'auto');
       await browser.waitFor(`document.querySelector('#size-width-hug').getAttribute('aria-checked') === 'true'`);
       await reset();
     });
 
     await t.test('a colour swatch picks a colour and writes one property', async () => {
+      await browser.waitFor(`!!document.querySelector('#pick-background')`); // (the panel redraws a moment after a reset)
       const r0 = await rev();
       await q(`(() => { const p = document.querySelector('#pick-background'); p.value = '#ff3b30'; p.dispatchEvent(new Event('input', { bubbles: true })); p.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.background'), '#ff3b30');
       assert.equal(lines(), '1\t1\tcomponents/Button.tsx');
       await browser.waitFor(`document.querySelector('#background').value === '#ff3b30'`);
@@ -153,7 +158,7 @@ test('the design panel reads like a design tool and every control is one small e
       assert.equal(await q(`!!document.querySelector('#dot-borderRadius')`), false);
       const r0 = await rev();
       await browser.type('#borderRadius', '20');
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.borderRadius', { size: 'sm' }), 20);
       assert.equal(getValue(doc(), 'root.borderRadius'), 6, 'base untouched');
       await browser.waitFor(`document.querySelector('#dot-borderRadius')`);

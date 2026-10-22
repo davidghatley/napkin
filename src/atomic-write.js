@@ -1,11 +1,4 @@
-// Write a file so a kill at any moment leaves either the old or the new content, never a truncated one:
-// temp file in the same folder, fsync, rename over the target. (Same name and signature as the files lane's module.)
-import { openSync, writeSync, fsyncSync, closeSync, renameSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
-
-export function writeFileAtomic(path, text) {
-  const tmp = join(dirname(path), `.${basename(path)}.tmp-${process.pid}-${Date.now()}`);
-  const fd = openSync(tmp, 'w');
-  try { writeSync(fd, text); fsyncSync(fd); } finally { closeSync(fd); }
-  renameSync(tmp, path);
-}
+// The name the merge lead asked for: writeFileAtomic(path, text) = temp file in the same folder, fsync, rename (REL-01).
+// The implementation is src/atomic.js (it also has the exclusive-create form and the stale-temp cleanup).
+import { writeAtomic } from './atomic.js';
+export const writeFileAtomic = (path, text, opts) => writeAtomic(path, text, opts); // opts.check(): runs just before the rename; throwing cancels it

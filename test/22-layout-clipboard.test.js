@@ -9,7 +9,7 @@ import { sleep } from './helpers/harness.js';
 import { centerOf } from './helpers/input.js';
 
 const CARD = readFileSync(new URL('../fixtures/Card/Card.tsx', import.meta.url), 'utf8');
-const waitRev = (L, name, r) => L.browser.waitFor(`napkin.find(${JSON.stringify(name)}).revision > ${r} && document.querySelector('section[data-name=${JSON.stringify(name)}]').dataset.revision === String(napkin.find(${JSON.stringify(name)}).revision)`);
+const waitRev = (L, name, r) => L.browser.waitFor(`napkin.find(${JSON.stringify(name)}).seq > ${r} && document.querySelector('section[data-name=${JSON.stringify(name)}]').dataset.revision === String(napkin.find(${JSON.stringify(name)}).revision)`);
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
 const mkPaste = (L, build) => L.q(`(async () => { const dt = new DataTransfer(); ${build}; const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }); document.body.dispatchEvent(ev); return true; })()`);
 

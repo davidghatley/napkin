@@ -32,7 +32,7 @@ test('AGT-05: every revision is attributed (david, agent names, file) and the hi
     assert.deepEqual(h.map((x) => x.by), ['file', 'api-client', 'scout', 'david', 'file']);
     assert.ok(h.every((x) => typeof x.by === 'string' && x.by && x.summary && x.at > 0 && Array.isArray(x.keys)), 'every revision has by, summary, time and keys');
     assert.match(h[3].summary, /title\.fontWeight = 500/);
-    assert.deepEqual(h.map((x) => x.revision), [5, 4, 3, 2, 1]);
+    assert.equal(h.length, 5); assert.equal(new Set(h.map((x) => x.revision)).size, 5, 'five different revisions, newest first (revisions are content hashes)');
     assert.equal((await http(server.url, '/api/components/Card/history?limit=2')).json.history.length, 2);
     assert.equal((await http(server.url, '/api/components/Nope/history')).status, 404);
     // rejected and dry-run attempts make no revision
@@ -94,11 +94,12 @@ test('AGT-10: a same-property clash error carries both values (theirs that lande
     assert.equal((await store.apply({ baseRevision: rev, by: 'david', edits: [{ op: 'set', path: 'root.padding', value: '1px', variant }] })).ok, true);
     const r = await store.apply({ baseRevision: rev, by: 'scout', edits: [{ op: 'set', path: 'root.padding', value: '2px', variant }, { op: 'set', path: 'label.fontWeight', value: 700 }] });
     assert.equal(r.ok, false);
-    assert.deepEqual(r.stale, [{ key: 'root.padding@size=sm', value: '1px', yours: '2px', revision: rev + 1, by: 'david' }]);
-    assert.equal(r.currentRevision, rev + 1);
+    assert.deepEqual(r.stale, [{ key: 'root.padding@size=sm', value: '1px', yours: '2px', revision: r.currentRevision, by: 'david' }]);
+    const rev1 = (await store.read()).revision;
+    assert.equal(r.currentRevision, rev1);
     // base-style clash and a removed value (null)
-    const r2 = await store.apply({ baseRevision: rev + 1, by: 'david', edits: [{ op: 'set', path: 'root.gap', value: null }] });
-    const r3 = await store.apply({ baseRevision: rev + 1, by: 'scout', edits: [{ op: 'set', path: 'root.gap', value: 99 }] });
+    const r2 = await store.apply({ baseRevision: rev1, by: 'david', edits: [{ op: 'set', path: 'root.gap', value: null }] });
+    const r3 = await store.apply({ baseRevision: rev1, by: 'scout', edits: [{ op: 'set', path: 'root.gap', value: 99 }] });
     assert.deepEqual(r3.stale.map(({ key, value, yours, by }) => ({ key, value, yours, by })), [{ key: 'root.gap', value: null, yours: 99, by: 'david' }]);
     // a deleted node: the clash says it is gone
     await store.apply({ baseRevision: r2.revision, by: 'david', edits: [{ op: 'delete', id: 'label' }] });
@@ -106,10 +107,10 @@ test('AGT-10: a same-property clash error carries both values (theirs that lande
     assert.equal(r4.ok, false); assert.equal(r4.stale[0].by, 'david');
     // an unknown base revision still answers with the current one
     const r5 = await store.apply({ baseRevision: 9999, by: 'scout', edits: [{ op: 'set', path: 'root.gap', value: 1 }] });
-    assert.match(r5.error, /^stale revision/); assert.equal(typeof r5.currentRevision, 'number');
+    assert.match(r5.error, /^stale revision/); assert.equal(typeof r5.currentRevision, 'string');
     // ...and it is not empty: every key of yours that changed since the oldest kept revision is listed, with who and the current value
-    assert.equal(r5.stale[0].key, 'root.gap'); assert.ok(r5.stale[0].by && r5.stale[0].revision > 1);
-    assert.equal(r5.oldestRevision, 1); assert.ok(r5.changedKeys.includes('root.gap') && r5.changedKeys.includes('root.padding@size=sm'));
+    assert.equal(r5.stale[0].key, 'root.gap'); assert.ok(r5.stale[0].by && typeof r5.stale[0].revision === 'string');
+    assert.equal(r5.oldestRevision, rev); assert.ok(r5.changedKeys.includes('root.gap') && r5.changedKeys.includes('root.padding@size=sm'));
     // an unknown base on a key nobody touched: stale is empty but changedKeys still says what moved
     const r6 = await store.apply({ baseRevision: 'nope', by: 'scout', edits: [{ op: 'set', path: 'root.display', value: 'grid' }] });
     assert.deepEqual(r6.stale, []); assert.ok(r6.changedKeys.length > 0);

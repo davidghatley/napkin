@@ -17,12 +17,16 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
   const io = input(browser);
   const q = (e) => browser.eval(e);
   const doc = (n = 'Button') => readComponent(readFileSync(fileOf(n), 'utf8')).doc;
-  const rev = (n = 'Button') => q(`napkin.find('${n}').revision`);
+  // revisions are content hashes: "one revision" is counted as one more entry in the history
+  const hist = async (n) => (await (await fetch(new URL(`api/components/${n}/history?limit=500`, server.url))).json()).history;
+  const rev = async (n = 'Button') => (await hist(n)).length;
+  const settled = async (n, k) => { const t0 = Date.now(); while ((await hist(n)).length < k && Date.now() - t0 < 5000) await new Promise((r) => setTimeout(r, 20)); await browser.waitFor(`napkin.find('${n}').revision === '${(await hist(n))[0].revision}'`); };
   const original = Object.fromEntries(['Button', 'Card'].map((n) => [n, readFileSync(fileOf(n), 'utf8')]));
   const reset = async (n = 'Button') => {
     git('checkout', '--', `components/${n}.tsx`);
     await waitFor(async () => (await (await fetch(new URL(`api/components/${n}`, server.url))).json()).source === original[n], 4000);
-    await browser.waitFor(`document.querySelector('section[data-name="${n}"]').dataset.revision === String(napkin.find('${n}').revision)`);
+    const now = (await (await fetch(new URL(`api/components/${n}`, server.url))).json()).revision; // the page must show exactly the revision the server holds now
+    await browser.waitFor(`document.querySelector('section[data-name="${n}"]').dataset.revision === '${now}' && napkin.find('${n}').revision === '${now}'`);
     await sleep(150);
   };
   const select = async (n, node, variant = {}) => { await q(`napkin.select({ component: napkin.find('${n}').component, node: '${node}', variant: ${JSON.stringify(variant)} })`); await browser.waitFor(`document.querySelector('#sel-node')?.textContent.startsWith('${node}')`); await sleep(100); };
@@ -35,16 +39,16 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     await t.test('Stroke: width, style and colour are one border line; opacity goes into the hex', async () => {
       let r0 = await rev();
       await browser.type('#stroke-w', '4');
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.border'), '4px solid #16181d');
       assert.equal(numstat(), '1\t1\tcomponents/Button.tsx');
       r0 = await rev();
       await q(`(() => { const s = document.querySelector('#stroke-s'); s.value = 'dashed'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.border'), '4px dashed #16181d');
       r0 = await rev();
       await browser.type('#stroke-a', '50');
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.border'), '4px dashed #16181d80');
       await reset();
     });
@@ -54,7 +58,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await browser.waitFor(`document.querySelector('#add-stroke')`);
       const r0 = await rev();
       await q(`document.querySelector('#add-stroke').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.borderTop'), '1px solid #1f2937');
       await reset();
       await q(`document.querySelector('#side-all').click()`);
@@ -63,23 +67,23 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     await t.test('Fill: alpha is part of the hex, the eye hides it, minus removes it, plus brings it back', async () => {
       let r0 = await rev();
       await browser.type('#fill-a', '50');
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.background'), '#2236b080');
       r0 = await rev();
       await q(`document.querySelector('#eye-fill').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.background'), 'transparent');
       await q(`document.querySelector('#eye-fill').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 2}`);
+      await settled('Button', r0 + 2);
       assert.equal(getValue(doc(), 'root.background'), '#2236b080');
       r0 = await rev();
       await browser.waitFor(`document.querySelector('#remove-fill')`);
       await q(`document.querySelector('#remove-fill').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.background'), undefined);
       await browser.waitFor(`document.querySelector('#add-fill')`);
       await q(`document.querySelector('#add-fill').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 2}`);
+      await settled('Button', r0 + 2);
       assert.equal(getValue(doc(), 'root.background'), '#d9d9d9');
       await reset();
     });
@@ -87,11 +91,11 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     await t.test('Shadow: x, y, blur, spread and colour are one boxShadow line', async () => {
       let r0 = await rev();
       await q(`document.querySelector('#add-effects').click()`);
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.boxShadow'), '0px 2px 6px 0px #00000040');
       r0 = await rev();
       await browser.type('#shadow-blur', '14');
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.boxShadow'), '0px 2px 14px 0px #00000040');
       assert.equal(numstat(), '1\t0\tcomponents/Button.tsx', 'one added line');
       await reset();
@@ -104,7 +108,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       assert.equal(await q(`document.querySelector('#pad-r').value`), '16');
       let r0 = await rev();
       await browser.type('#pad-t', '20');
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.padding'), '20px 16px 8px 16px');
       await reset();
       await browser.waitFor(`!!document.querySelector('#rad-sides')`);
@@ -112,7 +116,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await browser.waitFor(`document.querySelector('#rad-tl')`);
       r0 = await rev();
       await browser.type('#rad-tl', '0');
-      await browser.waitFor(`napkin.find('Button').revision === ${r0 + 1}`);
+      await settled('Button', r0 + 1);
       assert.equal(getValue(doc(), 'root.borderRadius'), '0px 6px 6px 6px');
       await reset();
     });
@@ -141,7 +145,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       assert.equal(await q(`document.querySelector('#borderRadius').closest('.fbox').querySelector('.unit').textContent`), 'px');
       const r0 = await rev('Card');
       await browser.type('#borderRadius', '20');
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       assert.equal(getValue(doc('Card'), 'card.borderRadius'), '20px');
       await reset('Card');
       await select('Button', 'root', { size: 'md', state: 'default' });
@@ -179,7 +183,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await q(`document.querySelector('#fontFamily').blur()`);
       const r0 = await rev('Card');
       await browser.type('#fontFamily', 'Inter Var');
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       assert.equal(getValue(doc('Card'), 'card.fontFamily'), '"Inter Var", serif');
       await reset('Card');
     });
@@ -207,12 +211,12 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       const row = (node) => `document.querySelector('#layers [data-component="' + napkin.find('Card').component + '"][data-node="${node}"]')`;
       const r0 = await rev('Card');
       await q(`${row('image')}.querySelector('.leye').click()`);
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       assert.equal(getValue(doc('Card'), 'image.visibility'), 'hidden');
       await browser.waitFor(`${row('image')}.classList.contains('hidden-node') && getComputedStyle(${row('image')}.querySelector('.leye')).display !== 'none'`);
       assert.equal(await q(`getComputedStyle(document.querySelector('section[data-name="Card"] [data-n="image"]')).visibility`), 'hidden');
       await q(`${row('image')}.querySelector('.leye').click()`);
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 2}`);
+      await settled('Card', r0 + 2);
       assert.equal(getValue(doc('Card'), 'image.visibility'), undefined);
     });
 
@@ -237,14 +241,14 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await q(`${row('title')}.querySelector('.lmore').click()`);
       await browser.waitFor(`!document.querySelector('#lmenu').hidden`);
       await q(`document.querySelector('#lmenu [data-do=duplicate]').click()`);
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       assert.deepEqual(doc('Card').root.children.map((x) => x.id), ['image', 'title', 'title2', 'body']);
       assert.equal(await q(`napkin.state.selection.node`), 'title2');
       r0 = await rev('Card');
       await browser.waitFor(`!!${row('title2')}`);
       await q(`${row('title2')}.querySelector('.lmore').click()`);
       await q(`document.querySelector('#lmenu [data-do=delete]').click()`);
-      await browser.waitFor(`napkin.find('Card').revision === ${r0 + 1}`);
+      await settled('Card', r0 + 1);
       assert.deepEqual(doc('Card').root.children.map((x) => x.id), ['image', 'title', 'body']);
     });
 
