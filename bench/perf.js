@@ -167,7 +167,7 @@ async function motionRun(b, zoomSteps) {
   await b.eval(`(()=>{ const sec = document.querySelectorAll('section.cmp')[100]; napkin.view.fitRect(napkin.stage.componentRect(sec.dataset.component), { pad: 1500, max: 0.3 }); return true })()`);
   await sleep(800);
   const before = await b.eval('napkin.view.get()');
-  await b.eval(`window.__frames = []; window.__stop = false; (() => { let prev; const tick = (t) => { if (prev !== undefined) __frames.push(t - prev); prev = t; if (!__stop) requestAnimationFrame(tick); }; requestAnimationFrame(tick); })(); true`);
+  await b.eval(`window.__path = 0; { let last = napkin.view.get(); napkin.on('view', (v) => { window.__path += Math.hypot(v.x - last.x, v.y - last.y) + Math.abs(v.z - last.z) * 1000; last = v; }); } window.__frames = []; window.__stop = false; (() => { let prev; const tick = (t) => { if (prev !== undefined) __frames.push(t - prev); prev = t; if (!__stop) requestAnimationFrame(tick); }; requestAnimationFrame(tick); })(); true`);
   let wheelEvents = 0;
   const started = performance.now();
   while (performance.now() - started < 5000) {
@@ -177,7 +177,7 @@ async function motionRun(b, zoomSteps) {
   }
   const samples = (await b.eval('window.__stop = true; window.__frames.slice(1)')).filter((x) => x > 0);
   const after = await b.eval('napkin.view.get()');
-  return { ...stats(samples), slowFrames: samples.filter((x) => x > 20).length, before, after, wheelEvents, moved: before.x !== after.x || before.y !== after.y };
+  return { ...stats(samples), slowFrames: samples.filter((x) => x > 20).length, before, after, wheelEvents, path: await b.eval('window.__path'), moved: (await b.eval('window.__path')) > 200 };
 }
 async function motion({ browser: b, cells }) {
   const pan = await motionRun(b, false), zoom = await motionRun(b, true);

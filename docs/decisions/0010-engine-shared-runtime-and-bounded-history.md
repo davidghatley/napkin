@@ -14,4 +14,4 @@ The engine criteria (PRF-01..08, REL-03..05) measured what 0002 left implicit. O
 - **Typing in a style field previews on the canvas** (the same DOM preview a scrub uses) and the edit is written on commit.
 
 ## Consequences
-The `render` event fires once per render and the panel redraw follows the pixels (it can lag them by a frame), which a test or script must not assume away: wait for the revision, not for the DOM. A render host that wants the shared runtime needs the same import map. The cost of an old undo step is one parse.
+The `render` event fires once per render, and typing in a style field moves the canvas before the file changes, so a test that sees the pixels change must still wait for the revision before it reads the file. A render host that wants the shared runtime needs the same import map. The cost of an old undo step is one parse.

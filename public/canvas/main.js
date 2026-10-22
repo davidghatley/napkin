@@ -105,10 +105,7 @@ const nav = initNav(ctx);
 initHandles(ctx);
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
-// A render redraws the panel too, but the canvas pixels come first (PRF-02): the redraw is coalesced and runs after the next paint.
-let panelLate = 0;
-const panelSoon = () => { if (!panelLate) panelLate = 1, (window.requestIdleCallback || ((f) => setTimeout(f, 50)))(() => { panelLate = 0; renderPanel(ctx); }, { timeout: 120 }); };
-ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; if (!ctx.state.selection || ctx.state.selection.component === component) panelSoon(); counts(); });
+ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
 
 const sync = id => {
   if (!id) return;
