@@ -305,9 +305,24 @@ export function createStage(ctx, root, world, view) {
   function place(box, target, label, base) {
     if (!target?.isConnected || target.closest('[data-cull]')) { box.style.display = 'none'; return; }
     const r = target.getBoundingClientRect();
+    const v = view.get(), sb = view.stageBox();
+    cached.set(box, { x: (r.left - sb.left - v.x) / v.z, y: (r.top - sb.top - v.y) / v.z, w: r.width / v.z, h: r.height / v.z, dx: sb.left - base.left, dy: sb.top - base.top, pw: r.width, ph: r.height }); // canvas units, for gestures
     box.style.setProperty('--w', `${r.width}px`); box.style.setProperty('--h', `${r.height}px`); // children are placed with transforms from these, so a new size never shifts layout
     Object.assign(box.style, { display: 'block', transform: `translate(${r.left - base.left}px, ${r.top - base.top}px)`, width: `${r.width}px`, height: `${r.height}px` });
     if (label !== undefined) box.dataset.label = label;
+  }
+  // While the view is in a wheel or drag gesture the boxes are moved from the geometry measured at the last full refresh (in canvas units):
+  // arithmetic and style writes only, no layout read. The full refresh runs again when the gesture settles.
+  const cached = new WeakMap();
+  let gesturing = false, lastZ = view.get().z;
+  function moveOverlays(v) {
+    for (const box of [selectBox, hoverBox, ...extras]) {
+      const c = box.style.display === 'block' && cached.get(box);
+      if (!c) continue;
+      const w = c.w * v.z, h = c.h * v.z;
+      box.style.transform = `translate(${c.x * v.z + v.x + c.dx}px, ${c.y * v.z + v.y + c.dy}px)`;
+      if (w !== c.pw || h !== c.ph) { c.pw = w; c.ph = h; box.style.setProperty('--w', `${w}px`); box.style.setProperty('--h', `${h}px`); box.style.width = `${w}px`; box.style.height = `${h}px`; }
+    }
   }
   function refreshOverlays() {
     const sels = ctx.state.selections, sel = ctx.state.selection;
@@ -368,23 +383,36 @@ export function createStage(ctx, root, world, view) {
 
   // ---------------------------------------------------------------------------------------------- culling
   // Far off-screen frames stop being painted (content-visibility), keeping their size. Cheap until a repo is big.
-  let cullQueued = false;
+  let cullQueued = false, cullMode = 'exact'; // 'exact' (settled, or a programmatic move), 'pan' (a wheel or drag pan) or 'zoom' (a wheel or pinch zoom)
   function cull() {
     cullQueued = false;
+    const mode = cullMode; cullMode = 'exact';
     if (sections.size <= CULL_AFTER) { for (const sec of sections.values()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; } return; }
+    if (mode === 'zoom') return; // a zoom gesture changes what is in view faster than frames can be drawn: they are brought exact when it settles
     const { x, y, z } = view.get(), b = view.stageBox();
-    const m = 0.6; // margin as a share of the viewport
-    const x0 = (-x - b.width * m) / z, x1 = (b.width * (1 + m) - x) / z, y0 = (-y - b.height * m) / z, y1 = (b.height * (1 + m) - y) / z;
+    const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
+    const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
+    const near = box(0.6), wide = box(1.6); // a change of culling costs a layout and a repaint: while panning, bring in everything within 1.6 viewports as soon as something is needed, and take nothing out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
+    let need = false;
+    if (mode === 'pan') for (const sec of sections.values()) if (sec.culled && sec.pos && sec.size.w && !out(near, sec)) { need = true; break; }
     for (const [id, sec] of sections) {
       if (sec.pending && visible(sec)) render(id, true).catch(console.error);
       if (!sec.pos || !sec.size.w) continue;
-      const off = !keep.has(id) && (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 > y1 || sec.pos.y + sec.size.h < y0);
+      let off;
+      if (mode === 'pan') off = sec.culled ? !(need && !out(wide, sec)) && out(near, sec) : false;
+      else off = !keep.has(id) && out(near, sec);
       if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else delete sec.el.dataset.cull; }
     }
   }
-  const queueCull = () => { if (!cullQueued) { cullQueued = true; requestAnimationFrame(cull); } };
-  ctx.on('view', () => { refreshOverlays(); queueCull(); });
+  const RANK = { zoom: 0, pan: 1, exact: 2 };
+  const queueCull = (mode = 'exact') => { if (!cullQueued) cullMode = mode; else if (RANK[mode] > RANK[cullMode]) cullMode = mode; if (!cullQueued) { cullQueued = true; requestAnimationFrame(cull); } };
+  ctx.on('view', (v) => {
+    if (v.gesture && gesturing) moveOverlays(v); else refreshOverlays();
+    const was = lastZ; lastZ = v.z; gesturing = !!v.gesture;
+    queueCull(v.gesture ? (v.z !== was ? 'zoom' : 'pan') : 'exact');
+  });
+  ctx.on('viewsettle', () => { if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
   ctx.on('select', () => {
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
@@ -393,7 +421,7 @@ export function createStage(ctx, root, world, view) {
     selectBox.dataset.more = String(n - 1);
     refreshOverlays();
   });
-  ctx.on('layout', queueCull);
+  ctx.on('layout', () => queueCull());
 
   // ---------------------------------------------------------------------------------------------- pointer: hover, click, marquee, frame drag
   const hit = (target) => {
@@ -525,7 +553,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: queueCull,
+    reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, cull: () => queueCull(),
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

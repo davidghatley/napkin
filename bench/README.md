@@ -45,8 +45,19 @@ SOAK=1 node --test test/engine/bench.test.js     # 60 s soak, writes REL-04-60s 
   - `PRF-08` types into the padding field with focus kept; timed from the `input` event to the
     selected node showing the new padding (the canvas previews while you type; the edit is written
     on commit).
-- `PRF-04` sends real wheel events for five seconds (a Ctrl-wheel zoom every twelfth) and records
-  rAF intervals; the benchmark never injects a transform.
+- `PRF-04` sends real CDP wheel events for five seconds on the 200-component canvas at 30% zoom
+  (one every 16 ms without waiting for each acknowledgement; about 300 land and all are handled),
+  along a path that stays over the component column, with a component selected. Run twice: pan only,
+  then with every twelfth event a Ctrl-wheel zoom step (1.27x, in for a second, out for a second).
+  It records a Chromium trace (Tracing domain) and reports, per run: frame time from the compositor's
+  PipelineReporter events (presentation to presentation) raw and rounded to whole vsyncs, the count
+  of frames over 17.7 ms, frames that missed a vsync, dropped frames, main-thread tasks over 16.7 ms
+  (long tasks, with the longest), and the rAF intervals. The software compositor jitters
+  presentation times by about +/- 2 ms around a steady 60 Hz (mean 16.7), so the raw p95 and the
+  over-17.7 count include that jitter; the pass test is on whole vsyncs (p95 of intervals rounded to
+  vsyncs <= 16.7, at most 2% of frames missed or dropped), in both runs. The benchmark never injects
+  a transform. (Earlier versions waited for every wheel acknowledgement, so only about 100 to 150
+  events landed, set an impossible 5% starting zoom, and measured rAF only.)
 - `PRF-05`/`PRF-06` apply 2,000 real `store.apply` edits to a 200-component workspace and time
   the incremental esbuild rebuild and the whole apply-to-bundle path. Edit #1 and #2000 are kept.
 - `PRF-07` samples the server's `VmRSS` and the page's live JS heap after an explicit GC.

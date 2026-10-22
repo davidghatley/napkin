@@ -25,26 +25,40 @@ export function createView(ctx, stageEl, worldEl) {
   const stageBox = () => box;
   new ResizeObserver(() => { box = stageEl.getBoundingClientRect(); apply(); }).observe(stageEl);
 
-  function apply() {
-    const { x, y, z } = v;
-    worldEl.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${z})`;
+  // A gesture (wheel, drag, pinch) moves the world by compositor transform only: nothing that needs a layout or a re-raster of the frames
+  // runs per event. The label counter-scale, the zoom band and the overlays are brought exact in settle(), 160 ms after the last event.
+  let labelZ = v.z, labelsStale = false;
+  function labels() {
+    const { z } = v; labelsStale = false; labelZ = z;
     const ls = Math.round(clamp(1 / z, 1, 3.2) * 20) / 20; // label scale, quantised so it changes rarely
     if (worldEl.dataset.ls !== String(ls)) { worldEl.dataset.ls = String(ls); worldEl.style.setProperty('--ls', ls); }
     const lf = Math.round(clamp(1 / z, 1, 16) * 20) / 20; // titles and the axis strip stay readable down to the 200-component fit
     if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--lf', lf); }
-    stageEl.dataset.hdr = z < 0.33 ? 'strip' : '';
+    // (an attribute written with the value it already has still repaints the page: only write on a change)
+    const hdr = z < 0.33 ? 'strip' : '', band = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
+    if (stageEl.dataset.hdr !== hdr) stageEl.dataset.hdr = hdr;
+    if (stageEl.dataset.zoomBand !== band) stageEl.dataset.zoomBand = band;
+  }
+  function apply(gesture = false) {
+    const { x, y, z } = v;
+    worldEl.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${z})`;
+    if (gesture && z !== labelZ) labelsStale = true; else labels();
     // (not custom properties: a custom property set on #stage is inherited by every element under it, and each pan event would restyle them all)
     stageEl.style.backgroundPosition = `${x}px ${y}px`; stageEl.style.backgroundSize = `${24 * z}px ${24 * z}px`;
-    stageEl.dataset.zoomBand = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
     ctx.state.zoom = z;
-    document.body.classList.add('moving'); clearTimeout(movingTimer); movingTimer = setTimeout(() => document.body.classList.remove('moving'), 160);
-    ctx.emit('view', { ...v });
+    if (!document.body.classList.contains('moving')) document.body.classList.add('moving'); clearTimeout(movingTimer); movingTimer = setTimeout(settle, 160);
+    ctx.emit('view', gesture ? { ...v, gesture: true } : { ...v });
+  }
+  function settle() {
+    document.body.classList.remove('moving');
+    if (labelsStale) labels();
+    ctx.emit('viewsettle', { ...v });
   }
   view.get = () => ({ ...v });
-  function set(next, { animate = false, duration = 220, anchor = null } = {}) {
+  function set(next, { animate = false, duration = 220, anchor = null, gesture = false } = {}) {
     next = { x: next.x, y: next.y, z: clamp(next.z, MIN_Z, MAX_Z) };
     if (anim) { cancelAnimationFrame(anim.raf); anim = null; }
-    if (!animate || reducedMotion()) { v = next; apply(); return Promise.resolve(); }
+    if (!animate || reducedMotion()) { v = next; apply(gesture); return Promise.resolve(); }
     const from = { ...v }, t0 = performance.now();
     return new Promise((done) => {
       const step = (now) => {
@@ -75,7 +89,7 @@ export function createView(ctx, stageEl, worldEl) {
     if (sx === undefined) { const p = lastPointer && inside(lastPointer) ? lastPointer : { x: box.left + box.width / 2, y: box.top + box.height / 2 }; sx = p.x; sy = p.y; }
     return view.zoomAt(sx, sy, v.z * factor, opts);
   };
-  view.panBy = (dx, dy) => set({ x: v.x + dx, y: v.y + dy, z: v.z });
+  view.panBy = (dx, dy, opts) => set({ x: v.x + dx, y: v.y + dy, z: v.z }, opts);
 
   // The view that shows a world rect { x, y, w, h } with `pad` screen pixels around it.
   view.fitView = (r, { pad = 64, max = 1 } = {}) => {
@@ -98,10 +112,10 @@ export function createView(ctx, stageEl, worldEl) {
     const unit = ev.deltaMode === 1 ? 16 : ev.deltaMode === 2 ? box.height : 1;
     const dx = ev.deltaX * unit, dy = ev.deltaY * unit;
     if (ev.ctrlKey || ev.metaKey) {
-      view.zoomAt(ev.clientX, ev.clientY, v.z * Math.exp(-clamp(dy, -48, 48) * 0.005));
+      view.zoomAt(ev.clientX, ev.clientY, v.z * Math.exp(-clamp(dy, -48, 48) * 0.005), { gesture: true });
     } else if (ev.shiftKey && !dx) {
-      view.panBy(-dy, 0);
-    } else view.panBy(-dx, -dy);
+      view.panBy(-dy, 0, { gesture: true });
+    } else view.panBy(-dx, -dy, { gesture: true });
   }, { passive: false });
   addEventListener('pointermove', (ev) => { lastPointer = { x: ev.clientX, y: ev.clientY }; }, true);
 
@@ -128,14 +142,14 @@ export function createView(ctx, stageEl, worldEl) {
       touches.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
       if (pan?.pinch && touches.size === 2) {
         const [a, b] = [...touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
-        view.panBy(cx - pan.cx, cy - pan.cy);
-        view.zoomAt(cx, cy, v.z * (d / pan.d));
+        view.panBy(cx - pan.cx, cy - pan.cy, { gesture: true });
+        view.zoomAt(cx, cy, v.z * (d / pan.d), { gesture: true });
         pan.d = d; pan.cx = cx; pan.cy = cy;
         return;
       }
     }
     if (!pan || pan.pinch || ev.pointerId !== pan.id) return;
-    view.panBy(ev.clientX - pan.x, ev.clientY - pan.y);
+    view.panBy(ev.clientX - pan.x, ev.clientY - pan.y, { gesture: true });
     pan.x = ev.clientX; pan.y = ev.clientY;
   }, true);
   const end = (ev) => {
@@ -172,7 +186,8 @@ export function createView(ctx, stageEl, worldEl) {
   $('#zoom-out').addEventListener('click', () => view.zoomBy(0.8, box.left + box.width / 2, box.top + box.height / 2, { animate: true, duration: 120 }));
   $('#zoom-level').addEventListener('click', () => view.zoomBy(1 / v.z, box.left + box.width / 2, box.top + box.height / 2, { animate: true }));
   $('#zoom-fit').addEventListener('click', () => view.fitAll({ animate: true }));
-  ctx.on('view', ({ z }) => { $('#zoom-level').textContent = `${Math.round(z * 100)}%`; });
+  let shown = '';
+  ctx.on('view', ({ z }) => { const t = `${Math.round(z * 100)}%`; if (t !== shown) { shown = t; $('#zoom-level').textContent = t; } });
 
   apply();
   return view;

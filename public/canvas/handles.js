@@ -46,9 +46,12 @@ export function initHandles(ctx) {
   // ------------------------------------------------------------------------------------------ drawing the handles
   const mkdiv = (cls, attrs = {}) => { const d = document.createElement('div'); d.className = cls; for (const [k, v] of Object.entries(attrs)) d.setAttribute(k, v); return d; };
   const place = (d, x, y, w, h) => { d.style.transform = `translate(${x}px, ${y}px)`; if (w !== undefined) { d.style.width = `${w}px`; d.style.height = `${h}px`; } };
+  // During a wheel or drag gesture the handles are not rebuilt: a pan moves the layer by the same offset, a zoom hides it until the view settles.
+  let drawnAt = null, gesturing = false;
   function draw() {
     queued = false; dirty = false;
-    if (g) return;
+    if (g || gesturing) return;
+    layer.style.transform = ''; layer.style.visibility = ''; drawnAt = ctx.view?.get() ?? null;
     layer.replaceChildren();
     const info = current();
     if (!info) return;
@@ -96,7 +99,13 @@ export function initHandles(ctx) {
     rows.forEach((h) => { const d = mkdiv('hdl-track h'); place(d, r.left - base.left, oy + at * z - base.top, r.width, h * z); layer.append(d); at += h + gy; });
   }
   const schedule = () => { dirty = true; if (!queued) { queued = true; requestAnimationFrame(draw); } };
-  for (const e of ['overlays', 'select', 'render', 'view', 'tool']) ctx.on(e, schedule);
+  for (const e of ['overlays', 'select', 'render', 'tool']) ctx.on(e, schedule);
+  ctx.on('view', (v) => {
+    if (!v.gesture || !drawnAt) { gesturing = false; schedule(); return; }
+    gesturing = true;
+    if (v.z === drawnAt.z) layer.style.transform = `translate(${v.x - drawnAt.x}px, ${v.y - drawnAt.y}px)`; else layer.style.visibility = 'hidden';
+  });
+  ctx.on('viewsettle', () => { if (gesturing) { gesturing = false; schedule(); } });
 
   // ------------------------------------------------------------------------------------------ gesture plumbing
   let frame = 0, pending = null, lastEv = null;

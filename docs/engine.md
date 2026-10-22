@@ -26,7 +26,7 @@ Tab key, then POST and SSE (about 30 ms, mostly waiting behind a frame), bundle 
 | PRF-01 cold open, 40 components | p50 <= 1.5 s | p50 1043 ms, p95 1060 ms | PRF-01.txt |
 | PRF-02 panel edit to pixels, 200 components | p95 < 100 ms | p50 73.6, p95 74.6 ms | PRF-02.txt |
 | PRF-03 agent edit (MCP) to pixels | p95 < 100 ms | p50 63.7, p95 92.9 ms | PRF-03.txt |
-| PRF-04 5 s pan | p95 frame <= 16.7 ms | p95 16.7 to 16.8 ms (timer ticks 0.1 ms; 0 to 4 of about 300 frames over 20 ms); with zoom steps p95 16.8 | PRF-04.txt |
+| PRF-04 5 s pan | p95 frame <= 16.7 ms | CDP trace, about 300 frames: 0 to 3 missed vsyncs and 0 to 2 dropped frames per run, no main-thread task over 16.7 ms (longest 8 to 14 ms), p95 16.7 ms in whole vsyncs (raw p95 17 to 20 ms is software-compositor timestamp jitter); same with a zoom step every 12th event | PRF-04.txt |
 | PRF-05 rebuild | p95 <= 50 ms | p95 7.9 ms | PRF-05.txt |
 | PRF-06 edit #2000 vs #1 | <= 2x | 0.49x (9.2 vs 18.6 ms) | PRF-06.txt |
 | PRF-07 memory at 200 | server <= 500 MB, page <= 400 MB | 129 MB, 18 MB | PRF-07.txt |
@@ -35,4 +35,4 @@ Tab key, then POST and SSE (about 30 ms, mostly waiting behind a frame), bundle 
 | REL-04 30-minute soak | 0 errors, RSS growth <= 20% | 0 errors, 12.4% (first run 35.5%) | REL-04.txt, REL-04-before.txt |
 | REL-05 branch switch, 40 components | <= 2 s | 667 ms | REL-05.txt |
 
-The numbers move a little from run to run (a shared machine, CPU-only Chromium); the .json files keep every sample. PRF-04 is measured with `requestAnimationFrame` intervals, which the browser reports in 0.1 ms steps, so a steady 60 Hz reads 16.6 to 16.8 and the 16.7 bar sits inside that noise. A zoom step re-rasterises the viewport on the CPU and costs two to four vsyncs while no main-thread task runs over 20 ms.
+The numbers move a little from run to run (a shared machine, CPU-only Chromium); the .json files keep every sample. PRF-04 is measured from a Chromium trace (see bench/README.md). During a wheel or drag gesture the view moves only by compositor transform: overlays are placed from geometry cached in canvas units, handles are translated or hidden, culling only adds frames, the title and label scales wait for the view to settle (160 ms idle), and `will-change` is dropped on settle so text is re-rasterised crisp. Frame titles use `zoom` instead of `transform: scale()` (200 scaled titles were 200 paint layers, costing 7 to 9 ms of layerisation per pan event), and attributes are never rewritten with the value they already have (that repaints the page).

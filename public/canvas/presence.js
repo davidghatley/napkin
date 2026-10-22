@@ -166,7 +166,7 @@ export function initPresence(ctx) {
   ctx.on('presence', onPresence);
   ctx.on('agents', onAgents);
   ctx.on('change', (f) => remember(f.by, f.color, f.ink));
-  for (const ev of ['view', 'layout', 'render', 'moved', 'select', 'drawer']) ctx.on(ev, () => refresh());
+  for (const ev of ['view', 'viewsettle', 'layout', 'render', 'moved', 'select', 'drawer']) ctx.on(ev, (v) => { if (ev === 'view' && v.gesture && !live.size) return; refresh(); }); // (no agent outlines to move: a gesture frame needs nothing)
   addEventListener('resize', refresh);
   drawAvatars();
 
