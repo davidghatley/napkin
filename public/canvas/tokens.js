@@ -90,14 +90,16 @@ export async function initTokens(ctx) {
   // WPC-13: a snap never happens silently. The dot says where it will go, and afterwards a toast names the token and its value, with Undo.
   const describeSnap = (text) => String(text).replace(/var\(--([\w-]+)\)/g, (_, n) => { const t = data.tokens.find(x => x.name === n); return t ? `${n} (${tokenValue(t, mode)})` : n; });
   let snapToast, snapTimer;
-  function snapNotice(prop, before, after) {
+  function snapNotice(prop, before, after, focusUndo = false) {
     snapToast ??= h('div', { id: 'snap-toast', role: 'status', 'data-nodrag': '1' }, h('span', { class: 'ut-msg' }), h('button', { type: 'button', id: 'snap-undo', text: 'Undo' }), h('button', { type: 'button', id: 'snap-dismiss', 'aria-label': 'Dismiss', text: '×' }));
     if (!snapToast.isConnected) document.querySelector('#stage').append(snapToast);
     const hide = () => { snapToast.hidden = true; };
     snapToast.querySelector('.ut-msg').textContent = `Snapped ${prop} ${before} to ${describeSnap(after)}.`;
-    snapToast.querySelector('#snap-undo').onclick = () => { hide(); ctx.undo(); };
+    snapToast.querySelector('#snap-undo').onclick = () => { hide(); Promise.resolve(ctx.undo()).then(() => document.getElementById(prop)?.focus({ preventScroll: true })); }; // focus goes back to the field it came from
     snapToast.querySelector('#snap-dismiss').onclick = hide;
-    snapToast.hidden = false; clearTimeout(snapTimer); snapTimer = setTimeout(hide, 10000);
+    snapToast.hidden = false; clearTimeout(snapTimer); snapTimer = setTimeout(() => { if (!snapToast.contains(document.activeElement)) hide(); }, 10000);
+    snapToast.querySelector('.ut-msg').textContent += ' Ctrl+Z also undoes it.';
+    if (focusUndo) snapToast.querySelector('#snap-undo').focus({ preventScroll: true }); // a keyboard snap moves focus to Undo, so it is one Tab or Enter away
   }
   function decorate(panel, valueOf, bind) {
     if (!data.tokens.length) return;
@@ -124,7 +126,7 @@ export async function initTokens(ctx) {
         const dot = h('button', { type: 'button', class: 'off-token', id: `off-token-${prop}`, 'aria-label': `${distant ? 'Choose nearest tokens' : 'Snap to nearest token'}: ${prop}`, title: distant ? 'Off token · Choose from the 3 nearest colours' : 'Off token · Snap to nearest token', onclick: ev => {
           ev.stopPropagation();
           if (distant) openPicker(dot, family, (_, value) => bind(prop, value), nearest.map(x => x.token));
-          else { const snapped = snapValue(catalog, family, comparison, mode); bind(prop, snapped); snapNotice(prop, raw, snapped); }
+          else { const snapped = snapValue(catalog, family, comparison, mode), fromKey = ev.detail === 0; Promise.resolve(bind(prop, snapped)).then(() => snapNotice(prop, raw, snapped, fromKey)); }
         } });
         if (!distant) { const target = describeSnap(snapValue(catalog, family, comparison, mode)); dot.title = `Off token · Snap ${raw} to ${target}`; dot.setAttribute('aria-label', `Snap to nearest token: ${prop}, ${raw} becomes ${target}`); }
         box.insertBefore(dot, pickerButton);

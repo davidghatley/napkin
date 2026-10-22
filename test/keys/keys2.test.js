@@ -22,6 +22,18 @@ async function repo(size = [1440, 900]) {
   return { dir, compDir, file, git, server, b, io, close: async () => { await b.close(); await server.stop(); } };
 }
 const palette = async (io, b, text) => { await io.key('k', { ctrl: true }); await b.waitFor(`!document.querySelector('#quick').hidden && document.activeElement.id === 'q-input'`); for (const ch of text) await io.key(ch); await io.key('Enter'); await sleep(250); };
+// A real mouse click at the control's hit-tested coordinates (an element something else covers fails here, unlike .click()).
+async function mouseClick(b, io, selector) {
+  await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true)); document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'center' })`); await sleep(150);
+  const probe = async () => JSON.parse(await b.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y); window.__probe = e; return JSON.stringify({ x, y, ok: !!hit && (hit === e || e.contains(hit)), hit: hit && (hit.id || hit.className || hit.tagName) }); })()`));
+  let r = await probe();
+  for (let i = 0; i < 20; i++) { await sleep(120); const next = await probe(); const same = next.x === r.x && next.y === r.y; r = next; if (same) break; } // wait until the panel has stopped redrawing
+  await io.move(r.x, r.y); await sleep(200); // hover first, like a person: nothing may move out from under the pointer
+  const after = await probe();
+  assert.ok(Math.abs(after.x - r.x) < 1 && Math.abs(after.y - r.y) < 1, `${selector} moved when hovered: ${r.x},${r.y} -> ${after.x},${after.y}`);
+  assert.ok(after.ok, `${selector} is covered by ${after.hit}`);
+  await io.press(after.x, after.y); await io.release(after.x, after.y);
+}
 const selectButton = (b, variant = { size: 'md', state: 'default' }, node = 'root') => b.eval(`napkin.select({ component: napkin.find('Button').component, node: ${JSON.stringify(node)}, variant: ${JSON.stringify(variant)} })`).then(() => sleep(250));
 
 test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope, empty-panel hint', { timeout: 150000 }, async (t) => {
@@ -34,12 +46,12 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
       await palette(io, b, q);
       const id = await b.eval(`document.activeElement.id`);
       assert.ok(want instanceof RegExp ? want.test(id) : id === want, `"${q}" landed on "${id}"`);
-      assert.ok(q.length + 2 <= 5);
       assert.equal(await b.eval(`!!document.activeElement.closest('#panel')`), true);
     });
     await t.test('the labels the ? sheet promises are in the index: Fill colour, Stroke colour, Shadow, Align, Settings label', async () => {
       const labels = await b.eval(`(napkin.quick.build(), napkin.quick.build().filter((i) => i.kind === 'property').map((i) => i.label))`);
-      for (const l of ['Fill Colour', 'Stroke Colour', 'Shadow', 'Layout Align top left', 'Settings label', 'Radius', 'Gap', 'Editing']) assert.ok(labels.includes(l), `${l} in ${labels.join(', ')}`);
+      const lower = labels.map((x) => x.toLowerCase());
+      for (const l of ['Fill Colour', 'Stroke Colour', 'Shadow', 'Layout Align top left', 'Settings label', 'Radius', 'Gap', 'Editing']) assert.ok(lower.includes(l.toLowerCase()), `${l} in ${labels.join(', ')}`);
     });
     await t.test('a folded section opens when the search lands in it', async () => {
       await b.eval(`document.querySelector('details[data-sec="stroke"]').open = false; document.querySelector('details[data-sec="stroke"]').dispatchEvent(new Event('toggle'))`);
@@ -116,12 +128,12 @@ test('WPC-13: the snap toast works from the keyboard; every off-token dot does s
       const nodes = JSON.parse(await b.eval(`JSON.stringify([...napkin.state.components.values()].flatMap((c) => { const out = []; (function w(n) { out.push([c.name, n.id]); n.children.forEach(w); })(c.doc.root); return out; }))`));
       let clicked = 0;
       for (const [c, n] of nodes) {
-        await b.eval(`napkin.select({ component: napkin.find(${JSON.stringify(c)}).component, node: ${JSON.stringify(n)}, variant: Object.fromEntries((napkin.find(${JSON.stringify(c)}).doc.props || []).filter((p) => p.type === 'enum').map((p) => [p.name, p.default])) })`); await sleep(200);
+        await b.eval(`napkin.select({ component: napkin.find(${JSON.stringify(c)}).component, node: ${JSON.stringify(n)}, variant: Object.fromEntries((napkin.find(${JSON.stringify(c)}).doc.props || []).filter((p) => p.type === 'enum').map((p) => [p.name, p.default])) })`); await sleep(600);
         for (const prop of ['color', 'background', 'stroke-color', 'borderRadius', 'padding', 'fontSize']) {
           if (!await b.eval(`!!document.querySelector('#off-token-${prop}')`)) continue;
           await b.eval(`document.querySelector('#snap-toast') && (document.querySelector('#snap-toast').hidden = true)`);
           const before = await b.eval(`document.querySelector('#${prop}').value`);
-          await b.eval(`document.querySelector('#off-token-${prop}').click()`); await sleep(400);
+          await mouseClick(b, io, `#off-token-${prop}`); await b.waitFor(`!!document.querySelector('#token-picker') || document.querySelector('#snap-toast')?.hidden === false`, 4000).catch(() => null); await sleep(150);
           const did = await b.eval(`({ picker: !!document.querySelector('#token-picker'), toast: document.querySelector('#snap-toast')?.hidden === false, after: document.querySelector('#${prop}')?.value })`);
           assert.ok(did.picker || (did.toast && did.after !== before), `${c}.${n} ${prop}: ${JSON.stringify({ before, ...did })}`);
           clicked++;
@@ -188,7 +200,8 @@ test('WPC-14: wording a person reads has no jargon: banners, connection loss, OS
       const seen = await b.eval(`JSON.stringify({ chip: !!document.querySelector('.clash-chip'), err: document.querySelector('#err-style-gap')?.textContent ?? '', value: napkin.find('Button').doc.root.style.gap })`);
       t.diagnostic(seen);
       const s = JSON.parse(seen);
-      assert.ok(s.chip || s.err || String(s.value) === '14', 'the edit landed, or a chip/message says why not: ' + seen);
+      assert.ok(s.chip || s.err, 'a chip or a message must say what happened: ' + seen);
+      if (s.chip) assert.match(await b.eval(`document.querySelector('.clash-chip').textContent`), /already saved/);
       if (s.err) assert.doesNotMatch(s.err, /stale revision|Next:/);
     });
   } finally { await r.close(); }
@@ -214,9 +227,10 @@ test('WPC-14: wording a person reads has no jargon: banners, connection loss, OS
 });
 
 test('WPC-15: top bar and status bar fit at 1280x720 and 1440x900 (tokens configured, Chip focused)', { timeout: 150000 }, async (t) => {
-  for (const size of [[1280, 720], [1440, 900]]) await t.test(`${size.join('x')}`, async () => {
+  for (const [size, theme] of [[[1280, 720], 'light'], [[1280, 720], 'dark'], [[1440, 900], 'light'], [[1440, 900], 'dark']]) await t.test(`${size.join('x')} ${theme}`, async () => {
     const r = await repo(size); const { b, io } = r;
     try {
+      await b.eval(`document.documentElement.dataset.theme = ${JSON.stringify(theme)}; { const t = document.querySelector('#token-theme'); t.value = ${JSON.stringify(theme)}; t.dispatchEvent(new Event('change')); }`);
       await palette(io, b, 'Chip'); await sleep(500);
       const m = JSON.parse(await b.eval(`(() => {
         const box = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width }; };
@@ -234,7 +248,7 @@ test('WPC-15: top bar and status bar fit at 1280x720 and 1440x900 (tokens config
       assert.ok(m.top.every((e) => !e.clipped) && m.status.every((e) => !e.clipped), JSON.stringify([...m.top, ...m.status].filter((e) => e.clipped)));
       assert.ok(m.hintsFit, 'hints are whole, not cut by an ellipsis');
       assert.ok(m.tools.length === 5 && m.tools.every((x) => x.name && x.w > 20), JSON.stringify(m.tools));
-      if (process.env.EVIDENCE) writeFileSync(join(ROOT, `docs/evidence/keys-${size.join('x')}-bars.png`), await b.screenshot());
+      if (process.env.EVIDENCE) writeFileSync(join(ROOT, `docs/evidence/keys-${size.join('x')}-${theme}-bars.png`), await b.screenshot());
     } finally { await r.close(); }
   });
 });

@@ -34,7 +34,7 @@ export function initHistory(ctx, drawer) {
   async function run(verb, component, skip) {
     const r = await ctx.fetch(component ? `/api/components/${encodeURIComponent(component)}/${verb}` : `/api/${verb}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(skip ? { skip: true } : {}) });
     const j = await r.json().catch(() => ({ ok: false, error: `${verb} failed (${r.status})` }));
-    if (j.ok) { hideToast(); ctx.hint(`${j.skipped ? `Skipped "${j.skipped.summary}". ` : ''}${verb === 'undo' ? 'Undid' : 'Redid'}: ${(j.undone || j.redone)?.summary ?? 'your last edit'}`); }
+    if (j.ok) { hideToast(); if (verb === 'undo') { const st = document.querySelector('#snap-toast'); if (st) st.hidden = true; } ctx.hint(`${j.skipped ? `Skipped "${j.skipped.summary}". ` : ''}${verb === 'undo' ? 'Undid' : 'Redid'}: ${(j.undone || j.redone)?.summary ?? 'your last edit'}`); }
     else if (j.refused) showToast(`Can't ${verb}: ${j.refused.by} changed ${j.refused.keys.join(', ')} in revision ${j.refused.revision}. Skip this step to ${verb} the one before it.`, verb, component ?? j.component);
     else { hideToast(); ctx.hint(/nothing to/i.test(j.error) ? plain(j.error) : `Can't ${verb}: ${plain(j.error)}`); }
     return j;

@@ -26,25 +26,65 @@ export function initQuick(ctx) {
   // Every control of the inspector, named by its section and label ("Fill colour", "Stroke colour", "Shadow", "Layout align top left",
   // "Settings label"), so Cmd-K reaches any property, not just the labelled number fields.
   const ALIAS = { Stroke: 'Border', Appearance: 'Corner opacity', Layout: 'Auto layout flex grid' };
-  const SKIP = /^(pick-|nativepick|token-|off-token-|eye-|remove-|grip-|value-(up|down|name)|axis-(up|down|name)|make-base|add-(style|prop|value|axis)|swatch-|scope-info|insert-|pad-sides|rad-sides|edit-settings)/;
+  const GENERIC = /^(Colour|Opacity|Width|Style|Size|Hug|Fill|Fixed|Block|Flex|Grid|Row|Column|Wrap|Left|Right|Top|Bottom|Center|All sides|Min \/ Max|Space between|Hide|Remove|Show)$/;
+  // Names for the controls whose own label says little ("md", "×", "+ value"): built from the control's id.
+  const BY_ID = [
+    [/^propdef-([^-]+)-(.+)$/, (m) => `Setting ${m[1]} default ${m[2]}`],
+    [/^axis-name-(.+)$/, (m) => `Variant axis ${m[1]} name`], [/^axis-(up|down)-(.+)$/, (m) => `Move variant axis ${m[2]} ${m[1]}`], [/^remove-axis-(.+)$/, (m) => `Delete variant axis ${m[1]}`],
+    [/^value-name-([^-]+)-(.+)$/, (m) => `Variant ${m[1]} value ${m[2]} name`], [/^value-(up|down)-([^-]+)-(.+)$/, (m) => `Move variant ${m[2]} ${m[3]} ${m[1]}`],
+    [/^grip-value-([^-]+)-(.+)$/, (m) => `Reorder variant ${m[1]} ${m[2]}`], [/^remove-value-([^-]+)-(.+)$/, (m) => `Delete variant value ${m[2]} from ${m[1]}`], [/^make-base-([^-]+)-(.+)$/, (m) => `Make variant ${m[1]} ${m[2]} the base`],
+    [/^token-(.+)$/, (m, p) => `Bind ${fieldName(p, m[1])} to token`], [/^off-token-(.+)$/, (m, p) => `Snap ${fieldName(p, m[1])} to token`], [/^add-value-(.+)$/, (m) => `Add variant value to ${m[1]}`], [/^add-axis$/, () => 'Add variant'], [/^add-prop$/, () => 'Add setting'],
+  ];
+  const fieldName = (panel, id) => { const l = panel.querySelector(`label[for="${CSS.escape(id)}"]`); return ((l?.querySelector('.lt') || l)?.textContent.trim() || humanId(id)).toLowerCase(); };
+  const humanId = (id) => id.replace(/[-_]+/g, ' ');
+  const symbolic = (t) => !/[A-Za-z0-9]{2,}/.test(t);
+  function nameOf(el, panel) {
+    const id = el.id;
+    for (const [re, f] of BY_ID) { const m = re.exec(id); if (m) return f(m, panel); }
+    if (el.tagName === 'SUMMARY') return `${el.firstChild?.textContent.trim() || el.textContent.trim()} section`;
+    if (id === 'add-effects') return 'Shadow';
+    const lab = id && panel.querySelector(`label[for="${CSS.escape(id)}"]`);
+    const own = el.tagName === 'BUTTON' ? el.textContent.trim() : '';
+    let name = (lab?.querySelector('.lt') || lab)?.textContent.trim() || el.getAttribute('aria-label') || (symbolic(own) ? '' : own) || el.title || humanId(id);
+    if (/^\+/.test(own)) name = `Add ${own.replace(/^\W+/, '')}`;
+    if (/^insert-/.test(id)) name = (el.title || name).replace(/ into .*$/, '');
+    return name.replace(/^Add (?=\w)/, (m) => (/^add-(fill|stroke|effects)$/.test(id) ? '' : m)).replace(/^([a-z])/, (c) => c.toUpperCase());
+  }
+  // Every focusable control of the inspector gets a name, so Cmd-K reaches all of them (WPC-07). A bare name that two controls share
+  // ("Colour", "Width", "Hug") is prefixed with its section; if that is still shared, with its id.
+  // display:none anywhere between the control and the panel means nobody can focus it (a closed <details> does not count: it opens).
+  const notRendered = (el, panel) => { for (let e = el; e && e !== panel; e = e.parentElement) if (getComputedStyle(e).display === 'none') return true; return false; };
   function panelControls() {
-    const out = [], seen = new Set(), panel = document.querySelector('#panel');
-    if (!panel) return out;
+    const panel = document.querySelector('#panel'), list = [];
+    if (!panel) return list;
     const seenIn = new Map();
-    for (const el of panel.querySelectorAll('input, select, textarea, button[id]')) {
-      const id = el.id;
-      if (!id || seen.has(id) || el.disabled || el.type === 'color' || SKIP.test(id) || (/^propdef-/.test(id) && el.tagName !== 'INPUT')) continue;
-      const lab = panel.querySelector(`label[for="${CSS.escape(id)}"]`);
-      let name = (lab?.querySelector('.lt') || lab)?.textContent.trim() || el.getAttribute('aria-label') || (el.tagName === 'BUTTON' ? el.textContent.trim() : '') || '';
-      const section = el.closest('details')?.querySelector('summary')?.firstChild?.textContent.trim() || '';
-      if (el.id === 'add-effects') { name = 'Shadow'; }
-      else if (/^Add /.test(name)) name = name.replace(/^Add /, '');
+    for (const el of panel.querySelectorAll('input, select, textarea, button, summary')) {
+      if (el.disabled || el.type === 'color' || el.tabIndex < 0 || el.closest('[hidden]') || notRendered(el, panel)) continue;
+      const det = el.closest('details'), section = det?.querySelector('summary')?.firstChild?.textContent.trim() || '';
+      if (!el.id) el.id = el.tagName === 'SUMMARY' ? `sum-${(det?.dataset.sec || section).toLowerCase().replace(/\W+/g, '-')}` : `ctl-${(el.textContent.trim() || el.type || el.tagName).toLowerCase().replace(/\W+/g, '-')}-${list.length}`; // controls with no id of their own get one, so they can be focused by id
+      const name = nameOf(el, panel);
       if (!name) continue;
-      seen.add(id);
-      const generic = /^propdef-/.test(id) || /^(Colour|Opacity|Width|Height|Style|Size|Hug|Fill|Fixed|Block|Flex|Grid|Row|Column|Wrap|Left|Right|Top|Bottom|Center|All sides|Min \/ Max|Space between)$/.test(name) || /^Align /.test(name);
-      const full = el.id === 'add-effects' || !section || !generic || section === name ? name : `${section.replace(/^Advanced.*/, 'Advanced')} ${name}`;
-      out.push({ id, order: (seenIn.set(el.closest('details'), (seenIn.get(el.closest('details')) ?? -1) + 1), seenIn.get(el.closest('details'))), button: el.tagName === 'BUTTON', label: full, alias: ALIAS[section] && section !== 'Layout' ? ALIAS[section] : '' });
+      const order = (seenIn.set(det, (seenIn.get(det) ?? -1) + 1), seenIn.get(det));
+      list.push({ id: el.id, order, section, name, force: /^propdef-/.test(el.id) && el.tagName === 'INPUT', button: el.tagName === 'BUTTON' || el.tagName === 'SUMMARY', add: /^(add-prop|add-axis|add-value-[^-]+)$/.test(el.id) });
     }
+    const count = (f) => { const c = new Map(); for (const p of list) c.set(f(p).toLowerCase(), (c.get(f(p).toLowerCase()) || 0) + 1); return c; };
+    const bare = count((p) => p.name);
+    for (const p of list) p.label = p.force || bare.get(p.name.toLowerCase()) > 1 || GENERIC.test(p.name) || /^Align /.test(p.name) ? (p.section && !p.name.toLowerCase().startsWith(p.section.toLowerCase()) ? `${p.section.replace(/^Advanced.*/, 'Advanced')} ${p.name}` : p.name) : p.name;
+    const full = count((p) => p.label);
+    for (const p of list) { if (full.get(p.label.toLowerCase()) > 1) p.label = `${p.label} (${humanId(p.id)})`; p.alias = ALIAS[p.section] && p.section !== 'Layout' ? ALIAS[p.section] : ''; }
+    return list;
+  }
+  // The inspector's fields of the current selection, so Cmd-K + "rad" + Enter lands in Radius. Rebuilt on every query: the panel may have
+  // been redrawn since the palette opened.
+  function propertyItems() {
+    const sel = ctx.state.selection, out = [];
+    if (!sel) return out;
+    const where = `${ctx.state.components.get(sel.component)?.name ?? ''} › ${sel.node}`;
+    const panel = document.querySelector('#panel');
+    for (const [btn, form] of [['add-prop', 'new-prop-name'], ['add-axis', 'new-axis-name']]) { // the form is open, so its button is gone: the action still lands in the form
+      if (panel?.querySelector('#' + form) && !panel.querySelector('#' + btn)) out.push({ kind: 'property', label: btn === 'add-prop' ? 'Add setting' : 'Add variant', hint: where, field: btn, add: true, boost: 7 });
+    }
+    for (const p of panelControls()) out.push({ kind: 'property', label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, add: p.add, boost: (p.add ? 7 : p.button ? 3 : 6) - Math.min(p.order, 8) * 0.35 });
     return out;
   }
   function build() {
@@ -57,19 +97,14 @@ export function initQuick(ctx) {
         n.children.forEach(walk);
       })(c.doc.root);
     }
-    // WPC-07: the inspector's fields of the current selection, so Cmd-K + "rad" + Enter lands in Radius
-    const sel = ctx.state.selection;
-    if (sel) {
-      const where = `${ctx.state.components.get(sel.component)?.name ?? ''} › ${sel.node}`;
-      for (const p of panelControls()) items.push({ kind: 'property', label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, boost: (p.button ? 3 : 6) - Math.min(p.order, 8) * 0.35 });
-    }
+    items.push(...propertyItems());
     return items;
   }
   // Focus an inspector control (opening its section if folded). Used by property results and Alt+I.
   function focusField(el) {
     if (!el) return false;
     const id = el.id, sc = document.getElementById('scope'), sel = ctx.state.selection;
-    if (id && id !== 'scope' && sc && sc.value !== 'variant' && sc.options[1] && !sc.options[1].disabled && sel) { // a variant cell is selected: land in that variant's scope
+    if (id && !/^(propdef|add-|axis-|value-|remove-|grip-|make-|insert-|edit-|scope|sum-|new-)/.test(id) && el.tagName !== 'SUMMARY' && sc && sc.value !== 'variant' && sc.options[1] && !sc.options[1].disabled && sel) { // a variant cell is selected: land in that variant's scope
       sc.value = 'variant'; sc.dispatchEvent(new Event('change', { bubbles: true }));
       el = document.getElementById(id) || el;
     }
@@ -125,7 +160,18 @@ export function initQuick(ctx) {
     if (!item) return;
     close();
     if (item.kind === 'action') { item.run(); return; }
-    if (item.kind === 'property') { focusField(document.getElementById(item.field)); return; }
+    if (item.kind === 'property') {
+      const el = document.getElementById(item.field);
+      if (item.add) { // "Add setting", "Add variant", "Add variant value": open the form and land in its name field
+        for (let d = el?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+        const want0 = item.field === 'add-prop' ? 'new-prop-name' : item.field === 'add-axis' ? 'new-axis-name' : `new-value-${item.field.replace(/^add-value-/, '')}`;
+        if (!document.getElementById(want0)) el?.click(); // the form may already be open: then just land in it
+        const want = item.field === 'add-prop' ? 'new-prop-name' : item.field === 'add-axis' ? 'new-axis-name' : `new-value-${item.field.replace(/^add-value-/, '')}`;
+        let tries = 0; const land = () => { const f = document.getElementById(want); if (f) { const open = (x) => { for (let d = x.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true; x.focus(); }; open(f); setTimeout(() => { if (document.activeElement.id !== want) { const g = document.getElementById(want); if (g) open(g); } }, 150); return; } if (++tries < 20) requestAnimationFrame(land); }; land();
+        return;
+      }
+      focusField(el); return;
+    }
     const c = ctx.state.components.get(item.component);
     if (!c) return;
     ctx.stage.live(c.component);
@@ -145,7 +191,7 @@ export function initQuick(ctx) {
     }
   }
 
-  input.addEventListener('input', () => { query(input.value); active = 0; paint(); });
+  input.addEventListener('input', () => { if (input.value.trim()) items = [...items.filter((i) => i.kind !== 'property'), ...propertyItems()]; query(input.value); active = 0; paint(); });
   input.addEventListener('keydown', (ev) => {
     ev.stopPropagation();
     if (ev.key === 'ArrowDown') { ev.preventDefault(); active = Math.min(active + 1, results.length - 1); paint(); }
