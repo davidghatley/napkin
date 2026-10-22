@@ -393,6 +393,7 @@ function jsxSplices(text, parts, before, after, st) {
     const el = els.get(n.id);
     if (same(shape(old), shape(n))) return;
     if (old.tag !== n.tag || old.when !== n.when) return whole(n, el);
+    if (n.when && !n.children.length && !old.children.length && (hasContent(old) !== hasContent(n) || !same(old.attrs, n.attrs) || !same(old.instance, n.instance))) return whole(n, el); // the wrapper's layout depends on whether the element fits on one line
     const oc = hasContent(old), nc = hasContent(n);
     const leafBoth = !n.children.length && !old.children.length;
     // 1. the attributes (src, alt): only the attribute changes, so comments between attributes stay
@@ -596,7 +597,10 @@ function renameIds(text, map) {
       const l = a.name?.name === 'data-n' ? a.value : a.name?.name === 'style' ? a.value.expression.arguments[0] : null;
       if (l && map.has(l.value)) lit(l, map.get(l.value));
     }
-    for (const c of e.children) if (c.type === 'JSXElement') el(c);
+    for (const c of e.children) {
+      if (c.type === 'JSXElement') el(c);
+      else if (c.type === 'JSXExpressionContainer' && c.expression.type === 'LogicalExpression') { let r = c.expression.right; while (r?.type === 'ParenthesizedExpression') r = r.expression; if (r?.type === 'JSXElement') el(r); } // {flag && <el />}
+    }
   })(parts.jsx);
   const rekey = (obj) => { for (const p of obj.properties) if (map.has(keyName(p.key))) out.push({ start: p.key.start, end: p.key.end, text: keySrc(map.get(keyName(p.key))) }); };
   rekey(parts.base);

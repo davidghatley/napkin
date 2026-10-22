@@ -501,7 +501,7 @@ export function applyEdits(doc, edits) {
         let p = propOf(next, e.prop);
         if (!p) { p = { name: e.prop, type: 'string', ...(node.text !== undefined ? { default: node.text } : {}) }; next.props.push(p); }
         if (p.type !== 'string') throw new EditError(i, `prop "${e.prop}" is not a string`);
-        delete node.text; node.textProp = e.prop;
+        delete node.text; delete node.slot; node.textProp = e.prop;
         break;
       }
       case 'addVariant': {
@@ -524,7 +524,11 @@ export function applyEdits(doc, edits) {
         if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
         if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
         if (p.default === e.value) throw new EditError(i, `"${e.value}" is the base of ${e.axis}`);
-        if (p.options.length <= 2) { next.props = next.props.filter((x) => x !== p); delete next.variants[e.axis]; break; }
+        if (p.options.length <= 2) {
+          const user = [...byId.values()].find((n) => Object.values(n.instance?.props || {}).some((v) => v?.prop === e.axis));
+          if (user) throw new EditError(i, `"${user.id}" passes ${e.axis} to another component; free it first`);
+          next.props = next.props.filter((x) => x !== p); delete next.variants[e.axis]; break;
+        }
         p.options = p.options.filter((o) => o !== e.value);
         if (next.variants[e.axis]) delete next.variants[e.axis][e.value];
         cleanVariants(next);
@@ -604,7 +608,12 @@ export function applyEdits(doc, edits) {
 const kindOf = (p) => (p.type === 'enum' ? 'string' : p.type);
 // Does value `v` (as passed by `hostDoc`) fit target prop `tp`?
 export function instancePropFits(hostDoc, v, tp) {
-  if (v && typeof v === 'object') { const mine = propOf(hostDoc, v.prop); return !!mine && kindOf(mine) === kindOf(tp); }
+  if (v && typeof v === 'object') {
+    const mine = propOf(hostDoc, v.prop);
+    if (!mine) return false;
+    if (tp.type === 'enum') return mine.type === 'enum' && mine.options.every((o) => tp.options.includes(o)); // tsc: every value ours can be must be one it takes
+    return kindOf(mine) === kindOf(tp);
+  }
   if (tp.type === 'enum') return tp.options.includes(v);
   if (tp.type === 'boolean') return typeof v === 'boolean';
   if (tp.type === 'number') return typeof v === 'number';

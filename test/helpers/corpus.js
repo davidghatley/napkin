@@ -9,9 +9,10 @@ import { newComponentSource } from '../../src/tsx/write.js';
 import { tsxCodec } from '../../src/codecs.js';
 import { readComponent } from '../../src/tsx/read.js';
 import { rng, nextValidEdit } from './fuzz.js';
+import { siblingDocs, writeSiblings } from './siblings.js';
 
 const ROOTS = ['div', 'section', 'article', 'button', 'header', 'nav', 'ul', 'a'];
-const NAMES = ['Badge', 'Tag', 'Toast', 'Chip', 'Panel', 'Tile', 'Banner', 'Avatar', 'Menu', 'Row', 'Hero', 'Field', 'Label', 'Meter', 'Crumb', 'Dock', 'Stat', 'Ribbon', 'Step', 'Pill'];
+const NAMES = ['Ticket', 'Tag', 'Toast', 'Chop', 'Panel', 'Tile', 'Banner', 'Avatar', 'Menu', 'Row', 'Hero', 'Field', 'Label', 'Meter', 'Crumb', 'Dock', 'Stat', 'Ribbon', 'Step', 'Pill'];
 
 // Formatting a person might use. Each takes text and returns text; the generator keeps one only if the model is unchanged.
 const FORMATS = {
@@ -44,6 +45,8 @@ const FORMATS = {
 
 export function makeCorpus(dir, n = 40, seed = 40, { skip = [] } = {}) {
   const rand = rng(seed);
+  const siblings = siblingDocs(); // Chip and Badge sit next to the corpus: components may use them (decision 0004)
+  writeSiblings(dir);
   const pick = (a) => a[Math.floor(rand() * a.length)];
   const files = [];
   const NEW = ['trailingComments', 'commentLines', 'blankGroups', 'jsxComments', 'jsxTrailing', 'compactObjects', 'unionComments', 'noTrailingCommas', 'semicolonlessInterface'];
@@ -54,7 +57,7 @@ export function makeCorpus(dir, n = 40, seed = 40, { skip = [] } = {}) {
     let { doc, state } = tsxCodec.load(text);
     const steps = 6 + Math.floor(rand() * 30);
     for (let k = 0, done = 0; done < steps && k < steps * 10; k++) {
-      const r = nextValidEdit(doc, rand, i * 1000 + k);
+      const r = nextValidEdit(doc, rand, i * 1000 + k, 50, { siblings });
       if (!r) continue;
       const saved = tsxCodec.save(state, doc, r.next);
       text = saved.text; state = saved.state; doc = r.next; done++;
