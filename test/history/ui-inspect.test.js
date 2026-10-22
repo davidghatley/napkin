@@ -90,7 +90,7 @@ test('code strip, inspect, usage and assets on the page', { timeout: 175000 }, a
       assert.equal(await from('root', { size: 'md', state: 'default' }, 'display'), 'base');
       assert.equal(await from('label', { size: 'sm', state: 'default' }, 'font-size'), 'inherited from root (size=sm)', 'a child takes the parent\'s value down');
       assert.equal(await from('label', { size: 'md', state: 'default' }, 'font-weight'), 'base');
-      assert.equal(await from('label', { size: 'md', state: 'default' }, 'text-transform'), 'inherited from the page');
+      assert.equal(await from('label', { size: 'md', state: 'default' }, 'text-transform'), 'browser default');
       await p.select('Button', 'root', { size: 'sm', state: 'hover' });
       await sleep(150);
       // the cell picker looks at another cell of the same node
@@ -112,7 +112,7 @@ test('code strip, inspect, usage and assets on the page', { timeout: 175000 }, a
       const [importLine, jsx] = usage.split('\n\n');
       writeFileSync(join(dir, 'App.tsx'), `import { createRoot } from 'react-dom/client';\nimport { flushSync } from 'react-dom';\n${importLine.replace('./Button', '@components/Button')}\nflushSync(() => createRoot(document.getElementById('m')!).render(${jsx}));\n`);
       await build({ entryPoints: [join(dir, 'App.tsx')], bundle: true, format: 'iife', jsx: 'automatic', alias: { '@components': p.compDir }, nodePaths: [join(ROOT, 'node_modules')], outfile: join(dir, 'app.js'), define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent' });
-      writeFileSync(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><style>* { box-sizing: border-box; } body { color: #1c1f27; margin: 0; }</style><div id="m" style="position:absolute;left:16px;top:16px"></div><script src="app.js"></script>`);
+      writeFileSync(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><style>body { margin: 0; }</style><div id="m" style="position:absolute;left:16px;top:16px"></div><script src="app.js"></script>`);
       const rendered = Buffer.from(await (await fetch(new URL(`api/components/Button/render?variant=${encodeURIComponent(JSON.stringify({ size: 'sm', state: 'hover' }))}`, p.server.url))).arrayBuffer());
       // 20 runs, each in a fresh browser: the consumer app's cell must equal napkin's render byte for byte every time
       let same = 0;

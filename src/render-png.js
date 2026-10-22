@@ -10,8 +10,8 @@ import { createHash } from 'node:crypto';
 import { axes } from './model.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// The page rules a component inherits on the canvas (public/canvas/canvas.css): box model and the frame ink colour.
-const HOST_CSS = '* { box-sizing: border-box; } body { color: #1c1f27; }'; // the canvas resets the font on .frame, so a component sees the browser defaults, as in an app
+// A blank host: no page CSS at all, as in a plain React app. The canvas isolates its cells to match (decision 0012).
+const HOST_CSS = '';
 export class RenderError extends Error { constructor(message) { super(explainError(message, { next: "fix the named build or render problem and retry; set CHROMIUM if the browser could not start." })); } }
 
 async function launch() {

@@ -762,6 +762,7 @@ const base: Styles = {
     flexDirection: 'column',
     gap: 8,
     padding: 16,
+    boxSizing: 'border-box',
   },
 };
 
