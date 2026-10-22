@@ -44,3 +44,14 @@ test('WPC-16: one save with an earlier valid edit plus a break names the break, 
   assert.match(problem, new RegExp(`parser stopped at line ${at + 1}\\b`));
   await store.close();
 });
+
+test('WPC-16: when the whole file was reflowed, the banner still says where the parser stopped', async () => {
+  const { fileOf } = tempRepo(['Card']);
+  const file = fileOf('Card');
+  const store = await openStore(file);
+  const text = readFileSync(file, 'utf8').split('\n').map((l) => (l.trim() ? '  ' + l : l)).join('\n').replace('<div data-n="image" style={s(\'image\', v)} />', '<div data-n="image" style={s(\'image\', v)} ');
+  writeFileSync(file, text);
+  const problem = (await waitFor(async () => (await store.read()).problem)).value;
+  assert.match(problem, /parser stopped at line \d+/, problem);
+  await store.close();
+});

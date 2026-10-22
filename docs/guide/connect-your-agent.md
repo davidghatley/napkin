@@ -1,71 +1,42 @@
-# How to connect your agent to napkin
+# Connect your agent
 
-Serves: **Work on it together**.
+Start a canvas with the [quickstart](quickstart.md). Copy the JSON object after
+“Paste into .mcp.json for Claude Code” from the `open` output. Merge it into your
+agent project's `.mcp.json`, then restart Claude Code. The snippet uses Node,
+this checkout's MCP entry point, the actual server URL, and `NAPKIN_AGENT=claude`.
+It prints a local absolute executable path; use the output for your checkout.
 
-## Who it's for and when to use it
-For anyone who wants an AI agent to read and edit components on the canvas. Do this once per project, before you [edit together](edit-together.md).
+Ask the agent to call `list_components`, then `read_component` for Welcome.
+It should return the current revision and source. Edits use that revision as
+`baseRevision`. The agent can read the MCP resource `napkin://guide` for edit operations.
+The canvas shows agent presence while it is connected and editing.
 
-## Prerequisites
-- napkin installed and `napkin init` run in your project (see the [quickstart](quickstart.md)).
-- An agent that speaks MCP (a standard plug for agent tools), or any program that can make HTTP requests to the API.
+To require review, merge this into the project's `napkin.json`:
 
-## Flow
-
-```mermaid
-flowchart LR
-  A[napkin open] --> B[Add napkin to agent's MCP settings]
-  B --> C[Restart agent]
-  C --> D{Agent: list napkin components}
-  D -- list or 'none yet' --> E[Connected]
-  D -- tool not found --> F[Check MCP settings]
-  F --> C
+```json
+{
+  "components": "components",
+  "agents": { "you": "write", "claude": "propose", "*": "read" }
+}
 ```
 
-## Steps
-1. Start a session in the project folder:
-   ```console
-   $ napkin open
-   ```
-   It prints the canvas address and `agent: MCP over stdio (napkin mcp)`.
-2. Add napkin to your agent's MCP settings. For Claude Code, put this in `.mcp.json` at the project root:
-   ```json
-   { "mcpServers": { "napkin": { "command": "napkin", "args": ["mcp"] } } }
-   ```
-   Other MCP agents take the same command and arguments in their own settings file.
-3. Restart the agent so it loads the new server.
-4. Ask the agent: "list napkin components".
-5. Optional, for scripts: call the API directly.
-   ```console
-   $ curl -s localhost:4810/api/components
-   [{"id":"cmp_7f3a","name":"Button","file":"components/Button.html","versions":6}]
-   ```
-
-### What the agent can do
-The MCP server offers these tools (working names):
-
-| Tool | What it does |
+| Mode | Effect |
 |---|---|
-| `list_components` | Names, IDs and files of every component in the project |
-| `read_component` | The current component, its versions, settings and the revision number |
-| `list_tokens` | The colours, spacing and radius tokens from your token file |
-| `create_component` | Make a new component file from a structure the agent supplies |
-| `apply_edits` | Apply a batch of edits (set, insert, delete, move). `dry_run: true` shows the result without saving |
+| read | Inspect components. Direct edits are refused. |
+| propose | Edits become proposals. Review them with Accept or Reject. |
+| write | Valid edits apply immediately. |
 
-Every edit, from you or the agent, goes through the same path as `apply_edits`. A batch that fails a check changes nothing.
+The configured name must match `NAPKIN_AGENT`. Keep `you` in write mode for
+canvas actions. With an agents key, unlisted names use `*` or default to read.
+Without an agents key, callers may write. Config is read for requests; restart
+the MCP client after changing its environment. Proposals live only for the server
+session. Accept can be refused as stale if the affected properties changed.
 
-## What you see when it worked
-- The agent replies with a component list, or "no components yet".
-- The canvas status bar shows "agent connected".
+These permissions govern requests through napkin. Any local program running as
+you can also write the files directly. The server listens on loopback and checks
+Host and browser Origin. See [decision 0005 and its amendment](../decisions/0005-clash-undo-permissions.md).
 
-## Common problems and fixes
-| Problem | Fix |
-|---|---|
-| Agent says it has no napkin tool | It didn't load the settings. Check the file name and location, then restart the agent. |
-| `napkin mcp: no session in this folder` | Run `napkin open` in the same project folder first. |
-| Canvas never shows "agent connected" | The agent started `napkin mcp` from a different folder. Set the agent's working directory to the project root. |
-| `curl` connection refused | The session isn't running, or it uses another port. `napkin open` prints the port. |
-
-## Limits
-- Local only: the agent and napkin run on the same machine.
-- One project per session.
-- Who may connect, and with which permissions, isn't designed yet. Any agent that can start `napkin mcp` in your folder can edit. ([GAPS.md](GAPS.md), G6.)
+If tools are absent, check that the agent loaded `.mcp.json`. If connection is
+refused, check that the server is running and use the URL printed by the current
+`open` process. There is no `napkin mcp` subcommand; the printed configuration
+runs `src/mcp.js` with Node.

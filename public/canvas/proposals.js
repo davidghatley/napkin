@@ -19,6 +19,7 @@ export function initProposals(ctx) {
   const tray = h('section', { id: 'proposals-tray', role: 'region', 'aria-label': 'Proposals from agents', hidden: true, 'data-open': '0' });
   dockEl.append(tray);
   const nameOf = (id) => ctx.state.components.get(id)?.name ?? id;
+  const titleOf = (p) => (p.create ? p.name : nameOf(p.component));
   const sectionOf = (id) => document.querySelector(`section.cmp[data-component="${CSS.escape(id)}"]`);
   const sorted = () => [...S.list.values()].sort((a, b) => a.by.localeCompare(b.by) || a.at - b.at);
 
@@ -68,15 +69,16 @@ export function initProposals(ctx) {
   }
   function propRow(p) {
     const busy = S.busy.has(p.id);
-    return h('li', { class: 'pitem', tabindex: '0', role: 'group', 'data-id': p.id, 'data-by': p.by, 'data-component': p.component, 'aria-current': String(S.picked === p.id), 'aria-label': `Proposal from ${p.by} on ${nameOf(p.component)}: ${p.summary}`,
+    return h('li', { class: 'pitem', tabindex: '0', role: 'group', 'data-id': p.id, 'data-by': p.by, 'data-component': p.component, ...(p.create && { 'data-create': p.name }), 'aria-current': String(S.picked === p.id), 'aria-label': p.create ? `Proposal from ${p.by} to create the new component ${p.name}` : `Proposal from ${p.by} on ${nameOf(p.component)}: ${p.summary}`,
       onclick: (ev) => { if (!ev.target.closest('button')) pick(p.id); } },
-      h('div', { class: 'pi-top' }, h('span', { class: 'pi-comp', text: nameOf(p.component) }), p.adoption ? h('span', { class: 'pi-age', text: 'adoption' }) : null, h('time', { class: 'pi-age', text: ago(p.at) })),
-      editRows(p),
-      staleBox(p),
+      h('div', { class: 'pi-main' },
+        h('div', { class: 'pi-top' }, h('span', { class: 'pi-comp', text: titleOf(p) }), p.adoption ? h('span', { class: 'pi-tag', text: 'adoption' }) : null, p.create ? h('span', { class: 'pi-tag', text: 'new component' }) : null, h('time', { class: 'pi-age', text: ago(p.at) })),
+        editRows(p)),
       h('div', { class: 'pi-btns' },
-        h('button', { type: 'button', class: 'pb go p-accept', disabled: busy, 'aria-label': `Accept ${p.edits.length > 1 ? 'all ' + p.edits.length + ' edits of ' : ''}the proposal on ${nameOf(p.component)}`, text: p.edits.length > 1 ? 'Accept' : 'Accept', onclick: () => act(p, 'accept') }),
-        h('button', { type: 'button', class: 'pb no p-reject', disabled: busy, 'aria-label': `Reject the proposal on ${nameOf(p.component)}`, text: 'Reject', onclick: () => act(p, 'reject') }),
-        h('button', { type: 'button', class: 'pb p-show', 'aria-pressed': String(S.picked === p.id), text: S.picked === p.id ? 'Hide ghost' : 'Show ghost', onclick: () => pick(S.picked === p.id && S.pickedEdit === null ? null : p.id) })));
+        h('button', { type: 'button', class: 'pb go p-accept', disabled: busy, 'aria-label': `Accept ${p.edits.length > 1 ? 'all ' + p.edits.length + ' edits of ' : ''}the proposal on ${titleOf(p)}`, text: p.edits.length > 1 ? 'Accept' : 'Accept', onclick: () => act(p, 'accept') }),
+        h('button', { type: 'button', class: 'pb no p-reject', disabled: busy, 'aria-label': `Reject the proposal on ${titleOf(p)}`, text: 'Reject', onclick: () => act(p, 'reject') }),
+        h('button', { type: 'button', class: 'pb p-show', 'aria-pressed': String(S.picked === p.id), text: S.picked === p.id ? 'Hide ghost' : 'Show ghost', onclick: () => pick(S.picked === p.id && S.pickedEdit === null ? null : p.id) })),
+      staleBox(p));
   }
   function draw() {
     const keep = document.activeElement?.closest?.('#proposals-tray') ? { id: document.activeElement.closest('.pitem')?.dataset.id, cls: [...document.activeElement.classList].find((c) => /^(p-|ed-|pt-)/.test(c)), edit: document.activeElement.closest('li[data-edit]')?.dataset.edit } : null;
@@ -142,7 +144,7 @@ export function initProposals(ctx) {
     S.token++;
     for (const u of S.unmounts) try { u(); } catch {}
     S.unmounts = []; S.mod = null;
-    for (const e of document.querySelectorAll('.ghost-layer, .ghost-flag, .ghost-divider')) e.remove();
+    for (const e of document.querySelectorAll('.ghost-layer, .ghost-flag, .ghost-divider, .ghost-new')) e.remove();
     for (const e of document.querySelectorAll('.cell[data-ghost]')) { delete e.dataset.ghost; e.style.removeProperty('--nk-c'); }
     for (const e of document.querySelectorAll('section.cmp[data-ghost]')) delete e.dataset.ghost;
     ctx.emit('ghost', { proposal: null });
@@ -152,7 +154,8 @@ export function initProposals(ctx) {
     if (!p || !S.mod) return;
     for (const u of S.unmounts) try { u(); } catch {}
     S.unmounts = [];
-    for (const e of document.querySelectorAll('.ghost-layer, .ghost-flag, .ghost-divider')) e.remove();
+    for (const e of document.querySelectorAll('.ghost-layer, .ghost-flag, .ghost-divider, .ghost-new')) e.remove();
+    if (p.create) return paintNew(p);
     const sec = sectionOf(p.component);
     if (!sec) return;
     sec.dataset.ghost = p.id;
@@ -167,6 +170,15 @@ export function initProposals(ctx) {
     }
     sec.querySelector('.frame')?.append(h('div', { class: 'ghost-flag', role: 'status', style: `--nk-c:${p.color || 'var(--nk-accent)'};--nk-ink:${p.ink || 'var(--nk-on-accent)'}`, text: `${p.by}'s proposal${S.pickedEdit === null ? '' : ` · edit ${S.pickedEdit + 1} of ${p.edits.length}`} · ${S.mode === 'before' ? 'before (live)' : S.mode === 'split' ? 'before | after' : 'after'} · not written` }));
     ctx.emit('ghost', { proposal: p.id, component: p.component, mode: S.mode });
+  }
+  // A component that does not exist yet: a dashed ghost frame on the canvas (top-left of the stage), drawn from the would-be source. No file, no entry.
+  function paintNew(p) {
+    const inner = h('div', { class: 'preview-inner' });
+    const c = p.color || 'var(--nk-accent)';
+    stageEl.append(h('div', { class: 'ghost-new', 'data-proposal': p.id, role: 'status', style: `--nk-c:${c};--nk-ink:${p.ink || 'var(--nk-on-accent)'}` },
+      h('div', { class: 'gn-flag', text: `${p.by}'s proposal · new component ${p.name} · not written` }), h('div', { class: 'gn-body' }, inner)));
+    try { S.unmounts.push(S.mod.mount(inner, {})); } catch (e) { inner.textContent = `could not draw: ${e.message}`; }
+    ctx.emit('ghost', { proposal: p.id, component: p.component, mode: S.mode, create: p.name });
   }
   async function ghost(p) {
     const token = ++S.token;
@@ -184,7 +196,7 @@ export function initProposals(ctx) {
     S.picked = id; S.pickedEdit = id ? edit : null;
     draw();
     const p = id && S.list.get(id);
-    if (p) { ghost(p); requestAnimationFrame(() => requestAnimationFrame(() => frame(p))); }
+    if (p) { ghost(p); tray.querySelector(`.pitem[data-id="${CSS.escape(p.id)}"]`)?.scrollIntoView({ block: 'nearest' }); if (!p.create) requestAnimationFrame(() => requestAnimationFrame(() => frame(p))); }
   }
   function frame(p) {
     const r = ctx.stage.componentRect?.(p.component);
@@ -204,6 +216,8 @@ export function initProposals(ctx) {
     else if (ev.key === 'a' || ev.key === 'A') { ev.preventDefault(); const next = rows[i + 1] ?? rows[i - 1]; act(p, 'accept').then(() => (next?.isConnected ? next : tray.querySelector('.pitem') ?? stageEl).focus?.({ preventScroll: true })); }
     else if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); const next = rows[i + 1] ?? rows[i - 1]; act(p, 'reject').then(() => (next?.isConnected ? next : tray.querySelector('.pitem') ?? stageEl).focus?.({ preventScroll: true })); }
   });
+  // Keyboard focus (or any focus) inside a row scrolls that row into the tray's visible part, so Accept is never out of reach.
+  tray.addEventListener('focusin', (ev) => ev.target.closest?.('.pitem')?.scrollIntoView({ block: 'nearest' }));
   function openTray() {
     if (!S.list.size) { ctx.hint('No proposals waiting'); return; }
     if (tray.contains(document.activeElement) && S.open) { S.open = false; S.userFolded = true; draw(); stageEl.focus({ preventScroll: true }); return; }

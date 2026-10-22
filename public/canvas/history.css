@@ -67,7 +67,7 @@ section.cmp[data-preview] .frame { outline: 2px solid var(--nk-accent); outline-
 .inspect .i-bar { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--nk-line); flex: none; }
 .i-status { flex: 1; min-width: 0; font: 11.5px var(--nk-mono); color: var(--nk-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .i-use { display: flex; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--nk-line); flex: none; }
-.i-usage { flex: 1; min-width: 0; padding: 4px 10px; border-radius: 6px; background: var(--nk-chrome-2); font: 12px var(--nk-mono); overflow-x: auto; white-space: nowrap; user-select: all; }
+.i-usage { flex: 1; min-width: 0; padding: 4px 10px; border-radius: 6px; background: var(--nk-chrome-2); font: 12px var(--nk-mono); overflow-x: auto; white-space: pre; user-select: all; }
 .i-scroll { overflow: auto; flex: 1; min-height: 0; }
 .i-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .i-table td, .i-table th { padding: 3px 14px; text-align: left; border-bottom: 1px solid var(--nk-line); }

@@ -36,3 +36,34 @@ test('ghost cells draw with the same token variables as live cells, in every the
     }
   } finally { await b.close(); await server.stop(); }
 });
+
+test('the create-proposal ghost frame (.ghost-new) gets the token variables and is isolated like a cell', { timeout: 120000 }, async () => {
+  const { dir, compDir } = tempRepo(['Button']);
+  cpSync(join(ROOT, 'fixtures/tokens'), join(dir, 'tokens'), { recursive: true });
+  writeFileSync(join(dir, 'napkin.json'), '{"tokens":{"source":"tokens/tokens.json","css":"tokens/tokens.css"}}');
+  const server = await startServer(compDir), b = await launchChromium({ width: 1440, height: 900 });
+  try {
+    await b.goto(server.url); await b.waitFor('document.body.dataset.ready === "1"');
+    await b.waitFor(`!!document.querySelector('section[data-name="Button"] .cell .mount [data-n=root]')`);
+    const token = await session(server.url, 'claude');
+    const made = await http(server.url, '/api/components', { method: 'POST', token, body: { name: 'Tooltip', propose: true } });
+    assert.equal(made.json.proposed, true, JSON.stringify(made.json));
+    await b.waitFor(`napkin.proposals.list().length === 1`);
+    await b.eval(`document.querySelector('.pitem .p-show').click()`);
+    await b.waitFor(`!!document.querySelector('.ghost-new [data-n="root"]')`);
+    const val = (sel, name) => b.eval(`getComputedStyle(document.querySelector(${JSON.stringify(sel)})).getPropertyValue('${name}').trim()`);
+    for (const mode of ['light', 'dark']) {
+      await b.eval(`document.querySelector('#token-theme').value = '${mode}'; document.querySelector('#token-theme').dispatchEvent(new Event('change'))`);
+      await sleep(300);
+      const live = await val('section[data-name="Button"] .cell .mount [data-n=root]', '--accent');
+      assert.ok(live, 'the live cell has the token');
+      assert.equal(await val('.ghost-new [data-n="root"]', '--accent'), live, `${mode}: the ghost frame has the same token value`);
+    }
+    // isolation: the ghost frame's component sees no editor colour or font, and no editor custom property
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('.ghost-new [data-n="root"]')).color`), 'rgb(0, 0, 0)');
+    const names = (sel) => b.eval(`(() => { const cs = getComputedStyle(document.querySelector(${JSON.stringify(sel)})); const out = []; for (const p of cs) if (p.startsWith('--') && !p.startsWith('--nk-')) out.push(p); return out.sort().join(); })()`);
+    const live = await names('section[data-name="Button"] .cell .mount [data-n=root]');
+    assert.ok(live.includes('--accent'), 'token variables are present in the live cell');
+    assert.equal(await names('.ghost-new [data-n="root"]'), live, 'the ghost frame sees exactly the live cell\'s custom properties (the tokens), nothing of the editor');
+  } finally { await b.close(); await server.stop(); }
+});

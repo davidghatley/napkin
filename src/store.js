@@ -44,7 +44,9 @@ function changedLines(before, after) {
 function withEditedLine(why, e, before, after) {
   const parser = e.loc?.line; if (!parser || typeof before !== 'string') return why;
   const changed = [...changedLines(before, after)].sort((a, b) => a - b);
-  if (!changed.length || changed.includes(parser)) return why;
+  const reflowed = changed.length >= 0.9 * after.split('\n').filter((l) => l.trim()).length; // the whole file changed (reformatted): every line is "changed", so say where the parser stopped too
+  if (!changed.length) return why;
+  if (changed.includes(parser)) return reflowed ? why + ` (the parser stopped at line ${parser})` : why;
   const edited = [...changed].reverse().find((l) => l <= parser) ?? changed[0];
   return why.replace(new RegExp(`\\bline ${parser}\\b`, 'g'), `line ${edited}`) + ` (the parser stopped at line ${parser})`;
 }
@@ -76,7 +78,7 @@ export async function openStore(file, start = {}) {
   try { ({ doc, state } = codec.load(text, file, start)); } catch (e) { readOnly = reason(e); if (e.loc) syntaxErr = readOnly; }
   let revision = revisionOf(text);
   let seq = 1;
-  const history = [{ seq, revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', doc, text }];
+  const history = [{ seq, revision, keys: new Set(), by: start.by || 'file', summary: start.summary || 'opened', at: Date.now(), kind: start.by ? 'edit' : 'open', ...(start.approvedBy && { approvedBy: start.approvedBy }), doc, text }];
   // A past revision's text and document. Old entries hold the text deflated and no document (see FULL).
   const textOf = (h) => (typeof h.text === 'string' ? h.text : Buffer.isBuffer(h.text) ? inflateSync(h.text).toString('utf8') : undefined);
   const docOf = (h) => {
@@ -317,7 +319,7 @@ export async function openStore(file, start = {}) {
   // Where the component sits on the canvas lives in the sidecar, never in the .tsx (FMT-02, FMT-06).
   function moveCanvas(x, y) {
     if (![x, y].every((n) => typeof n === 'number' && Number.isFinite(n))) return { ok: false, error: 'invalid canvas position: x and y must be numbers. Next: send x and y as finite numbers.' };
-    const side = readSidecar(file, basename(file).replace(/\.tsx$/, ''));
+    const side = readSidecar(file, basename(file).replace(/\.tsx$/, ''), { identityPath: displayFile });
     const canvas = { x: Math.round(x * 100) / 100, y: Math.round(y * 100) / 100 };
     if (side.canvas?.x !== canvas.x || side.canvas?.y !== canvas.y) writeSidecar(file, { ...side, canvas });
     events.emit('canvas', { canvas });

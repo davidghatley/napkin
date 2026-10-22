@@ -1,0 +1,38 @@
+Full suite command (run once):
+flock /tmp/claude-1000/napkin-suite.lock npm test
+
+ℹ tests 542
+ℹ pass 533
+ℹ fail 4
+ℹ skipped 5
+
+Full-run failures:
+✖ failing tests:
+test at test/17-canvas-round2.test.js:104:13
+✖ Padding per side and radius per corner write the shorthand (5268.259205ms)
+  Error: timed out waiting for: !!document.querySelector('#rad-sides')
+test at test/17-canvas-round2.test.js:124:13
+✖ one colour field (swatch | hex | %) with the eye and minus after it; swatches have an outline (5016.63098ms)
+  Error: timed out waiting for: !!document.querySelector('#background') && !!document.querySelector('#remove-fill')
+test at test/invariants/one-path.test.js:92:1
+✖ INV-05: static check: only src/atomic.js, src/commit.js and src/lock.js touch files; everything else calls commit.js (4.780158ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  +   "src/server.js:27: process.once('exit', () => { if (demoDir) rmSync(demoDir, { recursive: true, force: true }); });"
+
+The compound-controls parent also counts as a failure.
+
+After the full run, demo removal was moved from server.js into commit.removeDemoWorkspace. No assertion or allow-list was changed.
+Targeted write-path and cleanup checks after that correction:
+NODE_OPTIONS="--import=$PWD/test/helpers/cleanup.js" node --test --test-concurrency=1 test/onboarding/demo-cleanup.test.js test/invariants/one-path.test.js test/invariants/one-path-agents.test.js
+ℹ tests 8
+ℹ pass 8
+ℹ fail 0
+ℹ skipped 0
+
+Compound-controls diagnosis:
+NODE_OPTIONS="--import=$PWD/test/helpers/cleanup.js" node --test test/17-canvas-round2.test.js
+Current code: tests 19, pass 19, fail 0, skipped 0.
+Original runtime copied from HEAD into a disposable test folder: tests 19, pass 19, fail 0, skipped 0.
+The full-run UI timeouts did not reproduce. The full suite was not repeated.
+
+Sidecar assertions that assumed a file on open now assert its absence, save a position explicitly, and retain the original identity, canonical format, no-op and diff-budget checks. The frame-drag diff test starts with saved sidecars; onboarding/sample.test.js covers the first save.

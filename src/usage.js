@@ -10,3 +10,10 @@ export function usageFor(doc, variant = {}) {
   for (const p of doc.props) if (p.type === 'boolean' && p.default === true) parts.push(p.name);
   return `<${doc.name}${parts.map((x) => ' ' + x).join('')} />`;
 }
+
+// The path is relative to the opened components folder. A consumer can adjust
+// this one import to match its source tree; the JSX stays identical.
+export function usageWithImport(doc, variant = {}, path = `${doc.name}.tsx`) {
+  const from = './' + path.replace(/\\/g, '/').replace(/\.tsx$/, '');
+  return `import { ${doc.name} } from ${JSON.stringify(from)};\n\n${usageFor(doc, variant)}`;
+}

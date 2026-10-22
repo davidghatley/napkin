@@ -2,8 +2,9 @@
 // Held by the canvas server or a fallback MCP; never by two live processes. A lock whose process is gone is
 // stale. Taking over a stale lock goes through an O_EXCL mutex file (<dir>/.napkin/lock.takeover), so two
 // processes that both saw the dead PID cannot both win.
+import { privateDir } from './atomic.js';
 import { explainError } from './errors.js';
-import { mkdirSync, writeFileSync, readFileSync, unlinkSync, linkSync } from 'node:fs';
+import { writeFileSync, readFileSync, unlinkSync, linkSync } from 'node:fs';
 import { join } from 'node:path';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -22,8 +23,7 @@ const tryCreate = (file) => {
 };
 
 export function acquireLock(dir) {
-  const folder = join(dir, '.napkin'), file = join(folder, 'lock'), mutex = join(folder, 'lock.takeover');
-  mkdirSync(folder, { recursive: true });
+  const folder = privateDir(dir), file = join(folder, 'lock'), mutex = join(folder, 'lock.takeover');
   const held = (pid) => new LockError(`another napkin process (pid ${pid}) is editing ${dir}; stop it, or point your tools at it (NAPKIN_URL) instead of starting a second writer`);
   let got = false;
   for (let attempt = 0; attempt < 200 && !got; attempt++) {

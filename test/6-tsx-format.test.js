@@ -108,7 +108,9 @@ test('a file outside the dialect opens read-only and is never rewritten', async 
 
 test('the sidecar keeps a stable component id across reopen (F09)', async () => {
   const { file } = repoWith('Card');
-  const s1 = await openStore(file); const id1 = (await s1.read()).doc.id; await s1.close();
+  const s1 = await openStore(file); const id1 = (await s1.read()).doc.id;
+  assert.equal(existsSync(file.replace(/\.tsx$/, '.napkin.json')), false, 'opening derives an id without a sidecar');
+  await s1.moveCanvas(10, 20); await s1.close();
   assert.ok(existsSync(file.replace(/\.tsx$/, '.napkin.json')));
   const s2 = await openStore(file); const id2 = (await s2.read()).doc.id; await s2.close();
   assert.match(id1, /^cmp_card_/);

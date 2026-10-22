@@ -22,8 +22,8 @@ export function hashes(dir) {
   function walk(d) { for (const f of readdirSync(d, { withFileTypes: true })) { const p = join(d, f.name); if (f.isDirectory()) walk(p); else out[relative(dir, p)] = createHash('sha256').update(readFileSync(p)).digest('hex'); } }
   walk(dir); return out;
 }
-export async function cli(dir, extra = []) {
-  const proc = spawn(process.execPath, [join(ROOT, 'src/cli.js'), 'open', dir, '--port', '0', ...extra], { stdio: ['ignore', 'pipe', 'pipe'] });
+export async function cli(dir, extra = [], env = {}) {
+  const proc = spawn(process.execPath, [join(ROOT, 'src/cli.js'), 'open', dir, '--port', '0', ...extra], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let output = ''; proc.stdout.on('data', (b) => output += b); proc.stderr.on('data', (b) => output += b);
   try {
     const { value: url } = await waitFor(() => { if (proc.exitCode !== null) throw new Error(output); return output.match(/napkin canvas: (http:\/\/127.0.0.1:\d+\/)/)?.[1]; }, 15000);

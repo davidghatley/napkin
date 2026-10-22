@@ -8,7 +8,7 @@
 // Copy usage: the JSX line that draws this cell in an app: <Button size="sm" label="Button" />.
 import { h } from './drawer.js';
 import { axes, index, variantGrid } from '/src/model.js';
-import { usageFor } from '/src/usage.js';
+import { usageWithImport } from '/src/usage.js';
 
 const kebab = (p) => p.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
 // Properties a browser passes from parent to child.
@@ -84,7 +84,7 @@ export function initInspect(ctx, drawer) {
     const variant = JSON.parse(picker.value || '{}');
     S.cell = variant;
     const el = elOf(s.component, s.node, variant);
-    usage.textContent = usageFor(c.doc, variant); copyBtn.disabled = false;
+    usage.textContent = usageWithImport(c.doc, variant, c.path); copyBtn.disabled = false;
     if (!el) { status.textContent = `${c.name} · ${s.node} is not drawn in that cell yet.`; return; }
     status.textContent = `${c.name} · ${s.node} · ${label(variant)}`;
     const { declared, rest, box } = rowsFor(c.doc, s.node, variant, el);

@@ -103,13 +103,14 @@ test('code strip, inspect, usage and assets on the page', { timeout: 175000 }, a
       await p.select('Button', 'root', { size: 'sm', state: 'hover' });
       await browser.waitFor(`document.querySelector('#i-cell').value === ${JSON.stringify(JSON.stringify({ size: 'sm', state: 'hover' }))}`);
       const usage = await text('#i-usage');
-      assert.equal(usage, '<Button size="sm" state="hover" label="Button" />');
+      assert.equal(usage, 'import { Button } from "./Button";\n\n<Button size="sm" state="hover" label="Button" />');
       await q(`document.querySelector('#i-copy').click()`);
       await sleep(200);
       assert.equal(await q(`napkin.copied`), usage);
       // the consumer app: the same line, the same component folder, no napkin code
       const dir = mkdtempSync(join(tmpdir(), 'napkin-consumer-'));
-      writeFileSync(join(dir, 'App.tsx'), `import { createRoot } from 'react-dom/client';\nimport { flushSync } from 'react-dom';\nimport { Button } from '@components/Button';\nflushSync(() => createRoot(document.getElementById('m')!).render(${usage}));\n`);
+      const [importLine, jsx] = usage.split('\n\n');
+      writeFileSync(join(dir, 'App.tsx'), `import { createRoot } from 'react-dom/client';\nimport { flushSync } from 'react-dom';\n${importLine.replace('./Button', '@components/Button')}\nflushSync(() => createRoot(document.getElementById('m')!).render(${jsx}));\n`);
       await build({ entryPoints: [join(dir, 'App.tsx')], bundle: true, format: 'iife', jsx: 'automatic', alias: { '@components': p.compDir }, nodePaths: [join(ROOT, 'node_modules')], outfile: join(dir, 'app.js'), define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent' });
       writeFileSync(join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><style>body { margin: 0; }</style><div id="m" style="position:absolute;left:16px;top:16px"></div><script src="app.js"></script>`);
       const rendered = Buffer.from(await (await fetch(new URL(`api/components/Button/render?variant=${encodeURIComponent(JSON.stringify({ size: 'sm', state: 'hover' }))}`, p.server.url))).arrayBuffer());

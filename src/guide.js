@@ -32,7 +32,7 @@ Numbers stay numbers (fontSize: 20); strings are CSS text ("14px 28px").
 ## Other tools
 - create_component { name (PascalCase), rootTag? }, rename_component { component, name }, delete_component { component }.
 - search { query } finds components and nodes by name, id, tag or text.
-- subscribe { waitMs? } returns changes other people made since your last call.
+- subscribe { waitMs? } returns { changes, resolved }: changes other people made since your last call, and how the person answered your proposals (see Propose mode).
 - A file outside the napkin dialect is read-only: read it or render it with default props; direct edits, rename and delete are refused with the reason.
 - propose_adoption { component } proposes a faithful dialect rewrite of a simple read-only file. It returns a source diff through the existing proposals system; nothing writes until a write-capable reviewer accepts. Reject leaves the source unchanged. Local logic, hooks, class names and other unsupported behavior are refused instead of approximated. A hand edit makes a pending adoption stale: reject it and propose again. Adoption needs a running canvas server.
 
@@ -47,4 +47,11 @@ Your name is NAPKIN_AGENT; the server names you from your session, not from anyt
 
 ## Propose mode
 apply_edits with propose: true (or an agent configured as "propose" in napkin.json) does not write. The edits are validated like a dry run and held as a proposal; the person accepts or rejects it on the canvas. You get { proposed: true, proposal: { id } }. An agent configured as "read" can only read and dry-run. Propose mode needs the napkin canvas to be running (that is where a person reviews); without it the call is refused, so apply directly if you are allowed to.
+
+### Creating a component in propose mode
+create_component { name } from a propose agent (or with propose: true) creates nothing. You get { proposed: true, proposal: { id, component: "new:<Name>" } }; the canvas shows the new component as a ghost frame in the proposals tray, and no file exists until the person accepts it (then it is written as yours, approved by them). Reject leaves no file.
+While it is pending, read_component and apply_edits on that name are refused ("only proposed so far"): wait for the resolved event, then read_component and propose your edits. One pending create per name; the name must be free.
+
+### Learning how your proposals were answered
+subscribe { waitMs } returns { changes, resolved }. Each resolved entry is { proposal, component, summary, outcome: "accepted" | "rejected" | "partly", accepted: [edit summaries], rejected: [edit summaries], by (the person), final: true, revision? }. When the person answers only some edits of a proposal you get an entry with final: false and outcome "partly accepted" or "partly rejected", listing those edits and what remains. The same entry is pushed as notifications/napkin/resolved. A rejected proposal never touched the file: do not assume a change landed until its resolved entry says accepted; if it was rejected, read_component again before proposing something different.
 `;

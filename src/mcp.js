@@ -25,13 +25,13 @@ const TOOLS = [
   { name: 'list_components', description: 'List the napkin components in this folder: [{ id, name, readOnly? }].', inputSchema: obj({}) },
   { name: 'read_component', description: 'Read a component: its document tree, current revision and the TSX source text (readOnly says why a file cannot be edited).', inputSchema: obj({ component: comp }, ['component']) },
   { name: 'apply_edits', description: 'Apply a batch of edits, all or nothing, against baseRevision. Fails with "stale revision" plus a stale list ({key, value, yours, revision, by}) and currentRevision if a property you touch changed since; retry once with baseRevision = currentRevision. dryRun: true validates and returns the would-be TSX source without writing. propose: true validates and holds the edits as a proposal for the person to accept or reject (nothing is written).', inputSchema: obj({ component: comp, baseRevision: {}, edits: { type: 'array', items: editSchema }, dryRun: { type: 'boolean' }, propose: { type: 'boolean' } }, ['component', 'baseRevision', 'edits']) },
-  { name: 'create_component', description: 'Create a new component file components/<Name>.tsx (PascalCase name) with one root frame; it appears on the canvas. Returns { id, name }.', inputSchema: obj({ name: { type: 'string' }, rootTag: { type: 'string' } }, ['name']) },
+  { name: 'create_component', description: 'Create a new component file components/<Name>.tsx (PascalCase name) with one root frame; it appears on the canvas. Returns { id, name }. In propose mode (or with propose: true) nothing is created: you get { proposed: true, proposal } and the person accepts or rejects the new component on the canvas; propose edits to it only after the resolved event says accepted.', inputSchema: obj({ name: { type: 'string' }, rootTag: { type: 'string' }, propose: { type: 'boolean', description: 'ask the person to approve the new component instead of creating it' } }, ['name']) },
   { name: 'add_variant', description: 'Add a value to a variant axis (creating the axis if needed, with base value "default" unless given), optionally with style overrides per node, e.g. { component: "Button", baseRevision, axis: "size", value: "xl", overrides: { root: { padding: "14px 28px" } } }. Accepts dryRun and propose like apply_edits.', inputSchema: obj({ component: comp, baseRevision: {}, axis: { type: 'string' }, value: { type: 'string' }, base: { type: 'string' }, overrides: { type: 'object' }, dryRun: { type: 'boolean' }, propose: { type: 'boolean' } }, ['component', 'baseRevision', 'axis', 'value']) },
   { name: 'rename_component', description: 'Rename a component (file, exported function and Props interface). Its id stays. Returns { id, name }.', inputSchema: obj({ component: comp, name: { type: 'string', description: 'new PascalCase name' } }, ['component', 'name']) },
   { name: 'delete_component', description: 'Delete a component file and its sidecar. Returns { id, name }. Git can bring it back.', inputSchema: obj({ component: comp }, ['component']) },
   { name: 'render_component', description: 'Render one variant cell of a component to a PNG image so you can see it. variant is { axis: value } (omit for the base cell).', inputSchema: obj({ component: comp, variant: { type: 'object', description: 'e.g. { "size": "sm", "state": "hover" }' } }, ['component']) },
   { name: 'search', description: 'Find components and nodes by name, node id, tag or text (case-insensitive substring). Returns [{ kind: "component"|"node", component, name, node?, tag?, text?, match? }].', inputSchema: obj({ query: { type: 'string' } }, ['query']) },
-  { name: 'subscribe', description: 'Changes other people made since your last call (also pushed as notifications/napkin/change): { changes: [{ component, revision, by, summary }] }. waitMs (max 10000) waits for the first one when there is none yet; component filters.', inputSchema: obj({ component: comp, waitMs: { type: 'number' } }) },
+  { name: 'subscribe', description: 'Changes other people made since your last call (also pushed as notifications/napkin/change): { changes: [{ component, revision, by, summary }], resolved: [{ proposal, outcome: accepted|rejected|partly, accepted: [edits], rejected: [edits], by, final }] }. resolved says how the person answered your proposals (also pushed as notifications/napkin/resolved). waitMs (max 10000) waits for the first one when there is none yet; component filters.', inputSchema: obj({ component: comp, waitMs: { type: 'number' } }) },
 ];
 
 const variantEdits = (a) => [
@@ -42,7 +42,18 @@ const variantEdits = (a) => [
 // --- backends: both answer call({ method, path, query?, body? }) -> { status, json } | { status, png } ---
 const origin = Math.random().toString(36).slice(2);
 const pending = []; // changes by others, for the subscribe tool
+const pendingResolved = []; // how the person answered this agent's proposals (WPC-09), for the subscribe tool
 let waiters = [];
+// A proposal of mine was accepted, rejected or answered in part: { proposal, component, outcome: accepted|rejected|partly, accepted: [edits], rejected: [edits], by (who decided), final }
+const resolvedNotice = (f) => {
+  const final = f.type === 'proposal-resolved';
+  const n = { proposal: f.id, component: f.component, summary: f.summary, outcome: final ? f.outcome : f.status === 'accepted' ? 'partly accepted' : 'partly rejected', by: f.by ?? null, final,
+    ...(final ? { accepted: f.accepted, rejected: f.rejected } : { [f.status === 'accepted' ? 'accepted' : 'rejected']: f.edits, remaining: f.remaining }),
+    ...(f.revision !== undefined && { revision: f.revision }), ...(f.created && { created: f.created }), ...(f.reason && { reason: f.reason }) };
+  pendingResolved.push(n); if (pendingResolved.length > 200) pendingResolved.shift();
+  waiters.forEach((w) => w()); waiters = [];
+  send({ method: 'notifications/napkin/resolved', params: n });
+};
 const notice = (ch) => {
   const n = { component: ch.component, revision: ch.revision, by: ch.by, summary: ch.summary, edits: ch.edits };
   pending.push(n); if (pending.length > 200) pending.shift();
@@ -50,12 +61,15 @@ const notice = (ch) => {
   send({ method: 'notifications/napkin/change', params: n });
 };
 
-class Unreachable extends Error { constructor(message) { super(explainError(message, { next: "run napkin open and set NAPKIN_URL to its printed address." })); } }
+class Unreachable extends Error { constructor(message) { super(explainError(message, { next: "run node src/cli.js open and set NAPKIN_URL to its printed address." })); } }
 async function makeRemote() {
   const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) }).catch((e) => { throw new Unreachable(e.message); });
   if (!probe.ok) throw new Error(explainError(`napkin server answered ${probe.status}`));
   const live = await connectCanvas(BASE, { by: 'agent', identify: false, name: AGENT });
-  live.onChange((ch) => { if (ch.type === 'change' && !ch.mine && ch.origin !== origin) notice(ch); });
+  live.onChange((ch) => {
+    if (ch.type === 'change' && !ch.mine && ch.origin !== origin) notice(ch);
+    else if ((ch.type === 'proposal-resolved' || ch.type === 'proposal-part') && ch.proposedBy === AGENT) resolvedNotice(ch);
+  });
   const base = live.origin;
   const sess = await (await fetch(new URL('api/session', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: AGENT, token: process.env.NAPKIN_TOKEN }) })).json();
   if (!sess.ok) throw new Error(explainError(`napkin refused this agent a session: ${sess.error}`));
@@ -122,7 +136,7 @@ async function callTool(name, a = {}) {
   if (name === 'list_components') return ok(await b.call({ method: 'GET', path: '/api/components' }));
   if (name === 'propose_adoption') return ok(await b.call({ method: 'POST', path: `/api/components/${c}/adoption`, body: {} }));
   if (name === 'read_component') return ok(await b.call({ method: 'GET', path: `/api/components/${c}` }));
-  if (name === 'create_component') { const r = ok(await b.call({ method: 'POST', path: '/api/components', body: { name: a.name, rootTag: a.rootTag, by } })); return { id: r.id, name: r.name }; }
+  if (name === 'create_component') { const r = ok(await b.call({ method: 'POST', path: '/api/components', body: { name: a.name, rootTag: a.rootTag, by, propose: !!a.propose } })); return r.proposed ? { proposed: true, proposal: r.proposal } : { id: r.id, name: r.name }; }
   if (name === 'rename_component') { const r = ok(await b.call({ method: 'POST', path: `/api/components/${c}/rename`, body: { name: a.name, by } })); return { id: r.id, name: r.name }; }
   if (name === 'delete_component') { const r = ok(await b.call({ method: 'DELETE', path: `/api/components/${c}`, query: new URLSearchParams({ by }) })); return { id: r.id, name: r.name }; }
   if (name === 'search') return { results: ok(await b.call({ method: 'GET', path: '/api/search', query: new URLSearchParams({ q: a.query ?? '' }) })) };
@@ -134,10 +148,10 @@ async function callTool(name, a = {}) {
   if (name === 'subscribe') {
     const deadline = Math.min(Number(a.waitMs) || 0, 10000);
     const cid = a.component ? ok(await b.call({ method: 'GET', path: `/api/components/${c}` })).component : null;
-    const take = () => { const out = pending.filter((n) => !cid || n.component === cid); for (const n of out) pending.splice(pending.indexOf(n), 1); return out; };
-    let got = take();
-    if (!got.length && deadline) { await new Promise((r) => { const t = setTimeout(r, deadline); waiters.push(() => { clearTimeout(t); r(); }); }); got = take(); }
-    return { changes: got };
+    const drain = (list) => { const out = list.filter((n) => !cid || n.component === cid || (n.created && n.created === cid)); for (const n of out) list.splice(list.indexOf(n), 1); return out; };
+    let got = drain(pending), res = drain(pendingResolved);
+    if (!got.length && !res.length && deadline) { await new Promise((r) => { const t = setTimeout(r, deadline); waiters.push(() => { clearTimeout(t); r(); }); }); got = drain(pending); res = drain(pendingResolved); }
+    return { changes: got, resolved: res };
   }
   if (name === 'apply_edits' || name === 'add_variant') {
     const edits = name === 'add_variant' ? variantEdits(a) : a.edits;
