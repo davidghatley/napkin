@@ -10,7 +10,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 |---|---|---|---|---|---|---|
 | INV-01 | INV | files | pass | r5 pass: 500 + 200 race trials, 0 hand saves lost; broken files refused | test/invariants/broken-file.test.js | 9179fbb |
 | INV-02 | INV | files | pass | r5 pass on hand files H-K + 40/40 corpus | test/invariants/noop.test.js | 9179fbb |
-| INV-03 | INV | files | critic-fail | r5: only gap = comment inside multi-line props union lost on addVariant/renameVariant | test/invariants/diff-budget.test.js | 9179fbb |
+| INV-03 | INV | files | critic-pass | r6 PASS: comments survive all ops; 0 over budget (13 seeds) | test/invariants/diff-budget.test.js | dcb7b1a |
 | INV-04 | INV | files | pass | r5 pass | test/invariants/readonly.test.js | 9179fbb |
 | INV-05 | INV | files | pass | r5 pass: spy covers unlink/rm/fd writes; commit.js only writer | test/invariants/one-path.test.js | 9179fbb |
 | INV-06 | INV | files | pass | r1 pass | test/invariants/standalone.test.js | 9179fbb |
@@ -33,21 +33,21 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | LAY-09 | LAY | layout | pass | r1 pass: pasted subtree byte-identical render | test/18-*.test.js | a4a87dd |
 | LAY-10 | LAY | layout | critic-fail | r5 fail: 14 approximations in 290 snippets; redesign: browser parse + render-verify | test/canvas/paste-html.test.js | a4a87dd |
 | LAY-11 | LAY | layout | pass | r1 pass: sidecar only, sha unchanged | test/21-*.test.js | a4a87dd |
-| CMP-01 | CMP | components | building |  |  |  |
-| CMP-02 | CMP | components | building |  |  |  |
-| CMP-03 | CMP | components | building |  |  |  |
-| CMP-04 | CMP | components | building |  |  |  |
-| CMP-05 | CMP | components | building |  |  |  |
-| CMP-06 | CMP | components | building |  |  |  |
-| CMP-07 | CMP | components | building |  |  |  |
-| CMP-08 | CMP | components | building |  |  |  |
-| CMP-09 | CMP | components | building |  |  |  |
-| CMP-10 | CMP | components | building |  |  |  |
-| TOK-01 | TOK | tokens | building |  |  |  |
-| TOK-02 | TOK | tokens | building |  |  |  |
-| TOK-03 | TOK | tokens | building |  |  |  |
-| TOK-04 | TOK | tokens | building |  |  |  |
-| TOK-05 | TOK | tokens | building |  |  |  |
+| CMP-01 | CMP | components | critic-fail | r1 split: Sonnet WIN, Codex Storybook better (both orders); redesign to table | test/25-components-panel.test.js | eb3100c |
+| CMP-02 | CMP | components | critic-pass | r1 pass: rename 2/2 lines | test/25-components-panel.test.js | eb3100c |
+| CMP-03 | CMP | components | critic-pass | r1 blind WIN: Sonnet + Codex both orders | test/25-components-panel.test.js | eb3100c |
+| CMP-04 | CMP | components | critic-pass | r1 pass: consumer app both states | test/27-*.test.js | eb3100c |
+| CMP-05 | CMP | components | critic-pass | r1 pass: sidecar-only preview | test/27-*.test.js | eb3100c |
+| CMP-06 | CMP | components | critic-pass | r1 pass: Button edit → Cards 77 ms median | test/27-*.test.js | eb3100c |
+| CMP-07 | CMP | components | critic-pass | r1 pass | test/27-*.test.js | eb3100c |
+| CMP-08 | CMP | components | critic-pass | r1 pass: consumer app pixel diff 0 | test/27-*.test.js | eb3100c |
+| CMP-09 | CMP | components | critic-pass | r1 pass: toggle 12-15 ms | test/26-*.test.js | eb3100c |
+| CMP-10 | CMP | components | critic-pass | r1 pass ≤2 actions; frames overlap (fixing) | test/26-*.test.js | eb3100c |
+| TOK-01 | TOK | tokens | critic-pass | r1 pass: fixture 20/20; real secret-sauce shape 92 tokens | test/tokens/source.test.js | 97c2aed |
+| TOK-02 | TOK | tokens | critic-pass | r1 pass: 1-line var(); consumer app 0 px diff | test/tokens/consumer.test.js | 97c2aed |
+| TOK-03 | TOK | tokens | critic-pass | r1 pass 10/10 flagged; fixing bare-0 false positive | test/tokens/*.test.js | 97c2aed |
+| TOK-04 | TOK | tokens | critic-pass | r1 pass: p50 55 ms, max 72 ms at 200 comps | docs/evidence/TOK-04.txt | 97c2aed |
+| TOK-05 | TOK | tokens | critic-pass | r1 pass: 1/1 diff; 55 ms p50 | docs/evidence/TOK-05.txt | 97c2aed |
 | OPN-01 | OPN | open | pass | r2 pass: real causes + lines; "missing const base" wording | test/onboarding/open.test.js | ec22ab6 |
 | OPN-02 | OPN | open | pass | r2 pass: errors contained, 0 overflow | docs/evidence/OPN-02-missing.png | ec22ab6 |
 | OPN-03 | OPN | open | pass | r2 pass; converter formatting gap | test/onboarding/fix-round.test.js | ec22ab6 |
@@ -86,7 +86,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-07 | PRF | engine | building |  |  |  |
 | PRF-08 | PRF | engine | building |  |  |  |
 | FMT-01 | FMT | files | pass | r1 pass: cold walk | docs/dialect.md | 9179fbb |
-| FMT-02 | FMT | files | critic-fail | r5: same union-comment gap | test/invariants/diff-budget.test.js | 9179fbb |
+| FMT-02 | FMT | files | critic-pass | r6 PASS: table + hand files | test/invariants/diff-budget.test.js | dcb7b1a |
 | FMT-03 | FMT | files | pass | r2 pass: prettier(singleQuote)+tsc+eslint 0 | test/invariants/format.test.js | 9179fbb |
 | FMT-04 | FMT | files | pass | r1 pass 20/20 | test/invariants/merge.test.js | 9179fbb |
 | FMT-05 | FMT | files | pass | r5 pass: FUZZ=2000 via store | test/invariants/fuzz-store.test.js | 9179fbb |
