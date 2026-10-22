@@ -383,7 +383,7 @@ export function createStage(ctx, root, world, view) {
 
   // ---------------------------------------------------------------------------------------------- culling
   // Far off-screen frames stop being painted (content-visibility), keeping their size. Cheap until a repo is big.
-  let cullQueued = false, cullMode = 'exact'; // 'exact' (settled, or a programmatic move), 'pan' (a wheel or drag pan) or 'zoom' (a wheel or pinch zoom)
+  let cullQueued = false, cullMode = 'exact', trickle = false; // 'exact' (settled, or a programmatic move), 'pan' (a wheel or drag pan) or 'zoom' (a wheel or pinch zoom)
   function cull() {
     cullQueued = false;
     const mode = cullMode; cullMode = 'exact';
@@ -392,27 +392,50 @@ export function createStage(ctx, root, world, view) {
     const { x, y, z } = view.get(), b = view.stageBox();
     const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
     const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
-    const near = box(0.6), wide = box(1.6); // a change of culling costs a layout and a repaint: while panning, bring in everything within 1.6 viewports as soon as something is needed, and take nothing out
+    const near = box(0.6), wide = box(1.6); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
-    let need = false;
-    if (mode === 'pan') for (const sec of sections.values()) if (sec.culled && sec.pos && sec.size.w && !out(near, sec)) { need = true; break; }
+    const ahead = [];
     for (const [id, sec] of sections) {
       if (sec.pending && visible(sec)) render(id, true).catch(console.error);
       if (!sec.pos || !sec.size.w) continue;
       let off;
-      if (mode === 'pan') off = sec.culled ? !(need && !out(wide, sec)) && out(near, sec) : false;
-      else off = !keep.has(id) && out(near, sec);
+      if (mode === 'pan') {
+        off = sec.culled;
+        if (sec.culled) { if (!out(near, sec)) { off = false; trickle = true; } else if (!out(wide, sec)) ahead.push(sec); }
+      } else off = !keep.has(id) && out(near, sec);
       if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else delete sec.el.dataset.cull; }
     }
+    if (mode === 'pan' && trickle) {
+      const cy = (-y + b.height / 2) / z;
+      ahead.sort((p, q) => Math.abs(p.pos.y - cy) - Math.abs(q.pos.y - cy));
+      for (const sec of ahead.slice(0, 4)) { sec.culled = false; delete sec.el.dataset.cull; }
+      if (ahead.length > 4) queueCull('pan'); else trickle = false;
+    } else if (mode !== 'pan') trickle = false;
   }
   const RANK = { zoom: 0, pan: 1, exact: 2 };
   const queueCull = (mode = 'exact') => { if (!cullQueued) cullMode = mode; else if (RANK[mode] > RANK[cullMode]) cullMode = mode; if (!cullQueued) { cullQueued = true; requestAnimationFrame(cull); } };
   ctx.on('view', (v) => {
     if (v.gesture && gesturing) moveOverlays(v); else refreshOverlays();
     const was = lastZ; lastZ = v.z; gesturing = !!v.gesture;
+    if (v.gesture) titlesNow(v);
     queueCull(v.gesture ? (v.z !== was ? 'zoom' : 'pan') : 'exact');
   });
-  ctx.on('viewsettle', () => { if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
+  // Titles keep a readable size during a gesture: the world's title scale waits for the view to settle, so the titles on screen (a handful) get theirs now, on the element.
+  const titled = new Set();
+  function titlesNow(v) {
+    const lf = view.labelScale(v.z);
+    if (lf === view.settledLabelScale() && !titled.size) return;
+    const b = view.stageBox(), m = 0.25;
+    const x0 = (-v.x - b.width * m) / v.z, x1 = (b.width * (1 + m) - v.x) / v.z, y0 = (-v.y - b.height * m) / v.z, y1 = (b.height * (1 + m) - v.y) / v.z;
+    for (const sec of sections.values()) {
+      if (sec.culled || !sec.pos || !sec.size.w) continue;
+      if (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 * lf > y1 || sec.pos.y + sec.size.h < y0) continue;
+      if (sec.headLf === lf) continue;
+      const head = sec.el.querySelector('.cmp-head');
+      if (head) { head.style.setProperty('--lf', String(lf)); sec.headLf = lf; titled.add(sec); }
+    }
+  }
+  ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--lf'); sec.headLf = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
   ctx.on('select', () => {
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));

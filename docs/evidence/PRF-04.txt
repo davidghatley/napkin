@@ -1,7 +1,7 @@
 PRF-04
-PASS: pan only: trace frame p50 16.67, p95 19.10 ms raw / 16.67 in whole vsyncs, 46/299 frames over 17.7 ms (2 a missed vsync, 0 dropped), 2 missed vsyncs by draw interval, 0 main-thread tasks over 16.7 ms (max 13.4), rAF p95 16.70 ms (0/406 over 17.7) | pan with zoom bursts: trace frame p50 16.64, p95 19.32 ms raw / 16.67 in whole vsyncs, 35/296 frames over 17.7 ms (3 a missed vsync, 0 dropped), 3 missed vsyncs by draw interval, 0 main-thread tasks over 16.7 ms (max 8.5), rAF p95 16.80 ms (0/411 over 17.7).
+FAIL: pan: raw p95 18.21 ms, whole-vsync p95 16.67 ms, frames >=25 ms 0/301 (0.0%), >=33 ms 0, dropped 0, 0 long tasks (max 8.9 ms), selection on screen 100% of frames, 5 components drawn | pan+zoom: raw p95 19.18 ms, whole-vsync p95 16.67 ms, frames >=25 ms 0/299 (0.0%), >=33 ms 0, dropped 0, 0 long tasks (max 8.3 ms), selection on screen 81% of frames, 5 components drawn | sweep+zoom: raw p95 20.20 ms, whole-vsync p95 16.67 ms, frames >=25 ms 6/292 (2.1%), >=33 ms 5, dropped 0, 0 long tasks (max 9.4 ms), selection on screen 4% of frames, 11 components drawn | overview 6% sweep+zoom: raw p95 26.03 ms, whole-vsync p95 33.33 ms, frames >=25 ms 33/510 (6.5%), >=33 ms 5, dropped 51, 79 long tasks (max 52.7 ms), selection on screen 3% of frames, 53 components drawn.
 
 Re-run: node bench/perf.js --id PRF-04
-Measured: 2026-10-22T08:43:43.571Z
+Measured: 2026-10-22T09:12:26.417Z
 v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
 Raw samples and method: docs/evidence/PRF-04.json

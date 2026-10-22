@@ -54,6 +54,8 @@ export function createView(ctx, stageEl, worldEl) {
     if (labelsStale) labels();
     ctx.emit('viewsettle', { ...v });
   }
+  view.labelScale = (z) => Math.round(clamp(1 / z, 1, 16) * 20) / 20; // the title scale for a zoom, as labels() quantises it
+  view.settledLabelScale = () => Number(worldEl.dataset.lf || 1);
   view.get = () => ({ ...v });
   function set(next, { animate = false, duration = 220, anchor = null, gesture = false } = {}) {
     next = { x: next.x, y: next.y, z: clamp(next.z, MIN_Z, MAX_Z) };
