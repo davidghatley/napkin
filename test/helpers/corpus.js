@@ -27,6 +27,13 @@ const FORMATS = {
   commentLines: (t) => t.replace(/^(\s+)(\w+: [^\n]*,)(\r?)$/gm, (m, ind, rest, cr, off) => (off % 2 === 0 ? `${ind}// between${cr}\n${ind}${rest}${cr}` : m)),
   blankGroups: (t) => t.replace(/^(\s+\w+: [^\n]*,)(\r?)\n(?=\s+\w+: )/gm, (m, a, cr, off) => (off % 2 === 0 ? `${a}${cr}\n${cr}\n` : m)),
   jsxComments: (t) => t.replace(/^(\s+)(<\w+ data-n=)/gm, (m, ind, rest, off) => (off % 2 === 0 && !/return/.test(t.slice(Math.max(0, off - 12), off)) ? `${ind}{/* hero */}\n${ind}${rest}` : m)),
+  // a comment after an element on its own line, and style blocks squeezed onto one line with comments between and after the entries
+  jsxTrailing: (t) => t.replace(/^(\s+<\w+ data-n=[^\n]*?(?:\/>|<\/\w+>))(\r?)\n(?!\s*\);)/gm, (m, a, cr, off) => (off % 2 === 0 ? `${a} {/* tail */}${cr}\n` : m)),
+  compactObjects: (t) => t.replace(/^(\s+)(\w+): \{\r?\n((?:\s+\w+: [^\n{}]*,\r?\n)+)\s+\},(\r?)$/gm, (m, ind, key, body, cr, off) => {
+    if (off % 2) return m;
+    const items = body.trim().split(/,\r?\n\s*/).map((x) => x.replace(/,$/, '').trim()).filter(Boolean);
+    return `${ind}${key}: { ${items.map((x, i) => (i === 0 && items.length > 1 ? `${x}, /* tight */` : i < items.length - 1 ? `${x},` : x)).join(' ')} }, // ${key}${cr}`;
+  }),
   extraBlankLines: (t) => t.replace(/^(function s|const variants)/gm, '\n$1'),
   noFinalNewline: (t) => t.replace(/\n$/, ''),
   crlf: (t) => (t.includes('\r') ? t : t.replace(/\n/g, '\r\n')),
@@ -37,7 +44,7 @@ export function makeCorpus(dir, n = 40, seed = 40, { skip = [] } = {}) {
   const rand = rng(seed);
   const pick = (a) => a[Math.floor(rand() * a.length)];
   const files = [];
-  const NEW = ['trailingComments', 'commentLines', 'blankGroups', 'jsxComments', 'noTrailingCommas', 'semicolonlessInterface'];
+  const NEW = ['trailingComments', 'commentLines', 'blankGroups', 'jsxComments', 'jsxTrailing', 'compactObjects', 'noTrailingCommas', 'semicolonlessInterface'];
   const formats = [...Object.keys(FORMATS), ...NEW, ...NEW].filter((f) => !skip.includes(f)); // (the comment and blank-line shapes are drawn more often)
   for (let i = 0; i < n; i++) {
     const name = `${NAMES[i % NAMES.length]}${i >= NAMES.length ? i : ''}`;

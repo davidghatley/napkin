@@ -167,6 +167,11 @@ export function budget(edit, before, after, ctx) {
   const A = index(before).byId;
   const appends = (edit.op === 'set' && edit.value !== null && !edit.path.split('.')[1].startsWith('@') && edit.path.split('.')[1] !== 'text' && (edit.variant ? before.variants?.[Object.keys(edit.variant)[0]]?.[Object.values(edit.variant)[0]]?.[edit.path.split('.')[0]]?.[edit.path.split('.')[1]] === undefined : A.get(edit.path.split('.')[0])?.style[edit.path.split('.')[1]] === undefined))
     || (edit.op === 'insert' && Object.keys(edit.node.style || {}).length > 0);
+  // adding a property to a block written on one line (`id: { a: 1, b: 2 },`) changes that line
+  const nodeId = edit.op === 'set' ? edit.path.split('.')[0] : null;
+  const compact = nodeId && new RegExp(`^\\s*['"]?${nodeId}['"]?: \\{ .*\\}`, 'm').test(ctx.textBefore);
+  if (appends && compact) return { add: b.add + 1, del: b.del + 1 };
+  if (compact && edit.op === 'set' && edit.value === null && !edit.variant) return { add: b.add + 1, del: b.del }; // removing one of the entries leaves the (shorter) line behind
   return appends && commaless(ctx.textBefore) ? { add: b.add + 1, del: b.del + 1 } : b;
 }
 function budgetWithSlack(edit, before, after, ctx) {

@@ -41,6 +41,7 @@ function emit(key, value, d, indent, unit, eol) {
   return `${indent}${keySrc(key)}: {${eol}${Object.entries(value).map(([k, v]) => emit(k, v, d - 1, indent + unit, unit, eol)).join('')}${indent}},${eol}`;
 }
 const ownLines = (text, node) => /^[ \t]*$/.test(text.slice(lineStart(text, node.start), node.start)) && /^[ \t]*,?[ \t]*(\/\/[^\n]*|\/\*[^\n]*?\*\/[ \t]*)?(\r?\n|$)/.test(text.slice(node.end)); // (a trailing comment is part of the line)
+const flatEntry = (k, v, d) => `${keySrc(k)}: ${d === 0 ? litSrc(v) : '{ ' + Object.entries(v).map(([a, b]) => flatEntry(a, b, d - 1)).join(', ') + ' }'}`;
 function syncObj(text, obj, bef, aft, d, st) {
   const eol = EOL(text);
   const out = [];
@@ -51,14 +52,18 @@ function syncObj(text, obj, bef, aft, d, st) {
   const removed = Object.keys(bef).filter((k) => !(k in aft));
   const added = Object.keys(aft).filter((k) => !(k in bef));
   if (!Object.keys(aft).length && props.length) return [{ start: obj.start, end: obj.end, text: '{}' }];
-  if (!props.length || !props.every((p) => ownLines(text, p))) { // empty, or written inline: print the whole object
+  if (!props.length) { // empty: print the whole object
     if (same(bef, aft)) return [];
     const body = Object.entries(aft).map(([k, v]) => emit(k, v, d, memberIndent, unit, eol)).join('');
     return [{ start: obj.start, end: obj.end, text: body ? `{${eol}${body}${closeIndent}}` : '{}' }];
   }
+  // entries written several to a line (`{ a: 1, /* c */ b: 2 }`) are edited in place, comments and all
   for (const k of removed) {
     const p = findProp(obj, k);
-    out.push({ start: lineStart(text, p.start), end: lineEnd(text, p.end), text: '' });
+    if (ownLines(text, p)) { out.push({ start: lineStart(text, p.start), end: lineEnd(text, p.end), text: '' }); continue; }
+    const next = props[props.indexOf(p) + 1];
+    if (next) { const m = text.slice(p.end, next.start).match(/^[ \t]*,[ \t]*/); out.push({ start: p.start, end: p.end + (m ? m[0].length : 0), text: '' }); }
+    else out.push({ start: p.start - text.slice(0, p.start).match(/[ \t]*$/)[0].length, end: p.end, text: '' });
   }
   for (const k of Object.keys(aft)) {
     if (!(k in bef)) continue;
@@ -83,7 +88,16 @@ function syncObj(text, obj, bef, aft, d, st) {
     }
     for (const [key, g] of groups) {
       if (key.startsWith('k:')) continue;
-      if (g.anchor) {
+      if (g.anchor && !ownLines(text, g.anchor)) { // the anchor shares its line with other entries: add inside the line
+        const flat = (k) => `${keySrc(k)}: ${d === 0 ? litSrc(aft[k]) : '{ ' + Object.entries(aft[k]).map(([a, b]) => flatEntry(a, b, d - 1)).join(', ') + ' }'}`;
+        const items = added.filter((k) => groups.get(`k:${k}`)?.anchor === key).map(flat);
+        const comma = text.slice(g.anchor.end).match(/^[ \t]*,/);
+        if (comma) out.push({ start: g.anchor.end + comma[0].length, end: g.anchor.end + comma[0].length, text: ` ${items.join(', ')},` });
+        else out.push({ start: g.anchor.end, end: g.anchor.end, text: `, ${items.join(', ')}` });
+      } else if (!g.anchor && live[0] && !ownLines(text, live[0])) {
+        const items = added.filter((k) => groups.get(`k:${k}`)?.anchor === key).map((k) => `${keySrc(k)}: ${d === 0 ? litSrc(aft[k]) : '{ ' + Object.entries(aft[k]).map(([a, b]) => flatEntry(a, b, d - 1)).join(', ') + ' }'}`);
+        out.push({ start: live[0].start, end: live[0].start, text: `${items.join(', ')}, ` });
+      } else if (g.anchor) {
         if (!removed.includes(keyName(g.anchor.key)) && !/^[ \t]*,/.test(text.slice(g.anchor.end))) out.push({ start: g.anchor.end, end: g.anchor.end, text: ',' }); // hand-written, no trailing comma
         const at = lineEnd(text, g.anchor.end);
         out.push({ start: at, end: at, text: (at === text.length && !text.endsWith('\n') ? eol : '') + g.lines.join('') });
@@ -244,7 +258,9 @@ function jsxPrinter(text, jsx, before, st) {
   const reuse = (n, to) => {
     const el = els.get(n.id);
     const old = lineIndent(text, el.start);
-    return text.slice(el.start, el.end).split(/\r?\n/).map((l, i) => (i === 0 ? l : l.startsWith(old) ? to + l.slice(old.length) : l)).join(eol);
+    const body = text.slice(el.start, el.end).split(/\r?\n/).map((l, i) => (i === 0 ? l : l.startsWith(old) ? to + l.slice(old.length) : l)).join(eol);
+    const tail = text.slice(el.end, lineEnd(text, el.end)).match(/^[ \t]*(\{\/\*.*?\*\/\})[ \t]*(\r?\n|$)/)?.[1]; // a `{/* ... */}` after it on its last line travels with it
+    return tail ? `${body} ${tail}` : body;
   };
   // The opening tag: on one line if `<tag attrs>` (plus `tail`) fits, else one attribute per line.
   const open = (n, at, selfClose, tail = '') => {
@@ -290,7 +306,8 @@ function jsxSplices(text, parts, before, after, st) {
   const jp = jsxPrinter(text, parts.jsx, before, st);
   const { print, els, A, eol } = jp;
   const out = [];
-  const onOwnLines = (el) => /^[ \t]*$/.test(text.slice(lineStart(text, el.start), el.start)) && /^[ \t]*(\r?\n|$)/.test(text.slice(el.end));
+  // an element on lines of its own (only a trailing comment may share the last line)
+  const onOwnLines = (el) => /^[ \t]*$/.test(text.slice(lineStart(text, el.start), el.start)) && /^[ \t]*(\{\/\*.*?\*\/\}[ \t]*)?(\r?\n|$)/.test(text.slice(el.end));
   const whole = (n, el) => out.push({ start: el.start, end: el.end, text: print(n, indentOfLine(text, el.start)) });
   const walk = (n, old) => {
     const el = els.get(n.id);
@@ -363,7 +380,9 @@ function jsxSplices(text, parts, before, after, st) {
       (groups.get(key) ?? groups.set(key, []).get(key)).push(`${childIndent}${print(c, childIndent)}${eol}`);
     }
     for (const [key, lines] of groups) {
-      const at = key ? lineEnd(text, els.get(key).end) : lineEnd(text, el.openingElement.end);
+      // after the previous sibling that stays; with none, right before the first element child (after any comments that open the element)
+      const first = old.children.length ? els.get(old.children[0].id) : null;
+      const at = key ? lineEnd(text, els.get(key).end) : first ? lineStart(text, first.start) : lineEnd(text, el.openingElement.end);
       out.push({ start: at, end: at, text: lines.join('') });
     }
   };
