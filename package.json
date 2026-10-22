@@ -8,11 +8,12 @@
     "node": ">=26"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 test/",
+    "test": "NODE_OPTIONS=\"--import=$PWD/test/helpers/cleanup.js\" node --test --test-concurrency=1 test/",
     "start": "node src/server.js --port 4810",
     "mcp": "node src/mcp.js",
     "demo": "DEMO_OUT=docs/demo node --test test/10-demo.test.js",
-    "evidence:canvas": "EVIDENCE_OUT=docs/evidence node --test --test-force-exit test/14-canvas-look.test.js"
+    "evidence:canvas": "EVIDENCE_OUT=docs/evidence node --test --test-force-exit test/14-canvas-look.test.js",
+    "pretest": "find \"${TMPDIR:-/tmp}\" -maxdepth 1 -name 'napkin-*' -mmin +60 -exec rm -rf {} + 2>/dev/null; true"
   },
   "dependencies": {
     "@babel/parser": "7.29.9",
