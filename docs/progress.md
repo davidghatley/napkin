@@ -172,7 +172,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 - Blind bars: two judges from different model families (Sonnet, Codex). Codex runs twice with the image order swapped; a verdict that flips counts as a tie. A row passes only when both judges give a win or tie.
 - 0005 amendment: with an `agents` key in napkin.json, unlisted names default to read; Host/Origin guard on every route.
 - WPC-04 scope: docs/decisions/*.md are dated design records and are excluded from "every TSX example in docs/" (0003 shows an elided sketch).
-- PRF-04 measure (pending David): on this machine (headless, CPU raster) even a trivial compositor-only page reads raw p95 ~18.2 ms from symmetric presentation-timestamp jitter, so the bar is read as p95 in whole vsyncs <= 16.7 ms with <= 2% missed or dropped frames. The bar text in DREAM.md is unchanged; David decides whether to accept this reading.
+- PRF-04 (David, 2026-10-22): merge area/pan as a known limit after a regression critic. Bar read as raw p95 <= max(16.7 ms, same-run trivial-page floor + 1 ms) with <= 2% frames >= 25 ms. Pan meets it; sweep+zoom stays ~20 ms (un-cull raster) and is recorded as a known limit, not a pass. Earlier "~18.2 ms floor" premise did not reproduce (floor 16.9 ms).
 
 ## Incidents
 
