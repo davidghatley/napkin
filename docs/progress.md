@@ -109,11 +109,11 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | FEEL-05 | FEEL | canvas | pass | walk 1 pass; keys critic: 15 keys keyboard-only, diff 1 line | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
 | SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
 | SCN-2 | SCN | whole | pass | critic walk cold: accept 3/4, rejected value in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
-| SCN-3 | SCN | whole | critic-pass | critic cold walk: 280x95 canvas and app, 2 px <=2/255 (antialiased corner) | docs/evidence/SCN-3.txt | b96f89d |
+| SCN-3 | SCN | whole | pass | critic cold walk: 280x95 canvas and app; merged | docs/evidence/SCN-3.txt | 5707a23 |
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
-| WPC-01 | WPC | fidelity | critic-pass | critic: 83-node adversarial component 0 px diff; S3 280x95 both | test/fidelity/cell-isolation.test.js | b96f89d |
-| WPC-02 | WPC | fidelity | critic-pass | critic r2: 58 var() fallbacks hold in live, ghost, play, history; tokens identical live/ghost | test/fidelity/cell-isolation.test.js | 862bc69 |
+| WPC-01 | WPC | fidelity | pass | critic pass; merged, suite 555/560 0 fail | test/fidelity/cell-isolation.test.js | 5707a23 |
+| WPC-02 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/cell-isolation.test.js | 5707a23 |
 | WPC-03 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
 | WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
@@ -127,7 +127,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-13 | WPC | keys | building | critic: works by mouse; Undo not keyboard-activatable; text color dot dead: fixing | docs/evidence/walk-1/ | c5f48be |
 | WPC-14 | WPC | keys | building | critic: banner/network/EACCES leaks; invalid values written silently: fixing | docs/evidence/walk-1/ | c5f48be |
 | WPC-15 | WPC | keys | building | critic: 1440 ok; 1280x720 toolbar overlaps Jump to: fixing | docs/evidence/walk-1/ | c5f48be |
-| WPC-16 | WPC | fidelity | critic-pass | critic r2: banner and Next name the same line; edited line in 9 of 11 cases, +-1 on reflow/multi-line attr | test/fidelity/broken-line.test.js | 862bc69 |
+| WPC-16 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/broken-line.test.js | 5707a23 |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
 | WPC-19 | WPC | agents | critic-pass | critic: ~170 interleaved races, 0 lost | test/agents/agents3.test.js | 6d5fce2 |
