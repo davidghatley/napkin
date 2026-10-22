@@ -45,34 +45,40 @@ SOAK=1 node --test test/engine/bench.test.js     # 60 s soak, writes REL-04-60s 
   - `PRF-08` types into the padding field with focus kept; timed from the `input` event to the
     selected node showing the new padding (the canvas previews while you type; the edit is written
     on commit).
-- `PRF-04` sends real CDP wheel events for five seconds (one every 16 ms without waiting for each
-  acknowledgement; about 300 land and all are handled) on the 200-component canvas while a Chromium
-  trace (Tracing domain) records. Four runs: `pan` (30% zoom, the selected component in the middle of
-  the stage, 12 px per event back and forth about 300 px; about five components on screen, because
-  the components are tall); `pan+zoom` (the same with every twelfth event a Ctrl-wheel zoom step,
-  1.27x, in for a second, out for a second, anchored on the selection); `sweep+zoom` (25 px per event
-  one way for the whole run, about 7,500 px, so new components are un-culled and rasterised throughout;
-  the selection leaves the screen); `overview` (the sweep from 6% zoom, where about fourteen components
-  are on screen and 50 to 60 are drawn). Each run reports: frame time from the compositor's
-  PipelineReporter events (presentation to presentation) raw and rounded to whole vsyncs, frames
-  of at least 25 ms and 33 ms, dropped frames, main-thread long tasks (over 16.7 ms) with the longest,
-  rAF intervals, the share of frames with the selection on screen, and components drawn.
-  The software compositor jitters presentation times by about +/- 2 ms around a steady 60 Hz (a page
-  that only changes a translate3d reads a raw p95 near 18 ms here; the mean is 16.7), so the raw p95
-  is not a missed-vsync measure. The pass test is on whole vsyncs: p95 of the intervals rounded to
-  vsyncs <= 16.7, and at most 2% of frames missed (>= 25 ms) or dropped in the three 30% runs, 3% in
-  the overview run. The benchmark never injects a transform. Known state of the evidence: in the
-  30% runs no main-thread task over 16.7 ms landed in the window in the last eight runs (longest 8
-  to 11 ms), with 0 to 5 frames of 300 at 25 ms or more; the overview run has 4 to 12 dropped frames
-  of about 400 and 5 to 10 long tasks (longest 22 to 35 ms) and passes only some of the time, because
-  every frame that un-culls a component repaints, and layerising the 50-odd drawn components costs
-  about 9 ms. (Earlier versions of this benchmark started at 5% or 23% zoom, with the selection
-  off screen, waited for every acknowledgement, and measured rAF only.)
-  Tradeoffs the pan and zoom path accepts: during a gesture the `--ls` scale of the in-frame chips and
+- `PRF-04` first lays the 200 generated components out as a grid (about square; the stage packs the
+  corpus into one tall column when it is packed zoomed out) and selects the component nearest the middle.
+  It then sends real CDP wheel events for five seconds (one every 16 ms without waiting for each
+  acknowledgement; about 300 land) while a Chromium trace (Tracing domain) records. Four runs:
+  `pan` (30% zoom, scrolling about 370 px back and forth around the selection; it stays on screen),
+  `pan+zoom` (the same with every twelfth event a Ctrl-wheel zoom step, 1.27x, in for a second, out for a
+  second, anchored on the selection), `sweep+zoom` (30%, 25 px per event around a square of about 7,500 px,
+  so components are un-culled and rasterised throughout; the selection leaves the screen) and `overview`
+  (the same sweep from 10%). Reported per run: raw p95 frame time (presentation to presentation, from the
+  compositor's PipelineReporter events), the same rounded to whole vsyncs, frames of at least 25 and 33 ms
+  and the longest frame, dropped frames, main-thread long tasks (over 16.7 ms) with the longest, the
+  components on screen and un-culled (geometry sampled every 100 ms, no layout) and the share of frames with
+  the selection on screen. At 30% zoom the real components are tall: 3 to 10 are on screen (not 30), and 10%
+  zoom shows up to 28.
+  The same run measures two floors in Chromiums of their own: a page that only moves a translate3d every
+  frame, and the same page driven by the same wheel events, with `loadavg` and the number of chromium
+  processes. Pass, every run: raw p95 <= max(16.7, floor + 1) ms, at most 2% of frames >= 25 ms and at most
+  2% dropped. The benchmark never injects a transform.
+  Floor on this machine, five-second runs: raw p95 16.85 to 17.08 ms (0 frames >= 25 ms), with 51 to 66
+  chromium processes alive and a load average of 1.7 to 2.8 (other agents' suites).
+  State at the last commit (three consecutive runs, all FAIL): `pan` passes the frame bar in two of three
+  runs (raw p95 17.3 to 18.5 against a bar of 17.9 to 18.1, 0 to 3 frames of 300 at 25 ms or more, 0 long
+  tasks, longest main-thread task 13 to 15 ms); `pan+zoom` and `sweep+zoom` have raw p95 of about 21 ms and
+  1.4 to 3% of frames at 25 ms or more, with one stall of 200 to 380 ms where the zoom turns round at about
+  1 s (the main thread is not busy then: the compositor is waiting for tiles to rasterise, 100 ms of raster
+  work on the thread pool, on CPU raster with the machine shared); `overview` (120 components drawn) has
+  5 to 10% of frames at 25 ms or more, 30 dropped frames and 11 to 16 long tasks (longest 24 to 30 ms).
+  Where the time went: see docs/engine.md.
+  Tradeoffs the pan and zoom path accepts: during a gesture the `--nk-ls` scale of the in-frame chips and
   axis labels waits for the view to settle (160 ms idle), so they can be the wrong size while you keep
-  moving; titles are kept readable by setting their scale on the few titles on screen; frames that
-  are not yet drawn stay blank until they come within 0.6 viewport (zooming out brings them in only at
-  settle); the settle itself costs one 20 to 40 ms task (title and label restyle) after the gesture.
+  moving; titles are kept readable by setting their scale on the few titles on screen; frames outside 0.12
+  viewport are not drawn until they come inside it (and are invisible, not blank white, until then); a zoom
+  gesture un-culls nothing until it settles; the dot grid is hidden while zooming and redrawn on settle; the
+  settle itself is one 20 to 40 ms task (title and label restyle).
 - `PRF-05`/`PRF-06` apply 2,000 real `store.apply` edits to a 200-component workspace and time
   the incremental esbuild rebuild and the whole apply-to-bundle path. Edit #1 and #2000 are kept.
 - `PRF-07` samples the server's `VmRSS` and the page's live JS heap after an explicit GC.

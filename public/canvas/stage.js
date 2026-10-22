@@ -441,6 +441,7 @@ export function createStage(ctx, root, world, view) {
 
   // ---------------------------------------------------------------------------------------------- culling
   // Far off-screen frames stop being painted (content-visibility), keeping their size. Cheap until a repo is big.
+  const NEAR = 0.12, WIDE = 0.5; // viewports of margin: frames inside are drawn, frames far outside are not (every frame drawn costs about 0.1 ms in every frame that moves the view)
   let cullQueued = false, cullMode = 'exact', trickle = false; // 'exact' (settled, or a programmatic move), 'pan' (a wheel or drag pan) or 'zoom' (a wheel or pinch zoom)
   function cull() {
     cullQueued = false;
@@ -450,7 +451,7 @@ export function createStage(ctx, root, world, view) {
     const { x, y, z } = view.get(), b = view.stageBox();
     const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
     const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
-    const near = box(0.6), wide = box(1.6); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
+    const near = box(NEAR), wide = box(WIDE); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
     const ahead = [];
     for (const [id, sec] of sections) {
@@ -490,10 +491,10 @@ export function createStage(ctx, root, world, view) {
       if (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 * lf > y1 || sec.pos.y + sec.size.h < y0) continue;
       if (sec.headLf === lf) continue;
       const head = sec.el.querySelector('.cmp-head');
-      if (head) { head.style.setProperty('--lf', String(lf)); sec.headLf = lf; titled.add(sec); }
+      if (head) { head.style.setProperty('--nk-lf', String(lf)); sec.headLf = lf; titled.add(sec); }
     }
   }
-  ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--lf'); sec.headLf = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
+  ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.headLf = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
   ctx.on('select', () => {
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));

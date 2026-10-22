@@ -27,7 +27,9 @@ export function createView(ctx, stageEl, worldEl) {
 
   // A gesture (wheel, drag, pinch) moves the world by compositor transform only: nothing that needs a layout or a re-raster of the frames
   // runs per event. The label counter-scale, the zoom band and the overlays are brought exact in settle(), 160 ms after the last event.
-  let labelZ = v.z, labelsStale = false;
+  let zoomedSinceRaster = false, rasterZ = v.z;
+  let labelZ = v.z, labelsStale = false, gridSize = 0, gridW = 0, gridH = 0, gridHidden = false;
+  const grid = document.createElement('div'); grid.id = 'grid'; grid.setAttribute('aria-hidden', 'true'); stageEl.prepend(grid);
   function labels() {
     const { z } = v; labelsStale = false; labelZ = z;
     const ls = Math.round(clamp(1 / z, 1, 3.2) * 20) / 20; // label scale, quantised so it changes rarely
@@ -39,19 +41,29 @@ export function createView(ctx, stageEl, worldEl) {
     if (stageEl.dataset.hdr !== hdr) stageEl.dataset.hdr = hdr;
     if (stageEl.dataset.zoomBand !== band) stageEl.dataset.zoomBand = band;
   }
+  function placeGrid() {
+    const { x, y, z } = v, gs = 24 * z;
+    if (gs !== gridSize || box.width !== gridW || box.height !== gridH) { gridSize = gs; gridW = box.width; gridH = box.height; Object.assign(grid.style, { width: `${box.width + 2 * gs}px`, height: `${box.height + 2 * gs}px`, backgroundSize: `${gs}px ${gs}px` }); }
+    grid.style.transform = `translate3d(${((x % gs) + gs) % gs - gs}px, ${((y % gs) + gs) % gs - gs}px, 0)`; // (it starts one tile up and left of the stage, so the dots reach every edge)
+    if (gridHidden) { gridHidden = false; grid.style.visibility = ''; }
+  }
   function apply(gesture = false) {
     const { x, y, z } = v;
     worldEl.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${z})`;
     if (gesture && z !== labelZ) labelsStale = true; else labels();
     // (not custom properties: a custom property set on #stage is inherited by every element under it, and each pan event would restyle them all)
-    stageEl.style.backgroundPosition = `${x}px ${y}px`; stageEl.style.backgroundSize = `${24 * z}px ${24 * z}px`;
-    ctx.state.zoom = z;
+    stageEl.style.backgroundPosition = `${x}px ${y}px`; // (kept for readers of the stage style; the dots are drawn by #grid)
+    if (gesture && 24 * z !== gridSize && gridSize) { if (!gridHidden) { gridHidden = true; grid.style.visibility = 'hidden'; } } // (a zoom gesture: the dots are redrawn at the new pitch when it settles, not at every step)
+    else placeGrid();
+    ctx.state.zoom = z; if (z !== rasterZ) { rasterZ = z; zoomedSinceRaster = true; }
     if (!document.body.classList.contains('moving')) document.body.classList.add('moving'); clearTimeout(movingTimer); movingTimer = setTimeout(settle, 160);
     ctx.emit('view', gesture ? { ...v, gesture: true } : { ...v });
   }
   function settle() {
     document.body.classList.remove('moving');
     if (labelsStale) labels();
+    if (gridHidden) placeGrid();
+    if (zoomedSinceRaster) { zoomedSinceRaster = false; worldEl.style.willChange = 'auto'; requestAnimationFrame(() => requestAnimationFrame(() => { worldEl.style.willChange = ''; })); }
     ctx.emit('viewsettle', { ...v });
   }
   view.labelScale = (z) => Math.round(clamp(1 / z, 1, 16) * 20) / 20; // the title scale for a zoom, as labels() quantises it

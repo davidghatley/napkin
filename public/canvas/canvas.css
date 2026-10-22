@@ -143,16 +143,17 @@ code:where(:not(:is(.mount, .preview-inner) *)) { font-family: var(--nk-mono); }
 #stage {
   grid-area: stage; position: relative; overflow: clip; contain: layout paint; touch-action: none; user-select: none; outline: none;
   background-color: var(--nk-bg);
-  background-image: radial-gradient(circle at 1px 1px, var(--nk-dot) 1px, transparent 1.4px);
-  background-size: 24px 24px; /* (view.js sets the real size and position inline, at every pan and zoom) */
   background-position: 0 0;
 }
-#stage[data-zoom-band="far"] { background-image: none; }
+/* The dot grid is an element of its own (#grid, made by view.js) on its own layer: a pan only moves it by a transform, so panning repaints nothing (a changed
+   background-position on #stage repainted the page on every wheel event, and every repaint re-layerizes every drawn frame). */
+#grid { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; background-image: radial-gradient(circle at 1px 1px, var(--nk-dot) 1px, transparent 1.4px); }
+#stage[data-zoom-band="far"] #grid { display: none; }
 body[data-pan="ready"] #stage { cursor: grab; }
 body[data-pan="drag"] #stage, body[data-pan="drag"] #stage * { cursor: grabbing !important; }
 body[data-dragging="frame"] #stage * { cursor: grabbing !important; }
 #world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; --nk-ls: 1; }
-body.moving #world { will-change: transform; } /* a layer of its own while the view moves; dropped on settle, so the frames are drawn again at the new scale (crisp text) */
+#world { will-change: transform; } /* a layer of its own, so the first event of a gesture does not promote and rasterise the world; view.js drops it for a moment on settle, so the frames are drawn again at the new scale (crisp text) */
 .cmp { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
 .cmp:not([data-pos]) { visibility: hidden; }
 body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; transition: opacity .18s; }
@@ -160,6 +161,7 @@ body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; 
    every frame (style, pre-paint, layerize) in proportion to their elements, about 17 ms per frame at 200 components (PRF-02, PRF-04). */
 .cmp[data-cull] .frame { box-sizing: border-box; width: var(--nk-w, 200px); height: var(--nk-h, 120px); }
 .cmp[data-cull] .frame > * { display: none; }
+.cmp[data-cull] { visibility: hidden; } /* (a frame nobody can see paints nothing: each painted element is work for every frame that layerizes the page; its box is kept) */
 .cmp[data-presence] .frame { outline: 2px dashed var(--nk-ok); outline-offset: 8px; }
 
 /* (zoom, not transform: scale(): a scale transform on each of 200 titles made each its own paint layer, and re-layerizing them cost 7 to 9 ms on every pan event (PRF-04).
@@ -582,3 +584,7 @@ body[data-empty="1"] #statusbar .hints { visibility:hidden; }
 .cmp-title h3 { flex-shrink:0; max-width:calc(var(--nk-w) - 96px); }
 .cmp .badge:not([hidden]) { flex-shrink:1; min-width:60px; }
 .frame .build-error, .mount .error { color:#9f2633; }
+
+/* The chrome (the layers list has a row per component) is its own stacking context: chunks of a stacking context that did not change are not
+   walked again by the layerize pass that every view change triggers, which cost 2 ms per frame at 200 components (PRF-04). */
+#sidebar, #inspector, #topbar, #statusbar { isolation: isolate; }
