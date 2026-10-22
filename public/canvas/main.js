@@ -41,6 +41,7 @@ import { initMatrix } from './matrix.js';
 import { initPlay } from './play.js';
 import { initInstances } from './instances.js';
 import { initSlots } from './slots.js';
+import { initAgentsLane } from './agents-lane.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -70,8 +71,10 @@ const ctx = {
   fetch: (path, init) => client.fetch(path, init), // fetch with this page's session (identity "you"); use for any /api write
   async sendEdits(component, edits) {
     const c = ctx.state.components.get(component);
-    const r = await client.sendEdits(component, c.revision, edits);
-    $('#error').textContent = r.ok ? '' : plain(r.error);
+    const r = await client.sendEdits(component, ctx.clash?.base(component) ?? c.revision, edits); // clash.js: the revision you saw when you began on the field
+    ctx.clash?.sent(component, r);
+    if (!r.ok && r.stale?.length) ctx.emit('stale', { component, edits, result: r }); // a clash chip shows both values (AGT-10)
+    $('#error').textContent = r.ok || r.stale?.length ? '' : plain(r.error);
     return r;
   },
   hint(text) { const h = $('#hint'); h.textContent = text; clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },
@@ -115,6 +118,7 @@ initSlots(ctx); // CMP-05: slot drop zones
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 await initTokens(ctx); // token source, theme preview and Tokens drawer
 ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
+initAgentsLane(ctx);  // presence, proposals tray + ghost cells, Activity tab, clash chip
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
 
@@ -156,13 +160,9 @@ client.onChange((f) => {
   else if (f.type === 'slots') { stage.render(f.component, true).catch(console.error); }
   else if (f.type === 'build') { if (f.cause && f.ok) stage.render(f.component, true).catch(console.error); } // a component this one shows was edited: draw it again
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
-  else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; }
-  else if (f.type === 'presence') {
-    const sec = document.querySelector(`section.cmp[data-component="${f.component}"]`);
-    if (sec) { if (f.label) sec.dataset.presence = f.label; else delete sec.dataset.presence; }
-    const all = [...document.querySelectorAll('section.cmp[data-presence]')].map((s) => s.dataset.presence);
-    $('#presence').textContent = all.join(' · ');
-  }
+  else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; ctx.emit('agents', f); }
+  else if (f.type === 'presence') ctx.emit('presence', f); // presence.js
+  else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); counts(); }
 });
 

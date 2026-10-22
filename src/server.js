@@ -13,6 +13,8 @@ import { parseArgs } from 'node:util';
 import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
 import { createComponent, createProjectConfig, writeTokens } from './commit.js';
+import { createPresence } from './presence.js';
+import { nodeOfEdit } from './model.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
 import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
 
@@ -36,18 +38,27 @@ const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSide
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
 const broadcast = (obj) => { const f = frame(obj); for (const res of clients) res.write(f); };
-// Presence (F16): what each agent says it is editing. Agents (F21): MCP subscriptions, counted.
-const presence = new Map(); // component -> label
-let agents = 0;
-
-const api = createApi(ws, { broadcast, dir });
+// Presence (AGT-03): what each agent is editing now, with a stable colour per name (src/presence.js). Agents: SSE connections that say ?by=agent&name=<who>.
+const presence = createPresence({ broadcast });
+// A proposal is work in progress too: show the agent on its node while it proposes.
+const PEOPLE = new Set(['you', 'file', 'git', 'unknown']);
+const tint = (by) => (PEOPLE.has(by) || !by ? {} : presence.color(by)); // agents get their presence colour on every frame that names them
+const api = createApi(ws, { dir, colorOf: tint, broadcast: (f) => {
+  if (f.type === 'proposal') {
+    broadcast({ ...f, proposal: { ...f.proposal, ...tint(f.proposal.by) } });
+    if (!f.proposal.adoption && !f.proposal.updated) presence.set(f.proposal.by, { component: f.component, node: nodeOfEdit(f.proposal.edits?.[0]), variant: f.proposal.edits?.[0]?.variant ?? null });
+  } else broadcast(f);
+} });
 ws.events.on('tokens', t => broadcast({ type: 'tokens', ...t }));
 ws.events.on('progress', p => broadcast({ type: 'progress', ...p }));
-ws.events.on('change', (c) => broadcast({ type: 'change', ...c }));
+ws.events.on('change', (c) => {
+  broadcast({ type: 'change', ...c, ...tint(c.by) });
+  // An agent that wrote through the API (not MCP) still shows: the change names who and where. Accepting its proposal is your act, not its work.
+  if (c.by && !PEOPLE.has(c.by) && !c.approvedBy && c.edits?.length) presence.set(c.by, { component: c.component, node: nodeOfEdit(c.edits[0]), variant: c.edits[0].variant ?? null, ttl: 700 }); // an apply ends the agent's presence on that node <= 1 s later, whatever ttl it declared before
+});
 ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
 ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
 ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
-ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
 ws.events.on('preview', (c) => broadcast({ type: 'preview', ...c }));
 ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
 ws.events.on('slots', (s) => broadcast({ type: 'slots', ...s }));
@@ -89,15 +100,17 @@ const server = createServer(async (req, res) => {
       clients.add(res);
       res.write(frame({ type: 'progress', ...ws.progress() }));
       for (const e of ws.entries()) res.write(frame({ type: 'state', ...(await ws.snapshot(e)) }));
-      res.write(frame({ type: 'agents', count: agents }));
-      for (const [component, label] of presence) res.write(frame({ type: 'presence', component, label }));
+      const isAgent = url.searchParams.get('by') === 'agent';
+      const who = (url.searchParams.get('name') || 'agent').slice(0, 40);
+      if (isAgent) presence.connect(who);
+      res.write(frame(presence.agentsFrame()));
+      for (const f of presence.frames()) res.write(frame(f));
       res.write(frame({ type: 'ready' }));
       clients.add(res);
-      const isAgent = url.searchParams.get('by') === 'agent';
-      if (isAgent) { agents++; broadcast({ type: 'agents', count: agents }); }
+      if (isAgent) broadcast(presence.agentsFrame());
       req.on('close', () => {
         clients.delete(res);
-        if (isAgent) { agents--; broadcast({ type: 'agents', count: agents }); }
+        if (isAgent) { presence.disconnect(who); broadcast(presence.agentsFrame()); }
       });
       return;
     }
@@ -105,12 +118,13 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/api/presence') {
       let body = ''; for await (const chunk of req) body += chunk;
       let msg; try { msg = JSON.parse(body); } catch { return json(res, 400, { ok: false, error: 'body is not JSON' }); }
+      const who = api.identify(/^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1]);
+      if (!who) return json(res, 401, { ok: false, error: 'identity required: send "Authorization: Bearer <token>" (POST /api/session { as } gives you one)' });
       const e = ws.find(String(msg?.component ?? ''));
       if (!e) return json(res, 404, { ok: false, error: 'not found' });
-      const { component } = await ws.snapshot(e);
       const label = typeof msg.label === 'string' && msg.label.trim() ? msg.label.slice(0, 120) : null;
-      if (label) presence.set(component, label); else presence.delete(component);
-      broadcast({ type: 'presence', component, label });
+      if (label) presence.set(who, { component: e.id, node: typeof msg.node === 'string' ? msg.node : null, variant: msg.variant && typeof msg.variant === 'object' ? msg.variant : null, label, ttl: msg.ttl });
+      else presence.clear(who);
       return json(res, 200, { ok: true });
     }
 
@@ -122,6 +136,27 @@ const server = createServer(async (req, res) => {
       const r = await ws.bundle(e);
       if (!r.ok) return json(res, 500, { ok: false, error: r.error });
       res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'no-store', 'x-napkin-build-ms': r.ms.toFixed(1) });
+      return res.end(r.code);
+    }
+
+    // The bundle of a pending proposal's result, for the ghost cells (nothing is written).
+    const bp = path.match(/^\/bundle-proposal\/([^/]+)\.js$/);
+    if (req.method === 'GET' && bp) {
+      const p = api.proposals.get(decodeURIComponent(bp[1]));
+      const e = p && ws.find(p.component);
+      if (!e) return json(res, 404, { ok: false, error: 'no such proposal' });
+      let source = p.source;
+      const only = url.searchParams.get('only'); // "0,2": show just those edits (a dry run on the proposal's base; nothing is written)
+      if (only !== null && !p.adoption) {
+        const idx = only.split(',').map(Number);
+        if (idx.some((i) => !Number.isInteger(i) || i < 0 || i >= p.edits.length)) return json(res, 400, { ok: false, error: `only must list edit numbers from 0 to ${p.edits.length - 1}` });
+        const d = await e.store.apply({ baseRevision: p.baseRevision, edits: p.edits.filter((_, i) => idx.includes(i)), by: p.by, dryRun: true });
+        if (!d.ok) return json(res, 409, { ok: false, error: d.error });
+        source = d.source;
+      }
+      const r = await ws.bundleText(e, source);
+      if (!r.ok) return json(res, 500, { ok: false, error: r.error });
+      res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'no-store' });
       return res.end(r.code);
     }
 

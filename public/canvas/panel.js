@@ -472,6 +472,7 @@ function wire(ctx, el) {
       // A batch that changed the file is followed by a render, which redraws the panel after the new pixels (PRF-02).
       // One that changed nothing (same revision) has no render coming: redraw now.
       if (r.revision === was) setTimeout(rerender, 0);
+    } else if (r.stale?.length) { delete ui.errors[key]; rerender(); // clash.js shows a chip with both values
     } else {
       ui.errors[key] = { text: r.error, retry: /^stale revision/.test(r.error) ? { component, edits, opts: { clear, close } } : null };
       rerender();

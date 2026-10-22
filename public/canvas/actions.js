@@ -53,6 +53,11 @@ export const ACTIONS = [
   action('open-inspect', 'Open inspect', 'Status bar: Inspect', [], [], (c) => c.drawer.open('inspect')),
   action('open-assets', 'Open assets', 'Status bar: Assets', [], [], (c) => c.drawer.open('assets')),
   action('open-changes', 'Open changes against git', 'Status bar: Changes', [], [], (c) => c.drawer.open('changes')),
+  action('open-activity', 'Open the activity feed (who did what, live)', 'Status bar: Activity', [], [], (c) => c.drawer.open('activity')),
+  action('activity-nav', 'Activity: move / select and fly to the change', '↑ ↓ · Enter · Space', ['ArrowUp', 'ArrowDown', 'Enter', ' '], []),
+  action('proposals', 'Open the proposals tray and focus the first proposal', 'Alt+P', ['KeyP'], refs('proposals', 'keydown'), (c) => c.proposals.openTray(), 'review'),
+  action('proposals-keys', 'Proposals tray: move / show ghost / accept / reject / fold', '↑ ↓ · Enter · A · R · Escape', ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'a', 'A', 'r', 'R'], refs('proposals', 'keydown')),
+  action('clash', 'Clash chip: use mine or keep theirs', 'Tab to the chip, then Enter', [], []),
   action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
   action('theme', 'Switch light or dark chrome', 'Click the theme button', [], [], () => document.querySelector('#theme-toggle').click(), 'theme'),
 ];
@@ -60,7 +65,7 @@ export const ACTIONS = [
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
   'colorpop.js:keydown': 2, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
-  'play.js:keydown': 1, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
+  'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
   'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run).map((a) => ({ ...a, run: () => a.run(ctx) }));

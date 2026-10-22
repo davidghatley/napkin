@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline';
 import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { connectCanvas } from './canvas-client.js';
+import { nodeOfEdit } from './model.js';
 import { GUIDE } from './guide.js';
 import { editItemSchema } from './mcp-schema.js';
 
@@ -53,7 +54,7 @@ class Unreachable extends Error { constructor(message) { super(explainError(mess
 async function makeRemote() {
   const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) }).catch((e) => { throw new Unreachable(e.message); });
   if (!probe.ok) throw new Error(explainError(`napkin server answered ${probe.status}`));
-  const live = await connectCanvas(BASE, { by: 'agent', identify: false });
+  const live = await connectCanvas(BASE, { by: 'agent', identify: false, name: AGENT });
   live.onChange((ch) => { if (ch.type === 'change' && !ch.mine && ch.origin !== origin) notice(ch); });
   const base = live.origin;
   const sess = await (await fetch(new URL('api/session', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: AGENT, token: process.env.NAPKIN_TOKEN }) })).json();
@@ -67,7 +68,7 @@ async function makeRemote() {
       if ((r.headers.get('content-type') || '').startsWith('image/')) return { status: r.status, png: Buffer.from(await r.arrayBuffer()), ms: Number(r.headers.get('x-napkin-render-ms')) };
       return { status: r.status, json: await r.json() };
     },
-    async presence(component, label) { await fetch(new URL('api/presence', BASE), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component, label }) }).catch(() => {}); },
+    async presence(component, label, node, variant, ttl) { await fetch(new URL('api/presence', BASE), { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${sess.token}` }, body: JSON.stringify({ component, label, node, variant, ttl }) }).catch(() => {}); },
   };
 }
 
@@ -98,12 +99,9 @@ let backendP = null;
 const backend = () => (backendP ??= makeRemote().catch((e) => { if (process.env.NAPKIN_NO_FALLBACK || !(e instanceof Unreachable)) throw e; return makeLocal(); }).catch((e) => { backendP = null; throw e; }));
 
 // Presence (F16): say what this agent is editing while it works; clear it after a quiet moment.
-const quiet = new Map();
-async function presence(b, component, label) {
-  clearTimeout(quiet.get(component));
-  const p = b.presence(component, label);
-  quiet.set(component, setTimeout(() => b.presence(component, null), Number(process.env.NAPKIN_PRESENCE_MS || 1500)));
-  return p;
+// The server clears it after `ttl` ms of quiet (700 ms unless NAPKIN_PRESENCE_MS), and at once if this process disconnects.
+async function presence(b, component, label, edit) {
+  return b.presence(component, label, nodeOfEdit(edit), edit?.variant ?? null, Number(process.env.NAPKIN_PRESENCE_MS || 700));
 }
 function describe(name, a, compName) {
   if (name === 'add_variant') return `${AGENT}: editing ${compName} / ${a.axis}=${a.value}`;
@@ -143,7 +141,7 @@ async function callTool(name, a = {}) {
   }
   if (name === 'apply_edits' || name === 'add_variant') {
     const edits = name === 'add_variant' ? variantEdits(a) : a.edits;
-    if (!a.dryRun) await presence(b, a.component, describe(name, a, a.component));
+    if (!a.dryRun) await presence(b, a.component, describe(name, a, a.component), edits?.[0]);
     const r = ok(await b.call({ method: 'POST', path: `/api/components/${c}/edits`, body: { baseRevision: a.baseRevision, edits, by, origin: b.origin, dryRun: !!a.dryRun, propose: !!a.propose } }));
     if (r.proposed) return { proposed: true, proposal: r.proposal };
     return r.dryRun ? { dryRun: true, revision: r.revision, source: r.source } : { revision: r.revision };

@@ -15,7 +15,7 @@
 // { ok: false, error: 'stale revision: ...' }: the caller reads the component again before retrying (the edit may have landed).
 import { explainError } from './errors.js';
 
-export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {}) {
+export async function connectCanvas(baseUrl, { by = 'you', identify = true, name } = {}) {
   const origin = Math.random().toString(36).slice(2);
   const ctrl = new AbortController();
   const listeners = [];
@@ -28,7 +28,7 @@ export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {
   // Who is writing is decided by the server from this token, not from the request body.
   const newSession = () => (identify ? fetch(new URL('api/session', baseUrl), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: by }), signal: ctrl.signal }).then((r) => r.json()).then((j) => j.token, () => undefined) : Promise.resolve(undefined)); // (no token when the server cannot be reached: writes are then refused by the server, and a reconnect asks again)
   let tokenP = newSession();
-  const stream = () => fetch(new URL(`api/events?by=${encodeURIComponent(by)}`, baseUrl), { signal: ctrl.signal, headers: { accept: 'text/event-stream' } });
+  const stream = () => fetch(new URL(`api/events?by=${encodeURIComponent(by)}${name ? `&name=${encodeURIComponent(name)}` : ''}`, baseUrl), { signal: ctrl.signal, headers: { accept: 'text/event-stream' } });
   const initial = await stream();
   if (!initial.ok) throw new Error(`event stream: HTTP ${initial.status}. Next: check that the napkin server is running at this address, then reload.`);
 

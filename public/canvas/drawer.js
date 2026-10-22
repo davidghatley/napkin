@@ -50,7 +50,7 @@ export function createDrawer(ctx) {
       if (!api.active) return;
       for (const x of tabs.values()) x.btn.setAttribute('aria-pressed', 'false');
       api.active = null; el.hidden = true; delete document.body.dataset.drawer;
-      if (!document.querySelector('#proposals-tray')?.childElementCount) dock.hidden = true; // another lane may still be showing the dock
+      if (!document.querySelector('#dock #proposals-tray')?.childElementCount) dock.hidden = true; // another lane may still be showing the dock
       requestAnimationFrame(() => ctx.stage?.refreshOverlays?.());
       ctx.emit('drawer', { open: null });
     },
