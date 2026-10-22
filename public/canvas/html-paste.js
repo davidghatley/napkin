@@ -6,7 +6,12 @@
 //   3. both are rendered in two identical hidden sandboxes (an iframe each, styled the way React styles elements) and compared: the text
 //      the person would see, the tree shape, every element's box (to 0.5 px) and every computed style property. Any difference refuses the
 //      paste with "napkin can't paste this exactly: <first difference>". Only an exact match is accepted.
-//   pasteHtml(html) -> Promise<{ ok: true, trees } | { ok: false, reason }>;   renderedDiff(htmlA, htmlB) -> Promise<string | null>
+//   pasteHtml(html, { context, written, checking }) -> Promise<{ ok: true, trees } | { ok: false, reason }>
+//     context: the element the nodes will go into; both sandboxes sit inside a clone of its computed style (inherited white-space, colour, font,
+//              direction ..., display, width), so what is checked is what the target will draw;
+//     written: async (trees) => the same nodes read back from the file text the store WOULD write (dryRun), so what is checked is what is stored;
+//     checking: called when the check takes a moment (slow images).
+//   renderedDiff(htmlA, htmlB, opts), diffAgainstMarkup(origHtml, markup, opts) -> Promise<string | null>
 import { TAGS, VOID, unsafeCssValue } from '/src/model.js';
 
 // React appends "px" to a plain number unless the property is one of these (react-dom's unitless list); the nodes we write follow the same rule.
@@ -40,13 +45,14 @@ function styleOf(el) {
     if (name.startsWith('-')) no(`the vendor property ${name} cannot be kept`);
     const prop = camel(name);
     if (!/^[a-z][a-zA-Z]*$/.test(prop)) no(`"${name}" is not a CSS property napkin can write`);
+    if (/[\u2028\u2029]/.test(raw)) no(`the value of ${name} has a line separator (U+2028 / U+2029), which a component file cannot keep`);
     if (unsafeCssValue(raw)) no(`the value of ${name} has a character the dialect cannot hold`);
     out[prop] = NUMERIC.test(raw) && REACT_UNITLESS.has(prop) ? Number(raw) : raw; // plain numbers stay numbers only where React adds no "px"
   }
   return out;
 }
 const edgeSpace = (t) => t.replace(/^ | $/g, '');
-function convert(el) {
+function convert(el, raw = false) {
   const tag = el.localName;
   if (!TAGS.has(tag)) no(`<${tag}> is not an element napkin can write (supported: ${[...TAGS].join(', ')})`);
   const node = { id: STEM[tag] ?? tag, tag, style: {}, children: [] };
@@ -55,7 +61,7 @@ function convert(el) {
     if (k === 'style') node.style = styleOf(el);
     else if ((k === 'src' || k === 'alt') && tag === 'img') {
       if (a.value.length > 500) no('the image address or alt text is longer than 500 characters');
-      if (/[\n`]/.test(a.value)) no(`the ${k} text has a line break or a backtick, which the dialect cannot hold`);
+      if (/[\n`\u2028\u2029]/.test(a.value)) no(`the ${k} text has a line break or a backtick, which the dialect cannot hold`);
       (node.attrs ??= {})[k] = a.value;
     } else if (k === 'class') no(`<${tag}> has a class name; classes cannot be kept, only inline styles`);
     else no(`the attribute ${k} on <${tag}> cannot be kept (only style${tag === 'img' ? ', src and alt' : ''})`);
@@ -65,26 +71,39 @@ function convert(el) {
   const kids = [...el.childNodes].filter((n) => n.nodeType === 1 || n.nodeType === 3);
   const elements = kids.filter((n) => n.nodeType === 1), texts = kids.filter((n) => n.nodeType === 3);
   if (elements.length && texts.some((t) => /[^ \t\r\n]/.test(t.data))) no(`<${tag}> mixes text with other elements; put the text in its own <span>`);
-  if (elements.length) { node.children = elements.map(convert); return node; }
-  let text = texts.map((t) => t.data).join('').replace(/[ \t\r\n]+/g, ' '); // CSS collapses spaces, tabs and line breaks (a form feed is not white space to CSS); pre-like styles are caught by the render check
-  if (!INLINE.has(tag)) text = edgeSpace(text);
+  if (elements.length) { node.children = elements.map((e) => convert(e, raw)); return node; }
+  // 1st try: collapsible white space is one space and a block's edge spaces go (they are never drawn). 2nd try (raw): the text exactly as the
+  // browser holds it, for a target whose white-space or display would show the difference.
+  let text = texts.map((t) => t.data).join('');
+  if (!raw) { text = text.replace(/[ \t\r\n]+/g, ' '); if (!INLINE.has(tag)) text = edgeSpace(text); }
   if (text) {
     if (text.length > 500) no('a text is longer than 500 characters');
     if (text.includes('`')) no('the text has a backtick, which the dialect cannot hold in a text');
+    if (/\n/.test(text)) no('the text has a line break, which the dialect cannot hold in a text');
+    if (/[\u2028\u2029]/.test(text)) no('the text has a line or paragraph separator (U+2028 / U+2029), which a component file cannot keep');
     node.text = text;
   }
   return node;
 }
 
 // ---------------------------------------------------------------------------------------------- the render check
-function sandbox(width = 600) {
+const SKIP = /^(position|top|right|bottom|left|inset.*|margin.*|transform.*|translate|rotate|scale|float|height|min-height|max-height|block-size|min-block-size|max-block-size|visibility|animation.*|transition.*|contain.*|container.*|content-visibility|will-change|perspective.*|cursor|pointer-events|opacity|filter|backdrop-filter|clip.*|mask.*|outline.*|overflow.*|resize|zoom)$/;
+// Both sandboxes sit inside an element that wears the target's computed style, so inherited text properties and the display type are the target's.
+function sandbox(context, width = 600) {
   const f = document.createElement('iframe');
   f.setAttribute('aria-hidden', 'true'); f.tabIndex = -1;
   f.style.cssText = `position:fixed;left:-10000px;top:0;width:${width + 40}px;height:800px;border:0;visibility:hidden;pointer-events:none`;
   document.body.append(f);
   const d = f.contentDocument;
-  d.open(); d.write(`<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><div id="root" style="width:${width}px"></div></body></html>`); d.close();
-  return { frame: f, doc: d, root: d.getElementById('root'), done: () => f.remove() };
+  d.open(); d.write(`<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0"><div id="root"></div></body></html>`); d.close();
+  const root = d.getElementById('root');
+  if (context?.isConnected) {
+    const cs = getComputedStyle(context);
+    for (const p of cs) if (!SKIP.test(p)) root.style.setProperty(p, cs.getPropertyValue(p));
+    if (cs.display === 'none' || cs.display === 'contents') root.style.display = 'block';
+    root.style.overflow = 'visible';
+  } else root.style.width = `${width}px`;
+  return { frame: f, doc: d, root, done: () => f.remove() };
 }
 // What a component with these nodes draws: elements built the way React builds them (style[prop] = value, "px" only where React adds it).
 function build(doc, node) {
@@ -95,10 +114,15 @@ function build(doc, node) {
   for (const c of node.children || []) el.append(build(doc, c));
   return el;
 }
-// Images load (or fail) in their own time; compare only after both sandboxes have settled, so a half-loaded picture never decides the result.
-async function settle(...boxes) {
-  await Promise.all(boxes.flatMap((b) => [b.doc.fonts?.ready, ...[...b.root.querySelectorAll('img')].map((i) => (i.complete ? null : new Promise((r) => { i.addEventListener('load', r); i.addEventListener('error', r); setTimeout(r, 1500); })))]));
+// Images load (or fail) in their own time; compare only after both sandboxes have settled. A remote picture may take a few seconds.
+// Resolves false when an image never settles.
+async function settle(checking, ...boxes) {
+  const imgs = boxes.flatMap((b) => [...b.root.querySelectorAll('img')]).filter((i) => !i.complete);
+  if (imgs.length) checking?.();
+  await Promise.all(boxes.map((b) => b.doc.fonts?.ready));
+  await Promise.all(imgs.map((i) => new Promise((r) => { i.addEventListener('load', r); i.addEventListener('error', r); setTimeout(r, 6000); })));
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 30)));
+  return boxes.every((b) => [...b.root.querySelectorAll('img')].every((i) => i.complete));
 }
 const elementsOf = (root) => [...root.querySelectorAll('*')];
 const r05 = (n) => Math.round(n * 2) / 2;
@@ -122,28 +146,38 @@ function compare(A, B) {
   return null;
 }
 // Two HTML strings (a body fragment each) drawn in separate identical sandboxes; the first difference, or null. Also used by the tests as an oracle.
-export async function renderedDiff(htmlA, htmlB) {
-  const A = sandbox(), B = sandbox();
+export async function renderedDiff(htmlA, htmlB, { context } = {}) {
+  const A = sandbox(context), B = sandbox(context);
   try {
     A.root.innerHTML = htmlA; B.root.innerHTML = htmlB;
-    await settle(A, B);
+    if (!(await settle(null, A, B))) return 'an image did not load';
     return compare(A, B);
   } finally { A.done(); B.done(); }
 }
-
 // The oracle for the tests: the original HTML (as the browser builds it) against markup rendered by real React (react-dom/server) from the written file.
-export async function diffAgainstMarkup(origHtml, markup) {
+export async function diffAgainstMarkup(origHtml, markup, { context } = {}) {
   const doc = new DOMParser().parseFromString('<!doctype html>' + String(origHtml), 'text/html');
-  const A = sandbox(), B = sandbox();
+  const A = sandbox(context), B = sandbox(context);
   try {
     for (const n of doc.body.childNodes) A.root.append(A.doc.importNode(n, true));
     B.root.innerHTML = markup;
-    await settle(A, B);
+    if (!(await settle(null, A, B))) return 'an image did not load';
     return compare(A, B);
   } finally { A.done(); B.done(); }
 }
 
-export async function pasteHtml(html) {
+// Draws the original and the nodes in sandboxes that wear the target's style; the first difference, or null.
+async function verify(doc, trees, { context, checking }) {
+  const A = sandbox(context), B = sandbox(context);
+  try {
+    for (const n of doc.body.childNodes) A.root.append(A.doc.importNode(n, true));
+    for (const t of trees) B.root.append(build(B.doc, t));
+    if (!(await settle(checking, A, B))) return { unsettled: true };
+    return { diff: compare(A, B) };
+  } finally { A.done(); B.done(); }
+}
+
+export async function pasteHtml(html, { context, written, checking } = {}) {
   try {
     const doc = new DOMParser().parseFromString('<!doctype html>' + String(html), 'text/html'); // standards mode, like the page it lands in
     for (const a of [...doc.documentElement.attributes]) if (a.name !== 'lang') no(`the <html> has an attribute (${a.name}) that napkin would drop`);
@@ -153,18 +187,22 @@ export async function pasteHtml(html) {
     if (top.some((n) => n.nodeType === 3 && /[^ \t\r\n]/.test(n.data))) no('there is text outside any element; wrap it in a <span> or <p>');
     const els = top.filter((n) => n.nodeType === 1);
     if (!els.length) no('no element in the snippet');
-    const trees = els.map(convert);
-    // the render check: the original, as the browser built it, against the nodes, as React would draw them
-    const A = sandbox(), B = sandbox();
-    let diff;
-    try {
-      for (const n of doc.body.childNodes) A.root.append(A.doc.importNode(n, true));
-      for (const t of trees) B.root.append(build(B.doc, t));
-      await settle(A, B);
-      diff = compare(A, B);
-    } finally { A.done(); B.done(); }
-    if (diff) no(`napkin can't paste this exactly: ${diff}`);
-    return { ok: true, trees };
+    let firstDiff = null, firstError = null;
+    for (const raw of [false, true]) {
+      let trees;
+      try { trees = els.map((e) => convert(e, raw)); } catch (e) { if (e instanceof Refuse) { firstError ??= e; if (!raw) throw e; break; } throw e; }
+      // what will be stored: the nodes as the model and the writer would put them in the file, read back
+      if (written) {
+        const w = await written(trees);
+        if (!w.ok) no(`napkin can't paste this: ${w.reason}`);
+        trees = w.trees;
+      }
+      const v = await verify(doc, trees, { context, checking });
+      if (v.unsettled) no('an image did not load, so the paste could not be checked; try again, or paste the image as a file');
+      if (!v.diff) return { ok: true, trees };
+      firstDiff ??= v.diff;
+    }
+    no(`napkin can't paste this exactly: ${firstDiff}`);
   } catch (e) {
     if (e instanceof Refuse) return { ok: false, reason: e.message };
     throw e;

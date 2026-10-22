@@ -134,7 +134,19 @@ export function initEditOps(ctx) {
     if (/^\s*<svg[\s>]/i.test(plain)) return pasteImage(t, 'image/svg+xml', new TextEncoder().encode(plain));
     const html = data.getData?.('text/html');
     if (html) {
-      const r = await pasteHtml(html);
+      const comp = ctx.state.components.get(t.s.component), at = t.index ?? t.byId.get(t.parent).children.length;
+      // the check runs against the real target (its inherited style, display and width) and against the file text the store would write
+      const r = await pasteHtml(html, {
+        context: ctx.stage.cellElement(t.s.component, t.parent, t.s.variant),
+        checking: () => say('Checking paste…'),
+        written: async (trees) => {
+          const res = await ctx.fetch(`/api/components/${encodeURIComponent(t.s.component)}/edits`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ baseRevision: comp.revision, dryRun: true, edits: trees.map((tree, i) => ({ op: 'paste', parent: t.parent, index: at + i, tree })) }) });
+          const j = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
+          if (!j.ok) return { ok: false, reason: j.error };
+          const parent = index(j.written).byId.get(t.parent);
+          return { ok: true, trees: parent.children.slice(at, at + trees.length) };
+        },
+      });
       if (!r.ok) { ops.last = { ok: false, kind: 'html', reason: r.reason }; say(`Not pasted: ${r.reason}`); return null; }
       return insert(t, r.trees, null, 'html');
     }

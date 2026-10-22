@@ -1,9 +1,7 @@
-LAY-10: 231 snippets (the critics' corpora plus the cases they listed): 179 accepted and verified exact against real React rendering (text, tree, every box to 0.5 px, every computed style), 52 refused with a reason, 0 approximations.
+LAY-10: 231 snippets (the critics' corpora plus the cases they listed): 188 accepted and verified exact against real React rendering (text, tree, every box to 0.5 px, every computed style), 43 refused with a reason, 0 approximations.
 verify: EVIDENCE=1 node --test --test-force-exit test/24-html-paste.test.js
 
 refusals:
-07 white-space-collapse longhand: napkin can't paste this exactly: the text differs ("a   b" vs "a b")
-08 white-space: pre-wrap: napkin can't paste this exactly: the text differs ("a   b" vs "a b")
 09 important spaced: color is !important, which the dialect has no way to hold
 10 important upper: color is !important, which the dialect has no way to hold
 11 nested b in text: <p> mixes text with other elements; put the text in its own <span>
@@ -11,7 +9,6 @@ refusals:
 20 head style rule: the <head> has <style>, which napkin would drop
 21 body style: the <body> has attributes (style) that napkin would drop
 27 pre tag: <pre> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
-28 text-wrap/ white-space break-spaces: napkin can't paste this exactly: the text differs ("a  b" vs "a b")
 29 ws-only span between: napkin can't paste this exactly: the text differs ("a b" vs "ab")
 36 textarea: <textarea> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
 38 br in text: <p> mixes text with other elements; put the text in its own <span>
@@ -31,18 +28,13 @@ L12 inline-block with space between: napkin can't paste this exactly: the text d
 L14 button spaces: napkin can't paste this exactly: the text differs ("Go Stop" vs "GoStop")
 L23 span display:inline-flex: napkin can't paste this exactly: the text differs ("a b" vs "ab")
 L31 white-space:pre-line: napkin can't paste this exactly: the text differs ("a\nb" vs "a b")
-L33 inherited white-space pre on parent: napkin can't paste this exactly: the text differs ("a   b" vs "a b")
-L34 white-space: PRE caps: napkin can't paste this exactly: the text differs ("a   b" vs "a b")
-L35 white-space via important: napkin can't paste this exactly: the text differs ("a   b" vs "a b")
 L38 comment between with space: napkin can't paste this exactly: the text differs ("a b" vs "ab")
 L50 &lt in text then tag-like: <p> mixes text with other elements; put the text in its own <span>
 L54 css escape backslash: the attribute a\"" on <p> cannot be kept (only style)
 L72 css custom prop uppercase: the custom property --X cannot be kept
-L80 form feed in text: napkin can't paste this exactly: the text differs ("a\fb\u000bc" vs "a b\u000bc")
 L82 br inside: <br> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
 L83 wbr: <p> mixes text with other elements; put the text in its own <span>
 L90 attr alt with newline: the alt text has a line break or a backtick, which the dialect cannot hold
-L92 img no src: napkin can't paste this exactly: <img> src differs
 L95 attr no space between: the attribute id on <p> cannot be kept (only style)
 L98 attr src on non-img: the attribute src on <span> cannot be kept (only style)
 L99 button type: the attribute type on <button> cannot be kept (only style)
@@ -53,4 +45,3 @@ L115 hr: <hr> is not an element napkin can write (supported: div, span, p, butto
 L125 span nested unclosed ws: <div> mixes text with other elements; put the text in its own <span>
 X10 id after style: the attribute id on <div> cannot be kept (only style)
 X11 junk after tag: <p<b> is not an element napkin can write (supported: div, span, p, button, img, a, section, article, header, footer, nav, ul, li, h1, h2, h3, h4, label, strong, em, small)
-X12 form feed: napkin can't paste this exactly: the text differs ("a\fb" vs "a b")
