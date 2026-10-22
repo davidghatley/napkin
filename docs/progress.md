@@ -108,28 +108,32 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
 | FEEL-05 | FEEL | canvas | pass | walk 1: completed keyboard-only, but 86 Tabs to Radius (WPC-07) | docs/evidence/walk-1/FEEL-05.txt | 36daf60 |
 | SCN-1 | SCN | whole | pass | walk 1: done cold (open 836 ms, Cmd-K 1.6 s, drag 1.1 s, diff 1 line); needed a hand fix of the doc's Badge (WPC-04, WPC-18) | docs/evidence/walk-1/SCN-1.txt | 36daf60 |
-| SCN-2 | SCN | whole | building | walk 1 fail; WPC-03 in agents2 | docs/evidence/walk-1/SCN-2.txt | 36daf60 |
+| SCN-2 | SCN | whole | critic-pass | critic walk cold: accept 3/4, rejected #ff00ff in no file, agent told | docs/evidence/SCN-2.txt | 0085d7f |
 | SCN-3 | SCN | whole | building | walk 1 fail; WPC-01/02 in fidelity | docs/evidence/walk-1/SCN-3.txt | 36daf60 |
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
 | WPC-01 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-02 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-03 | WPC | agents | building | lane agents2 (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-03 | WPC | agents | critic-pass | critic: propose create, no file until accept, approvedBy you | test/agents/propose-create.test.js | 0085d7f |
 | WPC-04 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
 | WPC-05 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
 | WPC-06 | WPC | files | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
 | WPC-07 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-08 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-09 | WPC | agents | building | lane agents2 (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-09 | WPC | agents | critic-pass | critic: resolved items name id, outcome, edits, who (partly untested by critic) | test/agents/propose-create.test.js | 0085d7f |
 | WPC-10 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
 | WPC-11 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-12 | WPC | agents | building | lane agents2 (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-12 | WPC | agents | critic-pass | critic: 4 and 10 proposals reachable at 1440x900 | test/agents-ui/propose-create.test.js | 0085d7f |
 | WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-16 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-17 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
 | WPC-18 | WPC | docs | building | lane onboard2 (Codex) | docs/evidence/walk-1/ |  |
+| WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
+| WPC-20 | WPC | agents | open | agents2 critic: Pending proposals (incl. create) vanish on server restart; the agent is not told and its MCP session then fails 'identity required' until restarted. Proposals survive a restart, or the agent gets a dropped event and its session recovers | /tmp/claude-1000/critic-agents2/ |  |
+| WPC-21 | WPC | agents | open | agents2 critic: A name clash with a pending create shows only on Accept; the row has no warning and the agent isn't told. The row marks the clash as soon as it exists; the agent gets an event | /tmp/claude-1000/critic-agents2/ |  |
+| WPC-22 | WPC | agents | open | agents2 critic: Create-proposal ghost is hidden until Show ghost, and then an empty dashed box in the top-left with no preview; tray text truncated ('Toolt…', 'no'). Ghost frame shows the would-be component, placed like a new frame, visible on arrival | /tmp/claude-1000/critic-agents2/ |  |
 
 ## Rounds
 
