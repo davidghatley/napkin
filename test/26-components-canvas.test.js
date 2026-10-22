@@ -28,7 +28,7 @@ test('CMP-10: a 4x4x4 matrix filters and collapses; any cell is reached in two a
       await q(`document.querySelector('.mchip[data-axis=${a0}][data-value=${dims[a0][0]}]').click()`);
       await q(`document.querySelector('.mchip[data-axis=${a0}][data-value=${dims[a0][1]}]').dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }))`);
       assert.equal(await shown(), 32);
-      assert.equal(await q(`document.querySelector('.group .mgrid').style.getPropertyValue('--cols')`), '2');
+      assert.equal(await q(`document.querySelector('.group .mgrid').style.getPropertyValue('--nk-cols')`), '2');
       assert.match(await q(`document.querySelector('.mcount').textContent`), /32 of 64 shown/);
       await q(`document.querySelector('[data-act=show-all]').click()`);
       assert.equal(await shown(), 64);
