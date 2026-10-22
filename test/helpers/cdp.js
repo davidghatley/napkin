@@ -1,5 +1,5 @@
 // Minimal headless-Chromium driver over the DevTools protocol. No dependencies:
-// uses Node's built-in WebSocket client. CPU only (--disable-gpu).
+// uses Node's built-in WebSocket client. CPU only (--disable-gpu) unless NAPKIN_GPU is set (GPU raster; flags in NAPKIN_GPU_FLAGS).
 import { spawnChromium } from '../../src/chromium.js';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,7 +10,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function launchChromium({ width = 1100, height = 700 } = {}) {
   const profile = mkdtempSync(join(tmpdir(), 'napkin-chrome-'));
   const proc = spawnChromium([
-    '--headless=new', '--disable-gpu', '--use-angle=swiftshader', '--no-first-run', '--no-default-browser-check',
+    '--headless=new', ...(process.env.NAPKIN_GPU ? (process.env.NAPKIN_GPU_FLAGS || '--enable-gpu-rasterization --ignore-gpu-blocklist --use-angle=gl --use-gl=angle').split(' ') : ['--disable-gpu', '--use-angle=swiftshader']), '--no-first-run', '--no-default-browser-check',
     `--user-data-dir=${profile}`, '--remote-debugging-port=0', `--window-size=${width},${height}`, 'about:blank',
   ]);
   const portFile = join(profile, 'DevToolsActivePort');
@@ -34,6 +34,12 @@ export async function launchChromium({ width = 1100, height = 700 } = {}) {
   listeners.push((m) => { if (m.method === 'Runtime.consoleAPICalled') consoleLines.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); });
   const api = {
     send, consoleLines,
+    // GPU feature status as the browser reports it (chrome://gpu): needs the browser target, not the page's.
+    async gpuInfo() {
+      const v = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json();
+      const w = new WebSocket(v.webSocketDebuggerUrl); await new Promise((res, rej) => { w.onopen = res; w.onerror = rej; });
+      try { return await new Promise((res, rej) => { w.onmessage = (m) => { const d = JSON.parse(m.data); d.error ? rej(new Error(d.error.message)) : res(d.result); }; w.send(JSON.stringify({ id: 1, method: 'SystemInfo.getInfo' })); }); } finally { w.close(); }
+    },
     onEvent(cb) { listeners.push(cb); return () => listeners.splice(listeners.indexOf(cb), 1); },
     async goto(url) { await send('Page.navigate', { url }); await api.waitFor('document.readyState === "complete"'); },
     async eval(expr) { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; },
