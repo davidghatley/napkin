@@ -16,9 +16,20 @@
   .who h4 { margin-top: 0; }
   @media (max-width: 640px) { .who { grid-template-columns: minmax(0, 1fr); } }
   td .pill { margin-right: .2rem; }
+  figure img[data-full] { cursor: zoom-in; }
+  dialog.lb { border: 0; padding: 0; background: transparent; max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; margin: 0; }
+  dialog.lb::backdrop { background: rgba(10,10,12,.88); }
+  dialog.lb[open] { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6rem; }
+  dialog.lb img { max-width: min(96vw, 1600px); max-height: calc(100vh - 5rem); width: auto; height: auto; border: 1px solid rgba(255,255,255,.25); cursor: zoom-out; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  dialog.lb p { margin: 0; color: #eee; font: 500 12px var(--f-mono); letter-spacing: .06em; text-align: center; padding: 0 16px; }
+  dialog.lb button { position: fixed; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); color: #fff; font: 500 18px var(--f-sans); width: 2.6rem; height: 2.6rem; cursor: pointer; }
+  dialog.lb .x { top: 12px; right: 12px; }
+  dialog.lb .prev { left: 12px; top: 50%; transform: translateY(-50%); }
+  dialog.lb .next { right: 12px; top: 50%; transform: translateY(-50%); }
+  dialog.lb button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 </style>
 
-<div class="runhead"><span><b>napkin</b> · Build Log</span><span>Edition 1.0 · 2026-10-22 · branch feat/core @ 5707a23</span></div>
+<div class="runhead"><span><b>napkin</b> · Build Log</span><span>Edition 1.1 · 2026-10-22 · branch feat/core @ 5707a23</span></div>
 
 <main>
 
@@ -275,14 +286,14 @@
   <p class="deck">Every area of the dream now has working code, tests and evidence on feat/core.</p>
 
   <div class="strip" style="--n: 4">
-    <figure><img src="assets/build/canvas-light.jpg" alt="napkin canvas with layers, variant matrices and the design panel" loading="lazy"><figcaption>Canvas: frames, matrices, panel</figcaption></figure>
-    <figure><img src="assets/build/layout-autolayout.jpg" alt="Auto layout frame with three children and its panel" loading="lazy"><figcaption>Auto layout</figcaption></figure>
-    <figure><img src="assets/build/components-matrix.jpg" alt="Component settings and variant matrix" loading="lazy"><figcaption>Settings and variants</figcaption></figure>
-    <figure><img src="assets/build/tokens-drawer.jpg" alt="Tokens drawer listing token values" loading="lazy"><figcaption>Tokens drawer</figcaption></figure>
-    <figure><img src="assets/build/history-timeline.jpg" alt="History drawer in dark chrome with an undo refusal" loading="lazy"><figcaption>History and undo</figcaption></figure>
-    <figure><img src="assets/build/s2w-2-presence-and-tray.jpg" alt="Agent presence outline and proposals tray" loading="lazy"><figcaption>Agent presence and proposals</figcaption></figure>
-    <figure><img src="assets/build/s2w-1-ghost-frame.jpg" alt="Ghost frame for a component an agent proposed" loading="lazy"><figcaption>Proposed new component</figcaption></figure>
-    <figure><img src="assets/build/sample-40.jpg" alt="The 40-component sample repo at fit" loading="lazy"><figcaption>40-component sample repo</figcaption></figure>
+    <figure><img src="assets/build/canvas-light.jpg" data-full="assets/build/full/canvas-light.jpg" tabindex="0" role="button" alt="napkin canvas with layers, variant matrices and the design panel" loading="lazy"><figcaption>Canvas: frames, matrices, panel</figcaption></figure>
+    <figure><img src="assets/build/layout-autolayout.jpg" data-full="assets/build/full/layout-autolayout.jpg" tabindex="0" role="button" alt="Auto layout frame with three children and its panel" loading="lazy"><figcaption>Auto layout</figcaption></figure>
+    <figure><img src="assets/build/components-matrix.jpg" data-full="assets/build/full/components-matrix.jpg" tabindex="0" role="button" alt="Component settings and variant matrix" loading="lazy"><figcaption>Settings and variants</figcaption></figure>
+    <figure><img src="assets/build/tokens-drawer.jpg" data-full="assets/build/full/tokens-drawer.jpg" tabindex="0" role="button" alt="Tokens drawer listing token values" loading="lazy"><figcaption>Tokens drawer</figcaption></figure>
+    <figure><img src="assets/build/history-timeline.jpg" data-full="assets/build/full/history-timeline.jpg" tabindex="0" role="button" alt="History drawer in dark chrome with an undo refusal" loading="lazy"><figcaption>History and undo</figcaption></figure>
+    <figure><img src="assets/build/s2w-2-presence-and-tray.jpg" data-full="assets/build/full/s2w-2-presence-and-tray.jpg" tabindex="0" role="button" alt="Agent presence outline and proposals tray" loading="lazy"><figcaption>Agent presence and proposals</figcaption></figure>
+    <figure><img src="assets/build/s2w-1-ghost-frame.jpg" data-full="assets/build/full/s2w-1-ghost-frame.jpg" tabindex="0" role="button" alt="Ghost frame for a component an agent proposed" loading="lazy"><figcaption>Proposed new component</figcaption></figure>
+    <figure><img src="assets/build/sample-40.jpg" data-full="assets/build/full/sample-40.jpg" tabindex="0" role="button" alt="The 40-component sample repo at fit" loading="lazy"><figcaption>40-component sample repo</figcaption></figure>
   </div>
 
   <div class="tw"><table>
@@ -322,8 +333,8 @@
   <h2>Walk 1 and its 22 gaps</h2>
   <p class="deck">A fresh Opus agent used napkin from the README alone. Two scenes failed; both now pass.</p>
   <div class="strip" style="--n: 2">
-    <figure><img src="assets/build/walk1-canvas.jpg" alt="The canvas the walk captured, with six components" loading="lazy"><figcaption>Walk 1: six components at fit (FEEL-01 capture)</figcaption></figure>
-    <figure><img src="assets/build/walk1-s3.jpg" alt="ProfileCard with a Button instance at the end of scene S3" loading="lazy"><figcaption>Walk 1: S3 ProfileCard, 312 px in the app vs 280 on the canvas</figcaption></figure>
+    <figure><img src="assets/build/walk1-canvas.jpg" data-full="assets/build/full/walk1-canvas.jpg" tabindex="0" role="button" alt="The canvas the walk captured, with six components" loading="lazy"><figcaption>Walk 1: six components at fit (FEEL-01 capture)</figcaption></figure>
+    <figure><img src="assets/build/walk1-s3.jpg" data-full="assets/build/full/walk1-s3.jpg" tabindex="0" role="button" alt="ProfileCard with a Button instance at the end of scene S3" loading="lazy"><figcaption>Walk 1: S3 ProfileCard, 312 px in the app vs 280 on the canvas</figcaption></figure>
   </div>
   <div class="tw"><table>
     <thead><tr><th>Scene</th><th>Walk 1</th><th>Now</th><th>What changed</th></tr></thead>
@@ -472,10 +483,42 @@
   <div class="num">Appendix B</div>
   <h2>Changelog</h2>
   <dl class="changelog">
+    <dt>Edition 1.1 · 2026-10-22</dt>
+    <dd>Click any still to see it enlarged (1440 px source), with arrow keys to step through and Esc to close. Requested by David.</dd>
     <dt>Edition 1.0 · 2026-10-22</dt>
     <dd>First edition. Covers the build from dream approval (10-21 12:59) to the fidelity merge (10-22 04:38).</dd>
   </dl>
 </section>
 
 </main>
-<div class="foot">napkin · Build Log · Edition 1.0 · 2026-10-22</div>
+<dialog class="lb" aria-label="Enlarged image">
+  <img alt="">
+  <p></p>
+  <button class="x" aria-label="Close">✕</button>
+  <button class="prev" aria-label="Previous image">‹</button>
+  <button class="next" aria-label="Next image">›</button>
+</dialog>
+<script>
+(() => {
+  const imgs = [...document.querySelectorAll('img[data-full]')];
+  const dlg = document.querySelector('dialog.lb'), big = dlg.querySelector('img'), cap = dlg.querySelector('p');
+  let i = 0;
+  const show = n => {
+    i = (n + imgs.length) % imgs.length;
+    const t = imgs[i];
+    big.src = t.dataset.full; big.alt = t.alt;
+    const fc = t.closest('figure')?.querySelector('figcaption');
+    cap.textContent = (fc ? fc.textContent : t.alt) + '  ·  ' + (i + 1) + ' / ' + imgs.length;
+  };
+  imgs.forEach((t, n) => {
+    t.addEventListener('click', () => { show(n); dlg.showModal(); });
+    t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(n); dlg.showModal(); } });
+  });
+  dlg.querySelector('.x').onclick = () => dlg.close();
+  dlg.querySelector('.prev').onclick = e => { e.stopPropagation(); show(i - 1); };
+  dlg.querySelector('.next').onclick = e => { e.stopPropagation(); show(i + 1); };
+  dlg.addEventListener('click', e => { if (e.target === dlg || e.target === big) dlg.close(); });
+  dlg.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') show(i - 1); if (e.key === 'ArrowRight') show(i + 1); });
+})();
+</script>
+<div class="foot">napkin · Build Log · Edition 1.1 · 2026-10-22</div>
