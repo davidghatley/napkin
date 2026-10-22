@@ -113,7 +113,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
 | WPC-01 | WPC | fidelity | critic-pass | critic: 83-node adversarial component 0 px diff; S3 280x95 both | test/fidelity/cell-isolation.test.js | b96f89d |
-| WPC-02 | WPC | fidelity | building | critic: computed styles match, but editor custom properties leak into cells and ghosts lack tokens: fixing | test/fidelity/cell-isolation.test.js | b96f89d |
+| WPC-02 | WPC | fidelity | critic-pass | critic r2: 58 var() fallbacks hold in live, ghost, play, history; tokens identical live/ghost | test/fidelity/cell-isolation.test.js | 862bc69 |
 | WPC-03 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
 | WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
@@ -127,7 +127,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-13 | WPC | keys | building | critic: works by mouse; Undo not keyboard-activatable; text color dot dead: fixing | docs/evidence/walk-1/ | c5f48be |
 | WPC-14 | WPC | keys | building | critic: banner/network/EACCES leaks; invalid values written silently: fixing | docs/evidence/walk-1/ | c5f48be |
 | WPC-15 | WPC | keys | building | critic: 1440 ok; 1280x720 toolbar overlaps Jump to: fixing | docs/evidence/walk-1/ | c5f48be |
-| WPC-16 | WPC | fidelity | building | critic: wrong line when a save mixes a valid edit and a break; Next: hint names parser line: fixing | test/fidelity/broken-line.test.js | b96f89d |
+| WPC-16 | WPC | fidelity | critic-pass | critic r2: banner and Next name the same line; edited line in 9 of 11 cases, +-1 on reflow/multi-line attr | test/fidelity/broken-line.test.js | 862bc69 |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
 | WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
