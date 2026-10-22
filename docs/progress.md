@@ -147,3 +147,8 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 - LAY-06: the grid quantizes positions in parent-local coordinates at any zoom; edge and centre snaps within 4 screen px take priority.
 - Blind bars: two judges from different model families (Sonnet, Codex). Codex runs twice with the image order swapped; a verdict that flips counts as a tie. A row passes only when both judges give a win or tie.
 - 0005 amendment: with an `agents` key in napkin.json, unlisted names default to read; Host/Origin guard on every route.
+
+## Incidents
+
+- 2026-10-21: /tmp (tmpfs, 1,048,576 inodes) filled with ~14,400 leaked `/tmp/napkin-*` test folders while 4-6 suites ran in parallel; every shell on the machine failed with ENOSPC. David approved deleting `/tmp/napkin-*`. Fix on feat/core (65cc4c9): a cleanup preload for every test process and child, Chromium profile removal for dead owners, a pretest sweep. Rule from now on: at most 2 full suites at once. Three critics (agents-ui, tokens, LAY-10) were stopped and are re-run one at a time.
+- 2026-10-21: Codex hit its usage limit (until 6:07 PM) right after finishing the tokens lane; the engine rebase moves to a Sonnet builder.
