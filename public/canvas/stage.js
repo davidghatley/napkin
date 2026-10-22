@@ -206,39 +206,80 @@ export function createStage(ctx, root, world, view) {
     sec.el.dataset.pos = '1';
   }
   const placed = (id) => { const s = ctx.state.components.get(id)?.canvas; return !!s && (s.x !== 0 || s.y !== 0); };
+  // What a frame takes on the canvas besides its body: the title row and filter bar above it (drawn at a size that stays readable,
+  // so in canvas units they grow as the view zooms out) and a gap of at least CLEAR px. Packing reserves it, so frames never overlap.
+  const CLEAR = 24;
+  const headBox = (sec, z) => {
+    const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
+    const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
+    if (head && z < 0.33) { // far out the axis strip shows under the title (hidden now, so measured by its text)
+      const strip = head.querySelector('.axes-strip')?.textContent || '';
+      if (strip) { nat.h += 20; nat.w = Math.max(nat.w, Math.ceil(strip.length * 6.8)); }
+    }
+    return { w: Math.max(sec.size.w, Math.ceil(nat.w * lf)), top: Math.ceil((nat.h + 8) * lf) + CLEAR };
+  };
   // Components with no saved position are packed once (alphabetically, in rows). Nothing is ever re-packed.
+  function pack(ids, taken, z) {
+    let y = taken.length ? Math.max(...taken.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + CLEAR : 0;
+    const boxes = new Map(ids.map((id) => [id, headBox(sections.get(id), z)]));
+    const area = ids.reduce((a, id) => a + (boxes.get(id).w + GAP_X) * (sections.get(id).size.h + boxes.get(id).top), 0);
+    const width = Math.max(1400, ...ids.map((id) => boxes.get(id).w), Math.round(Math.sqrt(area * 1.7)));
+    const out = new Map();
+    const rows = [[]];
+    for (const id of ids) {
+      const { w } = boxes.get(id);
+      const cur = rows.at(-1);
+      const used = cur.reduce((a, i) => a + boxes.get(i).w + GAP_X, 0);
+      if (cur.length && used + w > width) rows.push([id]); else cur.push(id);
+    }
+    for (const row of rows) {
+      if (!row.length) continue;
+      const top = Math.max(...row.map((id) => boxes.get(id).top));
+      y += top;
+      let cx = 0;
+      for (const id of row) { out.set(id, { x: cx, y }); cx += boxes.get(id).w + GAP_X; }
+      y += Math.max(...row.map((id) => sections.get(id).size.h));
+    }
+    return { out, width, bottom: y };
+  }
   function layoutAll() {
     const ids = [...sections.keys()];
     for (const id of ids) if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); }
     const todo = ids.filter((id) => !placed(id) && !auto.has(id)).sort(byName);
     const taken = ids.filter(placed);
-    let y = taken.length ? Math.max(...taken.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + GAP_Y : 0;
-    // rows about 1.7 times wider than tall, so a handful of components fits on screen as one block
-    const area = todo.reduce((a, id) => a + (sections.get(id).size.w + GAP_X) * (sections.get(id).size.h + GAP_Y), 0);
-    SHELF_W = Math.max(1400, ...todo.map((id) => sections.get(id).size.w), Math.round(Math.sqrt(area * 1.7)));
-    let x = 0, rowH = 0;
-    for (const id of todo) {
-      const { w, h } = sections.get(id).size;
-      if (x > 0 && x + w > SHELF_W) { x = 0; y += rowH + GAP_Y; rowH = 0; }
-      auto.set(id, { x, y }); moveTo(id, x, y);
-      x += w + GAP_X; rowH = Math.max(rowH, h);
+    // the reserve depends on the zoom the whole layout will be viewed at, which depends on the reserve: settle it in a few steps
+    const box = view.stageBox();
+    const fitZoom = (res) => { // what Shift+1 will show: the frames and their 36 px title strip, 72 px padding, at most 100%
+      const rects = [...taken.map((id) => ({ x: sections.get(id).pos.x, y: sections.get(id).pos.y, w: sections.get(id).size.w, h: sections.get(id).size.h })), ...todo.map((id) => ({ ...res.out.get(id), w: sections.get(id).size.w, h: sections.get(id).size.h }))];
+      const x0 = Math.min(...rects.map((r) => r.x)), x1 = Math.max(...rects.map((r) => r.x + r.w)), y0 = Math.min(...rects.map((r) => r.y)) - 36, y1 = Math.max(...rects.map((r) => r.y + r.h));
+      return Math.max(1 / 16, Math.min(1, (box.width - 144) / Math.max(1, x1 - x0), (box.height - 144) / Math.max(1, y1 - y0)));
+    };
+    let z = 1, res = pack(todo, taken, z);
+    for (let i = 0; i < 8 && todo.length; i++) {
+      const next = fitZoom(res);
+      if (Math.abs(Math.round(Math.min(16, 1 / next) * 20) - Math.round(Math.min(16, 1 / z) * 20)) <= 1) break;
+      z = next; res = pack(todo, taken, z);
     }
-    shelf = { x, y, h: rowH };
+    for (const id of todo) { const p = res.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
+    SHELF_W = res.width;
+    const last = todo.at(-1);
+    shelf = last ? { x: res.out.get(last).x + headBox(sections.get(last), z).w + GAP_X, y: res.out.get(last).y, h: sections.get(last).size.h } : { x: 0, y: 0, h: 0 };
     laidOut = true;
     ctx.emit('layout', {});
   }
   // A component that appears later goes into the first free slot, so nothing else moves.
   function placeNew(id) {
     if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); return; }
-    const me = sections.get(id), others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([, s]) => ({ x: s.pos.x, y: s.pos.y, w: s.size.w, h: s.size.h }));
-    const { w, h } = me.size;
+    const me = sections.get(id), z = Math.min(1, view.get().z);
+    const others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([k, s]) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
+    const mine = headBox(me, z), { h } = me.size, w = mine.w;
     SHELF_W = Math.max(SHELF_W, w);
-    if (shelf.x && shelf.x + w > SHELF_W) shelf = { x: 0, y: shelf.y + shelf.h + GAP_Y, h: 0 };
-    const hit = o => shelf.x < o.x + o.w + GAP_X && shelf.x + w + GAP_X > o.x && shelf.y < o.y + o.h + GAP_Y * 0.6 && shelf.y + h + GAP_Y * 0.6 > o.y;
-    if (others.some(hit)) shelf = { x: 0, y: Math.max(0, ...others.map(o => o.y + o.h)) + GAP_Y, h: 0 };
-    const pos = { x: shelf.x, y: shelf.y };
-    shelf.x += w + GAP_X; shelf.h = Math.max(shelf.h, h);
-    auto.set(id, pos); moveTo(id, pos.x, pos.y);
+    let x = shelf.x, y = shelf.y;
+    if (x && x + w > SHELF_W) { x = 0; y = y + shelf.h + CLEAR; }
+    const hit = (px, py) => others.some((o) => px < o.x + o.w + GAP_X && px + w + GAP_X > o.x && py - mine.top < o.y + o.h + CLEAR && py + h + CLEAR > o.y);
+    if (hit(x, y)) { x = 0; y = Math.max(0, ...others.map((o) => o.y + o.h)) + CLEAR + mine.top; }
+    shelf = { x: x + w + GAP_X, y, h: Math.max(h, x ? shelf.h : 0) };
+    auto.set(id, { x, y }); moveTo(id, x, y);
   }
 
   // ---------------------------------------------------------------------------------------------- rectangles (canvas units)
@@ -456,6 +497,7 @@ export function createStage(ctx, root, world, view) {
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
+      else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
     }
     suppressClick = Date.now();

@@ -129,6 +129,7 @@ test('composition on the canvas (0004 ops through the panel)', { timeout: 240000
       await L.select('Card2', 'card');
       await L.edit('Card2', [{ op: 'delete', id: 'button' }]);
       const b = await seq('Card2');
+      await q(`napkin.view.fitAll({ animate: false })`); await sleep(300);
       const from = await centerOf(browser, `document.querySelector('section[data-name=Button] .cmp-head h3')`);
       const to = await centerOf(browser, `document.querySelector('section[data-name=Card2] .mount [data-n="title"]')`);
       await io.drag(from.x, from.y, to.x, to.y);

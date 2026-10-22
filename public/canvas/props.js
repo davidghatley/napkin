@@ -7,6 +7,7 @@ import { esc, ICON, errorLine, errors, run, ctxDoc, startDrag } from './cmp-core
 import { renderPanel } from './panel.js';
 
 const forms = {}; // which "add" forms are open
+const ui = { edit: false, notes: new Set() }; // the structure editor is open; settings whose note field was asked for
 export const formOpen = (k) => !!forms[k];
 
 // Types the model accepts today (a number prop arrives with the dialect widening: ask the model, so this follows it).
@@ -16,32 +17,41 @@ export function propTypes(doc) {
 }
 const TYPE_LABEL = { string: 'Text', boolean: 'On / off', enum: 'Choice', number: 'Number', node: 'Content' };
 
-// What each setting does in the component: its text, a hidden element, a slot, an instance's attribute.
+// Where a setting is used, in plain words.
 function uses(doc, name) {
   const out = [];
   (function walk(n) {
-    if (n.textProp === name) out.push(['shows', n.id]);
-    if (n.when === name) out.push(['shown when', n.id]);
-    if (n.slot === name) out.push(['content of', n.id]);
-    for (const [k, v] of Object.entries(n.instance?.props || {})) if (v && typeof v === 'object' && v.prop === name) out.push([`passed to ${n.instance.component}.${k} at`, n.id]);
+    if (n.textProp === name) out.push(`${n.id} text`);
+    if (n.when === name) out.push(`show or hide ${n.id}`);
+    if (n.slot === name) out.push(`${n.id} content`);
+    for (const [k, v] of Object.entries(n.instance?.props || {})) if (v && typeof v === 'object' && v.prop === name) out.push(`${n.instance.component} ${k} in ${n.id}`);
     (n.children || []).forEach(walk);
   })(doc.root);
   return out;
 }
 
-function defaultControl(p, dis) {
-  const id = `propdef-${p.name}`;
+function defaultControl(p, dis, label = true) {
+  const id = `propdef-${p.name}`, nm = esc(p.name);
   if (p.type === 'boolean') {
     const on = p.default === true;
-    return `<div class="seg" role="radiogroup" aria-label="Default of ${esc(p.name)}" id="${id}">
-      <button type="button" role="radio" id="${id}-false" aria-checked="${!on}" data-cmp="bool-default" data-prop="${esc(p.name)}" data-value="false"${dis}>False</button>
-      <button type="button" role="radio" id="${id}-true" aria-checked="${on}" data-cmp="bool-default" data-prop="${esc(p.name)}" data-value="true"${dis}>True</button></div>`;
+    return `<button type="button" role="switch" class="switch" id="${id}" aria-checked="${on}" aria-label="${nm}" data-cmp="bool-default" data-prop="${nm}" data-value="${!on}"${dis}><span class="knob"></span><span class="sw-text">${on ? 'On' : 'Off'}</span></button>`;
   }
   if (p.type === 'enum') {
-    return `<div class="seg wrapseg" role="radiogroup" aria-label="Default of ${esc(p.name)}" id="${id}">${p.options.map((o) => `<button type="button" role="radio" id="${id}-${esc(o)}" aria-checked="${o === p.default}" data-cmp="enum-default" data-prop="${esc(p.name)}" data-value="${esc(o)}"${dis}>${esc(o)}</button>`).join('')}</div>`;
+    return `<div class="seg wrapseg" role="radiogroup" aria-label="${nm}" id="${id}">${p.options.map((o) => `<button type="button" role="radio" id="${id}-${esc(o)}" aria-checked="${o === p.default}" data-cmp="enum-default" data-prop="${nm}" data-value="${esc(o)}"${dis}>${esc(o)}</button>`).join('')}</div>`;
   }
   const num = p.type === 'number';
-  return `<div class="fbox ${num ? 'num' : 'txt'}"><label class="flabel pfx" for="${id}"><span class="lt">Default</span></label><input id="${id}" data-cmp="default" data-prop="${esc(p.name)}" data-kind="${p.type}" autocomplete="off" spellcheck="false" value="${esc(p.default ?? '')}" placeholder="${num ? '0' : 'None'}"${dis} aria-label="Default of ${esc(p.name)}"></div>`;
+  return `<div class="fbox ${num ? 'num' : 'txt'}">${label ? `<label class="flabel pfx" for="${id}"><span class="lt">Default value</span></label>` : ''}<input id="${id}" data-cmp="default" data-prop="${nm}" data-kind="${p.type}" autocomplete="off" spellcheck="false" value="${esc(p.default ?? '')}" placeholder="${num ? '0' : 'Empty'}"${dis} aria-label="${nm}"></div>`;
+}
+
+// The everyday view, like Storybook's Controls: a name and a control that fits the type; the description is a quiet second line.
+function row(doc, p, dis, other) {
+  const nm = esc(p.name), u = uses(doc, p.name);
+  return `<li class="prow" data-prop="${nm}" id="prop-${nm}">
+    <div class="pcol-name"><span class="pn" id="prop-label-${nm}" data-cmp="name-dbl" title="Double-click to edit settings">${nm}</span>${p.description ? `<span class="pdesc" id="prop-note-${nm}">${esc(p.description)}</span>` : ''}</div>
+    <div class="pcol-ctl">${defaultControl(p, dis, false)}</div>
+    ${u.length ? `<p class="pmeta" id="uses-${nm}">Used by: ${esc(u.join(', '))}</p>` : ''}
+    ${errorLine('prop-' + p.name, other)}${errorLine('propdef-' + p.name, other)}${errorLine('desc-' + p.name)}
+  </li>`;
 }
 
 function card(doc, p, i, n, dis, other) {
@@ -56,17 +66,20 @@ function card(doc, p, i, n, dis, other) {
       <button type="button" class="rowbtn" id="prop-down-${nm}" data-cmp="move" data-dir="1" data-prop="${nm}" aria-label="Move ${nm} down" title="Move down"${dis}${i === n - 1 ? ' disabled' : ''}>${ICON.down}</button>
       <button type="button" class="x" id="remove-prop-${nm}" data-action="remove-prop" data-prop="${nm}" aria-label="Remove setting ${nm}" title="Remove"${dis}>×</button>
     </div>
-    <div class="fld full">${p.type === 'enum' ? `<div class="enumrow"><span class="pfx flabel"><span class="lt">Base</span></span>${defaultControl(p, dis)}</div>` : defaultControl(p, dis)}</div>
-    <div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="prop-desc-${nm}"><span class="lt">Note</span></label><input id="prop-desc-${nm}" data-cmp="describe" data-prop="${nm}" value="${esc(p.description ?? '')}" placeholder="What it does (kept as a comment)" autocomplete="off"${dis} aria-label="Description of ${nm}"></div></div>
-    ${u.length ? `<p class="pmeta" id="uses-${nm}">${u.map(([how, id]) => `${esc(how)} <code>${esc(id)}</code>`).join(' · ')}</p>` : ''}
+    <div class="fld full">${p.type === 'enum' ? `<div class="enumrow"><span class="pfx flabel"><span class="lt">Default value</span></span>${defaultControl(p, dis)}</div>` : defaultControl(p, dis)}</div>
+    ${p.description || ui.notes.has(p.name)
+      ? `<div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="prop-desc-${nm}"><span class="lt">Note</span></label><input id="prop-desc-${nm}" data-cmp="describe" data-prop="${nm}" value="${esc(p.description ?? '')}" placeholder="What it does (kept as a comment)" autocomplete="off"${dis} aria-label="Note for ${nm}"></div></div>`
+      : `<button type="button" class="linkbtn" id="add-note-${nm}" data-cmp="add-note" data-prop="${nm}"${dis}>Add note</button>`}
+    ${u.length ? `<p class="pmeta" id="uses-${nm}">Used by: ${esc(u.join(', '))}</p>` : ''}
     ${errorLine('prop-' + p.name, other)}${errorLine('propdef-' + p.name, other)}${errorLine('desc-' + p.name)}
   </li>`;
 }
 
 export function settingsBody(doc, dis, other) {
-  const cards = doc.props.map((p, i) => card(doc, p, i, doc.props.length, dis, other)).join('');
+  const rows = ui.edit ? doc.props.map((p, i) => card(doc, p, i, doc.props.length, dis, other)).join('') : doc.props.map((p) => row(doc, p, dis, other)).join('');
   const types = propTypes(doc);
-  return `${cards ? `<ul class="plain pcards" id="props">${cards}</ul>` : '<p class="hint">No settings yet.</p>'}
+  return `${doc.props.length ? `<div class="phdr"><span class="pcols"><span>Name</span><span>Control</span></span><button type="button" class="minibtn" id="edit-settings" data-cmp="edit" aria-pressed="${ui.edit}"${dis}>${ui.edit ? 'Done' : 'Edit settings'}</button></div>` : ''}
+    ${rows ? `<ul class="plain ${ui.edit ? 'pcards' : 'ptable'}" id="props">${rows}</ul>` : '<p class="hint">No settings yet.</p>'}
     ${forms.prop
       ? `<form data-cmp-submit="add-prop" class="inline addform"><label for="new-prop-name">Name</label><input id="new-prop-name" autocomplete="off" placeholder="label"${dis}>
           <label for="new-prop-type">Type</label><select id="new-prop-type" data-cmp="type"${dis}>${types.map((t) => `<option value="${t}">${t}</option>`).join('')}</select>
@@ -87,6 +100,8 @@ export function wireProps(ctx, el) {
     const { doc } = ctxDoc(ctx);
     const c = b.dataset.cmp, name = b.dataset.prop;
     if (c === 'open' && b.dataset.form === 'prop') { forms.prop = true; rerender(); setTimeout(() => el.querySelector('#new-prop-name')?.focus(), 0); }
+    else if (c === 'edit') { ui.edit = !ui.edit; rerender(); }
+    else if (c === 'add-note') { ui.notes.add(name); rerender(); setTimeout(() => el.querySelector(`#prop-desc-${CSS.escape(name)}`)?.focus(), 0); }
     else if (c === 'close' && b.dataset.form === 'prop') { delete forms.prop; delete errors['add-prop']; rerender(); }
     else if (c === 'move' && doc) {
       const at = doc.props.findIndex((p) => p.name === name) + Number(b.dataset.dir);
@@ -94,6 +109,8 @@ export function wireProps(ctx, el) {
     } else if (c === 'bool-default') await run(ctx, 'propdef-' + name, [{ op: 'setDefault', name, value: b.dataset.value === 'true' }]);
     else if (c === 'enum-default') await run(ctx, 'propdef-' + name, [{ op: 'setDefault', name, value: b.dataset.value }]);
   });
+
+  el.addEventListener('dblclick', (ev) => { if (ev.target.closest('[data-cmp=name-dbl]') && !ui.edit) { ui.edit = true; rerender(); } });
 
   el.addEventListener('change', async (ev) => {
     const t = ev.target;

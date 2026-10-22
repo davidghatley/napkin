@@ -121,7 +121,8 @@ export async function openStore(file, start = {}) {
       commit(loaded.doc, new Set(['file']), by, [{ op: 'adoption' }], origin);
       return { ok: true, revision, doc };
     }
-    if (disk && !dryRun) return { ok: false, error: brokenMessage(file, disk), problem: disk }; // (a dry run may still check the edit against the last good document)
+    // a hand edit that is not valid TSX is a syntax error; one that is valid but outside the dialect makes the file read-only, and says so
+    if (disk && !dryRun) return { ok: false, error: /syntax error/i.test(disk) ? brokenMessage(file, disk) : `read-only: ${disk}`, problem: disk }; // (a dry run may still check the edit against the last good document)
     if (readOnly) return { ok: false, error: `read-only: ${readOnly}` };
     // every revision names a real caller (AGT-05); a dry run makes none
     if (!dryRun && (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown')) return { ok: false, error: 'by is required: every revision names a real caller' };

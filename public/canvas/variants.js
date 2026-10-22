@@ -71,7 +71,7 @@ export function sourceRows(doc, nodeId, cell) {
     let from = null;
     for (const [a, v] of inCell) if (doc.variants?.[a]?.[v]?.[nodeId]?.[prop] !== undefined) from = [a, v]; // the last axis wins, as in resolveStyle
     const also = everywhere.filter(([a, v, st]) => st[prop] !== undefined && !(from && from[0] === a && from[1] === v) && !inCell.some(([ia, iv]) => ia === a && iv === v)).map(([a, v]) => [a, v]);
-    return { prop, value: resolved[prop], from, also };
+    return { prop, value: resolved[prop], from, also, base: node.style?.[prop] };
   });
 }
 
@@ -82,11 +82,12 @@ export function sourcesBody(doc, sel, dis) {
     const p = esc(r.prop), from = r.from ? `${r.from[0]}=${r.from[1]}` : 'base';
     const chip = `<span class="srcchip${r.from ? ' over' : ''}" id="src-chip-${p}">${esc(from)}</span>`;
     const also = r.also.length ? `<span class="also" id="src-also-${p}">also in ${esc(r.also.map(([a, v]) => `${a}=${v}`).join(', '))}</span>` : '';
+    const baseNote = r.from ? `<span class="basev" id="src-basev-${p}" title="Reset puts this back">base ${esc(r.base === undefined ? 'unset' : fmt(r.base))}</span>` : '';
     const buttons = r.from ? `<button type="button" class="minibtn" id="src-reset-${p}" data-cmp="src-reset" data-prop="${p}" data-axis="${esc(r.from[0])}" data-value="${esc(r.from[1])}" title="Remove the ${esc(from)} override; the base value shows again"${dis}>${ICON.reset} Reset</button>
         <button type="button" class="minibtn" id="src-base-${p}" data-cmp="src-base" data-prop="${p}" data-axis="${esc(r.from[0])}" data-value="${esc(r.from[1])}" title="Make this value the base for every variant, and drop the ${esc(from)} override"${dis}>${ICON.base} Move to base</button>` : '';
     return `<li class="srow${r.from ? ' over' : ''}" data-prop="${p}" id="src-${p}" data-source="${esc(from)}">
       <div class="sline"><span class="${r.from ? 'dot' : 'dot off'}" id="src-dot-${p}" role="img" aria-label="${r.from ? `${esc(human(r.prop))} is overridden by ${esc(from)}` : `${esc(human(r.prop))} comes from the base`}"></span><span class="sname">${esc(human(r.prop))}</span>${r.from ? '' : chip}<code class="sval">${esc(fmt(r.value))}</code></div>
-      ${r.from || also ? `<div class="sline sub">${r.from ? chip : ''}${buttons}${also}</div>` : ''}
+      ${r.from || also ? `<div class="sline sub">${r.from ? chip : ''}${baseNote}${buttons}${also}</div>` : ''}
       ${errorLine('src-' + r.prop)}</li>`;
   }).join('');
   return `<ul class="plain srcs" id="sources">${li}</ul>`;

@@ -46,7 +46,7 @@ export function initMatrix(ctx) {
     else {
       if (!ctl) { ctl = document.createElement('div'); ctl.className = 'mctl'; ctl.dataset.nodrag = '1'; sec.querySelector('.cmp-head').append(ctl); }
       const groups = ax.length > 2;
-      const html = ax.map((a) => `<div class="mrow" data-axis="${esc(a.name)}"><span class="mname">${esc(a.name)}</span>${a.options.map((o) => `<button type="button" class="mchip" data-axis="${esc(a.name)}" data-value="${esc(o)}" aria-pressed="${!hidden(a.name, o)}" title="Show only ${esc(o)}. Shift-click adds or removes it.">${esc(o)}</button>`).join('')}</div>`).join('')
+      const html = ax.map((a) => `<div class="mrow" data-axis="${esc(a.name)}"><span class="mname">${esc(a.name)}</span><button type="button" class="mchip mall" data-axis="${esc(a.name)}" data-value="" aria-pressed="${!s.hide[a.name]?.size}" title="Show every ${esc(a.name)}">All</button>${a.options.map((o) => `<button type="button" class="mchip" data-axis="${esc(a.name)}" data-value="${esc(o)}" aria-pressed="${!!s.hide[a.name]?.size && !hidden(a.name, o)}" title="Show only ${esc(o)}. Shift-click adds or removes it.">${esc(o)}</button>`).join('')}</div>`).join('')
         + `<div class="mrow mtools">${filtering ? '<button type="button" class="mtool" data-act="show-all">Show all values</button>' : ''}${groups ? '<button type="button" class="mtool" data-act="collapse-all">Collapse groups</button><button type="button" class="mtool" data-act="expand-all">Expand groups</button>' : ''}<span class="mcount" id="mcount-${esc(id)}"></span></div>`;
       if (ctl.dataset.html !== html) { ctl.innerHTML = html; ctl.dataset.html = html; }
     }
@@ -112,6 +112,7 @@ export function initMatrix(ctx) {
       if (!s.hide[axis].size) delete s.hide[axis];
       changed(id);
     },
+    clearAxis(id, axis) { delete stateOf(id).hide[axis]; changed(id); },
     showAll(id) { stateOf(id).hide = {}; changed(id); },
     collapse(id, groupKey) { const s = stateOf(id); s.collapsed.has(groupKey) ? s.collapsed.delete(groupKey) : s.collapsed.add(groupKey); changed(id); },
     collapseAll(id) { const s = stateOf(id); for (const g of section(id)?.querySelectorAll('.group') || []) if (g.dataset.group !== '{}') s.collapsed.add(g.dataset.group); changed(id); },
@@ -125,7 +126,8 @@ export function initMatrix(ctx) {
     const id = t.closest?.('section.cmp')?.dataset.component;
     if (!id) return;
     const chip = t.closest('.mchip'), tool = t.closest('.mtool'), title = t.closest('.group-title');
-    if (chip) api.filter(id, chip.dataset.axis, chip.dataset.value, { add: ev.shiftKey || ev.metaKey || ev.ctrlKey });
+    if (chip && chip.dataset.value === '') api.clearAxis(id, chip.dataset.axis);
+    else if (chip) api.filter(id, chip.dataset.axis, chip.dataset.value, { add: ev.shiftKey || ev.metaKey || ev.ctrlKey });
     else if (tool) { const a = tool.dataset.act; if (a === 'show-all') api.showAll(id); else if (a === 'collapse-all') api.collapseAll(id); else api.expandAll(id); }
     else if (title && title.closest('.group').dataset.group !== '{}') api.collapse(id, title.closest('.group').dataset.group);
   });

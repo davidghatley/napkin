@@ -15,6 +15,7 @@ test('components panel: settings, axes, sources', { timeout: 180000 }, async (t)
   const { q, browser, io } = L;
   const open = async (sec) => { if (!(await q(`document.querySelector('[data-sec=${sec}]').open`))) await q(`document.querySelector('[data-sec=${sec}] > summary').click()`); await sleep(60); };
   const setField = async (sel, text) => { await q(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); i.focus(); i.value = ${JSON.stringify(text)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); })()`); };
+  const edit = async (on) => { await browser.waitFor(`!!document.querySelector('#edit-settings')`); if ((await q(`document.querySelector('#edit-settings').getAttribute('aria-pressed')`)) !== String(on)) await q(`document.querySelector('#edit-settings').click()`); await sleep(80); };
   const names = async () => (await L.doc('Button')).props.map((p) => p.name);
   const seq = async () => Number(await L.rev('Button'));
   const settle = async (before) => { await browser.waitFor(`napkin.find('Button').seq > ${before}`); await sleep(150); };
@@ -23,6 +24,7 @@ test('components panel: settings, axes, sources', { timeout: 180000 }, async (t)
 
     await t.test('CMP-01: rename updates the interface, the parameter, the text node and v, as ONE revision', async () => {
       await open('props');
+      await edit(true);
       const before = await seq();
       await setField('#prop-name-label', 'caption');
       await settle(before);
@@ -35,6 +37,10 @@ test('components panel: settings, axes, sources', { timeout: 180000 }, async (t)
     });
 
     await t.test('CMP-01: a description is a /** */ comment; reorder with Down and by dragging the grip', async () => {
+      assert.equal(await q(`document.querySelectorAll('#panel [id^=add-note-]').length`), 3, 'a quiet Add note link on each setting until it has a note');
+      assert.equal(await q(`!!document.querySelector('#prop-desc-caption')`), false);
+      await q(`document.querySelector('#add-note-caption').click()`);
+      await browser.waitFor(`!!document.querySelector('#prop-desc-caption')`);
       await setField('#prop-desc-caption', 'The words on the button');
       await browser.waitFor(`document.querySelector('#prop-desc-caption')?.value === 'The words on the button'`);
       await sleep(200);
@@ -53,6 +59,7 @@ test('components panel: settings, axes, sources', { timeout: 180000 }, async (t)
     });
 
     await t.test('CMP-01: add (string, boolean, enum), set defaults, remove', async () => {
+      await edit(false);
       for (const [name, type, extra] of [['note', 'string'], ['dense', 'boolean'], ['tone', 'enum', 'calm, loud']]) {
         await q(`document.querySelector('#add-prop').click()`);
         await browser.waitFor(`!!document.querySelector('#new-prop-name')`);
@@ -66,11 +73,13 @@ test('components panel: settings, axes, sources', { timeout: 180000 }, async (t)
       const doc = await L.doc('Button');
       assert.deepEqual(doc.props.slice(-3).map((p) => [p.name, p.type]), [['note', 'string'], ['dense', 'boolean'], ['tone', 'enum']]);
       let b = await seq();
-      await q(`document.querySelector('#propdef-dense-true').click()`); await settle(b);
+      assert.match(await q(`document.querySelector('#prop-caption .pdesc').textContent`), /The words on the button/, 'the description is a quiet line under the name');
+      await q(`document.querySelector('#propdef-dense').click()`); await settle(b);
       assert.equal((await L.doc('Button')).props.find((p) => p.name === 'dense').default, true);
       b = await seq();
       await setField('#propdef-note', 'hi'); await settle(b);
       assert.equal((await L.doc('Button')).props.find((p) => p.name === 'note').default, 'hi');
+      await edit(true);
       for (const n of ['note', 'dense', 'tone']) { b = await seq(); await q(`document.querySelector('#remove-prop-${n}').click()`); await settle(b); }
       assert.deepEqual(await names(), ['state', 'size', 'caption']);
     });
