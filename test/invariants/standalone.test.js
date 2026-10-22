@@ -68,7 +68,7 @@ test('INV-06: tsc --strict passes over the components and the consumer app', () 
   const shimDir = mkdtempSync(join(tmpdir(), 'napkin-shim-'));
   copyFileSync(app, join(shimDir, 'App.tsx'));
   writeFileSync(join(shimDir, 'App.tsx'), readFileSync(app, 'utf8').replace("'@components/Button'", JSON.stringify(comps.find((f) => f.endsWith('/Button.tsx')).replace(/\.tsx$/, ''))));
-  const ta = typecheck([join(shimDir, 'App.tsx')]);
+  const ta = typecheck([join(shimDir, 'App.tsx'), join(ROOT, 'examples', 'consumer-app', 'assets.d.ts')]);
   console.log(`INV-06: tsc --strict over examples/consumer-app/App.tsx: ${ta.ok ? '0 errors' : ta.output}`);
   assert.equal(ta.ok, true, ta.output);
 });

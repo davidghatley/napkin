@@ -17,7 +17,7 @@ export async function buildApp(componentsDir = components, outDir = out) {
     alias: { '@components': componentsDir }, nodePaths: [join(root, 'node_modules')],
     outfile: join(outDir, 'app.js'), define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'error',
   });
-  writeFileSync(join(outDir, 'index.html'), '<!doctype html><meta charset="utf-8"><title>consumer app</title><div id="app"></div><script type="module" src="app.js"></script>\n');
+  writeFileSync(join(outDir, 'index.html'), '<!doctype html><meta charset="utf-8"><title>consumer app</title><link rel="stylesheet" href="app.css"><div id="app"></div><script type="module" src="app.js"></script>\n');
   return outDir;
 }
 

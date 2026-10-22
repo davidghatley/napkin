@@ -30,11 +30,11 @@ export async function waitFor(fn, timeout = 3000, step = 10) {
 }
 
 // Starts src/server.js on a free port for a components folder.
-export async function startServer(compDir, { execArgv = [], env = {} } = {}) {
+export async function startServer(compDir, { timeout = 5000, execArgv = [], env = {} } = {}) {
   const proc = spawn(process.execPath, [...execArgv, join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let out = '';
   const url = await new Promise((res, rej) => {
-    const t = setTimeout(() => rej(new Error('server did not start: ' + out)), 5000);
+    const t = setTimeout(() => { proc.kill('SIGTERM'); rej(new Error('server did not start: ' + out)); }, timeout);
     const on = (d) => { out += d; const m = out.match(/napkin canvas: (http:\/\/127\.0\.0\.1:\d+\/)/); if (m) { clearTimeout(t); res(m[1]); } };
     proc.stdout.on('data', on); proc.stderr.on('data', (d) => (out += d));
     proc.on('exit', (c) => rej(new Error(`server exited ${c}: ${out}`)));

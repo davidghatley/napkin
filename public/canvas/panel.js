@@ -445,6 +445,7 @@ export function renderPanel(ctx) {
     const f = el.querySelector('#' + CSS.escape(id));
     if (f && 'value' in f && f.type !== 'checkbox') f.value = v;
   }
+  ctx.tokens?.decorate(el, prop => prop === 'stroke-color' ? { value: bp?.c, mixed: bv.mixed } : prop === 'shadow-color' ? { value: sp?.c, mixed: sv.mixed } : val(prop), (prop, value) => ctx.panelCommit(prop, value));
   if (focus?.id) {
     const f = el.querySelector('#' + CSS.escape(focus.id));
     if (f) { f.focus({ preventScroll: true }); try { f.setSelectionRange(focus.s, focus.e); } catch {} }
@@ -525,6 +526,8 @@ function wire(ctx, el) {
   async function commit(prop, raw, id) {
     const s = ctx.state.selection;
     if (!s) return;
+    if (prop === 'stroke-color') { const p = parseBorder(curVal('border' + ui.side)); if (p) return commit('border' + ui.side, `${p.w}px ${p.s} ${raw}`, prop); }
+    if (prop === 'shadow-color') { const p = parseShadow(curVal('boxShadow')); if (p) return commit('boxShadow', `${p.x}px ${p.y}px ${p.b}px ${p.s}px ${raw}`, prop); }
     let v = typeof raw === 'string' ? toValue(raw) : raw;
     if (prop === 'opacity' && typeof v === 'number') v = Math.round(v) / 100; // the panel shows percent, the file holds 0..1
     else if (typeof v === 'number' && F[prop]?.unit === 'px' && /^-?\d*\.?\d+px$/.test(String(curVal(prop)))) v = `${v}px`; // keep '16px' a string, as the file had it
@@ -532,6 +535,8 @@ function wire(ctx, el) {
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
     await run('style-' + prop, s.component, edits, { clear: [id ?? prop] });
   }
+
+  ctx.panelCommit = commit;
 
   // ---- what a node's own box and its parent look like right now (for Fill, pins and grid cells) ----
   function nodeInfo(id) {
