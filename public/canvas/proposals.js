@@ -191,7 +191,7 @@ export function initProposals(ctx) {
     if (S.hiddenNew.has(p.id)) return;
     if (!S.news.has(p.id)) {
       const res = await fetch(`/bundle-proposal/${encodeURIComponent(p.id)}.js`).catch(() => null);
-      if (!res || !res.ok) { if (res) ctx.hint((await res.json().catch(() => ({}))).error || 'could not draw that proposal'); return; }
+      if (!res || !res.ok) { if (res) ctx.hint(plain((await res.json().catch(() => ({}))).error || 'could not draw that proposal')); return; }
       if (!S.list.has(p.id)) return;
       const url = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
       let mod; try { mod = await import(url); } finally { URL.revokeObjectURL(url); }
