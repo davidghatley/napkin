@@ -75,19 +75,26 @@ SOAK=1 node --test test/engine/bench.test.js     # 60 s soak, writes REL-04-60s 
   scaled to stay inside the grid for the same reason.)
   Floor on this machine, five-second runs: raw p95 16.9 ms CPU (0 frames >= 25 ms), 16.9 to 17.0 ms GPU (1
   frame >= 25 ms), with 51 to 66 chromium processes alive and a load average of 0.5 to 2.9.
-  State at the last commit, three consecutive runs each (all FAIL): CPU `pan` raw p95 17.1 to 17.3 ms (bar
-  17.9), 0 to 1 frames of 300 at 25 ms or more, passes; `pan+zoom` 18.5 to 19.5 ms, 0.3 to 2% of frames at
-  25 ms or more (mostly passes the 2% gate, misses the p95 bar by 0.6 to 1.6 ms); `sweep+zoom` 20.9 to 25.4
-  ms, 3.4 to 5.4% of frames at 25 ms or more; `overview` 23 to 24 ms, 1.7 to 3.7%, 7 to 23 dropped frames, 21
-  to 23 long tasks (longest 23 to 31 ms). GPU raster is no better and often worse: `pan` 18.9 to 19.6 ms,
-  `pan+zoom` 18.6 to 25.6 ms and 2.7 to 6% of frames at 25 ms or more, `sweep+zoom` 26 to 29 ms and 6 to 9%,
-  `overview` 23.6 to 23.7 ms and 2 to 3%.
-  Why zoom steps are late: each zoom step makes the compositor re-rasterise the world layer (about 57 raster
-  tasks per step, 31 without `will-change`, counted in a trace), even with `will-change: transform`; a step
-  therefore costs a frame 25 to 30 ms apart from the last. A page of 1,500 plain elements with the same
-  `will-change` layer and the same steps shows no such lateness (p95 17.1), and a zoom step costs the main
-  thread little (under 2 ms alone). Not fixed. What was tried and did not help: tighter and looser culling,
-  un-culling two frames per frame, a transform instead of `zoom` on the titles.
+  State at the last commit, three consecutive runs each, CPU raster (all three FAIL on some scenario):
+  `pan` raw p95 17.1 to 19.1 ms against a bar of 17.9 (passes 2 of 3; 0 to 1 frames of 300 at 25 ms or
+  more); `pan+zoom` 17.7 to 18.2 ms (passes 1 of 3 on the p95 bar, 0.7 to 1.0% of frames at 25 ms or more);
+  `sweep+zoom` 20.2 to 20.7 ms, 1.0 to 2.7% (fails the p95 bar; the 2% share fails in one run); `overview`
+  17.4 to 20.7 ms, 0 to 0.7%, 2 to 4 dropped frames, 4 to 12 long tasks (longest 24 to 27 ms). GPU raster
+  (three runs, floor 17.2 to 19.0 ms because it is noisier): `pan` 18.5 to 19.4 ms, `pan+zoom` 18.8 to 20.1
+  ms, `sweep+zoom` 20.2 to 21.3 ms (1.7 to 2.3% of frames at 25 ms or more), `overview` 20.8 to 22.3 ms, 1.7 to
+  3.4%. GPU raster is no better than CPU raster here.
+  Why zoom steps were late, and what fixed it: each zoom step made the compositor re-rasterise the page
+  (about 100 raster tasks per step, counted in a trace; the 1,500-element page needed none). Three things
+  changed raster at every step: the selection, hover and handle overlays (boxes in the page's root layer,
+  resized or moved at every step: about 30 tasks; now each is a layer of its own, `will-change: transform`,
+  scaled by transform in a gesture, not resized); the dot grid (hidden and shown again, then resized: about
+  9; now moved by transform at its old pitch and redrawn on settle); and the titles (restyled and laid out
+  at every step: about 33; now only when a title is more than 1.4x off its size). That took the count to
+  about 31 per step, which is the frames un-culled by the zoom (real content). Titles can be up to 1.4x off
+  during a gesture; the dots keep their old pitch until it settles. The status bar's percentage and the
+  hover and handle layers cost 2 to 3 tasks each and were left.
+  Still failing: the sweep, where un-culling and rasterising frames at 25 px per event keeps raw p95 about
+  3 ms above the floor.
   Tradeoffs the pan and zoom path accepts: during a gesture the `--nk-ls` scale of the in-frame chips and
   axis labels waits for the view to settle (160 ms idle), so they can be the wrong size while you keep
   moving; titles are kept readable by setting their scale on the few titles on screen; frames outside 0.12

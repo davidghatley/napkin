@@ -45,7 +45,7 @@ export function createView(ctx, stageEl, worldEl) {
     const { x, y, z } = v, gs = 24 * z;
     if (gs !== gridSize || box.width !== gridW || box.height !== gridH) { gridSize = gs; gridW = box.width; gridH = box.height; Object.assign(grid.style, { width: `${box.width + 2 * gs}px`, height: `${box.height + 2 * gs}px`, backgroundSize: `${gs}px ${gs}px` }); }
     grid.style.transform = `translate3d(${((x % gs) + gs) % gs - gs}px, ${((y % gs) + gs) % gs - gs}px, 0)`; // (it starts one tile up and left of the stage, so the dots reach every edge)
-    if (gridHidden) { gridHidden = false; grid.style.visibility = ''; }
+    gridHidden = false;
   }
   function apply(gesture = false) {
     const { x, y, z } = v;
@@ -53,7 +53,7 @@ export function createView(ctx, stageEl, worldEl) {
     if (gesture && z !== labelZ) labelsStale = true; else labels();
     // (not custom properties: a custom property set on #stage is inherited by every element under it, and each pan event would restyle them all)
     stageEl.style.backgroundPosition = `${x}px ${y}px`; // (kept for readers of the stage style; the dots are drawn by #grid)
-    if (gesture && 24 * z !== gridSize && gridSize) { if (!gridHidden) { gridHidden = true; grid.style.visibility = 'hidden'; } } // (a zoom gesture: the dots are redrawn at the new pitch when it settles, not at every step)
+    if (gesture && 24 * z !== gridSize && gridSize) { if (!gridHidden) gridHidden = true; const g = gridSize; grid.style.transform = `translate3d(${((x % g) + g) % g - g}px, ${((y % g) + g) % g - g}px, 0)`; } // (a zoom gesture: the dots keep their pitch and are moved by transform only, then redrawn at the new pitch when it settles: resizing or hiding them repaints a layer at every step)
     else placeGrid();
     ctx.state.zoom = z; if (z !== rasterZ) { rasterZ = z; zoomedSinceRaster = true; }
     if (!document.body.classList.contains('moving')) document.body.classList.add('moving'); clearTimeout(movingTimer); movingTimer = setTimeout(settle, 160);

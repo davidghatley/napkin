@@ -364,7 +364,7 @@ export function createStage(ctx, root, world, view) {
     if (!target?.isConnected || target.closest('[data-cull]')) { box.style.display = 'none'; return; }
     const r = target.getBoundingClientRect();
     const v = view.get(), sb = view.stageBox();
-    cached.set(box, { x: (r.left - sb.left - v.x) / v.z, y: (r.top - sb.top - v.y) / v.z, w: r.width / v.z, h: r.height / v.z, dx: sb.left - base.left, dy: sb.top - base.top, pw: r.width, ph: r.height }); // canvas units, for gestures
+    cached.set(box, { x: (r.left - sb.left - v.x) / v.z, y: (r.top - sb.top - v.y) / v.z, w: r.width / v.z, h: r.height / v.z, dx: sb.left - base.left, dy: sb.top - base.top, bw: r.width, bh: r.height }); // canvas units, for gestures
     box.style.setProperty('--nk-w', `${r.width}px`); box.style.setProperty('--nk-h', `${r.height}px`); // children are placed with transforms from these, so a new size never shifts layout
     Object.assign(box.style, { display: 'block', transform: `translate(${r.left - base.left}px, ${r.top - base.top}px)`, width: `${r.width}px`, height: `${r.height}px` });
     if (label !== undefined) box.dataset.label = label;
@@ -377,9 +377,11 @@ export function createStage(ctx, root, world, view) {
     for (const box of [selectBox, hoverBox, ...extras]) {
       const c = box.style.display === 'block' && cached.get(box);
       if (!c) continue;
-      const w = c.w * v.z, h = c.h * v.z;
-      box.style.transform = `translate(${c.x * v.z + v.x + c.dx}px, ${c.y * v.z + v.y + c.dy}px)`;
-      if (w !== c.pw || h !== c.ph) { c.pw = w; c.ph = h; box.style.setProperty('--w', `${w}px`); box.style.setProperty('--h', `${h}px`); box.style.width = `${w}px`; box.style.height = `${h}px`; }
+      // The box keeps the width and height it was drawn with and is scaled by transform: a changed size repaints the overlay layer, and with it
+      // about 100 raster tasks per zoom step (PRF-04). The full refresh on settle draws it at its size.
+      const sx = c.bw ? c.w * v.z / c.bw : 1, sy = c.bh ? c.h * v.z / c.bh : 1;
+      box.style.transform = `translate(${c.x * v.z + v.x + c.dx}px, ${c.y * v.z + v.y + c.dy}px)${sx === 1 && sy === 1 ? '' : ` scale(${sx}, ${sy})`}`;
+      box.style.transformOrigin = '0 0';
     }
   }
   function refreshOverlays() {
@@ -480,16 +482,17 @@ export function createStage(ctx, root, world, view) {
     queueCull(v.gesture ? (v.z !== was ? 'zoom' : 'pan') : 'exact');
   });
   // Titles keep a readable size during a gesture: the world's title scale waits for the view to settle, so the titles on screen (a handful) get theirs now, on the element.
-  const titled = new Set();
+  const TITLE_STEP = 1.4, titled = new Set();
   function titlesNow(v) {
-    const lf = view.labelScale(v.z);
-    if (lf === view.settledLabelScale() && !titled.size) return;
+    const lf = view.labelScale(v.z), settled = view.settledLabelScale();
+    if (lf === settled && !titled.size) return;
     const b = view.stageBox(), m = 0.25;
     const x0 = (-v.x - b.width * m) / v.z, x1 = (b.width * (1 + m) - v.x) / v.z, y0 = (-v.y - b.height * m) / v.z, y1 = (b.height * (1 + m) - v.y) / v.z;
     for (const sec of sections.values()) {
       if (sec.culled || !sec.pos || !sec.size.w) continue;
       if (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 * lf > y1 || sec.pos.y + sec.size.h < y0) continue;
-      if (sec.headLf === lf) continue;
+      const have = sec.headLf ?? settled;
+      if (Math.max(lf / have, have / lf) < TITLE_STEP) continue; // a title is restyled, laid out and re-rastered each time: only when it is off by more than this
       const head = sec.el.querySelector('.cmp-head');
       if (head) { head.style.setProperty('--nk-lf', String(lf)); sec.headLf = lf; titled.add(sec); }
     }

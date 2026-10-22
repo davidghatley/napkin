@@ -588,3 +588,7 @@ body[data-empty="1"] #statusbar .hints { visibility:hidden; }
 /* The chrome (the layers list has a row per component) is its own stacking context: chunks of a stacking context that did not change are not
    walked again by the layerize pass that every view change triggers, which cost 2 ms per frame at 200 components (PRF-04). */
 #sidebar, #inspector, #topbar, #statusbar { isolation: isolate; }
+
+/* The selection, hover and handle layers are layers of their own: moved or scaled by transform in a gesture, they repaint nothing; as part of the page's
+   root layer each move repainted it, and about 30 raster tasks per zoom step followed (PRF-04). */
+#overlays > *, #handles { will-change: transform; }
