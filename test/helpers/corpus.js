@@ -124,7 +124,7 @@ export const OUT_OF_DIALECT = [
   ['props-rest', swap("{ label = 'Button', size = 'md', state = 'default' }: ButtonProps", "{ label = 'Button', size = 'md', state = 'default', ...rest }: ButtonProps"), '...rest'],
   ['prop-renamed', swap("{ label = 'Button',", "{ label: text = 'Button',"), 'label: text'],
   ['prop-default-expression', swap("label = 'Button'", "label = DEFAULT"), 'DEFAULT'],
-  ['prop-type-number', swap('  label?: string;', '  label?: string;\n  count?: number;'), 'count'],
+  ['prop-type-number-union', swap('  label?: string;', '  label?: string;\n  count?: 1 | 2;'), 'count'],
   ['prop-type-function', swap('  label?: string;', '  label?: string;\n  onPress?: () => void;'), 'onPress'],
   ['axis-without-default', swap("size = 'md', ", ''), 'size'],
   ['v-out-of-order', swap('const v = { size, state };', 'const v = { state, size };'), 'const v'],

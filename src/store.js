@@ -15,6 +15,7 @@ import { summarize } from './summary.js';
 import { ADOPTION } from './adopt.js';
 import { classifySource } from './scan.js';
 import { staleEntries } from './stale.js';
+import { checkInstances, pruneSwapped } from './model.js';
 import { diffToEdits, undoKeys } from './undo.js';
 import { gitAttribution, primeGit } from './git.js';
 
@@ -140,6 +141,12 @@ export async function openStore(file, start = {}) {
     let next;
     try { next = applyEdits(doc, edits); }
     catch (e) { if (e instanceof EditError) return { ok: false, error: e.message }; throw e; }
+    if (start.components) { // other components this one uses: they must exist, fit and not make a cycle
+      const lookup = (n) => start.components.lookup(n, file);
+      next = pruneSwapped(next, edits, lookup);
+      const bad = checkInstances(next, lookup);
+      if (bad) return { ok: false, error: `invalid edit #0: ${bad}` };
+    }
     let saved;
     try { saved = codec.save(state, doc, next); }
     catch (e) { return { ok: false, error: `invalid edit #0: could not write the file (${e.message})` }; }

@@ -17,8 +17,8 @@ import { createComponent, removeComponent, moveComponent, writeSidecar, removeSi
 import { readComponent } from './tsx/read.js';
 import { createBundler } from './bundle.js';
 import { componentFiles, formatReport } from './scan.js';
-import { newComponentSource } from './tsx/write.js';
-import { TAGS, VOID } from './model.js';
+import { newComponentSource, writeComponent } from './tsx/write.js';
+import { TAGS, VOID, index, extractPlan } from './model.js';
 
 // create() failures: `status` is the HTTP code the server answers with (400 bad input, 409 already exists).
 export class CreateError extends Error {
@@ -31,6 +31,7 @@ async function until(fn, ms = 4000) { const t0 = Date.now(); while (Date.now() -
 // Every file-level commit names a real caller (AGT-05).
 // the saved frame position; reading never creates a sidecar (a deleted component must stay deleted)
 const previewOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).preview ?? {}; } catch { return {}; } };
+const slotsOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).slots ?? {}; } catch { return {}; } }; // preview content for ReactNode slots (sidecar only)
 const canvasOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).canvas ?? { x: 0, y: 0 }; } catch { return { x: 0, y: 0 }; } };
 const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown') throw new CreateError('a caller name is required: every commit names who made it'); };
 
@@ -45,29 +46,45 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
   const wanted = only ? new Set([basename(only)]) : null;
   const origins = new Map();  // file -> { by, summary, revision? } for files napkin itself is about to create or move in
   const removals = new Map(); // file -> { by, summary } for files napkin itself is about to remove
+  // Components that use other components (decision 0004): who uses whom, from the documents the stores hold.
+  const docs = new Map(); // file -> last good document (null while read-only)
+  const usesByFile = new Map(); // file -> Set of the sibling files its instances point at
+  const siblingFile = (host, name) => join(dirname(host), `${name}.tsx`);
+  const instancesOf = (doc) => (doc ? [...new Set([...index(doc).byId.values()].filter((n) => n.instance).map((n) => n.instance.component))] : []);
+  const setDoc = (file, doc) => { docs.set(file, doc); usesByFile.set(file, new Set(instancesOf(doc).map((n) => siblingFile(file, n)))); };
+  const reaches = (from, to, seen = new Set()) => { if (from === to) return true; if (seen.has(from)) return false; seen.add(from); for (const n of usesByFile.get(from) || []) if (reaches(n, to, seen)) return true; return false; };
+  const byFile = (f) => [...entries.values()].find((x) => x.file === f);
+  const dependents = (file) => [...entries.values()].filter((x) => x.file !== file && reaches(x.file, file)); // everything that shows `file` somewhere inside it
+  const directUsers = (file) => [...entries.values()].filter((x) => usesByFile.get(x.file)?.has(file));
+  const components = { lookup(name, host) { const f = siblingFile(host, name); if (!byFile(f)) return null; return { doc: docs.get(f) || null, reaches: () => reaches(f, host) }; } };
+  const graphOf = (e) => ({ uses: [...(usesByFile.get(e.file) || [])].map((f) => basename(f, '.tsx')), usedBy: directUsers(e.file).map((x) => x.name) });
   const log = [];
   const note = (x) => { log.push({ at: Date.now(), ...x }); if (log.length > 200) log.shift(); };
 
-  const build = (e) => {
+  const build = (e, cause) => {
     // Builds of one component run one after another, and a bundle is always built from the file as it is on disk.
     const prev = e.built || Promise.resolve();
-    e.built = prev.then(() => bundler.build(e.file, e.name, relative(dir, e.file))).then((r) => { e.lastBuild = r; events.emit('build', { component: e.id, ok: r.ok, ms: r.ms, error: r.error }); return r; });
+    e.built = prev.then(() => bundler.build(e.file, e.name, relative(dir, e.file))).then((r) => { e.lastBuild = r; events.emit('build', { component: e.id, ok: r.ok, ms: r.ms, error: r.error, ...(cause && { cause }) }); return r; });
     return e.built;
   };
 
   async function add(file) {
     const stem = basename(file).replace(/\.tsx$/, '');
     const origin = origins.get(file); origins.delete(file);
-    const store = await openStore(file, { ...origin, writeSidecars, displayFile: relative(dir, file) });
+    const store = await openStore(file, { ...origin, writeSidecars, displayFile: relative(dir, file), components });
     const id = (await store.read()).doc?.id || readSidecar(file, stem).id;
     const e = { id, file, store, name: stem, path: relative(dir, file), dirty: true };
     entries.set(id, e);
     const { doc } = await store.read();
     if (doc) e.name = doc.name;
+    setDoc(file, doc);
     store.events.on('change', (c) => {
       e.name = c.doc?.name || e.name;
+      setDoc(file, c.doc ?? null);
       e.dirty = true;
       if (e.built) { e.dirty = false; build(e); }
+      // everything that shows this component inside it is bundled again (a component that was never drawn yet is only marked)
+      for (const d of dependents(file)) { if (d.built) { d.dirty = false; build(d, e.name); } else d.dirty = true; }
       note({ kind: 'change', component: id, name: e.name, by: c.by, summary: c.summary, revision: c.revision, ...(c.approvedBy && { approvedBy: c.approvedBy }) });
       events.emit('change', { component: id, ...c });
     });
@@ -80,10 +97,13 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
 
   async function remove(e) {
     const why = removals.get(e.file); removals.delete(e.file);
+    const orphans = dependents(e.file);
     entries.delete(e.id);
+    docs.delete(e.file); usesByFile.delete(e.file);
     await e.store.close();
     await e.built?.catch(() => {}); // a build still queued would otherwise open a new esbuild context after the dispose
     await bundler.dispose(e.file);
+    for (const d of orphans) { if (d.built) { d.dirty = false; build(d, e.name); } else d.dirty = true; } // they now import a file that is gone: show that
     note({ kind: 'removed', component: e.id, name: e.name, by: why?.by ?? 'file', summary: why?.summary ?? 'file removed' });
     events.emit('removed', { component: e.id, ...(why && { by: why.by, summary: why.summary }) });
   }
@@ -123,7 +143,69 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     // What a client needs to draw one component right now.
     async snapshot(e) {
       const r = await e.store.read();
-      return { component: e.id, name: e.name, path: e.path, canvas: canvasOf(e), preview: previewOf(e), revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
+      return { component: e.id, name: e.name, path: e.path, canvas: canvasOf(e), preview: previewOf(e), slots: slotsOf(e), ...graphOf(e), revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
+    },
+    // Decision 0004: who a component uses and who uses it (direct), from the documents the stores hold.
+    graph: (e) => graphOf(e),
+    // The text a ReactNode slot shows on the canvas, per prop. Sidecar only (never the .tsx).
+    setSlotPreview(e, prop, text, { by } = {}) {
+      needBy(by);
+      if (!writeSidecars) throw new CreateError(`${e.path}: sidecar writes are disabled. Next: reopen with --write-sidecars to save slot previews.`, 403);
+      const slot = docs.get(e.file)?.props.find((p) => p.name === prop);
+      if (!slot || slot.type !== 'node') throw new CreateError(`"${prop}" is not a slot prop of ${e.name}. Next: use the name of a ReactNode prop.`);
+      if (text !== null && (typeof text !== 'string' || text.length > 500)) throw new CreateError('slot preview text must be a string of at most 500 characters, or null to clear it');
+      const side = readSidecar(e.file, e.name), slots = { ...(side.slots || {}) };
+      if (text === null) delete slots[prop]; else slots[prop] = text;
+      const next = { ...side, slots };
+      if (!Object.keys(slots).length) delete next.slots;
+      writeSidecar(sidecarPath(e.file), JSON.stringify(next, null, 2) + '\n');
+      events.emit('slots', { component: e.id, slots });
+      return slots;
+    },
+    // Extract: the node `id` of a component and everything in it become a new component (a file of its own); the node is replaced by an
+    // instance of it. Two files, always in this order: (1) create <Name>.tsx, (2) replace the subtree in the source. If (2) fails the new
+    // file is removed again, so a refusal leaves both files as they were.
+    async extractComponent(idOrName, { id, name, by } = {}) {
+      needBy(by);
+      const e = find(idOrName);
+      if (!e) throw new CreateError('not found', 404);
+      if (wanted) throw new CreateError('this server opened a single file, so it cannot add components');
+      if (typeof name !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new CreateError(`component name "${name}" must be PascalCase (letters and digits, starting with a capital)`);
+      const bad = await e.store.sync();
+      if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
+      const r = await e.store.read();
+      if (r.readOnly) throw new CreateError(`read-only: ${e.path}: ${r.readOnly}`, 403);
+      const file = siblingFile(e.file, name);
+      if (existsSync(file) || [...entries.values()].some((x) => x.file === file || (dirname(x.file) === dirname(e.file) && x.name.toLowerCase() === name.toLowerCase()))) throw new CreateError(`component "${name}" already exists`, 409);
+      let plan; try { plan = extractPlan(r.doc, id); } catch (err) { throw new CreateError(`invalid edit #0: ${err.message}`); }
+      // the new file: a fresh component with the subtree as its root (renamed "root")
+      const template = newComponentSource(name, plan.node.tag);
+      const t = readComponent(template);
+      const root = structuredClone(plan.node);
+      const rename = new Map([[root.id, 'root']]);
+      if (root.id !== 'root') {
+        root.id = 'root';
+      }
+      const variants = {};
+      for (const [axis, vals] of Object.entries(plan.variants)) for (const [val, nodes] of Object.entries(vals)) for (const [nid, st] of Object.entries(nodes)) ((variants[axis] ??= {})[val] ??= {})[rename.get(nid) ?? nid] = st;
+      const target = { ...t.doc, props: plan.props, root, variants };
+      const text = writeComponent(t.ast, t.doc, target, template);
+      readComponent(text); // must read back, or nothing is created
+      origins.set(file, { by, summary: `extracted ${name} from ${e.name}` });
+      try { createComponent(file, text); } catch (err) { origins.delete(file); throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
+      await scan();
+      const made = find(name);
+      if (!made) { try { removeComponent(file); } catch {} throw new Error(explainError(`created ${name}.tsx but could not open it`)); }
+      const rollback = async () => {
+        removals.set(file, { by, summary: `rolled back extracting ${name}` });
+        try { removeComponent(file); if (writeSidecars) removeSidecar(sidecarPath(file)); } catch {}
+        await until(() => !find(name)).catch?.(() => {});
+      };
+      let result;
+      try { result = await e.store.apply({ baseRevision: (await e.store.read()).revision, edits: [{ op: 'extractComponent', id, component: name }], by }); }
+      catch (err) { await rollback(); throw err; }
+      if (!result.ok) { await rollback(); throw new CreateError(result.error, 409); }
+      return { id: e.id, component: made.id, name, node: id, revision: result.revision };
     },
     async bundle(e) { if (!e.built || e.dirty) { e.dirty = false; build(e); } return e.built; },
     // The bundle of a past revision's source (preview and visual diff); cached per component and revision.
@@ -188,6 +270,8 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
       const r = await e.store.read();
       if (r.readOnly) throw new CreateError(`read-only: ${e.path}: ${r.readOnly}. Next: keep the source or propose an adoption before deleting it.`, 403);
+      const users = directUsers(e.file).map((x) => x.name);
+      if (users.length) throw new CreateError(`${e.name} is used by ${users.join(', ')}. Next: remove or swap those instances first.`, 409);
       const { id, name, file } = e;
       removals.set(file, { by, summary: `deleted ${name}` });
       removeComponent(file); if (writeSidecars) removeSidecar(sidecarPath(file));
@@ -203,6 +287,8 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (typeof newName !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(newName)) throw new CreateError(`component name "${newName}" must be PascalCase (letters and digits, starting with a capital)`);
       const bad = await e.store.sync();
       if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
+      const users = directUsers(e.file).map((x) => x.name);
+      if (users.length) throw new CreateError(`${e.name} is used by ${users.join(', ')}. Next: remove or swap those instances first, then rename it.`, 409);
       const { readOnly, source, doc, revision } = await e.store.read();
       if (readOnly) throw new CreateError(`read-only: ${readOnly}`, 403);
       const old = doc.name;

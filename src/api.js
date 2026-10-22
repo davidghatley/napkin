@@ -243,6 +243,20 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       try { return res(200, { ok: true, canvas: ws.setCanvas(e, msg.x, msg.y, { by: caller }) }); }
       catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
     }
+    // Decision 0004: who this component uses and who uses it; the text a slot shows on the canvas (sidecar only); extract a subtree into a new component.
+    if (sub === 'graph' && method === 'GET') return res(200, { ok: true, component: e.id, ...ws.graph(e) });
+    if (sub === 'slot-preview' && method === 'POST') {
+      const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
+      const g = guard('slot_preview'); if (g) return g;
+      try { return res(200, { ok: true, slots: ws.setSlotPreview(e, msg.prop, msg.text ?? null, { by: caller }) }); }
+      catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
+    }
+    if (sub === 'extract' && method === 'POST') {
+      const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
+      const g = guard('extract_component'); if (g) return g;
+      try { return res(201, { ok: true, ...(await ws.extractComponent(e.id, { id: msg.id, name: msg.name, by: caller })) }); }
+      catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
+    }
     // LAY-11: a variant cell's preview width, in the sidecar only. { variant: { size: 'sm' }, width: 320 | null }
     if (sub === 'preview' && method === 'POST') {
       const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
