@@ -80,7 +80,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | PRF-01 | PRF | engine | pass | critic p50 1097; merged p50 1105 ms | docs/evidence/PRF-01.txt | da57ab8 |
 | PRF-02 | PRF | engine | pass | critic p95 <=99.5; merged p95 82.8 ms (thin margin) | docs/evidence/PRF-02.txt | da57ab8 |
 | PRF-03 | PRF | engine | pass | critic p95 87.6; merged 87.6 ms | docs/evidence/PRF-03.txt | da57ab8 |
-| PRF-04 | PRF | engine | building | critic-fail: pan+zoom with a selection misses vsyncs | docs/evidence/PRF-04.txt | da57ab8 |
+| PRF-04 | PRF | engine | critic | builder: 3/4 runs pass under whole-vsync reading; 0 long tasks (was 55-75 ms per wheel) | docs/evidence/PRF-04.txt | d41ac7d |
 | PRF-05 | PRF | engine | pass | merged p95 8.3 ms | docs/evidence/PRF-05.txt | da57ab8 |
 | PRF-06 | PRF | engine | pass | merged ratio 0.477 | docs/evidence/PRF-06.txt | da57ab8 |
 | PRF-07 | PRF | engine | pass | merged 109 MB / 17 MB heap | docs/evidence/PRF-07.txt | da57ab8 |
@@ -112,22 +112,22 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | SCN-3 | SCN | whole | building | walk 1 fail; WPC-01/02 in fidelity | docs/evidence/walk-1/SCN-3.txt | 36daf60 |
 | SCN-4 | SCN | whole | pass | walk 1: done, 0 lost edits; stale retry ok; undo only yours | docs/evidence/walk-1/SCN-4.txt | 36daf60 |
 | SCN-5 | SCN | whole | pass | walk 1: done in demo (dots, token names, theme across cells) | docs/evidence/walk-1/SCN-5.txt | 36daf60 |
-| WPC-01 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-02 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-03 | WPC | agents | critic-pass | critic: propose create, no file until accept, approvedBy you | test/agents/propose-create.test.js | 0085d7f |
+| WPC-01 | WPC | fidelity | building | builder: cells isolated (all: initial); follow-up: new elements border-box so W = outer size | docs/evidence/walk-1/ | 7bbf4ee |
+| WPC-02 | WPC | fidelity | building | builder: 0 computed-style diffs on 23 nodes vs plain page | docs/evidence/walk-1/ | 7bbf4ee |
+| WPC-03 | WPC | agents | critic-pass | critic pass; suite pending (lock queue) | test/agents/propose-create.test.js | 0085d7f |
 | WPC-04 | WPC | docs | critic-pass | critic: dialect example editable; decisions/ excluded by lead ruling | test/onboarding/docs-examples.test.js | 07734c8 |
 | WPC-05 | WPC | docs | critic-fail | critic: 5 doc/UI contradictions (napkin not on PATH, labels, .next, npx); fix round 2 (Codex) | docs/evidence/onboard2-commands.txt | 07734c8 |
 | WPC-06 | WPC | files | critic-fail | critic: ids derived from absolute path change on move/clone; .napkin/lock untracked; fix round 2 (Codex) | test/onboarding/sample.test.js | 07734c8 |
 | WPC-07 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-08 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-09 | WPC | agents | critic-pass | critic: resolved items name id, outcome, edits, who (partly untested by critic) | test/agents/propose-create.test.js | 0085d7f |
+| WPC-09 | WPC | agents | critic-pass | critic pass; suite pending (lock queue) | test/agents/propose-create.test.js | 0085d7f |
 | WPC-10 | WPC | docs | critic-pass | critic: modes, import line, consumer app all documented and true | test/history/ui-inspect.test.js | 07734c8 |
 | WPC-11 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-12 | WPC | agents | critic-pass | critic: 4 and 10 proposals reachable at 1440x900 | test/agents-ui/propose-create.test.js | 0085d7f |
+| WPC-12 | WPC | agents | critic-pass | critic pass; suite pending (lock queue) | test/agents-ui/propose-create.test.js | 0085d7f |
 | WPC-13 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-14 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
 | WPC-15 | WPC | keys | building | lane keys (Sonnet) | docs/evidence/walk-1/ |  |
-| WPC-16 | WPC | fidelity | building | lane fidelity (Sonnet) | docs/evidence/walk-1/ |  |
+| WPC-16 | WPC | fidelity | building | builder: banner names first edited line + parser line | docs/evidence/walk-1/ | 7bbf4ee |
 | WPC-17 | WPC | docs | critic-pass | critic: SIGTERM/SIGINT/startup failure leave no fixtures | test/onboarding/demo-cleanup.test.js | 07734c8 |
 | WPC-18 | WPC | docs | critic-pass | critic: tools/sample-repo.js 40 editable; S1 on it 1-line diff | test/onboarding/sample.test.js | 07734c8 |
 | WPC-19 | WPC | agents | open | agents2 critic: subscribe waitMs returns on an unrelated change with resolved: [] although an accept landed. A resolved event is never lost or delayed by other traffic | /tmp/claude-1000/critic-agents2/ |  |
