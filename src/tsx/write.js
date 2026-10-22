@@ -430,6 +430,7 @@ function jsxSplices(text, parts, before, after, st) {
     const el = els.get(n.id);
     if (same(shape(old), shape(n))) return;
     if (old.tag !== n.tag || old.when !== n.when) return whole(n, el);
+    if (n.when && !n.children.length && !old.children.length && (hasContent(old) !== hasContent(n) || !same(old.attrs, n.attrs) || !same(old.instance, n.instance))) return whole(n, el); // the wrapper's layout depends on whether the element fits on one line
     const oc = hasContent(old), nc = hasContent(n);
     const leafBoth = !n.children.length && !old.children.length;
     // 1. the attributes (src, alt): only the attribute changes, so comments between attributes stay
@@ -519,7 +520,20 @@ function jsxSplices(text, parts, before, after, st) {
     const adds = [];
     const names = n.instance || old.instance ? [...new Set([...Object.keys(old.instance?.props || {}), ...Object.keys(n.instance?.props || {})])] : ['src', 'alt'];
     const valueOf = (x, k) => (n.instance || old.instance ? (x.instance?.props[k] === undefined ? undefined : propValueText(x.instance.props[k])) : x.attrs?.[k] === undefined ? undefined : attrValue(x.attrs[k]));
+    // an attribute with a new name and the same value in the same place is renamed in place (a prop rename in the component it points at)
+    const skip = new Set();
+    if (n.instance && old.instance) {
+      const ok = Object.keys(old.instance.props), nk = Object.keys(n.instance.props);
+      ok.forEach((k, ix) => {
+        const k2 = nk[ix];
+        if (k2 === undefined || k2 === k || k2 in old.instance.props || k in n.instance.props || valueOf(old, k) !== valueOf(n, k2)) return;
+        const a = attrs.find((x) => x.name?.name === k);
+        if (!a) return;
+        sp.push({ start: a.name.start, end: a.name.end, text: k2 }); skip.add(k); skip.add(k2);
+      });
+    }
     for (const k of names) {
+      if (skip.has(k)) continue;
       const ov = valueOf(old, k), nv = valueOf(n, k);
       if (ov === nv) continue;
       const a = attrs.find((x) => x.name?.name === k);
@@ -534,7 +548,7 @@ function jsxSplices(text, parts, before, after, st) {
       sp.push({ start: last.end, end: last.end, text: multi ? adds.map((x) => eol + indentOfLine(text, last.start) + x).join('') : ` ${adds.join(' ')}` });
     }
     // a single-line tag that no longer fits in 80 columns is laid out again by the caller
-    if (adds.length && !/\n/.test(text.slice(oe.start, oe.end))) { // (only a new attribute can push a tag past 80 columns; replacing a value keeps the layout, so it stays a one-line diff)
+    if ((adds.length || skip.size) && !/\n/.test(text.slice(oe.start, oe.end))) { // (only a new or longer attribute can push a tag past 80 columns; replacing a value keeps the layout, so it stays a one-line diff)
       const grow = sp.reduce((a, x) => a + x.text.length - (x.end - x.start), 0);
       if (indentOfLine(text, oe.start).length + (oe.end - oe.start) + grow > WIDTH && grow > 0) return null;
     }
@@ -633,7 +647,10 @@ function renameIds(text, map) {
       const l = a.name?.name === 'data-n' ? a.value : a.name?.name === 'style' ? a.value.expression.arguments[0] : null;
       if (l && map.has(l.value)) lit(l, map.get(l.value));
     }
-    for (const c of e.children) if (c.type === 'JSXElement') el(c);
+    for (const c of e.children) {
+      if (c.type === 'JSXElement') el(c);
+      else if (c.type === 'JSXExpressionContainer' && c.expression.type === 'LogicalExpression') { let r = c.expression.right; while (r?.type === 'ParenthesizedExpression') r = r.expression; if (r?.type === 'JSXElement') el(r); } // {flag && <el />}
+    }
   })(parts.jsx);
   const rekey = (obj) => { for (const p of obj.properties) if (map.has(keyName(p.key))) out.push({ start: p.key.start, end: p.key.end, text: keySrc(map.get(keyName(p.key))) }); };
   rekey(parts.base);

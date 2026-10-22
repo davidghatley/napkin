@@ -13,6 +13,7 @@ import { newComponentSource } from '../src/tsx/write.js';
 import { applyEdits, resolveStyle, variantGrid } from '../src/model.js';
 import { ROOT } from './helpers/harness.js';
 import { rng, nextValidEdit } from './helpers/fuzz.js';
+import { siblingDocs } from './helpers/siblings.js';
 
 const fixture = (name) => join(ROOT, 'fixtures', name, `${name}.tsx`);
 
@@ -118,12 +119,13 @@ test('the sidecar keeps a stable component id across reopen (F09)', async () => 
 const FUZZ = Number(process.env.FUZZ || 200);
 test(`${FUZZ} random edits keep the file parseable, in the dialect, and equal to the model`, () => {
   const rand = rng(20261020);
+  const siblings = siblingDocs(); // other components the fuzz may put in as instances (decision 0004)
   let text = readFileSync(fixture('Button'), 'utf8');
   let { doc, state } = tsxCodec.load(text);
   const kinds = {};
   let applied = 0;
   for (let n = 0; applied < FUZZ && n < FUZZ * 20; n++) {
-    const r = nextValidEdit(doc, rand, n);
+    const r = nextValidEdit(doc, rand, n, 50, { siblings });
     if (!r) continue;
     const { edit, next } = r;
     const saved = tsxCodec.save(state, doc, next);

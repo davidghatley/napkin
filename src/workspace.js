@@ -18,7 +18,7 @@ import { readComponent } from './tsx/read.js';
 import { createBundler } from './bundle.js';
 import { componentFiles, formatReport } from './scan.js';
 import { newComponentSource, writeComponent } from './tsx/write.js';
-import { TAGS, VOID, index, extractPlan } from './model.js';
+import { TAGS, VOID, index, extractPlan, applyEdits, EditError } from './model.js';
 
 // create() failures: `status` is the HTTP code the server answers with (400 bad input, 409 already exists).
 export class CreateError extends Error {
@@ -83,12 +83,100 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     return e.built;
   };
 
+  // --- consumer integrity (decision 0004) ---
+  // A component's props and variant values are also what the components that use it pass. Renaming one rewrites those consumers in the
+  // same change (the host first, then the consumers in name order; if one cannot be written the others are undone); removing one is
+  // refused while a consumer still passes it.
+  const SHAPE_OPS = new Set(['renameProp', 'removeProp', 'renameVariant', 'removeVariant']);
+  const lineOf = (source, id) => source.split('\n').findIndex((l) => l.includes(`data-n="${id}"`)) + 1;
+  const instancesIn = (doc, name) => [...index(doc).byId.values()].filter((n) => n.instance?.component === name);
+  // -> { error } | { plan: [{ user, edits }], summary } | null (nothing for the consumers to do)
+  async function consumerPlan(e, req) {
+    const users = directUsers(e.file).sort((a, b) => a.name.localeCompare(b.name));
+    if (!Array.isArray(req.edits) || !req.edits.some((x) => SHAPE_OPS.has(x?.op))) return null;
+    const host = await e.store.read();
+    if (!host.doc) return null;
+    // a component we cannot read may still use this one: look for its import
+    const mentions = new RegExp(`from\\s+['"]\\./${e.name}['"]`);
+    for (const x of entries.values()) {
+      if (x === e || docs.get(x.file)) continue;
+      const r = await x.store.read();
+      if (!r.doc && mentions.test(r.source || '')) return { error: `${e.name} is used by ${x.name}, which is read-only now (${r.readOnly || r.problem || 'it cannot be read'}). Next: fix ${x.path} first, then change ${e.name}.` };
+    }
+    const sims = [];
+    for (const u of users) {
+      const r = await u.store.read();
+      if (!r.doc) return { error: `${e.name} is used by ${u.name}, which is read-only now (${r.readOnly || r.problem || 'it cannot be read'}). Next: fix ${u.path} first, then change ${e.name}.` };
+      sims.push({ user: u, doc: r.doc, source: r.source, edits: [] });
+    }
+    let h = host.doc;
+    const refuse = (what, sim, n, tail = 'remove it there first') => ({ error: `${e.name}.${what} is passed by ${sim.user.name} (line ${lineOf(sim.source, n.id)}); ${tail}. Next: ${tail.replace(/^./, (c) => c)}, then retry.` });
+    for (const edit of req.edits) {
+      const op = edit?.op;
+      if (SHAPE_OPS.has(op)) {
+        if (op === 'renameProp') for (const sim of sims) { const x = { op: 'renameInstanceProp', component: e.name, name: edit.name, to: edit.to }; if (instancesIn(sim.doc, e.name).some((n) => edit.name in n.instance.props)) { sim.edits.push(x); sim.doc = applyEdits(sim.doc, [x]); } }
+        if (op === 'removeProp') for (const sim of sims) { const n = instancesIn(sim.doc, e.name).find((n) => edit.name in n.instance.props); if (n) return refuse(edit.name, sim, n); }
+        if (op === 'renameVariant' || op === 'removeVariant') {
+          const axis = h.props.find((p) => p.name === edit.axis);
+          const wholeAxis = op === 'removeVariant' && axis && axis.options.length <= 2;
+          for (const sim of sims) for (const n of instancesIn(sim.doc, e.name)) {
+            const v = n.instance.props[edit.axis];
+            if (v === undefined) continue;
+            const own = v && typeof v === 'object' ? sim.doc.props.find((p) => p.name === v.prop) : null;
+            if (wholeAxis) return refuse(edit.axis, sim, n);
+            if (own?.options?.includes(edit.value)) return refuse(`${edit.axis}="${edit.value}"`, sim, n, `rename or remove ${edit.value} in ${sim.user.name}'s own ${own.name} first`);
+            if (v === edit.value) {
+              if (op === 'removeVariant') return refuse(`${edit.axis}="${edit.value}"`, sim, n);
+              const x = { op: 'renameInstanceValue', component: e.name, axis: edit.axis, value: edit.value, to: edit.to }; sim.edits.push(x); sim.doc = applyEdits(sim.doc, [x]);
+            }
+          }
+        }
+      }
+      try { h = applyEdits(h, [edit]); } catch (err) { if (err instanceof EditError) return null; throw err; } // (the store gives the real message)
+    }
+    const plan = sims.filter((x) => x.edits.length).map((x) => ({ user: x.user, edits: x.edits }));
+    return plan.length ? { plan } : null;
+  }
+  // wraps a store's apply: shape changes go to the consumers too
+  function withConsumers(e, raw) {
+    const guarded = async (req, meta) => {
+      let p;
+      try { p = await consumerPlan(e, req); } catch (err) { return { ok: false, error: explainError(`invalid edit #0: ${err.message}`) }; }
+      if (!p) return raw(req, meta);
+      if (p.error) return { ok: false, error: explainError(`invalid edit #0: ${p.error}`) };
+      if (req.dryRun) return raw(req, meta);
+      const names = p.plan.map((x) => x.user.name);
+      const what = req.edits.filter((x) => SHAPE_OPS.has(x?.op)).map((x) => (x.op === 'renameProp' ? `${x.name} to ${x.to}` : x.op === 'renameVariant' ? `${x.axis}=${x.value} to ${x.to}` : `${x.axis ?? x.name}`)).join(', ');
+      const summary = `renamed ${e.name} ${what} (and updated ${names.join(', ')})`;
+      const before = new Map([[e, (await e.store.read()).revision], ...(await Promise.all(p.plan.map(async (x) => [x.user, (await x.user.store.read()).revision])))]);
+      const r = await raw(req, { ...meta, summary });
+      if (!r.ok) return r;
+      const done = [];
+      for (const { user, edits } of p.plan) {
+        let res;
+        try { res = await user.store.apply({ baseRevision: (await user.store.read()).revision, edits, by: req.by, origin: req.origin }, { summary: `renamed ${e.name} ${what} (${user.name} follows)` }); }
+        catch (err) { res = { ok: false, error: `${err.message}. Next: retry` }; }
+        if (!res.ok) { // put everything back, newest first, the host last
+          const back = `rolled back: ${user.name} could not follow ${e.name} ${what}`;
+          for (const d of done.reverse()) await d.store.revert(before.get(d), req.by, back).catch(() => {});
+          await e.store.revert(before.get(e), req.by, back).catch(() => {});
+          return { ok: false, error: `could not update ${user.name} (${res.error}); ${e.name} was left as it was. Next: fix ${user.path}, then retry.` };
+        }
+        done.push(user);
+      }
+      return { ...r, updated: names };
+    };
+    // (an edit that cannot touch consumers goes straight to the store, in the same tick, so the order of queued writes is untouched)
+    return (req, meta) => (Array.isArray(req?.edits) && req.edits.some((x) => SHAPE_OPS.has(x?.op)) ? guarded(req, meta) : raw(req, meta));
+  }
+
   async function add(file) {
     const stem = basename(file).replace(/\.tsx$/, '');
     const origin = origins.get(file); origins.delete(file);
     const store = await openStore(file, { ...origin, writeSidecars, displayFile: relative(dir, file), components });
     const id = (await store.read()).doc?.id || readSidecar(file, stem).id;
     const e = { id, file, store, name: stem, path: relative(dir, file), dirty: true };
+    store.apply = withConsumers(e, store.apply.bind(store));
     entries.set(id, e);
     const { doc } = await store.read();
     if (doc) e.name = doc.name;

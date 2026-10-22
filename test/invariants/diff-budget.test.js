@@ -9,11 +9,12 @@ import { openStore } from '../../src/store.js';
 import { index } from '../../src/model.js';
 import { mkdtempSync, mkdirSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, basename } from 'node:path';
+import { join, basename, dirname } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { tempRepo } from '../helpers/harness.js';
 import { makeCorpus } from '../helpers/corpus.js';
-import { rng, nextValidEdit } from '../helpers/fuzz.js';
+import { rng, nextValidEdit, lookupOf } from '../helpers/fuzz.js';
+import { siblingDocs, writeSiblings } from '../helpers/siblings.js';
 import { budget, signatureLines } from '../helpers/budget.js';
 import { commentDiff, mayDropComments } from '../helpers/comments.js';
 
@@ -118,13 +119,15 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
   const rand = rng(1021);
   const { file, git } = tempRepo(['Button']);
   const rel = 'components/Button.tsx';
-  const store = await openStore(file);
+  writeSiblings(dirname(file)); // Chip and Badge sit beside it: the fuzz adds and swaps instances of them too
+  const siblings = siblingDocs(), look = lookupOf(siblings);
+  const store = await openStore(file, { components: { lookup: (name) => look(name) } });
   const over = [];
   const per = {};
   try {
     for (let n = 0, done = 0; done < OPS && n < OPS * 20; n++) {
       const { doc, revision, source: srcBefore } = await store.read();
-      const r = nextValidEdit(doc, rand, n);
+      const r = nextValidEdit(doc, rand, n, 50, { siblings });
       if (!r) continue;
       const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
       assert.equal(res.ok, true, `${JSON.stringify(r.edit)}: ${res.error}`);
@@ -134,12 +137,12 @@ test(`INV-03: ${OPS}-op fuzz, git diff --numstat per op, 0 ops over budget`, asy
       const stat = (per[r.edit.op + (r.edit.variant ? '+variant' : '')] ??= { n: 0, maxAdd: 0, maxDel: 0, budgetAdd: 0, budgetDel: 0 });
       stat.n++; stat.maxAdd = Math.max(stat.maxAdd, m.file.add); stat.maxDel = Math.max(stat.maxDel, m.file.del);
       stat.budgetAdd = Math.max(stat.budgetAdd, b.add); stat.budgetDel = Math.max(stat.budgetDel, b.del);
-      if (m.file.add > b.add || m.file.del > b.del || m.others.length) over.push({ n: done, edit: r.edit, got: m.file, budget: b, others: m.others });
+      if (m.file.add > b.add || m.file.del > b.del || m.others.length) over.push({ n: done, edit: r.edit, got: m.file, budget: b, others: m.others, ...(process.env.DUMP ? { before: srcBefore, after: srcAfter } : {}) });
       done++;
     }
     console.log(`INV-03: ${OPS} ops; over budget: ${over.length}`);
     console.log(JSON.stringify(per, null, 1));
-    if (over.length) console.log(JSON.stringify(over.slice(0, 12)));
+    if (over.length) console.log(JSON.stringify(over.slice(0, process.env.DUMP ? 20 : 12)));
     assert.deepEqual(over.slice(0, 5), [], `${over.length} ops over budget`);
   } finally { await store.close(); }
 });
@@ -155,22 +158,23 @@ for (const seed of HAND_SEEDS) {
     git('init', '-q'); git('add', 'components');
     git('-c', 'user.name=t', '-c', 'user.email=t@example.invalid', 'commit', '-qm', 'corpus');
     const rand = rng(77 + seed);
+    const siblings = siblingDocs(), look = lookupOf(siblings);
     const over = [];
     let ops = 0;
     for (const file of files) {
       const rel = `components/${basename(file)}`;
-      const store = await openStore(file);
+      const store = await openStore(file, { components: { lookup: (name) => look(name) } });
       try {
         for (let n = 0, done = 0; done < HAND / HAND_FILES && n < 400; n++) {
           const { doc, revision, source } = await store.read();
-          const r = nextValidEdit(doc, rand, n);
+          const r = nextValidEdit(doc, rand, n, 50, { siblings });
           if (!r) continue;
           const res = await store.apply({ baseRevision: revision, edits: [r.edit], by: 'fuzz' });
           assert.equal(res.ok, true, `${rel} ${JSON.stringify(r.edit)}: ${res.error}`);
           const m = measure(git, rel);
           const srcAfter = (await store.read()).source;
           const b = budget(r.edit, doc, res.doc, { sigBefore: signatureLines(source), textBefore: source, textAfter: srcAfter });
-          if (m.file.add > b.add || m.file.del > b.del) over.push({ rel, edit: r.edit, got: m.file, budget: b });
+          if (m.file.add > b.add || m.file.del > b.del) over.push({ rel, edit: r.edit, got: m.file, budget: b, ...(process.env.DUMP ? { before: source, after: srcAfter } : {}) });
           const cd = commentDiff(source, srcAfter);
           if (cd.invented.length || (cd.lost.length && !mayDropComments(r.edit))) over.push({ rel, edit: r.edit, comments: cd });
           done++; ops++;
@@ -178,7 +182,7 @@ for (const seed of HAND_SEEDS) {
       } finally { await store.close(); }
     }
     console.log(`INV-03 (hand-formatted, seed ${seed}): ${ops} ops; over budget: ${over.length}`);
-    if (over.length) console.log(JSON.stringify(over.slice(0, 8)));
+    if (over.length) console.log(JSON.stringify(over.slice(0, process.env.DUMP ? 20 : 8)));
     assert.deepEqual(over.slice(0, 5), []);
   });
 }

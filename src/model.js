@@ -89,6 +89,7 @@ export function touched(edits) {
       case 'rename': keys.add(`node:${e.id}`); keys.add(`node:${e.to}`); break;
       case 'insertInstance': keys.add(`children:${e.parent}`); keys.add(`node:${e.id}`); break;
       case 'swapInstance': keys.add(`node:${e.id}`); break;
+      case 'renameInstanceProp': case 'renameInstanceValue': keys.add(`uses:${e.component}`); break;
       case 'move': keys.add(`node:${e.id}`); keys.add(`children:${e.parent}`); break;
       case 'duplicate': case 'paste': keys.add(`children:${e.op === 'paste' ? e.parent : `of:${e.id}`}`); break;
       case 'wrap': for (const id of e.ids || []) keys.add(`node:${id}`); keys.add(`node:${e.id}`); keys.add(`children:of:${e.ids?.[0]}`); break;
@@ -429,7 +430,10 @@ export function applyEdits(doc, edits) {
         const p = propOf(next, e.name);
         if (!p) throw new EditError(i, `no prop "${e.name}"`);
         const user = [...byId.values()].find((n) => n.textProp === e.name || n.slot === e.name || n.when === e.name || Object.values(n.instance?.props || {}).some((v) => v?.prop === e.name));
-        if (user) throw new EditError(i, `"${user.id}" uses ${e.name} (text, slot, condition or an instance prop); free it first`);
+        if (user) {
+          const how = user.textProp === e.name ? ['shows', 'unbind its text first'] : user.slot === e.name ? ['holds', 'clear its slot first'] : user.when === e.name ? ['is shown only when', 'clear its condition first'] : ['passes', 'remove that instance prop first'];
+          throw new EditError(i, `"${user.id}" ${how[0]} ${e.name}; ${how[1]}`);
+        }
         next.props = next.props.filter((x) => x !== p);
         delete next.variants[e.name];
         break;
@@ -490,6 +494,19 @@ export function applyEdits(doc, edits) {
         node.tag = e.component; node.instance.component = e.component;
         break;
       }
+      // The workspace's own ops, sent to the components that use another one when that one renames a prop or a variant value.
+      case 'renameInstanceProp': { // {component, name, to}: every instance of `component` passes `to` where it passed `name` (same place in the tag)
+        for (const n of byId.values()) {
+          if (n.instance?.component !== e.component || !(e.name in n.instance.props)) continue;
+          if (e.to in n.instance.props) throw new EditError(i, `"${n.id}" already passes ${e.to}`);
+          n.instance.props = Object.fromEntries(Object.entries(n.instance.props).map(([k, v]) => [k === e.name ? e.to : k, v]));
+        }
+        break;
+      }
+      case 'renameInstanceValue': { // {component, axis, value, to}: instances that pass the value as text pass the new one
+        for (const n of byId.values()) if (n.instance?.component === e.component && n.instance.props[e.axis] === e.value) n.instance.props[e.axis] = e.to;
+        break;
+      }
       case 'renameProp': { // {name, to}: the prop, every element that shows it, and (for a variant axis) its overrides
         const p = propOf(next, e.name);
         if (!p) throw new EditError(i, `no prop "${e.name}"`);
@@ -532,7 +549,7 @@ export function applyEdits(doc, edits) {
         let p = propOf(next, e.prop);
         if (!p) { p = { name: e.prop, type: 'string', ...(node.text !== undefined ? { default: node.text } : {}) }; next.props.push(p); }
         if (p.type !== 'string') throw new EditError(i, `prop "${e.prop}" is not a string`);
-        delete node.text; node.textProp = e.prop;
+        delete node.text; delete node.slot; node.textProp = e.prop;
         break;
       }
       case 'addVariant': {
@@ -555,7 +572,11 @@ export function applyEdits(doc, edits) {
         if (!p || p.type !== 'enum') throw new EditError(i, `no variant axis "${e.axis}"`);
         if (!p.options.includes(e.value)) throw new EditError(i, `${e.axis} has no "${e.value}"`);
         if (p.default === e.value) throw new EditError(i, `"${e.value}" is the base of ${e.axis}`);
-        if (p.options.length <= 2) { next.props = next.props.filter((x) => x !== p); delete next.variants[e.axis]; break; }
+        if (p.options.length <= 2) {
+          const user = [...byId.values()].find((n) => Object.values(n.instance?.props || {}).some((v) => v?.prop === e.axis));
+          if (user) throw new EditError(i, `"${user.id}" passes ${e.axis} to another component; free it first`);
+          next.props = next.props.filter((x) => x !== p); delete next.variants[e.axis]; break;
+        }
         p.options = p.options.filter((o) => o !== e.value);
         if (next.variants[e.axis]) delete next.variants[e.axis][e.value];
         cleanVariants(next);
@@ -635,7 +656,12 @@ export function applyEdits(doc, edits) {
 const kindOf = (p) => (p.type === 'enum' ? 'string' : p.type);
 // Does value `v` (as passed by `hostDoc`) fit target prop `tp`?
 export function instancePropFits(hostDoc, v, tp) {
-  if (v && typeof v === 'object') { const mine = propOf(hostDoc, v.prop); return !!mine && kindOf(mine) === kindOf(tp); }
+  if (v && typeof v === 'object') {
+    const mine = propOf(hostDoc, v.prop);
+    if (!mine) return false;
+    if (tp.type === 'enum') return mine.type === 'enum' && mine.options.every((o) => tp.options.includes(o)); // tsc: every value ours can be must be one it takes
+    return kindOf(mine) === kindOf(tp);
+  }
   if (tp.type === 'enum') return tp.options.includes(v);
   if (tp.type === 'boolean') return typeof v === 'boolean';
   if (tp.type === 'number') return typeof v === 'number';
