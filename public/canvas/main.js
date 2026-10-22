@@ -105,7 +105,10 @@ const nav = initNav(ctx);
 initHandles(ctx);
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
-ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; renderPanel(ctx); counts(); });
+// A render redraws the panel too, but the canvas pixels come first (PRF-02): the redraw is coalesced and runs after the next paint.
+let panelLate = 0;
+const panelSoon = () => { if (!panelLate) panelLate = 1, (window.requestIdleCallback || ((f) => setTimeout(f, 50)))(() => { panelLate = 0; renderPanel(ctx); }, { timeout: 120 }); };
+ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; if (!ctx.state.selection || ctx.state.selection.component === component) panelSoon(); counts(); });
 
 const sync = id => {
   if (!id) return;
@@ -140,6 +143,7 @@ client.onChange((f) => {
   else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'preview') { ctx.emit('preview', f); }
+  else if (f.type === 'connection') { document.body.dataset.connection = f.connected ? 'ok' : 'lost'; ctx.emit('connection', f); }
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; }
   else if (f.type === 'presence') {

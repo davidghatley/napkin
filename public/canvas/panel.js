@@ -483,12 +483,15 @@ function wire(ctx, el) {
   // closes the listed forms (the canvas re-render that follows redraws the panel).
   async function run(key, component, edits, { clear = [], close = [] } = {}) {
     let r;
+    const was = ctx.state.components.get(component)?.revision;
     try { r = await ctx.sendEdits(component, edits); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
     if (r.ok) {
       delete ui.errors[key];
       clear.forEach((id) => delete ui.draft[id]);
       close.forEach((f) => delete ui.forms[f]);
-      setTimeout(rerender, 0); // the SSE render redraws; redraw now too in case this batch changed no visible state
+      // A batch that changed the file is followed by a render, which redraws the panel after the new pixels (PRF-02).
+      // One that changed nothing (same revision) has no render coming: redraw now.
+      if (r.revision === was) setTimeout(rerender, 0);
     } else {
       ui.errors[key] = { text: r.error, retry: /^stale revision/.test(r.error) ? { component, edits, opts: { clear, close } } : null };
       rerender();
@@ -551,7 +554,7 @@ function wire(ctx, el) {
     else if (typeof v === 'number' && F[prop]?.unit === 'px' && /^-?\d*\.?\d+px$/.test(String(curVal(prop)))) v = `${v}px`; // keep '16px' a string, as the file had it
     const edits = styleEdits([[prop, v]]);
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
-    await run('style-' + prop, s.component, edits, { clear: [id ?? prop] });
+    return run('style-' + prop, s.component, edits, { clear: [id ?? prop] });
   }
 
   // ---- what a node's own box and its parent look like right now (for Fill, pins and grid cells) ----
@@ -629,7 +632,10 @@ function wire(ctx, el) {
       return;
     }
     if (t.id && t.type !== 'checkbox' && t.type !== 'radio' && t.type !== 'color') ui.draft[t.id] = t.value;
+    if (t.dataset.field === 'style') preview(t.dataset.prop, t.value); // the canvas follows the typing; the edit is written on change (PRF-08)
   });
+  // Leaving a field with nothing to write (the value is back where it began) puts the canvas back.
+  el.addEventListener('focusout', (ev) => { if (ev.target.dataset?.field === 'style' && previewed.length) restore(); });
   // only a person's click or key on a summary counts as a choice; a redraw inserting <details> also fires toggle
   let userToggle = 0;
   el.addEventListener('pointerdown', (ev) => { if (ev.target.closest?.('summary')) userToggle = Date.now(); }, true);
@@ -656,7 +662,11 @@ function wire(ctx, el) {
       await commit('fontFamily', name ? stackFor(name, cur) : null, t.id);
     }
     else if (field === 'cell') await setCell(t.dataset.axis, t.value.trim(), t.id);
-    else if (field === 'style') await commit(t.dataset.prop, t.value, t.id);
+    else if (field === 'style') {
+      const held = previewed; previewed = []; // the committed render replaces the DOM; if the write fails, the preview is taken back
+      const r = await commit(t.dataset.prop, t.value, t.id);
+      if (r && !r.ok) { const keep = previewed; previewed = held; restore(); previewed = keep; }
+    }
     else if (field === 'weight') { if (t.value) await commit('fontWeight', Number(t.value), t.id); }
     else if (field === 'text') await run('text', s.component, [{ op: 'set', path: `${s.node}.text`, value: t.value === '' ? null : t.value }], { clear: [t.id] });
     else if (field === 'attr') await run('attr-' + t.dataset.attr, s.component, [{ op: 'set', path: `${s.node}.@${t.dataset.attr}`, value: t.value === '' ? null : t.value }], { clear: [t.id] });
@@ -681,7 +691,7 @@ function wire(ctx, el) {
       t.value = next; ui.draft[t.id] = next;
       clearTimeout(nudgeTimer);
       nudgeTimer = setTimeout(() => t.dispatchEvent(new Event('change', { bubbles: true })), 350);
-    } else if (ev.key === 'Escape' && t.matches?.('#panel input[data-field]')) { delete ui.draft[t.id]; rerender(); }
+    } else if (ev.key === 'Escape' && t.matches?.('#panel input[data-field]')) { delete ui.draft[t.id]; restore(); rerender(); }
   });
 
   el.addEventListener('click', async (ev) => {

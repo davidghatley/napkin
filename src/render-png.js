@@ -123,7 +123,7 @@ export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES 
           if (!a) throw new RenderError(`no variant axis "${axis}" (axes: ${(snap.doc ? axes(snap.doc) : []).map((x) => x.name).join(', ') || 'none'})`);
           if (!a.options.includes(value)) throw new RenderError(`axis "${axis}" has no value "${value}" (values: ${a.options.join(', ')})`);
         }
-        const built = await ws.bundle(entry);
+        const built = await ws.bundleStandalone(entry);
         if (!built?.ok) throw new RenderError(`build failed: ${built?.error}`);
         const key = entry.id + ':' + createHash('sha1').update(built.code).digest('hex').slice(0, 12);
         const page = await acquire();

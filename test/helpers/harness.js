@@ -29,9 +29,9 @@ export async function waitFor(fn, timeout = 3000, step = 10) {
   throw new Error('waitFor timed out');
 }
 
-// Starts src/server.js on a free port for a components folder.
-export async function startServer(compDir, { execArgv = [], env = {} } = {}) {
-  const proc = spawn(process.execPath, [...execArgv, join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+// Starts src/server.js on a free port (or on `port`, to restart it where it was) for a components folder.
+export async function startServer(compDir, { execArgv = [], env = {}, port = 0 } = {}) {
+  const proc = spawn(process.execPath, [...execArgv, join(ROOT, 'src', 'server.js'), '--dir', compDir, '--port', String(port)], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
   let out = '';
   const url = await new Promise((res, rej) => {
     const t = setTimeout(() => rej(new Error('server did not start: ' + out)), 5000);

@@ -130,9 +130,12 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     async bundleAt(e, rev) {
       const past = e.store.at(rev);
       if (!past) return { ok: false, error: `revision ${rev} is not in the history this server keeps. Next: pick a revision from the history list.` };
-      return bundler.buildText(e.file, e.name, past.source);
+      return bundler.buildText(e.file, e.name, past.source, { shared: true });
     },
+    // Standalone bundles carry their own React: for drawing outside the canvas page (render_component, visual diff).
     bundleText: (e, text) => bundler.buildText(e.file, e.name, text),
+    bundleStandalone: (e) => bundler.buildStandalone(e.file, e.name, relative(dir, e.file)),
+    runtime: (module) => bundler.runtime(module),
     // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
     setCanvas(e, x, y, { by } = {}) {
       needBy(by);

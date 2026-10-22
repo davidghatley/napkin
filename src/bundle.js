@@ -4,6 +4,10 @@
 //   const b = createBundler(); const { code, ms } = await b.build(file, name); await b.dispose(file);
 // The bundle is an ES module: `export function mount(el, props) -> unmount`.
 import * as esbuild from 'esbuild';
+import * as React from 'react';
+import * as ReactDOM from 'react-dom';
+import * as ReactDOMClient from 'react-dom/client';
+import * as JSXRuntime from 'react/jsx-runtime';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { basename } from 'node:path';
@@ -44,9 +48,22 @@ const formatError = async (e) => {
   return (await esbuild.formatMessages(e.errors, { kind: 'error', color: false })).join('\n').trimEnd();
 };
 
+// The canvas page maps these bare names to one shared copy of React (public/index.html import map, GET /runtime.js),
+// so forty components do not ship, parse and evaluate forty copies of it. Server-side renderers use standalone bundles.
+export const SHARED = ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'];
+export const IMPORT_MAP = { imports: { react: '/runtime.js', 'react-dom': '/runtime.js?module=react-dom', 'react-dom/client': '/runtime.js?module=react-dom/client', 'react/jsx-runtime': '/runtime.js?module=react/jsx-runtime' } };
+
 export function createBundler() {
   const contexts = new Map();
-  const options = (file, name, displayFile) => ({
+  const names = (mod) => Object.keys(mod).filter((k) => /^[A-Za-z_$][\w$]*$/.test(k) && k !== 'default');
+  const facades = { 'react-dom': ['ReactDOM', names(ReactDOM)], 'react-dom/client': ['ReactDOMClient', names(ReactDOMClient)], 'react/jsx-runtime': ['JSXRuntime', names(JSXRuntime)] };
+  let runtime;
+  const sharedRuntime = () => runtime ??= esbuild.build({
+    stdin: { contents: `export { default, ${names(React).join(', ')} } from 'react'; export { default as ReactDOM } from 'react-dom'; export { default as ReactDOMClient } from 'react-dom/client'; export { default as JSXRuntime } from 'react/jsx-runtime'; `, resolveDir: ROOT },
+    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
+    define: { 'process.env.NODE_ENV': '"production"' }, logLevel: 'silent',
+  }).then((r) => ({ ok: true, code: r.outputFiles[0].text }));
+  const options = (file, name, displayFile, shared = false) => ({
     absWorkingDir: dirname(file),
     stdin: { contents: entry(file, name, displayFile), resolveDir: dirname(file), loader: 'js', sourcefile: 'napkin-canvas-entry.js' },
     bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2022',
@@ -55,13 +72,23 @@ export function createBundler() {
     nodePaths: [join(ROOT, 'node_modules')],
     define: { 'process.env.NODE_ENV': '"production"' },
     logLevel: 'silent', minify: false,
+    ...(shared && { external: SHARED }),
   });
   return {
+    // The module GET /runtime.js serves: the whole React runtime once, or a thin facade for react-dom, react-dom/client, react/jsx-runtime.
+    async runtime(module) {
+      if (!module) return sharedRuntime();
+      const facade = facades[module];
+      if (!facade) return null;
+      const [namespace, exports] = facade;
+      return { ok: true, code: `import { ${namespace} as D } from '/runtime.js'; export default D; export const { ${exports.join(', ')} } = D;` };
+    },
+    // Incremental, for the canvas page: React is left external (see SHARED).
     async build(file, name, displayFile = basename(file)) {
       const t0 = performance.now();
       try {
         let ctx = contexts.get(file);
-        if (!ctx) { ctx = await esbuild.context(options(file, name, displayFile)); contexts.set(file, ctx); }
+        if (!ctx) { ctx = await esbuild.context(options(file, name, displayFile, true)); contexts.set(file, ctx); }
         const r = await ctx.rebuild();
         return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
       } catch (e) {
@@ -69,10 +96,10 @@ export function createBundler() {
       }
     },
     // One-off bundle of `text` as if it were the content of `file` (a past revision, or the file at HEAD).
-    async buildText(file, name, text) {
+    async buildText(file, name, text, { shared = false } = {}) {
       const t0 = performance.now();
       try {
-        const { stdin, ...rest } = options(file, name);
+        const { stdin, ...rest } = options(file, name, undefined, shared);
         const plugin = { name: 'napkin-text', setup(b) {
           b.onResolve({ filter: /.*/ }, (a) => (a.path === file && (a.kind === 'import-statement' || a.kind === 'dynamic-import') ? { path: file, namespace: 'napkin-text' } : null));
           b.onLoad({ filter: /.*/, namespace: 'napkin-text' }, () => ({ contents: text, loader: 'tsx', resolveDir: dirname(file) }));
@@ -81,6 +108,16 @@ export function createBundler() {
         return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
       } catch (e) {
         return { ok: false, error: `${basename(file)}: ${await formatError(e)}\nNext: fix the reported error, then reload.`, ms: performance.now() - t0 };
+      }
+    },
+    // A one-off bundle with its own React, for programs that draw it outside the canvas page (render_component, visual diff).
+    async buildStandalone(file, name, displayFile = basename(file)) {
+      const t0 = performance.now();
+      try {
+        const r = await esbuild.build(options(file, name, displayFile));
+        return { ok: true, code: r.outputFiles[0].text, ms: performance.now() - t0 };
+      } catch (e) {
+        return { ok: false, error: `${displayFile}: ${await formatError(e)}\nNext: fix the reported error, then reload.`, ms: performance.now() - t0 };
       }
     },
     async dispose(file) { const c = contexts.get(file); contexts.delete(file); await c?.dispose(); },

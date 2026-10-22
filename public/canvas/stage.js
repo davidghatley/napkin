@@ -14,7 +14,7 @@
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 
-let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 30;
+let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function createStage(ctx, root, world, view) {
@@ -171,7 +171,6 @@ export function createStage(ctx, root, world, view) {
     const sels = ctx.state.selections.filter((s) => !(s.component === id && !(c.doc && index(c.doc).byId.has(s.node))));
     if (sels.length !== ctx.state.selections.length) ctx.selectMany(sels);
     refreshOverlays();
-    ctx.emit('render', { component: id, revision: c.revision });
   }
 
   function remove(id) {
@@ -202,7 +201,8 @@ export function createStage(ctx, root, world, view) {
     const sec = sections.get(id);
     if (!sec) return;
     sec.pos = { x, y };
-    sec.el.style.transform = `translate(${x}px, ${y}px)`;
+    // left/top, not a transform: 200 frames with a transform each are 200 paint-property nodes and make every frame's layerize pass slow (PRF-02)
+    sec.el.style.left = `${x}px`; sec.el.style.top = `${y}px`;
     sec.el.dataset.pos = '1';
   }
   const placed = (id) => { const s = ctx.state.components.get(id)?.canvas; return !!s && (s.x !== 0 || s.y !== 0); };
@@ -269,8 +269,9 @@ export function createStage(ctx, root, world, view) {
     if (label !== undefined) box.dataset.label = label;
   }
   function refreshOverlays() {
-    const base = overlays.getBoundingClientRect();
     const sels = ctx.state.selections, sel = ctx.state.selection;
+    if (!sels.length && !hoverEl && !measuring && !selectBox.style.display.includes('block') && !hoverBox.style.display.includes('block')) return; // nothing is shown, so there is nothing to place (and no layout to force)
+    const base = overlays.getBoundingClientRect();
     const selEl = selectedElement(sel);
     place(selectBox, selEl, sel && `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`, base);
     if (selEl?.isConnected && selectBox.style.display === 'block') { const r = selEl.getBoundingClientRect(), z = view.get().z; sizeChip.textContent = `${Math.round(r.width / z)} × ${Math.round(r.height / z)}`; }

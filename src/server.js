@@ -70,6 +70,12 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const path = url.pathname;
   try {
+    if (req.method === 'GET' && path === '/runtime.js') { // the one shared copy of React the component bundles import (see src/bundle.js)
+      const r = await ws.runtime(url.searchParams.get('module'));
+      if (!r) return json(res, 404, { ok: false, error: 'unknown runtime module' });
+      res.writeHead(200, { 'content-type': TYPES.js, 'cache-control': 'public, max-age=3600' });
+      return res.end(r.code);
+    }
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
     if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);

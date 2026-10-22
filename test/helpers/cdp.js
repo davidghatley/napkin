@@ -34,6 +34,7 @@ export async function launchChromium({ width = 1100, height = 700 } = {}) {
   listeners.push((m) => { if (m.method === 'Runtime.consoleAPICalled') consoleLines.push(m.params.args.map((a) => a.value ?? a.description).join(' ')); });
   const api = {
     send, consoleLines,
+    onEvent(cb) { listeners.push(cb); return () => listeners.splice(listeners.indexOf(cb), 1); },
     async goto(url) { await send('Page.navigate', { url }); await api.waitFor('document.readyState === "complete"'); },
     async eval(expr) { const r = await send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true }); if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text); return r.result.value; },
     async waitFor(expr, timeout = 5000) { const t0 = Date.now(); while (Date.now() - t0 < timeout) { try { if (await api.eval(expr)) return Date.now() - t0; } catch {} await sleep(25); } throw new Error(`timed out waiting for: ${expr}`); },
