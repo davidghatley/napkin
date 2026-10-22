@@ -126,13 +126,17 @@ export function initTools(ctx) {
     const el = sec && cellElement(sec, sel.node, sel.variant);
     if (!el) return false;
     editor?.cancel();
-    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el), z = zoom();
     const input = document.createElement('input');
     input.className = 'text-edit'; input.setAttribute('aria-label', `Text of ${sel.node}`); input.value = node.text ?? '';
-    Object.assign(input.style, { left: `${r.left}px`, top: `${r.top}px`, minWidth: `${Math.max(r.width + 16, 80)}px`, height: `${Math.max(r.height + 4, 24)}px`, font: cs.font, color: cs.color });
+    // the editor looks like the text it replaces, at the canvas's zoom: same face, size, spacing, alignment and colour
+    Object.assign(input.style, { left: `${r.left}px`, top: `${r.top}px`, minWidth: `${Math.max(r.width + 16, 80)}px`, height: `${Math.max(r.height + 4, 24)}px`, fontFamily: cs.fontFamily, fontSize: `${parseFloat(cs.fontSize) * z}px`, fontWeight: cs.fontWeight, fontStyle: cs.fontStyle, letterSpacing: cs.letterSpacing === 'normal' ? 'normal' : `${parseFloat(cs.letterSpacing) * z}px`, textAlign: cs.textAlign === 'start' ? 'left' : cs.textAlign, color: cs.color });
     document.body.append(input);
     input.focus(); input.select();
-    let done = false;
+    let done = false, composing = false;
+    // An IME (Japanese, Chinese, Korean, dead keys) builds a word in steps: Enter and blur while a composition is open belong to the IME, not to us.
+    input.addEventListener('compositionstart', () => { composing = true; input.dataset.composing = '1'; });
+    input.addEventListener('compositionend', () => { composing = false; delete input.dataset.composing; });
     const finish = async (commit) => {
       if (done) return; done = true;
       input.remove(); editor = null;
@@ -140,10 +144,11 @@ export function initTools(ctx) {
       if (commit && value !== '' && value !== node.text) await ctx.sendEdits(sel.component, [{ op: 'set', path: `${sel.node}.text`, value }]);
     };
     input.addEventListener('keydown', (ev) => {
+      if (ev.isComposing || composing || ev.keyCode === 229) return; // the IME is using this key
       if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
       else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
     });
-    input.addEventListener('blur', () => finish(true));
+    input.addEventListener('blur', () => { if (!composing) finish(true); else input.addEventListener('compositionend', () => finish(true), { once: true }); });
     editor = { cancel: () => finish(false) };
     return true;
   }

@@ -243,6 +243,13 @@ export function createApi(ws, { broadcast = () => {}, dir = ws.dir, canPropose =
       try { return res(200, { ok: true, canvas: ws.setCanvas(e, msg.x, msg.y, { by: caller }) }); }
       catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
     }
+    // LAY-11: a variant cell's preview width, in the sidecar only. { variant: { size: 'sm' }, width: 320 | null }
+    if (sub === 'preview' && method === 'POST') {
+      const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
+      const g = guard('preview_width'); if (g) return g;
+      try { return res(200, { ok: true, preview: ws.setPreview(e, msg.variant, msg.width, { by: caller }) }); }
+      catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
+    }
     if (sub === 'rename' && method === 'POST') {
       const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
       const g = guard('rename_component'); if (g) return g;

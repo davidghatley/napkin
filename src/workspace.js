@@ -30,6 +30,7 @@ async function until(fn, ms = 4000) { const t0 = Date.now(); while (Date.now() -
 
 // Every file-level commit names a real caller (AGT-05).
 // the saved frame position; reading never creates a sidecar (a deleted component must stay deleted)
+const previewOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).preview ?? {}; } catch { return {}; } };
 const canvasOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).canvas ?? { x: 0, y: 0 }; } catch { return { x: 0, y: 0 }; } };
 const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown') throw new CreateError('a caller name is required: every commit names who made it'); };
 
@@ -122,7 +123,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     // What a client needs to draw one component right now.
     async snapshot(e) {
       const r = await e.store.read();
-      return { component: e.id, name: e.name, path: e.path, canvas: canvasOf(e), revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
+      return { component: e.id, name: e.name, path: e.path, canvas: canvasOf(e), preview: previewOf(e), revision: r.revision, doc: r.doc, source: r.source, ...(r.readOnly && { readOnly: r.readOnly }), ...(r.problem && { problem: r.problem }) };
     },
     async bundle(e) { if (!e.built || e.dirty) { e.dirty = false; build(e); } return e.built; },
     // The bundle of a past revision's source (preview and visual diff); cached per component and revision.
@@ -143,6 +144,20 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       writeSidecar(sidecarPath(e.file), JSON.stringify({ ...side, canvas }, null, 2) + '\n');
       events.emit('canvas', { component: e.id, canvas });
       return canvas;
+    },
+    // LAY-11: preview widths for the variant cells (a cell dragged wider or narrower to watch the layout reflow). Sidecar only, never the .tsx.
+    // preview = { "<variant JSON>": width px }; width null puts the cell back to its natural size.
+    setPreview(e, variant, width, { by } = {}) {
+      needBy(by);
+      if (!variant || typeof variant !== 'object' || Array.isArray(variant)) throw new CreateError('variant must be an object like {"size":"sm"}');
+      if (width !== null && !(typeof width === 'number' && Number.isFinite(width) && width >= 16 && width <= 20000)) throw new CreateError('width must be a number from 16 to 20000, or null');
+      const side = readSidecar(e.file, e.name), preview = { ...(side.preview || {}) }, key = JSON.stringify(variant);
+      if (width === null) delete preview[key]; else preview[key] = Math.round(width);
+      const next = { ...side, preview };
+      if (!Object.keys(preview).length) delete next.preview;
+      writeSidecar(sidecarPath(e.file), JSON.stringify(next, null, 2) + '\n');
+      events.emit('preview', { component: e.id, preview });
+      return preview;
     },
     // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
     // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.

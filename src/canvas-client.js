@@ -20,8 +20,9 @@ export async function connectCanvas(baseUrl, { by = 'you', identify = true } = {
   const tokenP = identify ? fetch(new URL('api/session', baseUrl), { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ as: by }) }).then((r) => r.json()).then((j) => j.token) : Promise.resolve(undefined);
   const res = await fetch(new URL(`api/events?by=${encodeURIComponent(by)}`, baseUrl), { signal: ctrl.signal, headers: { accept: 'text/event-stream' } });
   const apply = (msg) => {
-    if (msg.type === 'state' || msg.type === 'added') comps.set(msg.component, { component: msg.component, name: msg.name, path: msg.path, canvas: msg.canvas, revision: msg.revision, doc: msg.doc, readOnly: msg.readOnly, problem: msg.problem });
+    if (msg.type === 'state' || msg.type === 'added') comps.set(msg.component, { component: msg.component, name: msg.name, path: msg.path, canvas: msg.canvas, preview: msg.preview, revision: msg.revision, doc: msg.doc, readOnly: msg.readOnly, problem: msg.problem });
     else if (msg.type === 'canvas') { const c = comps.get(msg.component); if (c) c.canvas = msg.canvas; }
+    else if (msg.type === 'preview') { const c = comps.get(msg.component); if (c) c.preview = msg.preview; }
     else if (msg.type === 'change') { const c = comps.get(msg.component); if (c) Object.assign(c, { revision: msg.revision, doc: msg.doc, name: msg.doc?.name || c.name, readOnly: msg.doc ? undefined : c.readOnly }); else comps.set(msg.component, { component: msg.component, name: msg.doc?.name || msg.component, revision: msg.revision, doc: msg.doc }); }
     else if (msg.type === 'problem') { const c = comps.get(msg.component); if (c) c.problem = msg.error || undefined; }
     else if (msg.type === 'removed') comps.delete(msg.component);

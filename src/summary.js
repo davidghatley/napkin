@@ -4,6 +4,10 @@ function one(e) {
   switch (e?.op) {
     case 'set': return `${e.path}${e.variant ? ` [${Object.entries(e.variant).map(([a, v]) => `${a}=${v}`).join(' ')}]` : ''} = ${val(e.value)}`;
     case 'insert': return `insert ${e.node?.id ?? 'node'} into ${e.parent}`;
+    case 'duplicate': return `duplicate ${e.id}`;
+    case 'paste': return `paste ${e.tree?.id ?? 'nodes'} into ${e.parent}`;
+    case 'wrap': return `wrap ${(e.ids || []).join(', ')} in ${e.id}`;
+    case 'unwrap': return `unwrap ${e.id}`;
     case 'delete': return `delete ${e.id}`;
     case 'move': return `move ${e.id} to ${e.parent}`;
     case 'addProp': return `add prop ${e.name}`;
