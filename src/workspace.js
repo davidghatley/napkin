@@ -12,7 +12,7 @@ import { watch, existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve, relative } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { openStore, brokenMessage } from './store.js';
-import { readSidecar, sidecarPath } from './codecs.js';
+import { readSidecar as loadSidecar, sidecarPath } from './codecs.js';
 import { createComponent, removeComponent, moveComponent, writeSidecar, removeSidecar } from './commit.js';
 import { readComponent } from './tsx/read.js';
 import { createBundler } from './bundle.js';
@@ -38,6 +38,7 @@ const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().t
 
 export async function openWorkspace(dir, { only, recursive = false, writeSidecars = true, progressive = false } = {}) {
   dir = resolve(dir);
+  const readSidecar = (file, name, options) => loadSidecar(file, name, { identityPath: relative(dir, file), ...options });
   const events = new EventEmitter();
   const tokens = openTokens(dir);
   tokens.events.on('change', row => { events.emit('tokens', row); });
@@ -370,6 +371,8 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       origins.set(file, { by, summary: `created ${name}`, ...(approvedBy && { approvedBy }) });
       try { createComponent(file, newComponentSource(name, rootTag)); }
       catch (err) { origins.delete(file); throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
+      // Explicit creation saves its identity. Scanning existing files is read-only.
+      readSidecar(file, name, { create: writeSidecars });
       await scan();
       const e = find(name);
       if (!e) throw new Error(explainError(`created ${name}.tsx but could not open it`));

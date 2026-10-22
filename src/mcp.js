@@ -61,7 +61,7 @@ const notice = (ch) => {
   send({ method: 'notifications/napkin/change', params: n });
 };
 
-class Unreachable extends Error { constructor(message) { super(explainError(message, { next: "run napkin open and set NAPKIN_URL to its printed address." })); } }
+class Unreachable extends Error { constructor(message) { super(explainError(message, { next: "run node src/cli.js open and set NAPKIN_URL to its printed address." })); } }
 async function makeRemote() {
   const probe = await fetch(new URL('api/components', BASE), { signal: AbortSignal.timeout(800) }).catch((e) => { throw new Unreachable(e.message); });
   if (!probe.ok) throw new Error(explainError(`napkin server answered ${probe.status}`));

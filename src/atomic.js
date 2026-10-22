@@ -3,6 +3,15 @@
 // one, never half of one. Nothing else in napkin writes a component or sidecar any other way.
 import { openSync, writeSync, fsyncSync, closeSync, renameSync, linkSync, unlinkSync, statSync, readdirSync, readFileSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
+// Private lock and edit-guard files ignore themselves without changing the root .gitignore.
+export function privateDir(dir) {
+  const folder = join(dir, '.napkin');
+  mkdirSync(folder, { recursive: true });
+  const ignore = join(folder, '.gitignore');
+  try { if (readFileSync(ignore, 'utf8') === '*\n') return folder; } catch {}
+  writeAtomic(ignore, '*\n');
+  return folder;
+}
 
 let counter = 0;
 export const tmpName = (file) => join(dirname(file), `.${basename(file)}.tmp-${process.pid}-${counter++}`);
@@ -34,7 +43,7 @@ export function writeAtomic(file, data, { exclusive = false, check, guard } = {}
     } finally { closeSync(fd); }
     check?.();
     if (guard !== undefined && !exclusive) {
-      const gdir = join(dirname(file), '.napkin', 'guard');
+      const gdir = join(privateDir(dirname(file)), 'guard');
       mkdirSync(gdir, { recursive: true });
       guardPath = join(gdir, `${basename(file)}.${process.pid}.${counter++}`);
       try { linkSync(file, guardPath); } catch { guardPath = null; } // no target yet: nothing to guard

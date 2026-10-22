@@ -1,0 +1,18 @@
+WPC-05: shell command walk from README.md and docs/guide/*.md.
+Commands ran in a disposable checkout with the current source and installed dependencies.
+npm ci: PASS in test/onboarding/readme.test.js (clean clone).
+node src/cli.js init ./my-napkin: PASS.
+node src/cli.js open ./my-napkin: PASS (HTTP ready; stopped).
+node tools/sample-repo.js ./sample-40: PASS.
+node src/cli.js open ./sample-40: PASS (HTTP ready; stopped).
+node examples/consumer-app/build.mjs ./sample-40/components ./sample-40/consumer: PASS.
+Real UI: selected a component root; Inspect usage includes import and JSX.
+Real UI: Tokens drawer has 20 rows. Drawer tabs: Code, History, Tokens, Inspect, Assets, Changes, Activity
+node src/server.js --port 0: PASS (HTTP ready; stopped).
+npm test: ran once under flock; tests 542, pass 533, fail 4, skipped 5. See onboard2-tests.txt for failures and follow-up checks.
+npm start: PASS (HTTP ready; stopped).
+npm run demo: PASS.
+ℹ tests 1
+ℹ pass 1
+ℹ fail 0
+ℹ skipped 0

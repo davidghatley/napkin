@@ -32,7 +32,7 @@ test('ONB-01/05: README quickstart runs in a clean clone; first render within 60
     assert.equal(JSON.parse(readFileSync(join(clone, 'package.json'))).bin.napkin, 'src/cli.js');
     // The checkout bin also resolves without fetching a published package.
     const npx = execFileSync('npx', ['--no-install', 'napkin', '--help'], { cwd: clone, encoding: 'utf8', env: { ...process.env, npm_config_cache: join(parent, 'npm-cache') } });
-    assert.match(npx, /Usage: napkin/);
+    assert.match(npx, /Usage: node src\/cli\.js/);
     // Substitute only the test's random port. No other README command is changed.
     proc = spawn('bash', ['-eu', '-c', 'exec ' + commands.at(-1) + ' --port 0'], { cwd: clone, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; proc.stdout.on('data', (b) => output += b); proc.stderr.on('data', (b) => output += b);
@@ -59,7 +59,7 @@ test('ONB-01: occupied requested port falls forward; init refuses existing files
   let proc;
   try {
     const init = execFileSync(process.execPath, [join(ROOT, 'src/cli.js'), 'init', dir], { encoding: 'utf8' });
-    assert.match(init, /run napkin open .* to start/);
+    assert.match(init, /run node src\/cli\.js open .* to start/);
     assert.doesNotMatch(init, /Canvas:|\.mcp\.json|NAPKIN_AGENT/);
     assert.throws(() => execFileSync(process.execPath, [join(ROOT, 'src/cli.js'), 'init', dir], { stdio: 'pipe' }), /not empty/);
     const port = busy.address().port;

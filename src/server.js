@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
-import { createComponent, createProjectConfig, writeTokens } from './commit.js';
+import { createComponent, createProjectConfig, writeTokens, removeDemoWorkspace } from './commit.js';
 import { createPresence } from './presence.js';
 import { nodeOfEdit } from './model.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
@@ -21,17 +21,23 @@ import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, stream: { type: 'boolean' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-let dir, only;
+let dir, only, demoDir;
+// exit also covers startup failures and ordinary process.exit(), after shutdown
+// has released the workspace. Never remove a caller-supplied --dir or --file.
+process.once('exit', () => { if (demoDir) removeDemoWorkspace(demoDir); });
+// Signals during async startup still take the normal exit cleanup path.
+let shutdown = () => process.exit(0);
+for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => shutdown());
 if (args.file) { dir = dirname(resolve(args.file)); only = resolve(args.file); }
 else if (args.dir) dir = resolve(args.dir);
 else { // a throwaway copy of the fixtures, so playing with the canvas never edits the repo
-  dir = mkdtempSync(join(tmpdir(), 'napkin-fixtures-'));
+  dir = demoDir = mkdtempSync(join(tmpdir(), 'napkin-fixtures-'));
   for (const d of readdirSync(join(ROOT, 'fixtures'))) for (const f of readdirSync(join(ROOT, 'fixtures', d))) if (f.endsWith('.tsx')) createComponent(join(dir, f), readFileSync(join(ROOT, 'fixtures', d, f), 'utf8'));
   writeTokens(join(dir, 'tokens.json'), readFileSync(join(ROOT, 'fixtures/tokens/tokens.json'), 'utf8'), { file: join(dir, 'tokens.css'), text: readFileSync(join(ROOT, 'fixtures/tokens/tokens.css'), 'utf8') });
   createProjectConfig(join(dir, 'napkin.json'), JSON.stringify({ tokens: { source: 'tokens.json', css: 'tokens.css' } }) + '\n');
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
-if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run napkin init.`); process.exit(1); }
+if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run node src/cli.js init.`); process.exit(1); }
 let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
 try { lock = acquireWorkspaceLock(dir, { writeSidecars: !args['no-sidecars'] }); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
 const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'], progressive: args.stream });
@@ -201,5 +207,5 @@ server.listen(listenPort, '127.0.0.1', () => {
   console.log(`napkin canvas: http://127.0.0.1:${server.address().port}/`);
   if (args.stream) ws.ready.then(async () => { if (!server.listening) return; console.log(await ws.report()); });
 });
-const stop = () => { for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
-process.on('SIGTERM', stop); process.on('SIGINT', stop);
+let stopping = false;
+shutdown = () => { if (stopping) return; stopping = true; for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
