@@ -13,7 +13,7 @@ import { openWorkspace } from '../src/workspace.js';
 import { ROOT, startServer } from './helpers/harness.js';
 import { renderHtml } from './helpers/ssr.js';
 
-const DATA = join(ROOT, 'test', 'data', '0004');
+const DATA = join(ROOT, 'test', 'fixtures', '0004');
 const read = (n) => readFileSync(join(DATA, `${n}.tsx`), 'utf8');
 function folder(names = ['Button', 'Panel']) {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-0004-'));

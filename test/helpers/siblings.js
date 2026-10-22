@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { readComponent } from '../../src/tsx/read.js';
 import { ROOT } from './harness.js';
 
-const button = () => readFileSync(join(ROOT, 'test', 'data', '0004', 'Button.tsx'), 'utf8');
+const button = () => readFileSync(join(ROOT, 'test', 'fixtures', '0004', 'Button.tsx'), 'utf8');
 export const SIBLING_SOURCES = {
   Chip: () => button().replace(/Button/g, 'Chip'),
   Badge: () => button().replace(/Button/g, 'Badge').replace("  disabled?: boolean;\n", '  hint?: string;\n  children?: ReactNode;\n').replace("import type { CSSProperties }", 'import type { CSSProperties, ReactNode }').replace(", disabled = false", ', hint, children'),
