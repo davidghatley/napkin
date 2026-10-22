@@ -46,7 +46,7 @@ const tint = (by) => (PEOPLE.has(by) || !by ? {} : presence.color(by)); // agent
 const api = createApi(ws, { dir, colorOf: tint, broadcast: (f) => {
   if (f.type === 'proposal') {
     broadcast({ ...f, proposal: { ...f.proposal, ...tint(f.proposal.by) } });
-    if (!f.proposal.adoption && !f.proposal.updated) presence.set(f.proposal.by, { component: f.component, node: nodeOfEdit(f.proposal.edits?.[0]), variant: f.proposal.edits?.[0]?.variant ?? null });
+    if (!f.proposal.adoption && !f.proposal.create && !f.proposal.updated) presence.set(f.proposal.by, { component: f.component, node: nodeOfEdit(f.proposal.edits?.[0]), variant: f.proposal.edits?.[0]?.variant ?? null });
   } else broadcast(f);
 } });
 ws.events.on('tokens', t => broadcast({ type: 'tokens', ...t }));
@@ -143,7 +143,7 @@ const server = createServer(async (req, res) => {
     const bp = path.match(/^\/bundle-proposal\/([^/]+)\.js$/);
     if (req.method === 'GET' && bp) {
       const p = api.proposals.get(decodeURIComponent(bp[1]));
-      const e = p && ws.find(p.component);
+      const e = p?.create ? { file: join(dir, `${p.name}.tsx`), name: p.name } : p && ws.find(p.component); // a new component has no entry yet: bundle its would-be source under its would-be name
       if (!e) return json(res, 404, { ok: false, error: 'no such proposal' });
       let source = p.source;
       const only = url.searchParams.get('only'); // "0,2": show just those edits (a dry run on the proposal's base; nothing is written)
