@@ -42,7 +42,7 @@ async function main() {
     if (!existsSync(components)) throw new Error(`${components} does not exist (napkin.json). Next: create the components folder or correct the components path.`);
   }
   if (external && !values['write-sidecars']) console.log('Opening without sidecar writes. Frame positions stay in this session; component edits and accepted adoptions still write the selected TSX file.');
-  const args = [...SERVER_FLAGS, join(ROOT, 'src/server.js'), '--dir', components, '--port', String(port), '--recursive', '--next-port', '--stream', ...(external && !values['write-sidecars'] ? ['--no-sidecars'] : [])];
+  const args = [...SERVER_FLAGS, join(ROOT, 'src/server.js'), '--dir', components, '--port', String(port), '--recursive', '--next-port', '--stream', '--watch-parent', String(process.pid), ...(external && !values['write-sidecars'] ? ['--no-sidecars'] : [])];
   const child = spawn(process.execPath, args, { stdio: ['inherit', 'pipe', 'inherit'] });
   let printed = false, buffer = '';
   child.stdout.on('data', (b) => {
@@ -51,7 +51,7 @@ async function main() {
     if (url && !printed) { printed = true; process.stdout.write(String(b) + connection(url) + '\n'); }
     else process.stdout.write(b);
   });
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => child.kill(signal));
+  for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(signal, () => child.kill(signal));
   child.on('exit', (code) => { process.exitCode = code || 0; });
 }
 

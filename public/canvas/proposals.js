@@ -12,7 +12,7 @@ const fmt = (v) => (v === null || v === undefined ? 'removed' : typeof v === 'st
 const JSON_POST = { method: 'POST', headers: { 'content-type': 'application/json' } };
 
 export function initProposals(ctx) {
-  const S = { list: new Map(), picked: null, pickedEdit: null, open: false, userFolded: false, mode: 'after', news: new Map(), hiddenNew: new Set(), errors: new Map(), busy: new Set(), mod: null, token: 0, unmounts: [] };
+  const S = { list: new Map(), picked: null, pickedEdit: null, open: false, userFolded: false, mode: 'after', news: new Map(), hiddenNew: new Set(), away: new Set(), errors: new Map(), busy: new Set(), mod: null, token: 0, unmounts: [] };
   const stageEl = document.querySelector('#stage');
   // The tray lives in the dock under the canvas (beside the drawer), so the canvas shrinks instead of being covered: cells under review stay fully visible.
   const dockEl = document.querySelector('#dock');
@@ -44,7 +44,7 @@ export function initProposals(ctx) {
   function drop(id) {
     S.list.delete(id); S.errors.delete(id);
     if (S.picked === id) { S.picked = null; S.pickedEdit = null; clearGhost(); }
-    S.news.delete(id); S.hiddenNew.delete(id); ctx.stage.removeGhost(id);
+    S.news.delete(id); S.hiddenNew.delete(id); S.away.delete(id); ctx.stage.removeGhost(id);
     afterChange(false);
   }
   function afterChange(opened) {
@@ -77,7 +77,7 @@ export function initProposals(ctx) {
     return h('li', { class: 'pitem', tabindex: '0', role: 'group', 'data-id': p.id, 'data-by': p.by, 'data-component': p.component, ...(p.create && { 'data-create': p.name }), 'aria-current': String(S.picked === p.id), 'aria-label': p.create ? `Proposal from ${p.by} to create the new component ${p.name}` : `Proposal from ${p.by} on ${nameOf(p.component)}: ${p.summary}`,
       onclick: (ev) => { if (!ev.target.closest('button')) pick(p.id); } },
       h('div', { class: 'pi-main' },
-        h('div', { class: 'pi-top' }, h('span', { class: 'pi-comp', text: titleOf(p) }), p.adoption ? h('span', { class: 'pi-tag', text: 'adoption' }) : null, p.create ? h('span', { class: 'pi-tag', text: 'new component' }) : null, h('time', { class: 'pi-age', text: ago(p.at) })),
+        h('div', { class: 'pi-top' }, h('span', { class: 'pi-comp', text: titleOf(p) }), p.adoption ? h('span', { class: 'pi-tag', text: 'adoption' }) : null, p.create ? h('span', { class: 'pi-tag', text: 'new component' }) : null, p.create && S.away.has(p.id) && offscreen(p.id) ? h('span', { class: 'pi-tag pi-away', title: 'The ghost is outside your view. Click this row to go there.', text: 'off screen →' }) : null, h('time', { class: 'pi-age', text: ago(p.at) })),
         editRows(p)),
       h('div', { class: 'pi-btns' },
         h('button', { type: 'button', class: 'pb go p-accept', disabled: busy, 'aria-label': `Accept ${p.edits.length > 1 ? 'all ' + p.edits.length + ' edits of ' : ''}the proposal on ${titleOf(p)}`, text: p.edits.length > 1 ? 'Accept' : 'Accept', onclick: () => act(p, 'accept') }),
@@ -199,10 +199,20 @@ export function initProposals(ctx) {
       S.news.set(p.id, mod);
     }
     if (!ctx.stage.ghostKeys().includes(p.id)) paintNews();
-    if (reveal) requestAnimationFrame(() => revealNew());
+    if (reveal) requestAnimationFrame(() => noticeNew(p));
   }
-  // Bring every pending ghost into view when any was placed off screen (nothing moves if they are all visible): several quick create
-  // proposals fit in one view, zooming out as far as needed.
+  // WPC-26: an agent's proposal never moves the person's camera. A new ghost that landed off screen gets a quiet notice instead; the
+  // tray row (click it) or revealNew() below is the one click that goes there.
+  function offscreen(id) {
+    const r = ctx.stage.ghostRect(id); if (!r) return false;
+    const { x, y, z } = ctx.view.get(), b = ctx.view.stageBox();
+    return !(r.x * z + x >= 0 && r.y * z + y >= 0 && (r.x + r.w) * z + x <= b.width && (r.y + r.h) * z + y <= b.height);
+  }
+  function noticeNew(p) {
+    if (S.list.has(p.id) && !S.hiddenNew.has(p.id) && offscreen(p.id)) { S.away.add(p.id); draw(); ctx.hint(`${p.by} proposed ${p.name}; its ghost is off screen. Click its row in the proposals tray to go there.`); }
+  }
+  // Bring every pending ghost into view (only ever from a click on a tray row): several create proposals fit in one view, zooming out
+  // as far as needed.
   function revealNew() {
     const rs = [...S.news.keys()].filter((id) => !S.hiddenNew.has(id)).map((id) => ctx.stage.ghostRect(id)).filter(Boolean);
     if (!rs.length) return;
@@ -230,7 +240,7 @@ export function initProposals(ctx) {
   // Show a proposal's result (or one edit of it) as a ghost, and bring its component fully into view in the space the tray left.
   function pick(id, edit = null) {
     const np = id && S.list.get(id);
-    if (np?.create) { S.hiddenNew.delete(id); showNew(np, true).then(() => revealNew()); draw(); return; } // a new component's ghost is always drawn; picking only brings it into view
+    if (np?.create) { S.hiddenNew.delete(id); S.away.delete(id); showNew(np, true).then(() => revealNew()); draw(); return; } // a new component's ghost is always drawn; picking only brings it into view
     clearGhost();
     S.picked = id; S.pickedEdit = id ? edit : null;
     draw();

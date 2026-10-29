@@ -180,7 +180,7 @@ export async function openStore(file, start = {}) {
     for (const h of history.slice(at + 1)) {
       if (conflicts(keys, h.keys)) {
         const stale = staleEntries({ doc, edits, keys, history, baseAt: at });
-        return { ok: false, error: `stale revision: ${[...keys].join(', ')} changed in revision ${h.revision} (base ${baseRevision})`, currentRevision: revision, stale };
+        return { ok: false, error: `stale revision: ${(stale.length ? stale.map((s) => s.key) : [...keys]).join(', ')} changed in revision ${h.revision} (base ${baseRevision})`, currentRevision: revision, stale };
       }
     }
     let next;

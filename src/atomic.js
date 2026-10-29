@@ -1,7 +1,7 @@
 // Whole-file writes (REL-01). The bytes go to a temp file in the same folder, are flushed to disk,
 // and only then renamed over the target, so a kill -9 at any moment leaves the old file or the new
 // one, never half of one. Nothing else in napkin writes a component or sidecar any other way.
-import { openSync, writeSync, fsyncSync, closeSync, renameSync, linkSync, unlinkSync, statSync, readdirSync, readFileSync, mkdirSync } from 'node:fs';
+import { rmdirSync, openSync, writeSync, fsyncSync, closeSync, renameSync, linkSync, unlinkSync, statSync, readdirSync, readFileSync, mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 // Private lock and edit-guard files ignore themselves without changing the root .gitignore.
 export function privateDir(dir) {
@@ -17,6 +17,26 @@ export function privateDir(dir) {
 export function writePrivate(folder, name, text) { mkdirSync(folder, { recursive: true }); writeAtomic(join(folder, name), text); }
 // Remove what an interrupted atomic write left behind (.<name>.tmp-<pid>-<n>) in a private folder.
 export function sweepTmp(folder) { try { for (const f of readdirSync(folder)) if (/^\..+\.tmp-\d+-\d+$/.test(f)) unlinkSync(join(folder, f)); } catch { /* no such folder */ } }
+
+// WPC-37: on a clean stop, leave only what is documented: .napkin/proposals.json (pending proposals survive a restart) and the
+// .gitignore that hides it. Empty guard/ folders, leftover temp files and a .gitignore guarding nothing are removed.
+export function cleanPrivate(root) {
+  const walk = (d, depth) => {
+    let names; try { names = readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of names) {
+      if (!e.isDirectory() || e.name === 'node_modules' || e.name === '.git') continue;
+      const p = join(d, e.name);
+      if (e.name === '.napkin') tidy(p); else if (depth < 6) walk(p, depth + 1);
+    }
+  };
+  const tidy = (folder) => {
+    sweepTmp(folder);
+    try { const f = join(folder, 'proposals.json'), j = JSON.parse(readFileSync(f, 'utf8')); if (!j.proposals?.length && !j.answered?.length) unlinkSync(f); } catch { /* none, or not ours to judge */ }
+    try { rmdirSync(join(folder, 'guard')); } catch { /* absent or not empty */ }
+    try { if (readdirSync(folder).join() === '.gitignore') { unlinkSync(join(folder, '.gitignore')); rmdirSync(folder); } else if (!readdirSync(folder).length) rmdirSync(folder); } catch { /* in use */ }
+  };
+  tidy(join(root, '.napkin')); walk(root, 0);
+}
 
 let counter = 0;
 export const tmpName = (file) => join(dirname(file), `.${basename(file)}.tmp-${process.pid}-${counter++}`);
