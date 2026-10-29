@@ -38,6 +38,7 @@ import { initHandles } from './handles.js';
 import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
 import { plain } from './words.js';
+import { variantGrid } from '/src/model.js';
 import { initMatrix } from './matrix.js';
 import { initPlay } from './play.js';
 import { initTabs } from './tabs.js';
@@ -136,7 +137,9 @@ const sync = id => {
 };
 
 function counts() {
-  const cells = document.querySelectorAll('.cell').length, n = ctx.state.components.size;
+  // WPC-35: counted from the documents, not from the cells on screen (frames far off screen are not drawn), so zoom never changes it
+  let cells = 0; for (const c of ctx.state.components.values()) if (c.doc) cells += variantGrid(c.doc).length;
+  const n = ctx.state.components.size;
   $('#counts').textContent = `${n} component${n === 1 ? '' : 's'} · ${cells} variant${cells === 1 ? '' : 's'}`;
 }
 

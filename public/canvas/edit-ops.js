@@ -3,7 +3,7 @@
 //   Paste: nodes copied from napkin (any component, fresh ids), an image file or SVG (stored in assets/ by content hash), an HTML snippet
 //   (dialect nodes if it fits exactly, else refused with the reason), or a line of text.
 //   ctx.ops = { duplicate, wrap, unwrap, copy(event?), paste(clipboardData), hide, last }  (`last` is the result of the latest paste, for tests)
-import { plain } from './words.js';
+import { plain, SANS } from './words.js';
 import { index, VOID } from '/src/model.js';
 import { pasteHtml } from './html-paste.js';
 import { isFlex } from '/src/layout.js';
@@ -151,7 +151,7 @@ export function initEditOps(ctx) {
       if (!r.ok) { ops.last = { ok: false, kind: 'html', reason: r.reason }; say(`Not pasted: ${r.reason}`); return null; }
       return insert(t, r.trees, null, 'html');
     }
-    if (plain.trim() && !/\n/.test(plain.trim()) && plain.length <= 500) return insert(t, [{ id: 'text', tag: 'span', text: plain.trim(), style: {}, children: [] }], null, 'text');
+    if (plain.trim() && !/\n/.test(plain.trim()) && plain.length <= 500) return insert(t, [{ id: 'text', tag: 'span', text: plain.trim(), style: { fontFamily: SANS }, children: [] }], null, 'text');
     return null;
   }
 

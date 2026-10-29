@@ -208,7 +208,7 @@ export function initProposals(ctx) {
     if (!rs.length) return;
     const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y)), x1 = Math.max(...rs.map((r) => r.x + r.w)), y1 = Math.max(...rs.map((r) => r.y + r.h));
     const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-    const { x, y, z } = ctx.view.get(), b = ctx.view.stageBox();
+    const { x, y, z } = ctx.view.target(), b = ctx.view.stageBox(); // (a fly already under way counts by where it ends)
     const inside = r.x * z + x >= 0 && r.y * z + y >= 0 && (r.x + r.w) * z + x <= b.width && (r.y + r.h) * z + y <= b.height;
     const tiny = r.w * z < 260 && r.h * z < 160; // visible but too small to read at a far-out fit: come closer
     if (!inside || tiny) ctx.view.flyTo(r, { pad: 90, max: Math.max(1, z) });

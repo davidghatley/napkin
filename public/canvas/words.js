@@ -73,3 +73,6 @@ export function engineSentence(kind, text, value) {
   if (/bad component name/.test(s)) return checkName('component', quoted, []) ?? plain(s);
   return plain(s);
 }
+
+// WPC-29: cells draw with `all: initial`, so text napkin makes itself says its font out loud (a system sans), in the component's own file.
+export const SANS = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";

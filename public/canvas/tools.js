@@ -5,7 +5,7 @@
 // Select-tool niceties live here too: Delete removes the selected node, Alt+Up/Down moves it among its siblings,
 // double-click edits a text node in place.
 //   initTools(ctx) -> { tools, use(id), editText(selection), createComponent(name) }; also set as ctx.tools.
-import { plain } from './words.js';
+import { plain, SANS } from './words.js';
 import { index, variantGrid, VOID } from '/src/model.js';
 
 const svg = (d) => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -27,7 +27,7 @@ function newNode(tool, id, size) {
     const [w, h] = size || [];
     return { id, tag: 'div', style: { display: 'flex', flexDirection: 'column', gap: 8, padding: 8, boxSizing: 'border-box', border: '1px dashed #9a927f', minWidth: MIN.frame[0], minHeight: MIN.frame[1], ...(size && { width: Math.max(w, MIN.frame[0]), height: Math.max(h, MIN.frame[1]) }) } };
   }
-  if (tool === 'text') return { id, tag: 'span', text: 'Text', style: { boxSizing: 'border-box' } };
+  if (tool === 'text') return { id, tag: 'span', text: 'Text', style: { boxSizing: 'border-box', fontFamily: SANS } };
   const [w, h] = size || [64, 64];
   return { id, tag: 'img', attrs: { src: '', alt: '' }, style: { boxSizing: 'border-box', display: 'block', width: Math.max(w, MIN.image[0]), height: Math.max(h, MIN.image[1]), backgroundColor: '#e4dccb' } };
 }
@@ -106,6 +106,9 @@ export function initTools(ctx) {
     for (let i = 0; i < 200 && !ctx.state.components.get(r.id)?.doc; i++) await sleep(25);
     const c = ctx.state.components.get(r.id);
     const sec = c && await rendered(r.id, c.revision);
+    // WPC-23: a component made here keeps the free spot the stage found for it, so a reload (or another tab) does not stack it at 0,0
+    const at = sec && ctx.stage?.position(r.id);
+    if (at && (at.x !== 0 || at.y !== 0)) await ctx.fetch(`/api/components/${encodeURIComponent(r.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: at.x, y: at.y }) }).catch(() => {});
     if (sec) { ctx.stage?.reveal(r.id); ctx.select({ component: r.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] }); }
     return { ok: true, id: r.id, name: r.name };
   }
