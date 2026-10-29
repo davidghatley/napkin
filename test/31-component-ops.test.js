@@ -131,11 +131,12 @@ test('WPC-28: Ctrl+Z after a rename puts file, export names and sidecar back, as
     await L.q(`napkin.cmpOps.rename()`);
     await L.q(`(() => { document.querySelector('#cmp-name').value = 'Panel'; document.querySelector('#cmp-rename').requestSubmit(); })()`);
     await waitFor(L, `!document.querySelector('#cmp-dialog').open && napkin.find('Panel')?.doc`);
+    await waitFor(L, `!document.querySelector('#cmp-toast').hidden`);
     assert.equal(await L.q(`napkin.state.selection?.component`), id, 'the selection stays on the renamed component');
     assert.ok(existsSync(join(L.compDir, 'Panel.napkin.json')));
     assert.match(await L.q(`document.querySelector('#cmp-toast').textContent`), /Ctrl\+Z/);
     await key(L, 'z', { ctrlKey: true });
-    await waitFor(L, `!napkin.find('Panel') && napkin.find('Card')?.doc`);
+    await waitFor(L, `!napkin.find('Panel') && napkin.find('Card')?.doc`).catch(async (e) => { throw new Error(e.message + ' | toast: ' + await L.q(`document.querySelector('#cmp-toast').textContent`) + ' | ' + await L.q(`[...napkin.state.components.values()].map((c) => c.name).join()`)); });
     assert.equal(readFileSync(join(L.compDir, 'Card.tsx'), 'utf8'), before);
     assert.ok(existsSync(join(L.compDir, 'Card.napkin.json')) && !existsSync(join(L.compDir, 'Panel.napkin.json')));
     assert.equal(await L.id('Card'), id);

@@ -151,7 +151,7 @@ export function initComponentOps(ctx) {
   toast.querySelector('#cmp-undo').onclick = undoLast;
 
   addEventListener('keydown', (ev) => {
-    if (document.body.dataset.modal || typing(ev.target) || ev.isComposing) return;
+    if ((document.body.dataset.modal && document.body.dataset.modal !== 'component') || dialog.open || typing(ev.target) || ev.isComposing) return;
     if (ev.key === 'F2' && !ev.defaultPrevented && ctx.state.selection) { ev.preventDefault(); rename(); return; }
     if (last && ev.key.toLowerCase() === 'z' && (ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey) { ev.preventDefault(); ev.stopImmediatePropagation(); undoLast(); }
   });
