@@ -4,6 +4,7 @@
 // Every control still writes CSS through ctx.sendEdits: one `set` per property, and one batch per change
 // (several selected nodes = one revision). The panel never writes files. Text typed into a field survives a
 // rebuild (ui.draft) until it is saved.
+import { plain, stripNext } from './words.js';
 import { index, axes, resolveStyle, propOf } from '/src/model.js';
 import { isFlex, isGrid, mainProp, sizeMode, sizePatch, pinPatch, pinsOf, tracks, placementOf, placePatch } from '/src/layout.js';
 import { parseColor, formatColor, fileSpace, documentColors, colorsIn } from '/src/color.js';
@@ -84,6 +85,17 @@ function target(doc, sel) {
 // Axis/value pairs of the selected cell that override `prop` on `node`.
 const overridesOf = (doc, nonBase, nodeId, prop) => nonBase.filter(([a, v]) => doc.variants?.[a]?.[v]?.[nodeId]?.[prop] !== undefined);
 
+// A value the browser would not accept for this property never reaches the file ("banana" as a colour, "abc def" as a padding).
+function invalidValue(prop, v) {
+  if (v === null || v === undefined || typeof v === 'boolean' || !globalThis.CSS?.supports) return null;
+  const kebab = prop.replace(/[A-Z]/g, (m) => '-' + m.toLowerCase());
+  if (!CSS.supports(kebab, 'inherit')) return null; // not a CSS property the panel knows how to check
+  const text = typeof v === 'number' && !UNITLESS.has(prop) ? `${v}px` : String(v);
+  if (CSS.supports(kebab, text)) return null;
+  const label = (({ background: 'fill colour', color: 'text colour', borderColor: 'stroke colour', boxShadow: 'shadow' })[prop] ?? F[prop]?.label ?? prop.replace(/[A-Z]/g, (m) => ' ' + m.toLowerCase())).toLowerCase();
+  const example = CSS.supports(kebab, '#2236b0') ? 'a colour like #2236b0' : CSS.supports(kebab, '12px') ? 'a size like 12px' : CSS.supports(kebab, '400') ? 'a number like 400' : 'one of the values CSS allows';
+  return `"${String(v).slice(0, 30)}" is not something ${label} can be. Try ${example}.`;
+}
 const err = (key) => {
   const e = ui.errors[key];
   if (!e) return '';
@@ -187,7 +199,7 @@ export function renderPanel(ctx) {
   if (!node) {
     el.innerHTML = `<div class="empty-panel"><svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="7" y="9" width="34" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 4"/><path d="M19 20l11 5-5 2-2 5z" fill="currentColor"/></svg>
       <h2>Nothing selected</h2><p class="hint">Click a layer or an element on the canvas. Shift-click or drag a box to select several.</p>
-      <dl class="keys"><dt><kbd>⌘K</kbd></dt><dd>Jump to anything</dd><dt><kbd>Enter</kbd></dt><dd>Focus a component</dd><dt><kbd>⇧1</kbd></dt><dd>Fit everything</dd><dt><kbd>N</kbd></dt><dd>New component</dd><dt><kbd>Alt</kbd></dt><dd>Measure to hovered</dd></dl></div>`;
+      <dl class="keys"><dt><kbd>⌘K</kbd></dt><dd>Jump to anything</dd><dt><kbd>Enter</kbd></dt><dd>Focus a component</dd><dt><kbd>Alt+I</kbd></dt><dd>Jump to the inspector</dd><dt><kbd>⌘K</kbd></dt><dd>…then type a property: Radius, Fill, Gap</dd><dt><kbd>⇧1</kbd></dt><dd>Fit everything</dd><dt><kbd>N</kbd></dt><dd>New component</dd><dt><kbd>Alt</kbd></dt><dd>Measure to hovered</dd></dl></div>`;
     return;
   }
   const selKey = `${sel.component}|${JSON.stringify(sel.variant)}`;
@@ -482,7 +494,7 @@ function wire(ctx, el) {
       if (r.revision === was) setTimeout(rerender, 0);
     } else if (r.stale?.length) { delete ui.errors[key]; rerender(); // clash.js shows a chip with both values
     } else {
-      ui.errors[key] = { text: r.error, retry: /^stale revision/.test(r.error) ? { component, edits, opts: { clear, close } } : null };
+      ui.errors[key] = { text: stripNext(r.error), retry: /^stale revision/.test(r.error) ? { component, edits, opts: { clear, close } } : null };
       rerender();
     }
     return r;
@@ -533,16 +545,39 @@ function wire(ctx, el) {
     if (g === 'rad') return { prop: 'borderRadius', value: box(['rad-tl', 'rad-tr', 'rad-br', 'rad-bl']) };
     return null;
   }
-  const commitGroup = (g, ids) => { const r = readGroup(g); return commit(r.prop, r.value, ids ?? r.prop); };
+  // A colour typed into the Stroke or Shadow colour field that is not a colour: say so by name, write nothing.
+  function colourProblem(g) {
+    const id = g === 'stroke' ? 'stroke-color' : g === 'shadow' ? 'shadow-color' : null;
+    const inp = id && el.querySelector('#' + id), text = inp?.value.trim();
+    if (!inp || !text || !globalThis.CSS?.supports || CSS.supports('color', text) || /\bvar\(/.test(text) || inp.dataset.token === text || ctx.tokens?.data?.tokens?.some((t) => t.name === text)) return null;
+    const key = g === 'stroke' ? 'style-border' + ui.side : 'style-boxShadow';
+    ui.errors[key] = { text: `"${text.slice(0, 30)}" is not a colour. Try a colour like #2236b0 in ${g === 'stroke' ? 'Stroke colour' : 'Shadow colour'}.`, retry: null };
+    return key;
+  }
+  const commitGroup = (g, ids) => {
+    for (const k of ['style-border' + ui.side, 'style-boxShadow']) if (g === 'stroke' || g === 'shadow') delete ui.errors[k];
+    if (colourProblem(g)) { rerender(); return { ok: false, error: 'invalid colour' }; }
+    const r = readGroup(g); return commit(r.prop, r.value, ids ?? r.prop);
+  };
   const curVal = (prop) => { const s = ctx.state.selection, doc = curDoc(); if (!s || !doc) return undefined; const n = index(doc).byId.get(s.node); return (target(doc, s).overriding ? resolveStyle(doc, s.node, s.variant) : n?.style || {})[prop]; };
   async function commit(prop, raw, id) {
     const s = ctx.state.selection;
     if (!s) return;
+    delete ui.errors['style-' + prop]; // a field's old message goes when its next edit comes in
+    if (prop === 'stroke-color' || prop === 'shadow-color') {
+      const sideKey = prop === 'stroke-color' ? 'style-border' + ui.side : 'style-boxShadow', text = String(raw).trim();
+      delete ui.errors[sideKey];
+      if (text && !/\bvar\(/.test(text) && globalThis.CSS?.supports && !CSS.supports('color', text)) { // name the colour and the field, not the border shorthand
+        ui.errors[sideKey] = { text: `"${text.slice(0, 30)}" is not a colour. Try ${CSS.supports('color', '#2236b0') ? 'a colour like #2236b0' : 'another colour'} in ${prop === 'stroke-color' ? 'Stroke colour' : 'Shadow colour'}.`, retry: null }; rerender(); return { ok: false, error: 'invalid colour' };
+      }
+    }
     if (prop === 'stroke-color') { const p = parseBorder(curVal('border' + ui.side)); if (p) return commit('border' + ui.side, `${p.w}px ${p.s} ${raw}`, prop); }
     if (prop === 'shadow-color') { const p = parseShadow(curVal('boxShadow')); if (p) return commit('boxShadow', `${p.x}px ${p.y}px ${p.b}px ${p.s}px ${raw}`, prop); }
     let v = typeof raw === 'string' ? toValue(raw) : raw;
     if (prop === 'opacity' && typeof v === 'number') v = Math.round(v) / 100; // the panel shows percent, the file holds 0..1
     else if (typeof v === 'number' && F[prop]?.unit === 'px' && /^-?\d*\.?\d+px$/.test(String(curVal(prop)))) v = `${v}px`; // keep '16px' a string, as the file had it
+    const bad = invalidValue(prop, v);
+    if (bad) { ui.errors['style-' + prop] = { text: bad, retry: null }; rerender(); return { ok: false, error: bad }; } // nothing is written
     const edits = styleEdits([[prop, v]]);
     if (!edits.length) { delete ui.draft[id ?? prop]; rerender(); return; }
     return run('style-' + prop, s.component, edits, { clear: [id ?? prop] });

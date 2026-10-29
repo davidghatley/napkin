@@ -187,7 +187,7 @@ export function createView(ctx, stageEl, worldEl) {
   addEventListener('keydown', (ev) => {
     if (ev.isComposing) return;
     const ctl = ev.ctrlKey || ev.metaKey;
-    if (ev.code === 'Space' && !ctl && !ev.altKey && !typing(ev.target) && (ev.target.closest?.('#stage') || !ev.target.closest?.('button, a, [role=option], summary'))) {
+    if (ev.code === 'Space' && !ctl && !ev.altKey && !typing(ev.target) && ((ev.target.closest?.('#stage') && !ev.target.closest?.('[data-nodrag]')) || !ev.target.closest?.('button, a, [role=option], summary'))) {
       ev.preventDefault();
       if (!space) { space = true; grabbing(!!pan); }
       return;

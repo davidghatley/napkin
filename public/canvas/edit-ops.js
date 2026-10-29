@@ -3,6 +3,7 @@
 //   Paste: nodes copied from napkin (any component, fresh ids), an image file or SVG (stored in assets/ by content hash), an HTML snippet
 //   (dialect nodes if it fits exactly, else refused with the reason), or a line of text.
 //   ctx.ops = { duplicate, wrap, unwrap, copy(event?), paste(clipboardData), hide, last }  (`last` is the result of the latest paste, for tests)
+import { plain } from './words.js';
 import { index, VOID } from '/src/model.js';
 import { pasteHtml } from './html-paste.js';
 import { isFlex } from '/src/layout.js';
@@ -105,7 +106,7 @@ export function initEditOps(ctx) {
   async function pasteImage(t, type, bytes) {
     const res = await ctx.fetch('/api/assets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ext: type === 'image/svg+xml' ? 'svg' : 'png', data: b64(bytes) }) });
     const a = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
-    if (!res.ok || !a.ok) { ops.last = { ok: false, kind: 'image', reason: a.error }; say(`Not pasted: ${a.error}`); return a; }
+    if (!res.ok || !a.ok) { ops.last = { ok: false, kind: 'image', reason: a.error }; say(`Not pasted: ${plain(a.error)}`); return a; }
     const [w, h] = await natural(type, bytes, a.path);
     return insert(t, [{ id: 'image', tag: 'img', attrs: { src: a.path, alt: '' }, style: { display: 'block', width: w, height: h }, children: [] }], null, 'image');
   }
@@ -160,7 +161,7 @@ export function initEditOps(ctx) {
     const k = picked();
     if (k?.ids.length) await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
   });
-  document.addEventListener('paste', (ev) => { if (typing(ev.target) || !ev.clipboardData) return; ev.preventDefault(); paste(ev.clipboardData).catch((e) => say(String(e.message || e))); });
+  document.addEventListener('paste', (ev) => { if (typing(ev.target) || !ev.clipboardData) return; ev.preventDefault(); paste(ev.clipboardData).catch((e) => say(plain(e.message || e))); });
   document.addEventListener('keydown', (ev) => {
     if (typing(ev.target) || ev.defaultPrevented || ev.isComposing) return;
     const mod = ev.ctrlKey || ev.metaKey;

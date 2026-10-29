@@ -2,6 +2,7 @@
 // a dashed outline and the slot's name while it is empty, so you can see where content goes. Drop text on it (or type in
 // the panel's Preview field) and the words show in every cell. The words are the slot's preview and live in the sidecar
 // (POST /api/components/:id/slot-preview), never in the .tsx.
+import { plain } from './words.js';
 import { index } from '/src/model.js';
 
 export function initSlots(ctx) {
@@ -24,7 +25,7 @@ export function initSlots(ctx) {
 
   async function setPreview(component, prop, text) {
     const r = await (await ctx.fetch(`/api/components/${encodeURIComponent(component)}/slot-preview`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ prop, text }) })).json();
-    if (!r.ok) ctx.hint(r.error);
+    if (!r.ok) ctx.hint(plain(r.error));
     return r;
   }
   const world = document.querySelector('#world');

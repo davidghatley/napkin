@@ -11,6 +11,7 @@
 // Interactions here: click / shift-click / marquee selection (ctx.state.selections), dragging a frame by its
 // title (position saved in the sidecar only), Alt to measure, hover. Components are laid out once and never
 // re-packed, so an edit in one frame can never move another (FEEL-04).
+import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 
@@ -63,7 +64,7 @@ export function createStage(ctx, root, world, view) {
     sec.el.querySelector('.axes-strip').textContent = ax.map((a, i) => `${a.name} ×${a.options.length}${i === 0 ? ' →' : i === 1 ? ' ↓' : ''}`).join('  ');
     const badge = sec.el.querySelector('.badge');
     badge.hidden = !c.readOnly; badge.textContent = c.readOnly ? `read-only: ${c.readOnly}` : ''; badge.title = badge.textContent;
-    sec.el.querySelector('.problem').textContent = c.problem ? `file has an error, showing the last good version: ${c.problem}` : '';
+    sec.el.querySelector('.problem').textContent = c.problem ? problemBanner(c.path || `${c.name}.tsx`, c.problem) : '';
   }
 
   // The matrix: first axis across, second down, the rest as labelled groups.
@@ -112,6 +113,7 @@ export function createStage(ctx, root, world, view) {
     card.append(summary, detail); return card;
   }
   function finish(sec, id, revision) {
+    ctx.matrix?.bar(id); // WPC-15: the filter bar exists before the frame is placed, so its height is counted
     const previous = { ...sec.size }; measure(sec);
     sec.el.dataset.ready = '1'; sec.el.dataset.revision = revision;
     const resized = previous.w !== sec.size.w || previous.h !== sec.size.h;
@@ -625,7 +627,7 @@ export function createStage(ctx, root, world, view) {
     try {
       const r = await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
-    } catch (e) { document.querySelector('#error').textContent = `could not save the position: ${e.message}`; }
+    } catch (e) { document.querySelector('#error').textContent = `Could not save the position: ${plain(e.message)}`; }
     ctx.emit('moved', { component: d.id, ...pos });
   });
 

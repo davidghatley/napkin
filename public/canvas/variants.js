@@ -5,7 +5,8 @@
 //    base, or an axis=value override (accent dot), with Reset and "Move to base" on the row, and a note of the
 //    other cells that override it. Nothing here writes a file; every action is one batch through ctx.sendEdits.
 import { index, axes, resolveStyle } from '/src/model.js';
-import { esc, ICON, errorLine, errors, run, ctxDoc, startDrag } from './cmp-core.js';
+import { esc, ICON, errorLine, errors, run, refuse, ctxDoc, startDrag } from './cmp-core.js';
+import { checkName } from './words.js';
 import { renderPanel } from './panel.js';
 
 const forms = {};
@@ -124,12 +125,27 @@ export function wireVariants(ctx, el) {
     }
   });
 
+  // A refusal belongs to the moment it happened: a new selection or closing a form clears every form message.
+  const clearMessages = () => { for (const k of Object.keys(errors)) if (k !== 'extractOpen') delete errors[k]; }; // extractOpen is not a message: it keeps the Make component form open
+  ctx.on('select', clearMessages);
+  el.addEventListener('click', (ev) => { if (ev.target.closest?.('[data-cmp="close"], #extract-cancel')) clearMessages(); }, true);
+
   el.addEventListener('change', async (ev) => {
     const t = ev.target, c = t.dataset?.cmp;
     if (c !== 'rename-axis' && c !== 'rename-value') return;
-    const to = t.value.trim();
-    if (c === 'rename-axis') { if (to !== t.dataset.axis) await run(ctx, 'axis-' + t.dataset.axis, [{ op: 'renameProp', name: t.dataset.axis, to }], [t.id]); }
-    else if (to !== t.dataset.value) await run(ctx, 'axis-' + t.dataset.axis, [{ op: 'renameVariant', axis: t.dataset.axis, value: t.dataset.value, to }], [t.id]);
+    const to = t.value.trim(), { doc } = ctxDoc(ctx), axis = t.dataset.axis;
+    if (!doc) return;
+    if (c === 'rename-axis') {
+      if (to === axis) return;
+      const problem = checkName('axis', to, Object.fromEntries((doc.props ?? []).filter((x) => x.name !== axis).map((x) => [x.name, x.type === 'enum' ? 'variant' : 'setting'])));
+      if (problem) return refuse(ctx, 'axis-' + axis, problem, t.id);
+      await run(ctx, 'axis-' + axis, [{ op: 'renameProp', name: axis, to }], [t.id], { kind: 'axis', field: t.id, value: to });
+    } else {
+      if (to === t.dataset.value) return;
+      const problem = checkName('value', to, (doc.props.find((x) => x.name === axis)?.options ?? []).filter((x) => x !== t.dataset.value));
+      if (problem) return refuse(ctx, 'axis-' + axis, problem, t.id);
+      await run(ctx, 'axis-' + axis, [{ op: 'renameVariant', axis, value: t.dataset.value, to }], [t.id], { kind: 'value', field: t.id, value: to });
+    }
   });
 
   el.addEventListener('submit', async (ev) => {
@@ -138,12 +154,24 @@ export function wireVariants(ctx, el) {
     ev.preventDefault();
     const v = (id) => form.querySelector('#' + id)?.value.trim() ?? '';
     const ids = [...form.querySelectorAll('[id]')].map((x) => x.id);
+    const { doc } = ctxDoc(ctx);
     let r;
-    if (kind === 'add-value') { const axis = form.dataset.axis; r = await run(ctx, 'axis-' + axis, [{ op: 'addVariant', axis, value: v('new-value-' + axis) }], ids); if (r.ok) delete forms['value:' + axis]; }
-    else {
+    if (kind === 'add-value') {
+      const axis = form.dataset.axis, field = 'new-value-' + axis;
+      const problem = checkName('value', v(field), doc?.props.find((x) => x.name === axis)?.options ?? []);
+      if (problem) return refuse(ctx, 'axis-' + axis, problem, field);
+      r = await run(ctx, 'axis-' + axis, [{ op: 'addVariant', axis, value: v(field) }], ids, { kind: 'value', field, value: v(field) });
+      if (r.ok) delete forms['value:' + axis];
+    } else {
       const edit = { op: 'addVariant', axis: v('new-axis-name'), value: v('new-axis-value') };
       if (v('new-axis-base')) edit.base = v('new-axis-base');
-      r = await run(ctx, 'add-axis', [edit], ids);
+      const taken = Object.fromEntries((doc?.props ?? []).map((x) => [x.name, x.type === 'enum' ? 'variant' : 'setting']));
+      let bad = 'new-axis-name', problem = checkName('axis', edit.axis, taken);
+      if (!problem) { bad = 'new-axis-value'; problem = checkName('value', edit.value, []); }
+      if (!problem && edit.base !== undefined) { bad = 'new-axis-base'; problem = checkName('value', edit.base, []); }
+      if (!problem && edit.base === edit.value) { bad = 'new-axis-base'; problem = 'The base and the new value must be different.'; }
+      if (problem) return refuse(ctx, 'add-axis', problem, bad);
+      r = await run(ctx, 'add-axis', [edit], ids, { kind: 'axis', field: 'new-axis-name', value: edit.axis });
       if (r.ok) delete forms.axis;
     }
     if (r.ok) rerender();

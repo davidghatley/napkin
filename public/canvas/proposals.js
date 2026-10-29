@@ -4,6 +4,7 @@
 // Accept goes through POST /api/proposals/:id/accept (store.apply, attributed to the agent, approved by you); Reject writes nothing.
 // A stale accept shows why. Whole proposal or one edit; Accept all / Reject all. Keys (tray focused): ArrowUp/Down move, Enter shows the ghost,
 // A accepts, R rejects, Escape folds the tray; Alt+P from anywhere opens it and focuses the first proposal.
+import { plain } from './words.js';
 import { h } from './drawer.js';
 
 const ago = (at) => { const s = Math.max(0, Math.round((Date.now() - at) / 1000)); return s < 5 ? 'now' : s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)} min` : `${Math.round(s / 3600)} h`; };
@@ -67,7 +68,7 @@ export function initProposals(ctx) {
     const e = S.errors.get(p.id);
     if (!e) return null;
     const rows = (e.stale ?? []).map((s) => h('li', {}, h('code', { text: s.key }), ` is now ${fmt(s.value)}`, s.by ? ` (${s.by}, r${s.revision})` : '', `; the proposal wanted ${fmt(s.yours)}.`));
-    return h('div', { class: 'pi-stale', role: 'alert' }, h('div', { text: e.stale ? 'Can\'t accept: this changed after the agent looked.' : `Can't accept: ${String(e.error).replace(/^stale revision: /, '')}` }), rows.length ? h('ul', { style: 'margin:4px 0 0;padding-left:16px' }, rows) : null, h('div', { text: 'Reject it, or ask the agent to propose again on the new revision.' }));
+    return h('div', { class: 'pi-stale', role: 'alert' }, h('div', { text: e.stale ? 'Can\'t accept: this changed after the agent looked.' : `Can't accept: ${plain(String(e.error).replace(/^stale revision: /, ''))}` }), rows.length ? h('ul', { style: 'margin:4px 0 0;padding-left:16px' }, rows) : null, h('div', { text: 'Reject it, or ask the agent to propose again on the new revision.' }));
   }
   // A create proposal whose name was taken meanwhile: marked as soon as the server knows, not when Accept is pressed.
   const clashBox = (p) => (p.clash ? h('div', { class: 'pi-stale pi-clash', role: 'alert', 'data-clash': '1' }, h('strong', { text: 'Name taken. ' }), p.clash) : null);
@@ -134,7 +135,7 @@ export function initProposals(ctx) {
       ctx.hint(verb === 'accept' ? `Accepted ${part} from ${p.by}${j.revision ? ` as r${j.revision}` : ''}` : `Rejected ${part} from ${p.by}; nothing was written`);
     } else {
       S.errors.set(p.id, j); draw();
-      if (!j.stale?.length) ctx.hint(`Can't ${verb}: ${String(j.error).replace(/^stale revision: /, 'stale: ')}`); // a stale reason is already in the tray
+      if (!j.stale?.length) ctx.hint(`Can't ${verb}: ${/^stale revision/.test(j.error) ? 'this changed after the agent looked' : plain(j.error)}`); // a stale reason is already in the tray
     }
     return j;
   }
@@ -190,7 +191,7 @@ export function initProposals(ctx) {
     if (S.hiddenNew.has(p.id)) return;
     if (!S.news.has(p.id)) {
       const res = await fetch(`/bundle-proposal/${encodeURIComponent(p.id)}.js`).catch(() => null);
-      if (!res || !res.ok) { if (res) ctx.hint((await res.json().catch(() => ({}))).error || 'could not draw that proposal'); return; }
+      if (!res || !res.ok) { if (res) ctx.hint(plain((await res.json().catch(() => ({}))).error || 'could not draw that proposal')); return; }
       if (!S.list.has(p.id)) return;
       const url = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
       let mod; try { mod = await import(url); } finally { URL.revokeObjectURL(url); }
@@ -209,7 +210,8 @@ export function initProposals(ctx) {
     const r = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
     const { x, y, z } = ctx.view.get(), b = ctx.view.stageBox();
     const inside = r.x * z + x >= 0 && r.y * z + y >= 0 && (r.x + r.w) * z + x <= b.width && (r.y + r.h) * z + y <= b.height;
-    if (!inside) ctx.view.flyTo(r, { pad: 90, max: Math.max(1, z) });
+    const tiny = r.w * z < 260 && r.h * z < 160; // visible but too small to read at a far-out fit: come closer
+    if (!inside || tiny) ctx.view.flyTo(r, { pad: 90, max: Math.max(1, z) });
   }
   function toggleNew(p) {
     if (S.hiddenNew.has(p.id)) { S.hiddenNew.delete(p.id); showNew(p, true); } else { S.hiddenNew.add(p.id); ctx.stage.removeGhost(p.id); }
@@ -219,7 +221,7 @@ export function initProposals(ctx) {
     const token = ++S.token;
     const res = await fetch(`/bundle-proposal/${encodeURIComponent(p.id)}.js${S.pickedEdit === null ? '' : `?only=${S.pickedEdit}`}`);
     if (token !== S.token) return;
-    if (!res.ok) { ctx.hint((await res.json().catch(() => ({}))).error || 'could not draw that proposal'); return; }
+    if (!res.ok) { ctx.hint(plain((await res.json().catch(() => ({}))).error || 'could not draw that proposal')); return; }
     const url = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
     try { S.mod = await import(url); } finally { URL.revokeObjectURL(url); }
     if (token !== S.token || S.picked !== p.id) return;

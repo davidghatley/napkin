@@ -2,8 +2,9 @@
 // its default (a control that fits the type), and a description that is written as a JSDoc comment above it in the file.
 // Add, rename, retype-by-adding, reorder (drag the grip or use Up / Down) and remove all go through ctx.sendEdits.
 // A rename is one `renameProp` edit: the file updates the interface, the parameter and every place that shows it.
+import { checkName } from './words.js';
 import { applyEdits } from '/src/model.js';
-import { esc, ICON, errorLine, errors, run, ctxDoc, startDrag } from './cmp-core.js';
+import { esc, ICON, errorLine, errors, run, refuse, ctxDoc, startDrag } from './cmp-core.js';
 import { renderPanel } from './panel.js';
 
 const forms = {}; // which "add" forms are open
@@ -126,7 +127,9 @@ export function wireProps(ctx, el) {
     } else if (c === 'rename') {
       const to = t.value.trim();
       if (to === name) return;
-      await run(ctx, 'prop-' + name, [{ op: 'renameProp', name, to }], [t.id]);
+      const problem = checkName('setting', to, Object.fromEntries(doc.props.filter((x) => x.name !== name).map((x) => [x.name, x.type === 'enum' ? 'variant' : 'setting'])));
+      if (problem) return refuse(ctx, 'prop-' + name, problem, t.id);
+      await run(ctx, 'prop-' + name, [{ op: 'renameProp', name, to }], [t.id], { kind: 'setting', field: t.id, value: to });
     } else if (c === 'describe') {
       await run(ctx, 'desc-' + name, [{ op: 'describeProp', name, text: t.value.trim() }], [t.id]);
     } else if (c === 'default') {
@@ -145,7 +148,11 @@ export function wireProps(ctx, el) {
     const edit = { op: 'addProp', name: v('new-prop-name'), type };
     if (type === 'enum') edit.options = v('new-prop-options').split(',').map((x) => x.trim()).filter(Boolean);
     if (v('new-prop-note')) edit.description = v('new-prop-note');
-    const r = await run(ctx, 'add-prop', [edit], [...form.querySelectorAll('[id]')].map((x) => x.id));
+    const { doc } = ctxDoc(ctx);
+    const problem = checkName('setting', edit.name, Object.fromEntries((doc?.props ?? []).map((x) => [x.name, x.type === 'enum' ? 'variant' : 'setting']))); // before anything is sent
+    if (problem) return refuse(ctx, 'add-prop', problem, 'new-prop-name');
+    delete errors['add-prop'];
+    const r = await run(ctx, 'add-prop', [edit], [...form.querySelectorAll('[id]')].map((x) => x.id), { kind: 'setting', field: 'new-prop-name', value: edit.name });
     if (r.ok) { delete forms.prop; rerender(); }
   });
 

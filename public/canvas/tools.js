@@ -5,6 +5,7 @@
 // Select-tool niceties live here too: Delete removes the selected node, Alt+Up/Down moves it among its siblings,
 // double-click edits a text node in place.
 //   initTools(ctx) -> { tools, use(id), editText(selection), createComponent(name) }; also set as ctx.tools.
+import { plain } from './words.js';
 import { index, variantGrid, VOID } from '/src/model.js';
 
 const svg = (d) => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -49,8 +50,8 @@ export function initTools(ctx) {
 
   // --- toolbar -------------------------------------------------------------------------------------------
   bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Tools');
-  bar.innerHTML = TOOLS.map((t) => `<button type="button" data-tool="${t.id}" aria-pressed="false" aria-keyshortcuts="${t.key}" title="${t.label} (${t.key})">${t.icon}${t.label} <kbd>${t.key}</kbd></button>`).join('')
-    + `<button type="button" id="tool-new" aria-keyshortcuts="N" aria-expanded="false" aria-controls="new-component" title="New component (N)">${svg('M8 3v10M3 8h10')}New component <kbd>N</kbd></button>`
+  bar.innerHTML = TOOLS.map((t) => `<button type="button" data-tool="${t.id}" aria-pressed="false" aria-keyshortcuts="${t.key}" title="${t.label} (${t.key})" aria-label="${t.label}">${t.icon}<span class="tl">${t.label}</span> <kbd>${t.key}</kbd></button>`).join('')
+    + `<button type="button" id="tool-new" aria-keyshortcuts="N" aria-expanded="false" aria-controls="new-component" title="New component (N)" aria-label="New component">${svg('M8 3v10M3 8h10')}<span class="tl">New component</span> <kbd>N</kbd></button>`
     + '<form id="new-component" hidden autocomplete="off"><label>Name <input id="new-name" aria-label="Component name" placeholder="Card" spellcheck="false"></label><button type="submit">Create</button><span id="new-error" role="alert"></span></form>';
   const buttons = new Map([...bar.querySelectorAll('[data-tool]')].map((b) => [b.dataset.tool, b]));
   const form = bar.querySelector('#new-component'), nameInput = bar.querySelector('#new-name'), newErr = bar.querySelector('#new-error'), newBtn = bar.querySelector('#tool-new');
@@ -112,7 +113,7 @@ export function initTools(ctx) {
     ev.preventDefault();
     newErr.textContent = '';
     const r = await createComponent(nameInput.value);
-    if (!r.ok) { newErr.textContent = r.error; nameInput.focus(); return; }
+    if (!r.ok) { newErr.textContent = plain(r.error); nameInput.focus(); return; }
     closeNew(); say('');
   });
 

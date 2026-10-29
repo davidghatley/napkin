@@ -1,7 +1,7 @@
 // AGT-10 on the page (decision N4: keep "stale revision", and show a clash chip with both values).
 // You start editing a field (focus, or a scrub); while you do, someone changes the same property. When you commit, the store refuses
 // your edit as stale and says what the property holds now and who changed it. This puts a chip on that property in the panel:
-// "yours 12 · scout's 16 (landed)", with one click "Use mine" (re-sends yours on the current revision) or "Keep theirs".
+// "yours 12 · scout's 16 (already saved)", with one click "Use mine" (re-sends yours on the current revision) or "Keep theirs".
 // To make that race real, the edit is sent against the revision you SAW when you started on the field (not the newest one).
 //   ctx.clash = { base(component), sent(component, result), list(), useMine(key), keepTheirs(key) }
 import { h } from './drawer.js';
@@ -64,7 +64,7 @@ export function initClash(ctx) {
     const pk = parseKey(c.key);
     const label = pk ? LABEL(pk.prop) : c.key;
     return h('div', { class: 'clash-chip', role: 'group', 'data-key': c.key, 'data-prop': pk?.prop ?? '', 'aria-label': `Clash on ${label}` },
-      h('div', { class: 'cc-text' }, h('b', { text: `${label}: ` }), 'yours ', h('code', { class: 'cc-yours', text: fmt(c.yours) }), ` · ${c.by}'s `, h('code', { class: 'cc-theirs-val', text: fmt(c.theirs) }), ' ', h('span', { class: 'cc-landed', text: '(landed)' })),
+      h('div', { class: 'cc-text' }, h('b', { text: `${label}: ` }), 'yours ', h('code', { class: 'cc-yours', text: fmt(c.yours) }), ` · ${c.by}'s `, h('code', { class: 'cc-theirs-val', text: fmt(c.theirs) }), ' ', h('span', { class: 'cc-landed', text: '(already saved)' })),
       h('button', { type: 'button', class: 'cc-mine', title: `Write ${fmt(c.yours)} on top of ${c.by}'s change`, text: 'Use mine', onclick: () => useMine(c.component + '|' + c.key) }),
       h('button', { type: 'button', class: 'cc-theirs', title: `Keep ${c.by}'s value`, text: 'Keep theirs', onclick: () => keepTheirs(c.component + '|' + c.key) }));
   }

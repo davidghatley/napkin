@@ -2,6 +2,8 @@
 // Keep machine-tested prefixes at the start, add the affected path and one next step.
 export function explainError(error, { file, next } = {}) {
   let message = String(error?.message ?? error);
+  const os = osError(message, file);
+  if (os) return `${os} Next: fix the permissions or free space, then retry.`;
   if (/won't overwrite your text\.?$|changed on disk while saving; reread and retry$/.test(message)) return message; // already says what to do
   const at = message.indexOf('Next:');
   const detail = (at < 0 ? message : message.slice(0, at)).trimEnd().replace(/\.$/, '');
@@ -22,3 +24,20 @@ export function explainError(error, { file, next } = {}) {
   }
   return `${detail}${context}. Next: ${next}`;
 }
+
+// OS error codes (EACCES, ENOSPC, ...) in a person's words, naming the component file and never a temp path.
+const OS = {
+  EACCES: (f) => `Napkin can't write ${f}: the file or its folder is read-only for you.`,
+  EPERM: (f) => `Napkin isn't allowed to change ${f}.`,
+  EROFS: (f) => `Napkin can't write ${f}: the folder is on a read-only disk.`,
+  ENOSPC: (f) => `Napkin can't save ${f}: the disk is full.`,
+  EBUSY: (f) => `${f} is in use by another program, so napkin can't save it right now.`,
+};
+function osError(message, file) {
+  const code = /\b(EACCES|EPERM|EROFS|ENOSPC|EBUSY)\b/.exec(String(message))?.[1];
+  if (!code) return null;
+  const path = /['"]([^'"]+)['"]/.exec(String(message))?.[1] ?? '';
+  const named = file || (path.split('/').pop() || 'the file').replace(/^\./, '').replace(/\.tmp-.*$/, '').replace(/\.napkin\.json$/, '.tsx');
+  return OS[code](named);
+}
+

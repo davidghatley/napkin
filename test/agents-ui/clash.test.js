@@ -25,7 +25,7 @@ test('clash chip', { timeout: 120000 }, async (t) => {
     await p.select('Button', 'root', { size: 'md', state: 'default' });
     await browser.waitFor(`!!document.querySelector('#panel #padding')`);
 
-    await t.test('yours 12 · scout\'s 16 (landed), and Use mine writes yours on the new revision', async () => {
+    await t.test('yours 12 · scout\'s 16 (already saved), and Use mine writes yours on the new revision', async () => {
       await startEditing('padding');
       const r = await scout.apply('Button', [{ op: 'set', path: 'root.padding', value: 16 }]);
       assert.equal(r.ok, true, JSON.stringify(r));
@@ -34,7 +34,7 @@ test('clash chip', { timeout: 120000 }, async (t) => {
       await commit('padding', '12');
       await browser.waitFor(`!!document.querySelector('#panel .clash-chip')`);
       const chip = await text('#panel .clash-chip .cc-text');
-      assert.match(chip, /yours 12 · scout's 16 \(landed\)/, chip);
+      assert.match(chip, /yours 12 · scout's 16 \(already saved\)/, chip);
       // the chip sits at the top of the Layout section, where padding is, and nothing was written
       assert.equal(await q(`document.querySelector('#panel .clash-chip').closest('.sbody').querySelector('#padding') !== null`), true);
       assert.match(readFileSync(p.fileOf('Button'), 'utf8'), /padding: 16\b/);
@@ -61,7 +61,7 @@ test('clash chip', { timeout: 120000 }, async (t) => {
       await browser.waitFor(`document.activeElement?.id === 'padding'`);
       await commit('padding', '9');
       await browser.waitFor(`!!document.querySelector('#panel .clash-chip')`);
-      assert.match(await text('#panel .clash-chip .cc-text'), /yours 9 · scout's 20 \(landed\)/);
+      assert.match(await text('#panel .clash-chip .cc-text'), /yours 9 · scout's 20 \(already saved\)/);
       const before = readFileSync(p.fileOf('Button'), 'utf8');
       await q(`document.querySelector('#panel .clash-chip .cc-theirs').click()`);
       await browser.waitFor(`!document.querySelector('#panel .clash-chip')`);

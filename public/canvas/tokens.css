@@ -11,7 +11,10 @@
 #panel .token-resolved { flex: none; max-width: 54px; overflow: hidden; text-overflow: ellipsis; color: var(--nk-text-3); font: 10px var(--nk-sans); white-space: nowrap; }
 #panel .token-bound .unit, #panel .token-bound .alpha, #panel .token-bound .vdiv { display: none; }
 #panel .fbox:has(.token-pick) { gap: 4px; padding-right: 4px; }
-#panel .fbox:has(.token-pick):has(.linkbtn) .linkbtn { display: none; }
+/* With tokens the per-side toggle has no room in the row. It stays focusable (Tab, Cmd-K) but takes no space: invisible until it has focus, then drawn over the end of the field. */
+#panel .fbox:has(.token-pick):has(.linkbtn) { position: relative; }
+#panel .fbox:has(.token-pick):has(.linkbtn) .linkbtn { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); opacity: 0; pointer-events: none; z-index: 2; }
+#panel .fbox:has(.token-pick):has(.linkbtn) .linkbtn:focus { opacity: 1; background: var(--nk-chrome); box-shadow: 0 0 0 1px var(--nk-accent); }
 #token-picker { position: relative; z-index: 1; grid-column: 1 / -1; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; width: 100%; min-width: 0; padding: 8px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px var(--nk-sans); }
 .token-picker-head { flex: none; display: flex; gap: 6px; margin-bottom: 6px; }
 #token-search { flex: 1; min-width: 0; height: 28px; padding: 0 8px; border: 1px solid var(--nk-line); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12px var(--nk-sans); }
@@ -58,3 +61,11 @@
 #token-theme-label { flex: none; white-space: nowrap; }
 .top-right .meta:has(#revision) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #theme-toggle { flex: none; }
+
+/* WPC-11: headers, group chips and captions inside a frame that takes the theme's surface follow the theme's ink, not the fixed light-grey ones */
+#world[data-frame-theme="1"] .group-title, #world[data-frame-theme="1"] .colhead, #world[data-frame-theme="1"] .rowhead, #world[data-frame-theme="1"] .corner,
+#world[data-frame-theme="1"] .colhead span, #world[data-frame-theme="1"] .rowhead span, #world[data-frame-theme="1"] .ghint, #world[data-frame-theme="1"] .gcount,
+#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { color: var(--nk-frame-ink); }
+#world[data-frame-theme="1"] .cell figcaption, #world[data-frame-theme="1"] .group-title i, #world[data-frame-theme="1"] .gchip i { color: color-mix(in srgb, var(--nk-frame-ink) 70%, var(--nk-frame)); }
+#world[data-frame-theme="1"] .gchip, #world[data-frame-theme="1"] .gtoggle { background: color-mix(in srgb, var(--nk-frame-ink) 14%, var(--nk-frame)); }
+#world[data-frame-theme="1"] .gtoggle:hover { background: color-mix(in srgb, var(--nk-frame-ink) 24%, var(--nk-frame)); }

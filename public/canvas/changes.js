@@ -1,6 +1,7 @@
 // HIS-05 and INS-05 on the page. A dot in a component's title when its file differs from git HEAD, and the Changes tab: the
 // line diff against HEAD and before/after pictures of every cell that changed (unchanged cells are hidden).
 // napkin only reads git; it never commits, stages or checks out.
+import { plain } from './words.js';
 import { h } from './drawer.js';
 
 export function initChanges(ctx, drawer) {
@@ -50,7 +51,7 @@ export function initChanges(ctx, drawer) {
     const v = await fetch(`/api/components/${encodeURIComponent(id)}/visual-diff`).then((x) => x.json()).catch(() => null);
     if (token !== S.token) return;
     picsEl.replaceChildren();
-    if (!v?.ok) { picsEl.append(h('p', { class: 'p-note', text: v?.error ?? 'Could not draw the comparison.' })); return; }
+    if (!v?.ok) { picsEl.append(h('p', { class: 'p-note', text: v?.error ? plain(v.error) : 'Could not draw the comparison.' })); return; }
     picsEl.dataset.changed = String(v.cells.length); picsEl.dataset.total = String(v.total);
     picsEl.append(h('p', { class: 'p-note', id: 'v-note', text: v.cells.length ? `${v.cells.length} of ${v.total} cells changed. ${v.unchanged} unchanged cell${v.unchanged === 1 ? ' is' : 's are'} hidden.` : `No cell looks different (${v.total} checked).` }));
     for (const c of v.cells) {

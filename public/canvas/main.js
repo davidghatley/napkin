@@ -37,8 +37,10 @@ import { initEditOps } from './edit-ops.js';
 import { initHandles } from './handles.js';
 import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
+import { plain } from './words.js';
 import { initMatrix } from './matrix.js';
 import { initPlay } from './play.js';
+import { initTabs } from './tabs.js';
 import { initInstances } from './instances.js';
 import { initSlots } from './slots.js';
 import { initAgentsLane } from './agents-lane.js';
@@ -48,7 +50,6 @@ const client = await connectCanvas(location.origin + '/');
 
 const handlers = new Map();
 // The toast says it in plain words; the raw store message stays in the panel's inline errors.
-const plain = (e) => (/^invalid edit #\d+: id ".*" already exists/.test(e) ? 'That id is already used' : e.replace(/^invalid edit #\d+: /, ''));
 const keyOf = (s) => `${s.component}|${s.node}`;
 const nameCounts = new Map(), nameById = new Map(), idsByName = new Map();
 const ctx = {
@@ -69,15 +70,15 @@ const ctx = {
     else ctx.selectMany([...cur, sel]);
   },
   fetch: (path, init) => client.fetch(path, init), // fetch with this page's session (identity "you"); use for any /api write
-  async sendEdits(component, edits) {
+  async sendEdits(component, edits, opts = {}) {
     const c = ctx.state.components.get(component);
     const r = await client.sendEdits(component, ctx.clash?.base(component) ?? c.revision, edits); // clash.js: the revision you saw when you began on the field
     ctx.clash?.sent(component, r);
     if (!r.ok && r.stale?.length) ctx.emit('stale', { component, edits, result: r }); // a clash chip shows both values (AGT-10)
-    $('#error').textContent = r.ok || r.stale?.length ? '' : plain(r.error);
+    $('#error').textContent = r.ok || r.stale?.length || opts.quiet ? '' : plain(r.error); // a form says it beside its field (quiet): one message, not two
     return r;
   },
-  hint(text) { const h = $('#hint'); h.textContent = text; clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },
+  hint(text) { const h = $('#hint'); h.textContent = plain(text); clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },
   title(c) { return nameCounts.get(c.name) > 1 && c.path ? `${c.name} · ${c.path}` : c.name; },
   named(name) { return [...(idsByName.get(name) || [])].map(id => ctx.state.components.get(id)).filter(Boolean); },
   find(idOrName) { return ctx.state.components.get(idOrName) ?? [...ctx.state.components.values()].find((c) => c.name === idOrName); },
@@ -113,6 +114,7 @@ const nav = initNav(ctx);
 initHandles(ctx);
 initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
 initPlay(ctx); // CMP-09: P makes the cells live
+initTabs(ctx); // WPC-07: cell content stays out of the Tab order outside play mode
 initInstances(ctx); // CMP-04, 06..08: composition
 initSlots(ctx); // CMP-05: slot drop zones
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
@@ -120,7 +122,8 @@ await initTokens(ctx); // token source, theme preview and Tokens drawer
 ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
 initAgentsLane(ctx);  // presence, proposals tray + ghost cells, Activity tab, clash chip
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
-ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = revision; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
+// #revision shows 8 characters (the frame title shows 7); the full revision is its tooltip
+ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = String(revision).slice(0, 8); $('#revision').title = `revision ${revision}`; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
 
 const sync = id => {
   if (!id) return;

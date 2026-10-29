@@ -26,6 +26,9 @@ export const ACTIONS = [
   action('multi', 'Add / remove selection', 'Shift/Ctrl/Cmd + click · drag marquee', [], []),
   action('quick', 'Quick open', 'Ctrl/Cmd+K', ['k'], refs('quick', 'keydown'), (c) => c.quick.open()),
   action('quick-move', 'Quick open: move / go / close', '↑ ↓ · Enter · Escape · Ctrl/Cmd+K · Tab stays in search', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape', 'Tab', 'k'], refs('quick', 'keydown')),
+  action('inspector', 'Jump to the inspector (first property of the selection)', 'Alt+I', ['KeyI'], refs('quick', 'keydown'), (c) => c.quick.focusInspector(), 'edit'),
+  action('property-search', 'Jump to a property of the selection', 'Ctrl/Cmd+K, then type the property (Radius, Fill colour, Stroke colour, Shadow, Align, a setting...)', [], []),
+  action('matrix-rove', 'Variant matrix: move between group bars and filter chips', '← → ↑ ↓ · Home · End (Tab leaves)', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'], refs('matrix', 'keydown')),
   action('rename', 'Rename layer', 'F2 · double click', ['F2'], refs('layers', 'keydown')),
   action('layer-nav', 'Layers: select / expand / collapse / focus', '↑ ↓ ← → · Enter', ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'], refs('layers', 'keydown')),
   action('layer-menu', 'Layer menu', 'Shift+F10 / Menu key', ['F10', 'ContextMenu'], refs('layers', 'keydown')),
@@ -64,7 +67,7 @@ export const ACTIONS = [
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
+  'colorpop.js:keydown': 2, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'matrix.js:keydown': 1, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
   'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
   'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
