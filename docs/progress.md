@@ -199,3 +199,6 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 
 - 2026-10-21: /tmp (tmpfs, 1,048,576 inodes) filled with ~14,400 leaked `/tmp/napkin-*` test folders while 4-6 suites ran in parallel; every shell on the machine failed with ENOSPC. David approved deleting `/tmp/napkin-*`. Fix on feat/core (65cc4c9): a cleanup preload for every test process and child, Chromium profile removal for dead owners, a pretest sweep. Rule from now on: at most 2 full suites at once. Three critics (agents-ui, tokens, LAY-10) were stopped and are re-run one at a time.
 - 2026-10-21: Codex hit its usage limit (until 6:07 PM) right after finishing the tokens lane; the engine rebase moves to a Sonnet builder.
+
+## Pause (2026-10-29)
+David chose to pause for review after round 6 (AskUserQuestion). State: 140/141 pass; FEEL-02 needs David; feat/core 463e359 (suite 696/691/0 fail, 5 skipped). Walk 3 waits for David. Open for David: FEEL-02, N8, shadcn dialect widening, decisions 0006-0012.
