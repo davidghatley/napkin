@@ -9,8 +9,12 @@
 /* ---- dark theme: a neutral mid-dark surround, clear frame edges, a faint grid ---- */
 :root[data-theme="dark"] { --nk-bg: #2a2d33; --nk-dot: #33373e; --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 12px 32px -10px rgba(0, 0, 0, .55); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --nk-bg: #2a2d33; --nk-dot: #33373e; --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 12px 32px -10px rgba(0, 0, 0, .55); } }
-:root[data-theme="dark"] .cmp-head .mctl { background: var(--nk-chrome); box-shadow: 0 0 0 1px var(--nk-line-2), 0 8px 20px -10px rgba(0, 0, 0, .6); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cmp-head .mctl { background: var(--nk-chrome); box-shadow: 0 0 0 1px var(--nk-line-2), 0 8px 20px -10px rgba(0, 0, 0, .6); } }
+/* WPC-32: the filter bar is part of its frame, so it takes the frame's surface and ink (light or dark chrome, or the theme's own), not a dark island */
+.cmp-head .mctl { background: var(--nk-frame); color: var(--nk-frame-ink); box-shadow: 0 0 0 1px color-mix(in srgb, var(--nk-frame-ink) 20%, var(--nk-frame)); }
+.cmp-head .mctl .mname, .cmp-head .mctl .mcount { color: color-mix(in srgb, var(--nk-frame-ink) 68%, var(--nk-frame)); }
+.cmp-head .mctl .mchip, .cmp-head .mctl .mtool { background: color-mix(in srgb, var(--nk-frame-ink) 7%, var(--nk-frame)); color: var(--nk-frame-ink); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nk-frame-ink) 18%, var(--nk-frame)); }
+.cmp-head .mctl .mchip[aria-pressed="true"] { background: color-mix(in srgb, var(--nk-accent) 16%, var(--nk-frame)); box-shadow: inset 0 0 0 1px var(--nk-accent); }
+.cmp-head .mctl .mall[aria-pressed="true"] { background: color-mix(in srgb, var(--nk-frame-ink) 15%, var(--nk-frame)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nk-frame-ink) 30%, var(--nk-frame)); }
 
 /* ---- top bar: small, uniform tools ---- */
 #toolbar { min-height: 30px; padding: 2px; border-radius: 8px; gap: 1px; }
@@ -53,3 +57,9 @@ details.sec[data-sec="text"]:not(:has(.fbox:not(.inherited):not(.computed))) > s
 #statusbar #counts { flex: none; min-width: 176px; }              /* reserved, so the hints do not move when the counts and tabs fill in */
 #statusbar #drawer-tabs { flex: none; min-width: 372px; }
 #statusbar .hints { flex: none; margin-left: auto; text-align: right; }
+
+/* WPC-33: when the tags below the box would cover a cell caption, both go above it */
+#overlay-select[data-tags="above"]::after { transform: translateY(calc(-100% - 7px)); }
+#overlay-select[data-tags="above"] .osize { transform: translate(var(--nk-w, 0px), calc(-100% - 7px - clamp(0px, calc((190px - var(--nk-w, 120px)) * 1000), 24px))) translateX(-100%); }
+#overlay-select[data-tags="inside"]::after { transform: translate(5px, 5px); }
+#overlay-select[data-tags="inside"] .osize { transform: translate(calc(var(--nk-w, 0px) - 5px), calc(var(--nk-h, 0px) - 5px)) translate(-100%, -100%); }

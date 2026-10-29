@@ -50,11 +50,33 @@ export function initMatrix(ctx) {
         + `<div class="mrow mtools">${filtering ? '<button type="button" class="mtool" data-act="show-all">Show all values</button>' : ''}${groups ? '<button type="button" class="mtool" data-act="collapse-all">Collapse groups</button><button type="button" class="mtool" data-act="expand-all">Expand groups</button>' : ''}<span class="mcount" id="mcount-${esc(id)}"></span></div>`;
       if (ctl.dataset.html !== html) {
         const had = ctl.contains(document.activeElement) ? document.activeElement : null, at = had && { axis: had.dataset.axis, value: had.dataset.value, act: had.dataset.act };
-        ctl.innerHTML = html; ctl.dataset.html = html;
+        ctl.innerHTML = html; ctl.dataset.html = html; delete ctl.dataset.nw; // (its natural size is measured again)
         if (at) ctl.querySelector(at.act ? `[data-act="${at.act}"]` : `.mchip[data-axis="${CSS.escape(at.axis)}"][data-value="${CSS.escape(at.value)}"]`)?.focus({ preventScroll: true }); // a keyboard press keeps its place
       }
     }
     return { sec, c, ax, s, total, hidden };
+  }
+  // WPC-32: the bar is drawn at a constant size on screen, so at low zoom it grows (in canvas units) past the frame it belongs to and
+  // pushes the rows of frames below it apart. It is shown only while it fits inside its frame; a frame too small for it hides it
+  // (zoom in to filter). At 100% and above it wraps inside the frame instead. `natural` measures its size once per content.
+  function natural(sec) {
+    const ctl = sec.querySelector('.mctl');
+    if (!ctl) return null;
+    if (!ctl.dataset.nw) {
+      const off = sec.hasAttribute('data-mctl-off'); sec.removeAttribute('data-mctl-off'); ctl.style.maxWidth = '';
+      ctl.dataset.nw = String(ctl.offsetWidth); ctl.dataset.nh = String(ctl.offsetHeight);
+      if (off) sec.setAttribute('data-mctl-off', '');
+    }
+    return { ctl, w: Number(ctl.dataset.nw), h: Number(ctl.dataset.nh) };
+  }
+  const labelScale = () => ctx.view?.settledLabelScale?.() ?? 1;
+  const fits = (sec, lf = labelScale()) => { const n = natural(sec), f = sec.querySelector('.frame'); return !n || !f || lf <= 1 || n.w * lf <= f.offsetWidth + 1; };
+  function fit(sec) {
+    const n = natural(sec);
+    if (!n) { sec.removeAttribute('data-mctl-off'); return; }
+    const lf = labelScale(), ok = fits(sec, lf), w = sec.querySelector('.frame')?.offsetWidth || 0;
+    if (ok === sec.hasAttribute('data-mctl-off')) ok ? sec.removeAttribute('data-mctl-off') : sec.setAttribute('data-mctl-off', '');
+    n.ctl.style.maxWidth = lf <= 1 && w && n.w > w ? `${w}px` : '';
   }
   function apply(id) {
     const made = bar(id);
@@ -104,6 +126,7 @@ export function initMatrix(ctx) {
     if (count) count.textContent = `${shown} of ${total} shown`;
     sec.dataset.shown = String(shown);
     rove(sec);
+    fit(sec);
     ctx.stage?.measureAll(id);
     ctx.stage?.refreshOverlays();
   }
@@ -124,7 +147,7 @@ export function initMatrix(ctx) {
   }
   function changed(id) { save(id); apply(id); ctx.emit('matrix', { component: id }); }
   const api = {
-    bar,
+    bar, natural, fits,
     state: (id) => { const s = stateOf(id); return { hide: Object.fromEntries(Object.entries(s.hide).map(([a, v]) => [a, [...v]])), collapsed: [...s.collapsed] }; },
     // click: show only `value` (again: show all of that axis); add: toggle it in or out of the shown set
     filter(id, axis, value, { add = false } = {}) {
@@ -147,6 +170,7 @@ export function initMatrix(ctx) {
   };
   ctx.matrix = api;
   ctx.on('render', ({ component }) => apply(component));
+  ctx.on('viewsettle', () => { for (const sec of document.querySelectorAll('section.cmp')) if (sec.querySelector('.mctl')) fit(sec); });
   ctx.on('select', () => { for (const sec of document.querySelectorAll('section.cmp')) rove(sec); });
 
   document.querySelector('#world').addEventListener('click', (ev) => {
