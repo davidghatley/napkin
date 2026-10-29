@@ -139,15 +139,15 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-25 | WPC | agents4 | pass | critic: HUP/KILL/TERM/INT and pty close leave no process in 5 s; merged; suite 679/674/0 fail | test/agents/agents4.test.js | 95a72a6 |
 | WPC-26 | WPC | agents4 | pass | critic r2: view unchanged at 150% after canvas2 merge; one click reveals ghost; merged | test/agents-ui/agents4.test.js | 95a72a6 |
 | WPC-27 | WPC | agents4 | pass | critic r2: canvas 0.76 of height at 1440x900 and 1280x720, no blank area; merged | test/agents-ui/agents4.test.js | 95a72a6 |
-| WPC-28 | WPC | components2 | building | critic: rename/delete by Cmd-K, F2, row menu work with plain messages; FAIL: delete-undo restores to wrong folder in nested repos, rename not undoable, rename dead-ends without napkin.json, used-component rename gives no next step: fixing | docs/evidence/walk-2/report.txt | 05b3ac1 |
+| WPC-28 | WPC | components2 | pass | critic r2: rename/delete by Cmd-K, F2, row menu; undo exact path and names; importers updated, read-only importers refuse; works without napkin.json; merged; suite 696/691/0 fail | test/31-component-ops.test.js | cd4bddd |
 | WPC-29 | WPC | canvas2 | pass | critic: T and pasted text computed system-ui sans, written to file; 40 user files unchanged; merged | test/canvas/canvas2.test.js | da14b7e |
-| WPC-30 | WPC | components2 | critic-pass | critic: 9 layouts incl. ties, nested, node_modules, config: file lands beside existing | docs/evidence/walk-2/report.txt | 05b3ac1 |
+| WPC-30 | WPC | components2 | pass | critic: 9 layouts, file lands beside existing; merged | test/31-component-ops.test.js | cd4bddd |
 | WPC-31 | WPC | canvas2 | pass | critic: 999 radius 100 px drag -> 76 (visible); normal scrubs identical to core; merged | test/canvas/canvas2.test.js | da14b7e |
 | WPC-32 | WPC | canvas2 | pass | critic: hidden 6-20%, never wider than frame 40-300%, frame-coloured both themes, rows not pushed; merged | test/canvas/canvas2.test.js | da14b7e |
 | WPC-33 | WPC | canvas2 | pass | critic: 126 selections x 2 configs, 0 tag/caption overlaps (core 30); merged | test/canvas/canvas2.test.js | da14b7e |
 | WPC-34 | WPC | agents4 | pass | critic r2: stale error names only the changed key; merged | test/agents/agents4.test.js | 95a72a6 |
 | WPC-35 | WPC | canvas2 | pass | critic: one count string at every zoom 6-300%; merged; suite 670/665/0 fail | test/canvas/canvas2.test.js | da14b7e |
-| WPC-36 | WPC | components2 | critic-pass | critic: tokens 22, proposals persist, quickstart outside checkout, no-styles wording, 1 file, MCP text, live syntax line 6/6; nits to follow-up | docs/evidence/walk-2/report.txt | 05b3ac1 |
+| WPC-36 | WPC | components2 | pass | critic: tokens, proposals, quickstart, wording, report, MCP text, syntax line; merged | test/onboarding/wpc36.test.js | cd4bddd |
 | WPC-37 | WPC | agents4 | pass | critic r2: nothing left after stop unless pending or unheard answers (2 files); ack or 24 h clears; doc matches; merged | test/agents/agents4.test.js | 95a72a6 |
 
 ## Rounds
@@ -161,7 +161,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | 4 | 2026-10-22 | engine2, agents2, onboard2, fidelity, agents3 | Sonnet, Codex (onboard2, finished by Sonnet) | all merged; WPC-01..06, 09, 10, 12, 16..22 pass |
 | 5 | 2026-10-22 to 10-29 | keys (5 rounds + polish), pan (PRF-04, 4 rounds + regression fixes) | Sonnet | merged; WPC-07/08/11/13/14/15 pass; PRF-04 pass with known limit (David); FEEL-01 pass after polish |
 | Walk 2 | 2026-10-29 | whole-product critic (Opus) | | SCN-1..5 pass; WPC-23..37 filed |
-| 6 | 2026-10-29 | canvas2 (WPC-23/24/29/31/32/33/35), agents4 (25/26/27/34/37), components2 (28/30/36) | Sonnet | running |
+| 6 | 2026-10-29 | canvas2 (WPC-23/24/29/31/32/33/35), agents4 (25/26/27/34/37), components2 (28/30/36) | Sonnet | all merged; WPC-23..37 pass; suite 696/691/0 fail |
 
 ## New dependencies
 
