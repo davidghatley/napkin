@@ -102,7 +102,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | REL-03 | REL | engine | pass | worst 208 ms, 0 silent losses | docs/evidence/REL-03.txt | da57ab8 |
 | REL-04 | REL | engine | pass | critic soak 1800 s, 0 errors, 9.0% growth (pre-merge code, one seed) | docs/evidence/REL-04.txt | da57ab8 |
 | REL-05 | REL | engine | pass | merged 685 ms | docs/evidence/REL-05.txt | da57ab8 |
-| FEEL-01 | FEEL | canvas | building | judged 55f6802: Codex napkin 8/8 order-stable; Sonnet Paper 6/6 order-stable: judges split; polish round on Sonnet fixes then re-judge | docs/evidence/feel-01/judging.txt | 55f6802 |
+| FEEL-01 | FEEL | canvas | pass | round 3 after polish: light napkin wins (Codex 2/2, Sonnet 2/2, order-stable); dark split (Codex napkin, Sonnet Paper) = tie; merged; suite 662/657/0 fail | docs/evidence/feel-01/judging.txt | 379fa69 |
 | FEEL-02 | FEEL | layout | needs-david | 6 rounds: Sonnet tie; Codex prefers Figma help imagery in both orders | test/23-layout-panel.test.js | a4a87dd |
 | FEEL-03 | FEEL | canvas | pass | r2 pass: axe 0 light+dark | test/14-canvas-look.test.js | d57d328 |
 | FEEL-04 | FEEL | canvas | pass | r3 pass: CLS 0 over 20 selections + 5 edits | test/12-canvas-nav.test.js | 35cbf5d |
