@@ -20,9 +20,20 @@ export function componentFiles(dir, { recursive = true } = {}) {
 
 // Collect independently of the dialect reader's first refusal. Each occurrence retains
 // its source line; report totals count files, rather than occurrences in one file.
-export function blockingConstructs(source, { adoption = false } = {}) {
+// A parser gives up on the token AFTER the mistake: an unclosed tag or a missing bracket is reported where the next line starts. When the
+// error sits on the first token of its line, the line that is broken is the one above it (the parser's own line is said too). `relocate: false`
+// keeps the parser's line, for callers that know what changed (store.js names the edited line from a diff).
+function syntaxProblem(source, error, relocate) {
+  const parser = error.loc?.line || 1, col = error.loc?.column ?? 0;
+  const lines = source.split('\n');
+  let line = parser;
+  if (relocate && parser > 1 && /^\s*$/.test((lines[parser - 1] || '').slice(0, col))) { for (let i = parser - 2; i >= 0; i--) if (lines[i].trim()) { line = i + 1; break; } }
+  const detail = error.message.replace(/\s*\(\d+:\d+\)\s*$/, '') + (line !== parser ? `; the parser stopped at line ${parser}` : '');
+  return [{ name: 'syntax error', line, detail }];
+}
+export function blockingConstructs(source, { adoption = false, relocate = true } = {}) {
   let ast;
-  try { ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] }); } catch (error) { return [{ name: 'syntax error', line: error.loc?.line || 1, detail: error.message }]; }
+  try { ast = parse(source, { sourceType: 'module', plugins: ['typescript', 'jsx'] }); } catch (error) { return syntaxProblem(source, error, relocate); }
   const out = [], add = (name, n, detail) => out.push({ name, line: n?.loc?.start?.line || 1, ...(detail ? { detail } : {}) });
   let firstStyling;
   const body = ast.program.body;
@@ -55,7 +66,7 @@ export function blockingConstructs(source, { adoption = false } = {}) {
     for (const [key, value] of Object.entries(n)) if (!['loc', 'tokens', 'comments', 'original', 'extra'].includes(key) && value && typeof value === 'object') visit(value, n);
   };
   visit(ast);
-  if (!hasBase && !adoption) add('styles outside const base', firstStyling || exported || main || body[0], "styles are not in napkin's `const base` object (this file styles with className/cn() or inline styles); see docs/dialect.md");
+  if (!hasBase && !adoption) add('styles outside const base', firstStyling || exported || main || body[0], (firstStyling ? "styles are not in napkin's `const base` object (this file styles with className/cn() or inline styles); see docs/dialect.md" : "this file has no styles napkin can edit (napkin keeps styles in a `const base` object); see docs/dialect.md"));
   return out.sort((a, b) => a.line - b.line).filter((c, i, all) => !all.slice(0, i).some(x => x.name === c.name && x.line === c.line));
 }
 
@@ -70,8 +81,8 @@ function constructReasons(constructs) {
     return [reason + (n === 5 && totals.get(c.name) > 5 ? ` (and ${totals.get(c.name) - 5} more ${c.name})` : '')];
   }).join('; ');
 }
-export function classifySource(source, file) {
-  const constructs = blockingConstructs(source);
+export function classifySource(source, file, { relocate = true } = {}) {
+  const constructs = blockingConstructs(source, { relocate });
   try { if (constructs.length) throw new Error(explainError('outside the dialect')); const { doc } = readComponent(source); return { file, editable: true, name: doc.name }; }
   catch (e) {
     const line = constructs[0]?.line || e.line || e.loc?.line || 1;
@@ -83,5 +94,5 @@ export const scanRepository = (dir) => componentFiles(dir).map((file) => classif
 export function formatReport(rows) {
   const editable = rows.filter(r => r.editable).length, counts = new Map();
   for (const r of rows) for (const name of new Set((r.constructs || []).map(c => c.name))) counts.set(name, (counts.get(name) || 0) + 1);
-  return [`${rows.length} TSX files: ${editable} editable, ${rows.length - editable} read-only`, 'Top blocking constructs (files):', ...[...counts].sort((a,b) => b[1]-a[1]).map(([name,n]) => `${name}: ${n} files`), 'File | Status | Line | Reason', ...rows.map(r => `${r.file} | ${r.editable ? 'editable' : 'read-only'} | ${r.line || '—'} | ${r.editable ? 'Fits the napkin dialect' : r.reason}`)].join('\n');
+  return [`${rows.length} TSX files: ${editable} editable, ${rows.length - editable} read-only`, ...(counts.size ? ['Top blocking constructs (files):'] : []), ...[...counts].sort((a,b) => b[1]-a[1]).map(([name,n]) => `${name}: ${n} ${n === 1 ? 'file' : 'files'}`), 'File | Status | Line | Reason', ...rows.map(r => `${r.file} | ${r.editable ? 'editable' : 'read-only'} | ${r.line || '—'} | ${r.editable ? 'Fits the napkin dialect' : r.reason}`)].join('\n');
 }

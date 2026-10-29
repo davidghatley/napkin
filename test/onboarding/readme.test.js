@@ -28,7 +28,7 @@ test('ONB-01/05: README quickstart runs in a clean clone; first render within 60
     const installMs = performance.now() - installStart;
     const started = performance.now();
     for (const command of commands.slice(1, -1)) execFileSync('bash', ['-eu', '-c', command], { cwd: clone, stdio: 'pipe', timeout: 45000 });
-    assert.equal(readComponent(readFileSync(join(clone, 'my-napkin/components/Welcome.tsx'), 'utf8')).doc.name, 'Welcome');
+    assert.equal(readComponent(readFileSync(join(parent, 'my-napkin/components/Welcome.tsx'), 'utf8')).doc.name, 'Welcome');
     assert.equal(JSON.parse(readFileSync(join(clone, 'package.json'))).bin.napkin, 'src/cli.js');
     // The checkout bin also resolves without fetching a published package.
     const npx = execFileSync('npx', ['--no-install', 'napkin', '--help'], { cwd: clone, encoding: 'utf8', env: { ...process.env, npm_config_cache: join(parent, 'npm-cache') } });

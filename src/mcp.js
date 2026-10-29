@@ -165,6 +165,8 @@ function describe(name, a, compName) {
   return `${AGENT}: editing ${compName}${node ? ` · ${node}` : ''}${v}`;
 }
 
+// The HTTP errors point at GET /api/guide; an MCP client reads the same text as the napkin://guide resource (or the napkin_guide prompt).
+const forMcp = (t) => t.replace(/\/api\/guide/g, 'the napkin://guide resource (the napkin_guide prompt has the same text)');
 class ToolError extends Error { constructor(message, data) { super(explainError(message)); this.data = data; } }
 const ok = (r) => { if (r.status >= 400 || r.json?.ok === false) { const { ok: _, ...rest } = r.json || {}; throw new ToolError(r.json?.error ?? `HTTP ${r.status}`, rest.stale || rest.permission ? { ok: false, ...rest } : undefined); } return r.json; };
 
@@ -248,8 +250,8 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
       if (data?.image) return send({ id, result: { content: [{ type: 'image', data: data.image.toString('base64'), mimeType: 'image/png' }, { type: 'text', text: JSON.stringify(data.info) }], structuredContent: data.info } });
       return send({ id, result: { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: Array.isArray(data) ? { components: data } : data } });
     } catch (e) {
-      const text = e.data ? JSON.stringify({ error: explainError(e.message), ...e.data }) : explainError(e.message);
-      return send({ id, result: { isError: true, content: [{ type: 'text', text }], ...(e.data && { structuredContent: { error: explainError(e.message), ...e.data } }) } });
+      const text = e.data ? JSON.stringify({ error: forMcp(explainError(e.message)), ...e.data }) : forMcp(explainError(e.message));
+      return send({ id, result: { isError: true, content: [{ type: 'text', text }], ...(e.data && { structuredContent: { error: forMcp(explainError(e.message)), ...e.data } }) } });
     }
   }
   send({ id, error: { code: -32601, message: `method not found: ${method}` } });

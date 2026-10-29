@@ -28,6 +28,7 @@ import { createStage } from './stage.js';
 import { renderPanel } from './panel.js';
 import { initTools } from './tools.js';
 import { initLayers } from './layers.js';
+import { initComponentOps } from './component-ops.js';
 import { initQuick } from './quick.js';
 import { initReadOnly } from './readonly.js';
 import { initEmpty } from './empty.js';
@@ -106,6 +107,7 @@ const stage = createStage(ctx, $('#stage'), $('#world'), view);
 Object.assign(ctx, { view, stage });
 initTools(ctx);
 initEditOps(ctx);
+initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
 initShortcuts(ctx);

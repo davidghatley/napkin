@@ -87,7 +87,7 @@ test('scan explains where foreign styling starts and caps each construct indepen
   assert.match(report, /and 2 more className or cn\(\) styling/);
   assert.match(report, /line 6: hooks/);
   assert.doesNotMatch(report, /line 7: hooks|line 8: hooks|line 9: hooks/);
-  assert.match(report, /hooks: 1 files/);
+  assert.match(report, /hooks: 1 file\b/);
 });
 
 test('build failures preserve esbuild import names, dependency paths, source lines and all errors', async () => {

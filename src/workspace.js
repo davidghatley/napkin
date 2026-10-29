@@ -9,7 +9,7 @@
 // workspace.activity(): the last 200 { at, kind: 'change'|'added'|'removed', component, name, by, summary, revision? }
 import { explainError } from './errors.js';
 import { watch, existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, resolve, relative } from 'node:path';
+import { basename, dirname, join, resolve, relative, sep } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { openStore, brokenMessage } from './store.js';
 import { readSidecar as loadSidecar, sidecarPath } from './codecs.js';
@@ -226,6 +226,13 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
   const watcher = watch(dir, { recursive }, () => { scan(); });
 
   const find = (idOrName) => entries.get(idOrName) || [...entries.values()].find((e) => e.name === idOrName);
+  const createDir = () => {
+    if (!recursive || !entries.size) return dir;
+    const count = new Map();
+    for (const x of entries.values()) count.set(dirname(x.file), (count.get(dirname(x.file)) || 0) + 1);
+    const depth = (d) => relative(dir, d).split(sep).filter(Boolean).length;
+    return [...count].sort((a, b) => b[1] - a[1] || depth(a[0]) - depth(b[0]) || a[0].localeCompare(b[0]))[0][0];
+  };
   return {
     dir, events, tokens, ready, progress: () => progress,
     async report() { return formatReport(await Promise.all([...entries.values()].map(async e => { const r = await e.store.read(); return r.readOnly ? r.classification : { file: e.path, editable: true, name: e.name }; }))); },
@@ -347,12 +354,14 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     // F11/F12: write components/<Name>.tsx (and, through the store, its sidecar) for a new, empty component.
     // Resolves { id, name } once the workspace has opened it; throws CreateError for a bad or taken name.
     // Everything create() checks before it writes, so a propose-mode agent's request can be refused up front. Returns the file it would make.
+    // Where a new component goes: beside the existing ones. In a folder opened recursively without a fixed components folder, that is
+    // the most common directory of the component files (ties: the shallowest, then the first by name); otherwise the folder itself.
     checkCreate(name, rootTag = 'div') {
       if (typeof name !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new CreateError(`component name "${name}" must be PascalCase (letters and digits, starting with a capital)`);
       if (typeof rootTag !== 'string' || !TAGS.has(rootTag) || VOID.has(rootTag)) throw new CreateError(`root tag "${rootTag}" is not supported`);
       if (wanted) throw new CreateError('this server opened a single file, so it cannot add components');
       const taken = [...entries.values()].some((e) => e.name.toLowerCase() === name.toLowerCase());
-      const file = join(dir, `${name}.tsx`);
+      const file = join(createDir(), `${name}.tsx`);
       if (taken || existsSync(file)) throw new CreateError(`component "${name}" already exists`, 409);
       return file;
     },
@@ -363,20 +372,24 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       return { source, doc: readComponent(source).doc };
     },
     // opts.approvedBy: the person who accepted a proposal to create it; recorded beside the author in history.
-    async create(name, rootTag = 'div', { by, approvedBy } = {}) {
+    async create(name, rootTag = 'div', { by, approvedBy, source } = {}) {
       needBy(by);
+      if (source !== undefined) { // bringing a deleted component back: the text must be this component, in the dialect
+        let back; try { back = readComponent(source).doc; } catch (err) { throw new CreateError(`that source is not a napkin component: ${err.message}`); }
+        if (back.name !== name) throw new CreateError(`that source is ${back.name}, not ${name}`);
+      }
       this.checkCreate(name, rootTag);
       await queue;
       const file = this.checkCreate(name, rootTag);
       origins.set(file, { by, summary: `created ${name}`, ...(approvedBy && { approvedBy }) });
-      try { createComponent(file, newComponentSource(name, rootTag)); }
+      try { createComponent(file, source ?? newComponentSource(name, rootTag)); }
       catch (err) { origins.delete(file); throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
       // Explicit creation saves its identity. Scanning existing files is read-only.
       readSidecar(file, name, { create: writeSidecars });
       await scan();
       const e = find(name);
       if (!e) throw new Error(explainError(`created ${name}.tsx but could not open it`));
-      return { id: e.id, name: e.name };
+      return { id: e.id, name: e.name, path: e.path };
     },
     activity: (limit = 50) => [...log, ...tokens.history()].sort((a, b) => b.at - a.at).slice(0, limit),
     // Delete: remove the file and its sidecar through commit.js; the workspace records who and why and announces 'removed'.
