@@ -39,9 +39,9 @@
 #proposals-tray { position: relative; flex: none; margin-left: auto; z-index: 9; width: 420px; max-width: 46%; background: var(--nk-chrome); border-left: 1px solid var(--nk-line-2); font: 12px/1.45 var(--nk-sans); color: var(--nk-text); display: flex; flex-direction: column; max-height: clamp(220px, 46vh, 460px); }
 #proposals-tray[hidden] { display: none; }
 /* WPC-27: with no drawer open the tray IS the dock: it spans the whole width under the canvas (no empty strip beside it), lays its rows
-   out in columns, and is capped at 25% of the canvas's height, so the canvas keeps at least 70% of it; the rows scroll inside the cap and the
+   out in columns, and is capped at 24% of the canvas's height, so the canvas keeps at least 70% of it; the rows scroll inside the cap and the
    header never leaves. With a drawer open the dock is shared with the drawer, as before. */
-body:not([data-drawer]) #proposals-tray { flex: 1 1 auto; width: auto; max-width: none; margin-left: 0; max-height: calc((100vh - 70px) * .25); border-left: 0; }
+body:not([data-drawer]) #proposals-tray { flex: 1 1 auto; width: auto; max-width: none; margin-left: 0; max-height: calc((100vh - 70px) * .24); border-left: 0; }
 body:not([data-drawer]) #proposals-tray .pt-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); align-content: start; column-gap: 6px; }
 body:not([data-drawer]) #proposals-tray .pt-body .pt-group { grid-column: 1 / -1; margin-top: 2px; }
 body:not([data-drawer]) #proposals-tray .pt-body ol { display: contents; }
