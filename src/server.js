@@ -12,13 +12,14 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { openWorkspace } from './workspace.js';
 import { createApi } from './api.js';
+import { cleanPrivate } from './atomic.js';
 import { createComponent, createProjectConfig, writeTokens, removeDemoWorkspace } from './commit.js';
 import { createPresence } from './presence.js';
 import { nodeOfEdit } from './model.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
 import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
 
-const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, stream: { type: 'boolean' } } });
+const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, 'watch-parent': { type: 'string' }, stream: { type: 'boolean' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 let dir, only, demoDir;
@@ -27,7 +28,14 @@ let dir, only, demoDir;
 process.once('exit', () => { if (demoDir) removeDemoWorkspace(demoDir); });
 // Signals during async startup still take the normal exit cleanup path.
 let shutdown = () => process.exit(0);
-for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => shutdown());
+for (const signal of ['SIGTERM', 'SIGINT', 'SIGHUP']) process.on(signal, () => shutdown());
+// WPC-25: SIGKILL of the launching CLI cannot be caught, so the server watches it: when --watch-parent <pid> is gone
+// (or we were re-parented), it shuts down as if told to, so a dead terminal never leaves an orphan holding the lock.
+if (args['watch-parent']) {
+  const parent = Number(args['watch-parent']);
+  const gone = () => { if (process.ppid !== parent) return true; try { process.kill(parent, 0); return false; } catch (e) { return e.code !== 'EPERM'; } };
+  setInterval(() => { if (gone()) { shutdown(); setTimeout(() => process.exit(0), 3000).unref(); } }, 500).unref();
+}
 if (args.file) { dir = dirname(resolve(args.file)); only = resolve(args.file); }
 else if (args.dir) dir = resolve(args.dir);
 else { // a throwaway copy of the fixtures, so playing with the canvas never edits the repo
@@ -40,6 +48,7 @@ else { // a throwaway copy of the fixtures, so playing with the canvas never edi
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run node src/cli.js init.`); process.exit(1); }
 let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
 try { lock = acquireWorkspaceLock(dir, { writeSidecars: !args['no-sidecars'] }); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
+if (!args['no-sidecars']) process.once('exit', () => cleanPrivate(dir)); // WPC-37: after the lock is released (its exit hook ran first), tidy what napkin left
 const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'], progressive: args.stream });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;

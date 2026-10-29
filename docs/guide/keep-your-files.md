@@ -28,6 +28,14 @@ sidecars are preserved. The `.napkin/` folder holds the project writer lock; the
 folder ignores itself in git through its own `.gitignore`. In an unconfigured repository, `open` keeps the lock
 outside the repo and disables sidecar writes unless `--write-sidecars` is set.
 
+What a configured project (one with a `napkin.json`) keeps in `.napkin/` once napkin stops: nothing, unless
+there are pending agent proposals, or answers (accepted or rejected) that the proposing agent has not yet
+acknowledged. Answers are dropped once the agent has heard them, or after 24 hours. Then exactly two files
+remain, so proposals and missed answers survive a restart: `proposals.json` and `.gitignore` (which hides the
+folder from git). The lock, the empty `guard/` folder and temp files are removed on a normal stop. If napkin is
+killed outright (`kill -9`), leftovers can stay until the next run; a lock left by a dead process never blocks
+the next `open`. Closing the terminal (SIGHUP) or killing the CLI stops the server too, within a second or two.
+
 Undo and redo are in the canvas. History is session memory; source and saved
 sidecars persist. Keep sidecars with components when moving files between repos.
 Hand saves reload through the file watcher. Broken source retains its last good

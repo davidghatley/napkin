@@ -15,7 +15,7 @@ for (const [width, height] of [[1440, 900], [1280, 720]]) {
       const r = (await http(p.server.url, '/api/components', { method: 'POST', token: claude.token, body: { name: 'Tooltip', propose: true } })).json;
       assert.equal(r.proposed, true, JSON.stringify(r));
       await browser.waitFor(`napkin.proposals.list().length === 1 && !!document.querySelector('.ghost-new [data-n="root"]')`); // nobody clicked anything
-      await sleep(900); // a ghost placed off screen is flown to once
+      await q(`document.querySelector('.pitem').click()`); await sleep(900); // WPC-26: the camera never moves by itself; one click on the row goes to the ghost
       const g = await q(`(() => {
         const rect = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
         const ghost = document.querySelector('.ghost-new'), frame = rect(ghost.querySelector('.gn-frame')), stage = rect(document.querySelector('#stage'));
@@ -72,7 +72,7 @@ test('a name clash shows on the tray row at once with a plain reason; Accept nev
   } finally { await p.close(); }
 });
 
-test('several quick create proposals: every ghost is on screen on arrival and every flag shows the whole component name', { timeout: 120000 }, async () => {
+test('several quick create proposals: every ghost is one click from being on screen (the camera never moves by itself) and every flag shows the whole component name', { timeout: 120000 }, async () => {
   const p = await openAgents(['Button', 'Card', 'Chip']);
   const { q, browser } = p;
   try {
@@ -81,6 +81,7 @@ test('several quick create proposals: every ghost is on screen on arrival and ev
     await Promise.all(names.map((name) => http(p.server.url, '/api/components', { method: 'POST', token: claude.token, body: { name, propose: true } })));
     await browser.waitFor(`document.querySelectorAll('.ghost-new [data-n="root"]').length === ${names.length}`);
     await sleep(1200);
+    await q(`document.querySelector('.pitem').click()`); await sleep(1200); // WPC-26: one click on a row fits them all
     const g = await q(`(() => { const stage = document.querySelector('#stage').getBoundingClientRect();
       return [...document.querySelectorAll('.ghost-new')].map((e) => { const f = e.querySelector('.gn-frame').getBoundingClientRect(), fl = e.querySelector('.gn-flag');
         return { inStage: f.left >= stage.left && f.top >= stage.top && f.right <= stage.right && f.bottom <= stage.bottom, flagOk: fl.scrollWidth <= fl.clientWidth + 1 && fl.scrollHeight <= fl.clientHeight + 1, text: fl.textContent }; }); })()`);
