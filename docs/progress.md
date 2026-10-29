@@ -136,19 +136,19 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-22 | WPC | agents | pass | critic pass + follow-ups (no trace in opened repos, tmp sweep, missed answers, all ghosts in view); suite 566/571 0 fail | docs/evidence/agents3-ghost.png | 4d2cdf6 |
 | WPC-23 | WPC | canvas2 | pass | critic: 4 created + reload + Shift+1: 0 overlaps, 0/149 off; branch switch 0/0; existing sidecar layouts unchanged; merged | test/canvas/canvas2.test.js | da14b7e |
 | WPC-24 | WPC | canvas2 | pass | critic: field = disk and no stale error at +150 ms..4 s after hand fix; merged | test/canvas/canvas2.test.js | da14b7e |
-| WPC-25 | WPC | agents4 | critic-pass | critic: HUP/KILL/TERM/INT and pty close: CLI+server gone in 5 s, next open starts | docs/evidence/walk-2/report.txt | 831e316 |
-| WPC-26 | WPC | agents4 | critic-pass | critic: view unchanged at 150% on create proposal; off-screen chip; one click brings ghost in | docs/evidence/walk-2/report.txt | 831e316 |
-| WPC-27 | WPC | agents4 | critic-pass | critic: canvas 0.72 (1440) / 0.71 (1280) of height with tray, no blank area; margin follow-up | docs/evidence/walk-2/report.txt | 831e316 |
+| WPC-25 | WPC | agents4 | pass | critic: HUP/KILL/TERM/INT and pty close leave no process in 5 s; merged; suite 679/674/0 fail | test/agents/agents4.test.js | 95a72a6 |
+| WPC-26 | WPC | agents4 | pass | critic r2: view unchanged at 150% after canvas2 merge; one click reveals ghost; merged | test/agents-ui/agents4.test.js | 95a72a6 |
+| WPC-27 | WPC | agents4 | pass | critic r2: canvas 0.76 of height at 1440x900 and 1280x720, no blank area; merged | test/agents-ui/agents4.test.js | 95a72a6 |
 | WPC-28 | WPC | components2 | building | critic: rename/delete by Cmd-K, F2, row menu work with plain messages; FAIL: delete-undo restores to wrong folder in nested repos, rename not undoable, rename dead-ends without napkin.json, used-component rename gives no next step: fixing | docs/evidence/walk-2/report.txt | 05b3ac1 |
 | WPC-29 | WPC | canvas2 | pass | critic: T and pasted text computed system-ui sans, written to file; 40 user files unchanged; merged | test/canvas/canvas2.test.js | da14b7e |
 | WPC-30 | WPC | components2 | critic-pass | critic: 9 layouts incl. ties, nested, node_modules, config: file lands beside existing | docs/evidence/walk-2/report.txt | 05b3ac1 |
 | WPC-31 | WPC | canvas2 | pass | critic: 999 radius 100 px drag -> 76 (visible); normal scrubs identical to core; merged | test/canvas/canvas2.test.js | da14b7e |
 | WPC-32 | WPC | canvas2 | pass | critic: hidden 6-20%, never wider than frame 40-300%, frame-coloured both themes, rows not pushed; merged | test/canvas/canvas2.test.js | da14b7e |
 | WPC-33 | WPC | canvas2 | pass | critic: 126 selections x 2 configs, 0 tag/caption overlaps (core 30); merged | test/canvas/canvas2.test.js | da14b7e |
-| WPC-34 | WPC | agents4 | critic-pass | critic: stale error names only root.borderRadius; message and stale list agree | docs/evidence/walk-2/report.txt | 831e316 |
+| WPC-34 | WPC | agents4 | pass | critic r2: stale error names only the changed key; merged | test/agents/agents4.test.js | 95a72a6 |
 | WPC-35 | WPC | canvas2 | pass | critic: one count string at every zoom 6-300%; merged; suite 670/665/0 fail | test/canvas/canvas2.test.js | da14b7e |
 | WPC-36 | WPC | components2 | critic-pass | critic: tokens 22, proposals persist, quickstart outside checkout, no-styles wording, 1 file, MCP text, live syntax line 6/6; nits to follow-up | docs/evidence/walk-2/report.txt | 05b3ac1 |
-| WPC-37 | WPC | agents4 | building | critic: no-proposal stop clean, pending survives restart; FAIL: answered-only proposals.json remains, doc says nothing: fixing | docs/evidence/walk-2/report.txt | 831e316 |
+| WPC-37 | WPC | agents4 | pass | critic r2: nothing left after stop unless pending or unheard answers (2 files); ack or 24 h clears; doc matches; merged | test/agents/agents4.test.js | 95a72a6 |
 
 ## Rounds
 
