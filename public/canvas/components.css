@@ -137,3 +137,5 @@ section.cmp:has(.mctl) .ghint { display: none; }
 #cmp-toast button { font: 600 11.5px var(--nk-sans); height: 24px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--nk-line); background: var(--nk-chrome-2); color: var(--nk-text); cursor: pointer; }
 #cmp-toast #cmp-undo { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent); }
 #cmp-toast #cmp-toast-dismiss { border: 0; background: transparent; font-size: 15px; padding: 0 6px; color: var(--nk-text-2); }
+/* WPC-32: too big for its frame at this zoom: hidden (zoom in to filter) */
+section.cmp[data-mctl-off] .mctl { display: none; }

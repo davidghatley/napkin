@@ -476,6 +476,13 @@ function wire(ctx, el) {
   if (el.dataset.wired) return;
   el.dataset.wired = '1';
   const rerender = () => renderPanel(ctx);
+  // WPC-24: when the broken file is fixed on disk the refused values, their messages and the toast go; the fields show the file.
+  ctx.on('problem', (f) => {
+    if (f.error || ctx.state.selection?.component !== f.component) return;
+    ui.errors = {}; ui.draft = {};
+    const toast = document.querySelector('#error'); if (toast) toast.textContent = '';
+    rerender();
+  });
   const curDoc = () => { const s = ctx.state.selection; return s && ctx.state.components.get(s.component)?.doc; };
   const selNodes = () => ctx.state.selections.filter((s) => s.component === ctx.state.selection?.component).map((s) => s.node);
 
@@ -900,6 +907,7 @@ function wire(ctx, el) {
     const input = el.querySelector('#' + CSS.escape(lab.dataset.scrub));
     if (!input || input.disabled) return;
     scrub = { lab, input, x: ev.clientX, start: input.value, moved: false, prop: lab.dataset.scrub, ...scrubOf(lab.dataset.scrub, input.value) };
+    scrub.base = visibleRadius(scrub.start, lab.dataset.scrub); // WPC-31: a 999 pill scrubs from the radius you can see
     try { lab.setPointerCapture(ev.pointerId); } catch {}
   });
   el.addEventListener('pointermove', (ev) => {
@@ -909,11 +917,20 @@ function wire(ctx, el) {
     if (!scrub.moved) { scrub.moved = true; ui.scrubbing = true; document.body.dataset.scrub = '1'; }
     ev.preventDefault();
     const mult = ev.shiftKey ? 10 : ev.altKey ? 0.1 : 1;
-    const next = bump(scrub.start || '0', Math.round(dx / 2) * scrub.step * mult, scrub);
+    const next = bump(scrub.base || '0', Math.round(dx / 2) * scrub.step * mult, scrub);
     if (next === null) return;
     scrub.input.value = next; scrub.value = next;
     if (scrub.input.dataset.group) { const r = readGroup(scrub.input.dataset.group); preview(r.prop, r.value); } else preview(scrub.prop, next);
   });
+  // A radius larger than half the shorter side draws the same as half of it, so a drag from 999 moved nothing you could see.
+  // The drag starts from what is drawn: the number is clamped to the selected element's half-side first.
+  function visibleRadius(text, prop) {
+    if (prop !== 'borderRadius' && !/^rad-/.test(prop)) return text;
+    const node = ctx.stage?.selectedElement(ctx.state.selection);
+    if (!node?.isConnected || !/\d/.test(text)) return text;
+    const cap = Math.floor(Math.min(node.offsetWidth, node.offsetHeight) / 2);
+    return text.replace(/\d+(\.\d+)?/g, (m) => String(Math.min(Number(m), cap)));
+  }
   const endScrub = async (ev) => {
     if (!scrub) return;
     const sc = scrub; scrub = null;
