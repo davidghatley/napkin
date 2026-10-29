@@ -19,6 +19,7 @@ let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40; // up to 40
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function createStage(ctx, root, world, view) {
+  world.style.visibility = 'hidden'; // until the first layout: frames are packed together once they are all measured, and nobody sees them move there
   const sections = new Map(); // component id -> { el, frame, unmounts, token, pos, size, culled }
   const auto = new Map();     // component id -> { x, y } chosen by the stage for components that have no saved position
   const overlays = root.querySelector('#overlays');
@@ -229,15 +230,15 @@ export function createStage(ctx, root, world, view) {
   const headBox = (sec, z) => {
     const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
     const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
-    if (head && z < 0.4) { // far out the axis strip shows under the title (hidden now, so measured by its text)
-      const strip = head.querySelector('.axes-strip')?.textContent || '';
-      if (strip) { nat.h += 20; nat.w = Math.max(nat.w, Math.ceil(strip.length * 6.8)); }
-    }
     const bar = head && ctx.matrix?.natural(sec.el); // WPC-32: a filter bar too big for its frame is hidden, so it takes no room above it
     if (bar) {
       const shown = bar.ctl.offsetParent !== null, fits = ctx.matrix.fits(sec.el, lf);
       nat.h += (fits ? bar.h + 4 : 0) - (shown ? bar.ctl.offsetHeight + 4 : 0);
       if (shown && !fits) nat.w = head.querySelector('.cmp-title')?.offsetWidth || nat.w;
+    }
+    if (head && z < 0.4) { // far out the axis strip shows under the title (hidden now, so measured by its text)
+      const strip = head.querySelector('.axes-strip')?.textContent || '';
+      if (strip) { nat.h += 20; nat.w = Math.max(nat.w, Math.ceil(strip.length * 6.8)); }
     }
     return { w: Math.max(sec.size.w, Math.ceil(nat.w * lf)), top: Math.ceil((nat.h + 8) * lf) + CLEAR };
   };
@@ -270,6 +271,15 @@ export function createStage(ctx, root, world, view) {
     // Frames placed one by one while the first renders were still on their way were placed by a placeholder size; now that
     // the sizes are known, the ones without a saved position are packed once, together (WPC-23: no overlaps after a reload).
     for (const id of ids) if (!placed(id)) auto.delete(id);
+    // Frames not drawn yet (far off screen on a big canvas) have no size of their own: each is given room for a large one of the sizes
+    // measured so far (the 90th percentile), so drawing it later rarely needs more room than it was given and nothing has to move.
+    const real = ids.filter((id) => { const x = sections.get(id); return !x.pending && x.size.w > 0 && !x.frame.querySelector('.bundle-pending'); });
+    const pend = ids.filter((id) => !placed(id) && sections.get(id).pending);
+    if (pend.length && real.length >= 3) {
+      const p90 = (vals) => vals.sort((a, b) => a - b)[Math.min(vals.length - 1, Math.floor(vals.length * 0.9))];
+      const est = { w: p90(real.map((id) => sections.get(id).size.w)), h: p90(real.map((id) => sections.get(id).size.h)) };
+      for (const id of pend) { const x = sections.get(id); x.size = { ...est }; x.el.style.setProperty('--nk-w', `${est.w}px`); x.el.style.setProperty('--nk-h', `${est.h}px`); }
+    }
     for (const id of ids) if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); }
     const todo = ids.filter((id) => !placed(id) && !auto.has(id)).sort(byName);
     const taken = ids.filter(placed);
@@ -291,6 +301,7 @@ export function createStage(ctx, root, world, view) {
     const last = todo.at(-1);
     shelf = last ? { x: res.out.get(last).x + headBox(sections.get(last), z).w + GAP_X, y: res.out.get(last).y, h: sections.get(last).size.h } : { x: 0, y: 0, h: 0 };
     laidOut = true;
+    world.style.visibility = '';
     ctx.emit('layout', {});
   }
   // The first free slot for a frame of w x h with `top` px of title above it, among `others` (their rectangles, title strips included): the

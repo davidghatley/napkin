@@ -15,7 +15,7 @@ export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)'
 
 export function createView(ctx, stageEl, worldEl) {
   let v = { x: 80, y: 120, z: 1 };
-  let anim = null;
+  let anim = null, target = null; // target: where a running animation ends
   let box = stageEl.getBoundingClientRect();
   let lastPointer = null;       // last pointer position over the stage, for keyboard zoom
   let movingTimer = 0;
@@ -78,11 +78,14 @@ export function createView(ctx, stageEl, worldEl) {
   view.labelScaleLs = (z) => Math.round(clamp(1 / z, 1, 3.2) * 20) / 20;
   view.settledLabelScaleLs = () => Number(worldEl.dataset.ls || 1);
   view.get = () => ({ ...v });
+  view.target = () => ({ ...(target ?? v) }); // where the view is going (or is)
   function set(next, { animate = false, duration = 220, anchor = null, gesture = false } = {}) {
     next = { x: next.x, y: next.y, z: clamp(next.z, MIN_Z, MAX_Z) };
     if (anim) { cancelAnimationFrame(anim.raf); anim = null; }
+    target = null;
     if (!animate || reducedMotion()) { v = next; apply(gesture); return Promise.resolve(); }
     const from = { ...v }, t0 = performance.now();
+    target = next;
     return new Promise((done) => {
       const step = (now) => {
         const t = clamp((now - t0) / duration, 0, 1), e = 1 - Math.pow(1 - t, 3);
@@ -91,7 +94,7 @@ export function createView(ctx, stageEl, worldEl) {
         v = anchor ? { x: anchor.cx - anchor.wx * z, y: anchor.cy - anchor.wy * z, z } : { x: from.x + (next.x - from.x) * e, y: from.y + (next.y - from.y) * e, z };
         if (t >= 1) v = next;
         apply();
-        if (t < 1) anim.raf = requestAnimationFrame(step); else { anim = null; done(); }
+        if (t < 1) anim.raf = requestAnimationFrame(step); else { anim = null; target = null; done(); }
       };
       anim = { raf: requestAnimationFrame(step) };
     });
@@ -121,7 +124,7 @@ export function createView(ctx, stageEl, worldEl) {
   };
   view.fitRect = (r, opts = {}) => set(view.fitView(r, opts), { animate: opts.animate });
   view.flyTo = (r, opts = {}) => set(view.fitView(r, opts), { animate: true });
-  view.stop = () => { if (anim) { cancelAnimationFrame(anim.raf); anim = null; } };
+  view.stop = () => { if (anim) { cancelAnimationFrame(anim.raf); anim = null; } target = null; };
   view.setFitters = (f) => { fitters = f; };
   // Shift+1 must show every frame. Frames far off screen draw late and then grow, and a frame may be moved aside when it does: while the
   // view is still exactly the fit the stage keeps it a fit (WPC-23). Any pan or zoom of the person's own ends this.
