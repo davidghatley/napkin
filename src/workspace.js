@@ -59,6 +59,19 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
   const reaches = (from, to, seen = new Set()) => { if (from === to) return true; if (seen.has(from)) return false; seen.add(from); for (const n of usesByFile.get(from) || []) if (reaches(n, to, seen)) return true; return false; };
   const byFile = (f) => [...entries.values()].find((x) => x.file === f);
   const dependents = (file) => [...entries.values()].filter((x) => x.file !== file && reaches(x.file, file)); // everything that shows `file` somewhere inside it
+  // Every component file that imports `file`, read-only ones included (a plain import scan, not the dialect's document).
+  const importersOf = async (file) => {
+    const target = file.replace(/\.tsx$/, ''), out = [];
+    for (const x of entries.values()) {
+      if (x.file === file) continue;
+      const { source } = await x.store.read();
+      for (const m of String(source).matchAll(/\b(?:import|export)\b[^'"`;]*?\bfrom\s*['"]([^'"]+)['"]|\bimport\s*['"]([^'"]+)['"]/g)) {
+        const spec = m[1] ?? m[2];
+        if (spec.startsWith('.') && resolve(dirname(x.file), spec).replace(/\.tsx?$/, '') === target) { out.push(x); break; }
+      }
+    }
+    return out;
+  };
   const directUsers = (file) => [...entries.values()].filter((x) => usesByFile.get(x.file)?.has(file));
   const components = { lookup(name, host) { const f = siblingFile(host, name); if (!byFile(f)) return null; return { doc: docs.get(f) || null, reaches: () => reaches(f, host) }; } };
   const graphOf = (e) => ({ uses: [...(usesByFile.get(e.file) || [])].map((f) => basename(f, '.tsx')), usedBy: directUsers(e.file).map((x) => x.name) });
@@ -250,6 +263,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     },
     // Decision 0004: who a component uses and who uses it (direct), from the documents the stores hold.
     graph: (e) => graphOf(e),
+    importers: importersOf,
     // The text a ReactNode slot shows on the canvas, per prop. Sidecar only (never the .tsx).
     setSlotPreview(e, prop, text, { by } = {}) {
       needBy(by);
@@ -407,7 +421,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
       const r = await e.store.read();
       if (r.readOnly) throw new CreateError(`read-only: ${e.path}: ${r.readOnly}. Next: keep the source or propose an adoption before deleting it.`, 403);
-      const users = directUsers(e.file).map((x) => x.name);
+      const users = [...new Set([...directUsers(e.file), ...(await importersOf(e.file))].map((x) => x.name))];
       if (users.length) throw new CreateError(`${e.name} is used by ${users.join(', ')}. Next: remove or swap those instances first.`, 409);
       const { id, name, file } = e;
       removals.set(file, { by, summary: `deleted ${name}` });
@@ -425,6 +439,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
       // The components that use this one get their import and tags renamed too (a swapInstance per instance, one batch per file).
       const swaps = directUsers(e.file).map((u) => ({ u, doc: docs.get(u.file) }));
+      for (const x of await importersOf(e.file)) if (!swaps.some(({ u }) => u === x)) throw new CreateError(`${e.name} is imported by ${x.name}, which napkin cannot rewrite safely (it is read-only). Next: change its import of ${e.name} yourself, or rename in your editor.`, 409);
       for (const { u, doc: d } of swaps) if (!d) throw new CreateError(`${e.name} is used by ${u.name}, which is read-only, so napkin cannot update its import. Next: rename it in your editor, or make ${u.name} editable first.`, 409);
       const { readOnly, source, doc, revision } = await e.store.read();
       if (readOnly) throw new CreateError(`read-only: ${readOnly}`, 403);

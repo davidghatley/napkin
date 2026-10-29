@@ -195,3 +195,19 @@ test('WPC-28: after a rename focus stays on the renamed row; Cancel on delete fr
     assert.match(await L.q(`document.querySelector('#cmp-toast').textContent`), /./);
   } finally { await L.close(); }
 });
+
+test('WPC-28: a read-only file that imports a component blocks its rename and delete, and is named', { timeout: 60000 }, async () => {
+  const data = (n) => readFileSync(new URL(`./fixtures/0004/${n}.tsx`, import.meta.url), 'utf8');
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-ro-'));
+  writeFileSync(join(dir, 'Button.tsx'), data('Button'));
+  const user = "import { useState } from 'react';\nimport { Button } from './Button';\nexport function Shell() {\n  const [n] = useState(0);\n  return <div className=\"x\"><Button />{n}</div>;\n}\n";
+  writeFileSync(join(dir, 'Shell.tsx'), user);
+  const ws = await openWorkspace(dir, { writeSidecars: false });
+  try {
+    assert.ok((await ws.find('Shell').store.read()).readOnly, 'Shell is read-only');
+    await assert.rejects(ws.rename('Button', 'Knob', { by: 'you' }), /imported by Shell.*read-only.*Next:/);
+    await assert.rejects(ws.delete('Button', { by: 'you' }), /used by Shell/);
+    assert.ok(existsSync(join(dir, 'Button.tsx')) && !existsSync(join(dir, 'Knob.tsx')));
+    assert.equal(readFileSync(join(dir, 'Shell.tsx'), 'utf8'), user);
+  } finally { await ws.close(); }
+});
