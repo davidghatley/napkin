@@ -26,6 +26,8 @@ test('WPC-14: person-facing wording never carries API or agent text', () => {
     const src = readFileSync(join(ROOT, 'public/canvas', f), 'utf8');
     const code = src.replace(/\/\/.*$/gm, '').split('\n').filter((l) => !/\.split\(/.test(l)).join('\n'); // stage.js cuts the agent text off with split('. Next:')
     assert.ok(!/['"`][^'"`\n]*\bNext:/.test(code), `${f} writes agent-facing "Next:" text`);
+    // every inline message and banner that takes server text goes through plain() or stripNext() (no "invalid edit #n:" reaches a person)
+    for (const line of src.split('\n')) if (/(?:errors?\[[^\]]*\]|errors\.\w+|\.textContent|\btext:)\s*=?\s*[^;\n]*\b(?:r|j|res|next|v|e)\??\.error\b/.test(line) && !/stripNext\(|plain\(|problemBanner\(/.test(line)) assert.fail(`${f}: server text shown without plain(): ${line.trim().slice(0, 120)}`);
     for (const m of src.matchAll(/ctx\.hint\(([^;\n]*)\)/g)) if (/\.error\b/.test(m[1])) assert.match(m[1], /plain\(/, `${f}: ctx.hint prints a raw server error: ${m[1]}`);
   }
 });

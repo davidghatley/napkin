@@ -1,5 +1,7 @@
 // Person-facing wording for messages that come from the server. The API speaks to agents ("... Next: check this request
 // against /api/guide ..."); the canvas speaks to a person, so every toast, hint and inline error goes through plain().
+export const SETTING_NAME = /^[a-z][a-zA-Z0-9]*$/;
+export const SETTING_NAME_HELP = (n) => `"${String(n).slice(0, 30)}" can't be a setting name. Start with a lowercase letter, then use letters and digits only, like label or isActive.`;
 const NOTHING = /nothing to (undo|redo)/i;
 export function plain(text) {
   let s = String(text ?? '').trim();
@@ -9,11 +11,14 @@ export function plain(text) {
   if (nothing) return `Nothing to ${nothing[1].toLowerCase()} yet.`;
   s = s.replace(/\s*Next:[\s\S]*$/, '').replace(/^(undo|redo) refused: /, '').replace(/^invalid edit #\d+: /, '').replace(/\s*\/api\/[\w/.-]*/g, '').trim();
   if (/^id ".*" already exists/.test(s)) return 'That id is already used';
+  s = s.replace(/\s*\[[^\]]*\.(?:tsx|json)\]\s*$/, '').trim(); // the file is already named by the field the message sits beside
+  const bad = /^bad prop name "(.*)"$/.exec(s);
+  if (bad) return SETTING_NAME_HELP(bad[1]);
   return s || 'Something went wrong';
 }
 
 // Inline errors in the panel keep the store's own wording ("invalid edit #0: ...") but never the agent-facing "Next: ..." tail.
-export const stripNext = (text) => /connection to napkin was interrupted/.test(text) || osError(text) || /^stale revision/.test(text) ? plain(/^stale revision:?\s*/.test(text) && !/interrupted/.test(text) ? 'This changed while you were editing it.' : text) : String(text ?? '').replace(/\s*Next:[\s\S]*$/, '').replace(/\s*\/api\/[\w/.-]*/g, '').trim();
+export const stripNext = (text) => plain(text); // inline messages beside a field: the same plain words as a toast
 
 // OS error codes (EACCES, ENOSPC, ...) in a person's words, naming the component file and never a temp path.
 const OS = {

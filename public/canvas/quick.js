@@ -29,11 +29,11 @@ export function initQuick(ctx) {
   const GENERIC = /^(Colour|Opacity|Width|Style|Size|Hug|Fill|Fixed|Block|Flex|Grid|Row|Column|Wrap|Left|Right|Top|Bottom|Center|All sides|Min \/ Max|Space between|Hide|Remove|Show)$/;
   // Names for the controls whose own label says little ("md", "×", "+ value"): built from the control's id.
   const BY_ID = [
-    [/^propdef-([^-]+)-(.+)$/, (m) => `Setting ${m[1]} default ${m[2]}`],
-    [/^axis-name-(.+)$/, (m) => `Variant axis ${m[1]} name`], [/^axis-(up|down)-(.+)$/, (m) => `Move variant axis ${m[2]} ${m[1]}`], [/^remove-axis-(.+)$/, (m) => `Delete variant axis ${m[1]}`],
-    [/^value-name-([^-]+)-(.+)$/, (m) => `Variant ${m[1]} value ${m[2]} name`], [/^value-(up|down)-([^-]+)-(.+)$/, (m) => `Move variant ${m[2]} ${m[3]} ${m[1]}`],
-    [/^grip-value-([^-]+)-(.+)$/, (m) => `Reorder variant ${m[1]} ${m[2]}`], [/^remove-value-([^-]+)-(.+)$/, (m) => `Delete variant value ${m[2]} from ${m[1]}`], [/^make-base-([^-]+)-(.+)$/, (m) => `Make variant ${m[1]} ${m[2]} the base`],
-    [/^token-(.+)$/, (m, p) => `Bind ${fieldName(p, m[1])} to token`], [/^off-token-(.+)$/, (m, p) => `Snap ${fieldName(p, m[1])} to token`], [/^add-value-(.+)$/, (m) => `Add variant value to ${m[1]}`], [/^add-axis$/, () => 'Add variant'], [/^add-prop$/, () => 'Add setting'],
+    [/^propdef-([^-]+)-(.+)$/, (m) => `Default ${m[1]} ${m[2]}`],
+    [/^axis-name-(.+)$/, (m) => `Name of ${m[1]} axis`], [/^axis-(up|down)-(.+)$/, (m) => `Move ${m[2]} axis ${m[1]}`], [/^remove-axis-(.+)$/, (m) => `Remove ${m[1]} axis`],
+    [/^value-name-([^-]+)-(.+)$/, (m) => `Name of value ${m[2]}`], [/^value-(up|down)-([^-]+)-(.+)$/, (m) => `Move ${m[3]} ${m[1]}`],
+    [/^grip-value-([^-]+)-(.+)$/, (m) => `Drag ${m[2]} to reorder`], [/^remove-value-([^-]+)-(.+)$/, (m) => `Remove value ${m[2]}`], [/^make-base-([^-]+)-(.+)$/, (m) => `Make ${m[2]} the base`],
+    [/^remove-(fill|stroke)$/, (m) => `Clear ${m[1]}`], [/^seg-textAlign-(.+)$/, (m) => `Text align ${m[1]}`], [/^side-(.+)$/, (m) => m[1] === 'all' ? 'Stroke all sides' : `Stroke ${m[1].toLowerCase()} side`], [/^size-(width|height)-(hug|fill|fixed)$/, (m) => `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}`], [/^token-(.+)$/, (m, p) => `Bind ${fieldName(p, m[1])} to token`], [/^off-token-(.+)$/, (m, p) => `Snap ${fieldName(p, m[1])} to token`], [/^add-value-(.+)$/, (m) => `Add ${m[1]} value`], [/^add-axis$/, () => 'Add variant'], [/^add-prop$/, () => 'Add setting'],
   ];
   const fieldName = (panel, id) => { const l = panel.querySelector(`label[for="${CSS.escape(id)}"]`); return ((l?.querySelector('.lt') || l)?.textContent.trim() || humanId(id)).toLowerCase(); };
   const humanId = (id) => id.replace(/[-_]+/g, ' ');
@@ -41,7 +41,7 @@ export function initQuick(ctx) {
   function nameOf(el, panel) {
     const id = el.id;
     for (const [re, f] of BY_ID) { const m = re.exec(id); if (m) return f(m, panel); }
-    if (el.tagName === 'SUMMARY') return `${el.firstChild?.textContent.trim() || el.textContent.trim()} section`;
+    if (el.tagName === 'SUMMARY') return (el.firstChild?.textContent.trim() || el.textContent.trim()).replace(/^Advanced.*/, 'Advanced');
     if (id === 'add-effects') return 'Shadow';
     const lab = id && panel.querySelector(`label[for="${CSS.escape(id)}"]`);
     const own = el.tagName === 'BUTTON' ? el.textContent.trim() : '';
@@ -69,7 +69,7 @@ export function initQuick(ctx) {
     }
     const count = (f) => { const c = new Map(); for (const p of list) c.set(f(p).toLowerCase(), (c.get(f(p).toLowerCase()) || 0) + 1); return c; };
     const bare = count((p) => p.name);
-    for (const p of list) p.label = p.force || bare.get(p.name.toLowerCase()) > 1 || GENERIC.test(p.name) || /^Align /.test(p.name) ? (p.section && !p.name.toLowerCase().startsWith(p.section.toLowerCase()) ? `${p.section.replace(/^Advanced.*/, 'Advanced')} ${p.name}` : p.name) : p.name;
+    for (const p of list) p.label = /^Align /.test(p.name) || (p.section === 'Size' && /^(Width|Height)$/.test(p.name)) ? p.name : p.force || bare.get(p.name.toLowerCase()) > 1 || GENERIC.test(p.name) ? (p.section && !p.name.toLowerCase().startsWith(p.section.toLowerCase()) ? `${p.section.replace(/^Advanced.*/, 'Advanced')} ${p.name}` : p.name) : p.name;
     const full = count((p) => p.label);
     for (const p of list) { if (full.get(p.label.toLowerCase()) > 1) p.label = `${p.label} (${humanId(p.id)})`; p.alias = ALIAS[p.section] && p.section !== 'Layout' ? ALIAS[p.section] : ''; }
     return list;
@@ -82,9 +82,11 @@ export function initQuick(ctx) {
     const where = `${ctx.state.components.get(sel.component)?.name ?? ''} › ${sel.node}`;
     const panel = document.querySelector('#panel');
     for (const [btn, form] of [['add-prop', 'new-prop-name'], ['add-axis', 'new-axis-name']]) { // the form is open, so its button is gone: the action still lands in the form
-      if (panel?.querySelector('#' + form) && !panel.querySelector('#' + btn)) out.push({ kind: 'property', label: btn === 'add-prop' ? 'Add setting' : 'Add variant', hint: where, field: btn, add: true, boost: 7 });
+      if (panel?.querySelector('#' + form) && !panel.querySelector('#' + btn)) out.push({ kind: 'property', label: btn === 'add-prop' ? 'Add setting' : 'Add variant', hint: where, field: btn, add: true, boost: 16 });
     }
-    for (const p of panelControls()) out.push({ kind: 'property', label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, add: p.add, boost: (p.add ? 7 : p.button ? 3 : 6) - Math.min(p.order, 8) * 0.35 });
+    if (panel?.querySelector('#add-axis, #add-value-size, [id^="add-value-"], [id^="axis-name-"]') && !panel.querySelector('[id^="make-base-"]')) // say so instead of matching nothing
+      out.push({ kind: 'property', label: 'Make base (none available)', hint: where, note: 'Make base needs a variant value that is not the base yet. There is none here.', boost: 5 });
+    for (const p of panelControls()) out.push({ kind: 'property', label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, add: p.add, boost: 14 - p.label.length * 0.25 + (p.add ? 3 : p.button ? 0 : 0.5) - Math.min(p.order, 8) * 0.02 });
     return out;
   }
   function build() {
@@ -160,6 +162,7 @@ export function initQuick(ctx) {
     if (!item) return;
     close();
     if (item.kind === 'action') { item.run(); return; }
+    if (item.kind === 'property' && item.note) { ctx.hint(item.note); return; }
     if (item.kind === 'property') {
       const el = document.getElementById(item.field);
       if (item.add) { // "Add setting", "Add variant", "Add variant value": open the form and land in its name field

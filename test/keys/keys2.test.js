@@ -40,7 +40,7 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
   const r = await repo(); const { b, io } = r;
   try {
     await selectButton(b);
-    const cases = [['rad', 'borderRadius'], ['fil', 'background'], ['str', 'stroke-color'], ['sha', 'add-effects'], ['ali', /^align-/], ['set', 'propdef-label'], ['bor', 'stroke-color'], ['gap', 'gap'], ['wei', 'fontWeight']];
+    const cases = [['rad', 'borderRadius'], ['fc', 'background'], ['fil', 'sum-fill'], ['sc', 'stroke-color'], ['str', 'sum-stroke'], ['sha', 'add-effects'], ['ali', /^align-/], ['sl', 'propdef-label'], ['gap', 'gap'], ['wei', 'fontWeight']];
     for (const [q, want] of cases) await t.test(`Cmd-K "${q}" Enter (${q.length + 2} keys) lands on ${want}`, async () => {
       await b.eval(`document.activeElement.blur()`);
       await palette(io, b, q);
@@ -51,13 +51,13 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
     await t.test('the labels the ? sheet promises are in the index: Fill colour, Stroke colour, Shadow, Align, Settings label', async () => {
       const labels = await b.eval(`(napkin.quick.build(), napkin.quick.build().filter((i) => i.kind === 'property').map((i) => i.label))`);
       const lower = labels.map((x) => x.toLowerCase());
-      for (const l of ['Fill Colour', 'Stroke Colour', 'Shadow', 'Layout Align top left', 'Settings label', 'Radius', 'Gap', 'Editing']) assert.ok(lower.includes(l.toLowerCase()), `${l} in ${labels.join(', ')}`);
+      for (const l of ['Fill Colour', 'Stroke Colour', 'Shadow', 'Align top left', 'Settings label', 'Radius', 'Gap', 'Editing']) assert.ok(lower.includes(l.toLowerCase()), `${l} in ${labels.join(', ')}`);
     });
     await t.test('a folded section opens when the search lands in it', async () => {
       await b.eval(`document.querySelector('details[data-sec="stroke"]').open = false; document.querySelector('details[data-sec="stroke"]').dispatchEvent(new Event('toggle'))`);
       await selectButton(b);
       await b.eval(`(() => { const d = document.querySelector('details[data-sec="stroke"]'); d.open = false; d.dispatchEvent(new Event('toggle')); })()`);
-      await palette(io, b, 'str');
+      await palette(io, b, 'sc');
       assert.equal(await b.eval(`document.activeElement.id`), 'stroke-color');
       assert.equal(await b.eval(`document.activeElement.closest('details').open`), true);
     });

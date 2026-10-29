@@ -2,6 +2,7 @@
 // its default (a control that fits the type), and a description that is written as a JSDoc comment above it in the file.
 // Add, rename, retype-by-adding, reorder (drag the grip or use Up / Down) and remove all go through ctx.sendEdits.
 // A rename is one `renameProp` edit: the file updates the interface, the parameter and every place that shows it.
+import { SETTING_NAME, SETTING_NAME_HELP } from './words.js';
 import { applyEdits } from '/src/model.js';
 import { esc, ICON, errorLine, errors, run, ctxDoc, startDrag } from './cmp-core.js';
 import { renderPanel } from './panel.js';
@@ -145,8 +146,15 @@ export function wireProps(ctx, el) {
     const edit = { op: 'addProp', name: v('new-prop-name'), type };
     if (type === 'enum') edit.options = v('new-prop-options').split(',').map((x) => x.trim()).filter(Boolean);
     if (v('new-prop-note')) edit.description = v('new-prop-note');
+    if (!SETTING_NAME.test(edit.name)) { // say what a name looks like before asking the engine; the caret stays in the name field
+      errors['add-prop'] = SETTING_NAME_HELP(edit.name); rerender();
+      const keep = () => { const f = document.getElementById('new-prop-name'); if (f && document.activeElement !== f) { for (let d = f.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true; f.focus(); f.select?.(); } };
+      for (const ms of [0, 60, 150, 400]) setTimeout(keep, ms); // the panel may redraw once more
+      return;
+    }
+    delete errors['add-prop'];
     const r = await run(ctx, 'add-prop', [edit], [...form.querySelectorAll('[id]')].map((x) => x.id));
-    if (r.ok) { delete forms.prop; rerender(); }
+    if (r.ok) { delete forms.prop; rerender(); } else setTimeout(() => el.querySelector('#new-prop-name')?.focus(), 0);
   });
 
   el.addEventListener('pointerdown', (ev) => {

@@ -176,7 +176,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
       await browser.waitFor('document.querySelector("#remove-prop-label")');
       await click('#remove-prop-label'); // label is shown by the text node
       await browser.waitFor('document.querySelector("#err-prop-label")');
-      assert.match(await q(`document.querySelector('#err-prop-label').textContent`), /^invalid edit #\d+: "label" (shows label; unbind its text first|uses label \(text, slot, condition or an instance prop\); free it first)/);
+      assert.match(await q(`document.querySelector('#err-prop-label').textContent`), /^"label" (shows label; unbind its text first|uses label \(text, slot, condition or an instance prop\); free it first)/);
       assert.equal(readFileSync(fileOf('Button'), 'utf8'), before);
       // a bad value is refused next to its field
       await selectCell('Button', 0, 'root');

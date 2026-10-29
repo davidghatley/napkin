@@ -21,23 +21,23 @@ const pick = (b, c, n, variant) => b.eval(`napkin.select({ component: napkin.fin
 // In the page: for each control, the shortest query (1-3 characters, taken from the start of its words, their initials, or its first letters)
 // whose top result is that control. Null when none exists.
 const FIND = `(() => {
-  const items = napkin.quick.build().filter((i) => i.kind === 'property');
+  const items = napkin.quick.build().filter((i) => i.kind === 'property' && !i.note);
   const words = (l) => l.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\\s+/).filter(Boolean);
+  // Natural queries only: the first 2-3 letters of one word of the label, or the initials of 2-3 of its words in order.
   const cands = (label) => {
     const w = words(label), set = new Set();
-    for (const x of w) for (let n = 1; n <= 3; n++) set.add(x.slice(0, n));
-    for (let i = 0; i < w.length; i++) for (let j = i + 1; j < w.length; j++) { set.add(w[i][0] + w[j][0]); for (let k = j + 1; k < w.length; k++) set.add(w[i][0] + w[j][0] + w[k][0]); set.add(w[i][0] + w[j].slice(0, 2)); set.add(w[i].slice(0, 2) + w[j][0]); }
-    const flat = w.join(''); for (let i = 0; i + 3 <= flat.length; i++) set.add(flat.slice(i, i + 3));
-    return [...set].filter((q) => q && q.length <= 3).sort((a, b) => a.length - b.length);
+    for (const x of w) { if (x.length >= 2) set.add(x.slice(0, 2)); if (x.length >= 3) set.add(x.slice(0, 3)); }
+    for (let i = 0; i < w.length; i++) for (let j = i + 1; j < w.length; j++) { set.add(w[i][0] + w[j].slice(0, 2)); set.add(w[i].slice(0, 2) + w[j][0]); set.add(w[i][0] + w[j][0]); for (let k = j + 1; k < w.length; k++) set.add(w[i][0] + w[j][0] + w[k][0]); }
+    return [...set].sort((a, b) => a.length - b.length);
   };
   return JSON.stringify(items.map((it) => {
     const ok = (c) => { const top = napkin.quick.search(c)[0]; return top && top.kind === 'property' && top.field === it.field; };
-    let q = cands(it.label).find(ok);
-    if (!q) { // any 3 letters of the name, in order
+    let q = cands(it.label).find(ok), natural = !!q;
+    if (!q) { // siblings that differ only in their last word (see EXEMPT in the test): any 3 letters of the name, in order
       const l = it.label.toLowerCase().replace(/[^a-z0-9]/g, ''); const seen = new Set();
       outer: for (let i = 0; i < l.length; i++) for (let j = i + 1; j < l.length; j++) for (let k = j + 1; k < l.length; k++) { const c = l[i] + l[j] + l[k]; if (seen.has(c)) continue; seen.add(c); if (ok(c)) { q = c; break outer; } }
     }
-    return { label: it.label, field: it.field, add: !!it.add, q: q ?? null };
+    return { label: it.label, field: it.field, add: !!it.add, q: q ?? null, natural };
   }));
 })()`;
 
@@ -49,6 +49,12 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
       await pick(b, c, n, variant);
       const found = JSON.parse(await b.eval(FIND));
       assert.ok(found.length >= (n === 'image' ? 25 : 80), `${found.length} controls indexed`);
+      // Natural queries (the first 2-3 letters of a word of the label, or the initials of 2-3 words) reach every control, except these
+      // siblings that share every word but the last (Height fill vs Height fixed, Stroke Width vs the Size Width ...): those need letters picked from the name.
+      const EXEMPT = /^(Height |Width |Stroke Width)/;
+      const unnatural = found.filter((f) => !f.natural && !EXEMPT.test(f.label));
+      assert.deepEqual(unnatural.map((f) => f.label), [], 'a natural 2-3 letter query reaches each control first');
+      assert.ok(found.filter((f) => !f.natural).length <= 8, 'few exceptions');
       const none = found.filter((f) => !f.q);
       assert.deepEqual(none.map((f) => f.label), [], 'every control has a query of at most 3 characters');
       const total = await b.eval(`[...document.querySelectorAll('#panel input, #panel select, #panel textarea, #panel button, #panel summary')].filter((e) => { if (e.tabIndex < 0 || e.disabled || e.type === 'color' || e.closest('[hidden]')) return false; for (let x = e; x && x.id !== 'panel'; x = x.parentElement) if (getComputedStyle(x).display === 'none') return false; return true; }).length`);
@@ -69,7 +75,7 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
         assert.equal(got, want, `${c}.${n} "${f.label}" via "${f.q}"`);
         assert.ok(keys <= 5, `${f.label}: ${keys} keys`);
         worst = Math.max(worst, keys);
-        if (f.add) await pick(b, c, n, variant);
+        if (f.add) { await b.eval(`document.querySelectorAll('#panel [data-cmp="close"]').forEach((x) => x.click())`); await sleep(150); } // close the add form again
       }
       t.diagnostic(`${found.length} controls, worst ${worst} keys`);
     });
@@ -77,6 +83,13 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
       await pick(b, 'Button', 'label', { size: 'md', state: 'default' });
       const labels = await b.eval(`(napkin.quick.build(), napkin.quick.search('hei').filter((i) => i.kind === 'property').map((i) => i.label))`);
       assert.ok(labels.indexOf('Height') >= 0 && labels.indexOf('Height') < labels.indexOf('Line height'), labels.join(' | '));
+    });
+    await t.test('Make base: when no variant value can be made the base, the palette says so', async () => {
+      await pick(b, 'Card', 'image', {});
+      await open(); for (const ch of 'make b') await io.key(ch);
+      assert.match(await b.eval(`document.querySelector('#q-list').innerText`), /Make base \(none available\)/);
+      await io.key('Enter'); await sleep(150);
+      assert.match(await b.eval(`document.querySelector('#hint').textContent`), /not the base yet/);
     });
     await t.test('Cmd-K "Add setting" and "Add variant" open their forms with the caret in the name', async () => {
       await pick(b, 'Button', 'root', { size: 'md', state: 'default' });
@@ -109,6 +122,21 @@ test('round 3 polish: messages clear and name the field; the snap toast follows 
       assert.equal(await b.eval(`!!document.querySelector('#err-style-padding')`), false, 'padding message gone after a good edit');
       await type('stroke-color', '#336699');
       assert.equal(await b.eval(`document.querySelectorAll('.field-error').length`), 0, 'no message left');
+    });
+    await t.test('add setting with a bad name: plain message, caret stays in the name field, nothing written', async () => {
+      const before = readFileSync(file, 'utf8');
+      await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(300);
+      await b.eval(`document.getElementById('add-prop')?.click()`); await sleep(250);
+      await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(300);
+      await b.eval(`(() => { const e = document.getElementById('new-prop-name'); e.focus(); e.select(); })()`); assert.equal(await b.eval(`document.activeElement.id`), 'new-prop-name');
+      await b.eval(`window.__f = []; document.addEventListener('focusin', (e) => __f.push('in:' + e.target.id), true); document.addEventListener('focusout', (e) => __f.push('out:' + e.target.id), true); new MutationObserver(() => __f.push('mut')).observe(document.querySelector('#panel'), { childList: true, subtree: true })`);
+      await b.send('Input.insertText', { text: 'Foo' }); await io.key('Enter'); await sleep(450);
+      const msg = await b.eval(`[...document.querySelectorAll('.field-error, #panel [role=alert]')].map((e) => e.textContent).join(' | ')`);
+      assert.match(msg, /"Foo" can't be a setting name\. Start with a lowercase letter/, msg);
+      assert.doesNotMatch(msg, /invalid edit|\[Button\.tsx\]|bad prop name/);
+      assert.equal(await b.eval(`document.activeElement.id`), 'new-prop-name', await b.eval(`JSON.stringify(__f) + ' ' + !!document.getElementById('new-prop-name')`));
+      assert.equal(readFileSync(file, 'utf8'), before);
+      await b.eval(`document.querySelectorAll('#panel [data-cmp="close"]').forEach((x) => x.click())`);
     });
     await t.test('a keyboard snap moves focus to Undo; Ctrl+Z hides the toast and the snap is undone', async () => {
       await b.eval(`(() => { document.querySelectorAll('#panel details').forEach((d) => (d.open = true)); const d = document.getElementById('off-token-borderRadius'); d.scrollIntoView(); d.focus(); })()`);

@@ -12,6 +12,27 @@ export function match(q, t) {
     const wordStart = sub === 0 || SEP.test(t[sub - 1]) || (t[sub - 1] === t[sub - 1].toLowerCase() && t[sub] !== t[sub].toLowerCase());
     return { score: 60 + (sub === 0 ? 30 : 0) + (wordStart ? 15 : 0) + (lq.length === lt.length ? 40 : 0) - sub * 0.5 - lt.length * 0.05, at };
   }
+  // An acronym: every query letter starts a word of the text, in order ("sl" -> "Stroke Left", "ras" -> "Remove axis state").
+  if (lq.length >= 2 && !/\s/.test(lq)) {
+    const starts = []; for (let i = 0; i < t.length; i++) if (/[a-z0-9]/i.test(t[i]) && (i === 0 || SEP.test(t[i - 1]) || (t[i - 1] === t[i - 1].toLowerCase() && t[i] !== t[i].toLowerCase()))) starts.push(i);
+    const hit = []; let from = 0;
+    for (const ch of lq) { const k = starts.findIndex((s, n) => n >= from && lt[s] === ch); if (k < 0) { hit.length = 0; break; } hit.push(starts[k]); from = k + 1; }
+    if (hit.length === lq.length) { const skipped = starts.indexOf(hit.at(-1)) + 1 - hit.length; return { score: 85 - skipped * 6 - lt.length * 0.05, at: hit }; }
+  }
+  // Chunks: the query is cut into pieces of 1-3 letters, each the start of a later word ("rst" -> "Remove state axis": r|st).
+  if (lq.length >= 3 && !/\s/.test(lq)) {
+    const words = []; for (let i = 0; i < t.length; i++) if (/[a-z0-9]/i.test(t[i]) && (i === 0 || SEP.test(t[i - 1]) || (t[i - 1] === t[i - 1].toLowerCase() && t[i] !== t[i].toLowerCase()))) words.push(i);
+    let best = null;
+    const go = (qi, wi, hit, skipped) => {
+      if (qi === lq.length) { if (!best || skipped < best.skipped) best = { hit: hit.slice(), skipped }; return; }
+      for (let w = wi; w < words.length; w++) for (let n = 1; n <= 3 && qi + n <= lq.length; n++) {
+        if (lt.slice(words[w], words[w] + n) !== lq.slice(qi, qi + n)) continue;
+        go(qi + n, w + 1, [...hit, ...Array.from({ length: n }, (_, k) => words[w] + k)], skipped + (w - wi));
+      }
+    };
+    go(0, 0, [], 0);
+    if (best && best.hit.length === lq.length) return { score: 88 - best.skipped * 3 - lt.length * 0.05, at: best.hit };
+  }
   const at = [];
   let ti = 0, score = 0, prev = -2;
   for (let qi = 0; qi < lq.length; qi++) {
