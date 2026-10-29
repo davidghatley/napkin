@@ -333,7 +333,7 @@ export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, c
         const n = needId(); if (n) return n;
         if (agentPermission(dir, caller) === 'propose' || (msg.propose && agentPermission(dir, caller) !== 'read')) return proposeCreate(msg, caller);
         const g = deny('create_component'); if (g) return g;
-        try { return res(201, { ok: true, ...(await ws.create(msg.name, msg.rootTag, { by: caller })) }); }
+        try { return res(201, { ok: true, ...(await ws.create(msg.name, msg.rootTag, { by: caller, ...(typeof msg.source === 'string' && { source: msg.source }), ...(typeof msg.folder === 'string' && { folder: msg.folder }) })) }); }
         catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
       }
       return fail(405, 'method not allowed');
@@ -390,7 +390,7 @@ export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, c
       catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
     }
     // Decision 0004: who this component uses and who uses it; the text a slot shows on the canvas (sidecar only); extract a subtree into a new component.
-    if (sub === 'graph' && method === 'GET') return res(200, { ok: true, component: e.id, ...ws.graph(e) });
+    if (sub === 'graph' && method === 'GET') { const g = ws.graph(e); return res(200, { ok: true, component: e.id, ...g, usedBy: [...new Set([...g.usedBy, ...(await ws.importers(e.file)).map((x) => x.name)])] }); } // read-only importers count too
     if (sub === 'slot-preview' && method === 'POST') {
       const msg = msgOf(); if (!msg) return fail(400, 'body is not JSON');
       const g = guard('slot_preview'); if (g) return g;

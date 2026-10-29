@@ -11,12 +11,13 @@ Use Node.js 26 or newer, npm, and git. Run these commands from this checkout:
 <!-- quickstart:start -->
 ```sh
 npm ci
-node src/cli.js init ./my-napkin
-node src/cli.js open ./my-napkin
+node src/cli.js init ../my-napkin
+node src/cli.js open ../my-napkin
 ```
 <!-- quickstart:end -->
 
-`init` requires an empty destination. It creates `napkin.json` and
+`init` requires an empty destination, and the example puts it next to this
+checkout (`../my-napkin`), not inside it. It creates `napkin.json` and
 `components/Welcome.tsx`, then exits. `open` starts the server and prints the
 canvas address and a `.mcp.json` object for Claude Code. The default port is 4810;
 napkin tries the next port if it is occupied. Use `--port 0` for a free random port.
@@ -115,10 +116,11 @@ settings, and variants. Choose **Base** or **This variant** before editing.
 
 Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z undo and redo your own edits. They refuse to
 overwrite a later change to the same property by someone else. The bottom drawer
-has Code, History, Tokens, Inspect, Assets, Changes, and Activity. History and proposals
-last for the server session; git keeps long-term history. napkin never commits.
+has Code, History, Tokens, Inspect, Assets, Changes, and Activity. Undo stacks and
+recent history last for the server session. Pending agent proposals are saved in
+`proposals.json` and survive a restart: in `.napkin/` inside the components folder for a project with a `napkin.json`, otherwise in napkin's own state folder (`~/.local/state/napkin`), so a repo you only opened stays clean. Git keeps long-term history. napkin never commits.
 
-The disposable demo includes 20 tokens:
+The disposable demo includes 22 tokens:
 
 ```sh
 node src/server.js --port 0

@@ -66,7 +66,7 @@ const STACK = 100; // undo steps remembered per caller // revisions remembered f
 export async function openStore(file, start = {}) {
   const displayFile = start.displayFile || basename(file);
   let classification;
-  const reason = (e, source = text) => { classification = classifySource(source, displayFile); return classification.reason || explainError(rawReason(e), { file: displayFile }); };
+  const reason = (e, source = text, relocate = true) => { classification = classifySource(source, displayFile, { relocate }); return classification.reason || explainError(rawReason(e), { file: displayFile }); };
   const codec = codecFor(file);
   const { applyEdits, touched, conflicts, diffKeys, EditError } = codec;
   const events = new EventEmitter();
@@ -123,7 +123,7 @@ export async function openStore(file, start = {}) {
       return syntaxErr;
     }
     let loaded; try { loaded = codec.load(t, file, start); } catch (e) {
-      const why = readOnly ? reason(e, t) : withEditedLine(reason(e, t), e, text, t);
+      const why = readOnly ? reason(e, t) : withEditedLine(reason(e, t, false), e, text, t);
       if (readOnly) { text = t; readOnly = why; syntaxErr = e.loc ? why : null; revision = revisionOf(text); history.push({ seq: ++seq, revision, keys: new Set(['file']), by: 'file', summary: 'file changed', at: Date.now() }); if (history.length > HISTORY) history.shift(); events.emit('change', { revision, doc: null, by: 'file', summary: 'file changed' }); return syntaxErr; }
       problem(why); syntaxErr = e.loc ? why : null;
       return why; // half-written or broken: keep the last good doc, and write nothing over it

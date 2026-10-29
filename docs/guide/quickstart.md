@@ -4,8 +4,8 @@ Use Node.js 26 or newer, npm, and git. From the checkout root:
 
 ```sh
 npm ci
-node src/cli.js init ./my-napkin
-node src/cli.js open ./my-napkin
+node src/cli.js init ../my-napkin
+node src/cli.js open ../my-napkin
 ```
 
 `init` creates `napkin.json` and `components/Welcome.tsx`. It exits without starting

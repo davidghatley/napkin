@@ -37,7 +37,7 @@ export function initLayers(ctx, el) {
     for (const c of comps) {
       const open = expanded.has(c.component);
       const has = ctx.state.selections.some((s) => s.component === c.component);
-      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1" aria-expanded="${open}" aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0"><span class="twirl" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="licon">${ICON.component}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}</div>`);
+      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1" aria-expanded="${open}" aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0"><span class="twirl" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="licon">${ICON.component}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">⋯</button></div>`);
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
         const k = `${c.component}|${n.id}`, kids = n.children.length, isFolded = folded.has(k);
@@ -103,6 +103,14 @@ export function initLayers(ctx, el) {
   const closeMenu = () => { menu.hidden = true; };
   function openMenu(btn) {
     const row = btn.closest('.lrow'), c = ctx.state.components.get(row.dataset.component);
+    if (row.dataset.kind === 'component') { // a component row: rename or delete the whole component
+      menu.innerHTML = `<button type="button" role="menuitem" data-do="crename"${c?.readOnly ? ' disabled title="This file is read-only"' : ''}>Rename component…<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="cdelete"${c?.readOnly ? ' disabled title="This file is read-only"' : ''}>Delete component…</button>`;
+      const r = btn.getBoundingClientRect();
+      Object.assign(menu.style, { left: `${r.right - 164}px`, top: `${r.bottom + 4}px` });
+      menu.dataset.component = row.dataset.component; menu.dataset.node = '';
+      menu.hidden = false; menu.querySelector('button:not(:disabled)')?.focus();
+      return;
+    }
     const isRoot = c?.doc?.root.id === row.dataset.node, ro = !!c?.readOnly;
     const hid = (c?.doc && index(c.doc).byId.get(row.dataset.node)?.style?.visibility === 'hidden');
     const off = (why) => (ro || why ? ` disabled title="${why || 'This file is read-only'}"` : '');
@@ -116,7 +124,9 @@ export function initLayers(ctx, el) {
     const b = ev.target.closest('button[data-do]');
     if (!b) return;
     const { component, node } = menu.dataset; closeMenu();
-    if (b.dataset.do === 'rename') { const r = el.querySelector(`.lrow[data-component="${CSS.escape(component)}"][data-node="${CSS.escape(node)}"]`); if (r) startRename(r); }
+    if (b.dataset.do === 'crename') ctx.cmpOps.rename(component, { fromRow: true });
+    else if (b.dataset.do === 'cdelete') ctx.cmpOps.remove(component, { fromRow: true });
+    else if (b.dataset.do === 'rename') { const r = el.querySelector(`.lrow[data-component="${CSS.escape(component)}"][data-node="${CSS.escape(node)}"]`); if (r) startRename(r); }
     else if (b.dataset.do === 'duplicate') await ctx.ops.duplicate();
     else if (b.dataset.do === 'copy') { try { document.execCommand('copy'); } catch {} ctx.hint('Copied. Paste into any component with ⌘V'); }
     else if (b.dataset.do === 'hide') await ctx.ops.hide();
@@ -188,7 +198,7 @@ export function initLayers(ctx, el) {
       ev.preventDefault();
       if (row.getAttribute('aria-expanded') === 'true') row.querySelector('.twirl').click();
       else { const lvl = Number(row.getAttribute('aria-level')); go(rows.slice(0, i).reverse().find((r) => Number(r.getAttribute('aria-level')) < lvl)); }
-    } else if (ev.key === 'F2') { ev.preventDefault(); startRename(row); }
+    } else if (ev.key === 'F2') { ev.preventDefault(); if (row.dataset.kind === 'component') ctx.cmpOps.rename(row.dataset.component); else startRename(row); }
     else if (ev.key === 'ContextMenu' || (ev.shiftKey && ev.key === 'F10')) { ev.preventDefault(); const b = row.querySelector('.lmore'); if (b) openMenu(b); }
     else if (ev.key === 'Enter') { ev.preventDefault(); focusKey = rowKey(row); pick(row); ctx.nav?.focus(row.dataset.component, row.dataset.node); }
   });

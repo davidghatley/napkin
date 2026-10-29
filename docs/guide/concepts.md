@@ -23,8 +23,10 @@ create it. Renaming a component saves its identity so references remain stable.
 **Token.** A named value in a configured JSON or CSS source. A bound style uses a
 CSS custom property. Component theme chooses the token mode for previews.
 
-**Proposal.** An agent's validated change held in server memory. Accept writes
-through the revision-checked store. Reject leaves component files unchanged.
+**Proposal.** An agent's validated change, held until you answer it. Pending
+proposals are saved in `proposals.json` (in `.napkin/` inside the components folder for a project with a `napkin.json`, otherwise in `~/.local/state/napkin`), so they survive a restart.
+Accept writes through the revision-checked store. Reject leaves component files
+unchanged.
 
-**Session.** One running server. Undo stacks, proposals, presence, and recent
-history live in memory. Source files and saved sidecars survive a restart.
+**Session.** One running server. Undo stacks, presence, and recent history live
+in memory. Pending proposals, source files and saved sidecars survive a restart.
