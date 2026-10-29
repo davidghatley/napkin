@@ -139,9 +139,13 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 
 | Round | Started | Lanes | Builders | Result |
 |---|---|---|---|---|
-| 1 | 2026-10-21 | files, engine, agents, canvas | Sonnet (files, agents, canvas), Codex (engine) | agents + canvas merged; files fixing; engine to rebase |
-| 2 | 2026-10-21 | layout, history (+inspect, assets), open (+onboarding) | Sonnet (layout, history), Codex (open) | all merged; FEEL-02 to David; LAY-10 redesign in critique |
-| 3 | 2026-10-21 | agents-ui, tokens, files (0004 core), components (UI), engine (rebase) | Sonnet (agents-ui, files, components, engine), Codex (tokens) | running |
+| 1 | 2026-10-21 | files, engine, agents, canvas | Sonnet (files, agents, canvas), Codex (engine) | all merged |
+| 2 | 2026-10-21 | layout, history (+inspect, assets), open (+onboarding) | Sonnet (layout, history), Codex (open) | all merged; FEEL-02 to David |
+| 3 | 2026-10-21 | agents-ui, tokens, files (0004 core), components (UI), engine (rebase) | Sonnet (agents-ui, files, components, engine), Codex (tokens) | all merged |
+| Walk 1 | 2026-10-22 | whole-product critic (Opus) | | SCN-2/3 failed; WPC-01..22 filed |
+| 4 | 2026-10-22 | engine2, agents2, onboard2, fidelity, agents3 | Sonnet, Codex (onboard2, finished by Sonnet) | all merged; WPC-01..06, 09, 10, 12, 16..22 pass |
+| 5 | 2026-10-22 to 10-29 | keys (5 rounds + polish), pan (PRF-04, 4 rounds + regression fixes) | Sonnet | merged; WPC-07/08/11/13/14/15 pass; PRF-04 pass with known limit (David); FEEL-01 pass after polish |
+| Walk 2 | 2026-10-29 | whole-product critic (Opus) | | running |
 
 ## New dependencies
 
@@ -153,7 +157,9 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | When | ccusage total | Note |
 |---|---|---|
 | 2026-10-21 start of round 1 | $53.19 today, machine-wide (Claude $47.57, Codex $5.62, Opencode $0.00) | ccusage@20.0.26 daily; includes other sessions on this machine |
+| 2026-10-21 mid round 2 | $103.21 today, machine-wide (Claude $93.72, Codex $9.48, Opencode $0.00); about $50 since round 1 began | ccusage@20.0.26 daily |
 | 2026-10-22, after the agents-ui merge | $276.43 total since 2026-10-21, machine-wide ($8.06 so far on 10-22) | same command; Opencode free models $0.00 |
+| 2026-10-29, after FEEL-01, before walk 2 | $1,133.41 total since 2026-10-21, machine-wide (10-21 $268.37, 10-22 $334.25, 10-23 $257.78, 10-24..26 $26.06, 10-27 $84.96, 10-28 $128.28, 10-29 $33.71) | ccusage@20.0.26 daily; includes other sessions on this machine, so napkin's share is lower |
 
 ## New dependencies (merged)
 
@@ -161,7 +167,6 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 |---|---|---|---|---|
 | axe-core | 4.13.0 | 2026-08-05 | test-only accessibility check for FEEL-03 | canvas |
 | Inter, JetBrains Mono (vendored woff2, OFL) | @fontsource-variable 5.2.8 | 2025-09-17 | chrome typefaces that work offline; not an npm dependency | canvas |
-| 2026-10-21 mid round 2 | $103.21 today, machine-wide (Claude $93.72, Codex $9.48, Opencode $0.00); about $50 since round 1 began | ccusage@20.0.26 daily |
 
 ## Lead rulings during the build (within David's go-ahead)
 
