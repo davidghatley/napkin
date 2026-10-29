@@ -118,15 +118,15 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | WPC-04 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/docs-examples.test.js | 5c8f4a9 |
 | WPC-05 | WPC | docs | pass | critic pass r2: 0 contradictions (2 nits fixed by lead); suite 548/553 0 fail | docs/evidence/onboard2-commands.txt | 5c8f4a9 |
 | WPC-06 | WPC | files | pass | critic pass r2: portable ids, .napkin self-ignores, 0 new files until a move; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
-| WPC-07 | WPC | keys | critic | critic r3 f277f6b: every focusable control (123/83/50 on 3 selections) <=5 keys to focus; 8 need unguessable letters (natural 6-7); buttons +1 to act: small r4 for natural queries | docs/evidence/walk-1/ | f277f6b |
-| WPC-08 | WPC | keys | critic-pass | critic r2: Ctrl+K Badge Enter = 7 keys, selects root | test/keys/keys.test.js | bb22830 |
+| WPC-07 | WPC | keys | pass | critic r5: every focusable control (123/83/50) <=5 keys; natural prefixes: 1 over 5 (Remove state axis, 6); merged; suite 662/657/0 fail | test/keys/keys3.test.js | 577a7a5 |
+| WPC-08 | WPC | keys | pass | critic r3: Ctrl+K Badge Enter = 7 keys; merged | test/keys/keys.test.js | 577a7a5 |
 | WPC-09 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents/propose-create.test.js | 0085d7f |
 | WPC-10 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/history/ui-inspect.test.js | 5c8f4a9 |
-| WPC-11 | WPC | keys | critic-pass | critic r2: demo 72 text nodes, min 3.48 light / 3.40 dark, 0 below 3:1 | docs/evidence/walk-1/ | bb22830 |
+| WPC-11 | WPC | keys | pass | critic r2 measured min 3.48/3.40; keys2 test both themes; merged | test/keys/keys2.test.js | 577a7a5 |
 | WPC-12 | WPC | agents | pass | critic pass; suite 538/543 0 fail | test/agents-ui/propose-create.test.js | 0085d7f |
-| WPC-13 | WPC | keys | critic-pass | critic r2: Undo by Enter restores disk; 99 hit-tested dot activations, 0 fail; old dead dot = folded Text section | docs/evidence/walk-1/ | bb22830 |
-| WPC-14 | WPC | keys | building | critic r3: add-setting with bad name shows raw "invalid edit #0: bad prop name" and drops focus: r4 | docs/evidence/walk-1/ | f277f6b |
-| WPC-15 | WPC | keys | critic-pass | critic r2: 1280x720 and 1440x900, both themes, 3 selections: 0 clipped, ellipsis, overlap | docs/evidence/walk-1/ | bb22830 |
+| WPC-13 | WPC | keys | pass | critic r3: Undo by Enter/Space, focus to Undo after dot; merged | test/keys/keys2.test.js | 577a7a5 |
+| WPC-14 | WPC | keys | pass | critic r5: every form bad/empty/duplicate = one plain sentence, focus kept, disk unchanged; merged | test/keys/keys3.test.js | 577a7a5 |
+| WPC-15 | WPC | keys | pass | critic r2: 1280x720 and 1440x900 both themes 0 clip/overlap; merged | test/keys/keys2.test.js | 577a7a5 |
 | WPC-16 | WPC | fidelity | pass | critic r2 pass; merged | test/fidelity/broken-line.test.js | 5707a23 |
 | WPC-17 | WPC | docs | pass | critic pass r1; merged; suite 548/553 0 fail | test/onboarding/demo-cleanup.test.js | 5c8f4a9 |
 | WPC-18 | WPC | docs | pass | critic pass r2: sample looks real; S1 1-line diff; suite 548/553 0 fail | test/onboarding/sample.test.js | 5c8f4a9 |
