@@ -39,7 +39,7 @@ export function createStage(ctx, root, world, view) {
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
   const selectedElement = (sel) => (sel ? cellElement(sel.component, sel.node, sel.variant) : null);
-  const live = (id) => { const sec = sections.get(id); if (sec?.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; } if (sec?.pending) { sec.follow = true; render(id, true).catch(console.error); } return sec; };
+  const live = (id) => { const sec = sections.get(id); if (sec?.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; queueMicrotask(() => regrown([sec])); } if (sec?.pending) { sec.follow = true; render(id, true).catch(console.error); } return sec; };
 
   // ---------------------------------------------------------------------------------------------- sections
   function section(id) {
@@ -112,12 +112,27 @@ export function createStage(ctx, root, world, view) {
     const detail = document.createElement('pre'); detail.textContent = message;
     card.append(summary, detail); return card;
   }
+  const overlapsOthers = (id, sec) => sec.pos && [...sections.entries()].some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
+  // WPC-23: a frame far off screen is kept at the size it had (or a placeholder's) while it is culled; when it is drawn again it can be bigger
+  // than the room it was given. The ones the stage placed itself move aside to free space; nothing else moves.
+  function regrown(secs) {
+    let changed = false;
+    for (const sec of secs) {
+      const id = [...sections].find(([, x]) => x === sec)?.[0];
+      if (!id || sec.culled) continue;
+      const was = { ...sec.size }; measure(sec);
+      if (was.w === sec.size.w && was.h === sec.size.h) continue;
+      changed = true;
+      if (laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id);
+    }
+    if (changed) { refreshOverlays(); ctx.emit('layout', {}); }
+  }
   function finish(sec, id, revision) {
     ctx.matrix?.bar(id); // WPC-15: the filter bar exists before the frame is placed, so its height is counted
     const previous = { ...sec.size }; measure(sec);
     sec.el.dataset.ready = '1'; sec.el.dataset.revision = revision;
     const resized = previous.w !== sec.size.w || previous.h !== sec.size.h;
-    const overlaps = sec.pos && [...sections.entries()].some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
+    const overlaps = overlapsOthers(id, sec);
     if (laidOut && (!sec.pos || auto.has(id) && resized && overlaps)) placeNew(id);
     if (sec.follow) { sec.follow = false; view.flyTo(componentRect(id), { pad: 96, max: Math.max(1, view.get().z) }); }
     refreshOverlays(); ctx.emit('render', { component: id, revision }); queueCull();
@@ -210,13 +225,19 @@ export function createStage(ctx, root, world, view) {
   const placed = (id) => { const s = ctx.state.components.get(id)?.canvas; return !!s && (s.x !== 0 || s.y !== 0); };
   // What a frame takes on the canvas besides its body: the title row and filter bar above it (drawn at a size that stays readable,
   // so in canvas units they grow as the view zooms out) and a gap of at least CLEAR px. Packing reserves it, so frames never overlap.
-  const CLEAR = 24;
+  const CLEAR = 24, RESERVE_Z = 0.25;
   const headBox = (sec, z) => {
     const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
     const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
     if (head && z < 0.4) { // far out the axis strip shows under the title (hidden now, so measured by its text)
       const strip = head.querySelector('.axes-strip')?.textContent || '';
       if (strip) { nat.h += 20; nat.w = Math.max(nat.w, Math.ceil(strip.length * 6.8)); }
+    }
+    const bar = head && ctx.matrix?.natural(sec.el); // WPC-32: a filter bar too big for its frame is hidden, so it takes no room above it
+    if (bar) {
+      const shown = bar.ctl.offsetParent !== null, fits = ctx.matrix.fits(sec.el, lf);
+      nat.h += (fits ? bar.h + 4 : 0) - (shown ? bar.ctl.offsetHeight + 4 : 0);
+      if (shown && !fits) nat.w = head.querySelector('.cmp-title')?.offsetWidth || nat.w;
     }
     return { w: Math.max(sec.size.w, Math.ceil(nat.w * lf)), top: Math.ceil((nat.h + 8) * lf) + CLEAR };
   };
@@ -246,6 +267,9 @@ export function createStage(ctx, root, world, view) {
   }
   function layoutAll() {
     const ids = [...sections.keys()];
+    // Frames placed one by one while the first renders were still on their way were placed by a placeholder size; now that
+    // the sizes are known, the ones without a saved position are packed once, together (WPC-23: no overlaps after a reload).
+    for (const id of ids) if (!placed(id)) auto.delete(id);
     for (const id of ids) if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); }
     const todo = ids.filter((id) => !placed(id) && !auto.has(id)).sort(byName);
     const taken = ids.filter(placed);
@@ -269,18 +293,25 @@ export function createStage(ctx, root, world, view) {
     laidOut = true;
     ctx.emit('layout', {});
   }
+  // The first free slot for a frame of w x h with `top` px of title above it, among `others` (their rectangles, title strips included): the
+  // earliest row, then the leftmost place in it, no wider than the shelf. Holes are filled, so a burst of new frames (a branch switch) stays
+  // compact and a frame is never put "below everything" (WPC-23: that stacked 40 new files into one tall column that Shift+1 could not fit).
+  function freeSlot(w, h, top, others) {
+    const hit = (rx, ry) => others.some((o) => rx < o.x + o.w + GAP_X && rx + w + GAP_X > o.x && ry < o.y + o.h + CLEAR && ry + top + h + CLEAR > o.y);
+    const xs = [...new Set([0, ...others.map((o) => o.x + o.w + GAP_X)])].sort((p, q) => p - q);
+    const ys = [...new Set([0, ...others.map((o) => o.y + o.h + CLEAR)])].filter((v) => v >= 0).sort((p, q) => p - q);
+    for (const ry of ys) for (const rx of xs) if ((rx === 0 || rx + w <= SHELF_W) && !hit(rx, ry)) return { x: rx, y: ry + top };
+    return { x: 0, y: Math.max(0, ...others.map((o) => o.y + o.h)) + CLEAR + top };
+  }
   // A component that appears later goes into the first free slot, so nothing else moves.
   function placeNew(id) {
     if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); return; }
-    const me = sections.get(id), z = Math.min(1, view.get().z);
+    const me = sections.get(id), z = Math.max(RESERVE_Z, Math.min(1, view.get().z)); // (the room for a title is bounded: a zoomed-out view must not make every new frame's slot huge)
     const others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([k, s]) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
     const mine = headBox(me, z), { h } = me.size, w = mine.w;
     SHELF_W = Math.max(SHELF_W, w);
-    let x = shelf.x, y = shelf.y;
-    if (x && x + w > SHELF_W) { x = 0; y = y + shelf.h + CLEAR; }
-    const hit = (px, py) => others.some((o) => px < o.x + o.w + GAP_X && px + w + GAP_X > o.x && py - mine.top < o.y + o.h + CLEAR && py + h + CLEAR > o.y);
-    if (hit(x, y)) { x = 0; y = Math.max(0, ...others.map((o) => o.y + o.h)) + CLEAR + mine.top; }
-    shelf = { x: x + w + GAP_X, y, h: Math.max(h, x ? shelf.h : 0) };
+    const { x, y } = freeSlot(w, h, mine.top, others);
+    shelf = { x: x + w + GAP_X, y, h };
     auto.set(id, { x, y }); moveTo(id, x, y);
   }
 
@@ -290,16 +321,12 @@ export function createStage(ctx, root, world, view) {
   // Ghost frames are not components: no section, no selection, no pointer events. key is the proposal id.
   const ghosts = new Map(); // key -> { el, frame, unmounts, pos, size }
   function ghostSlot(key, size) {
-    const z = Math.min(1, view.get().z), lf = Math.min(16, Math.max(1, 1 / z));
+    const z = Math.max(RESERVE_Z, Math.min(1, view.get().z)), lf = Math.min(16, Math.max(1, 1 / z));
     const top = Math.ceil(52 * lf) + CLEAR, w = size.w, h = size.h;
     const others = [...sections.values()].filter((s) => s.pos).map((s) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
     for (const [k, g] of ghosts) if (k !== key && g.pos) others.push({ x: g.pos.x, y: g.pos.y - top, w: g.size.w, h: g.size.h + top });
-    const sw = Math.max(SHELF_W, w);
-    let x = shelf.x, y = shelf.y;
-    if (x && x + w > sw) { x = 0; y = y + shelf.h + CLEAR; }
-    const hit = (px, py) => others.some((o) => px < o.x + o.w + GAP_X && px + w + GAP_X > o.x && py - top < o.y + o.h + CLEAR && py + h + CLEAR > o.y);
-    if (hit(x, y)) { x = 0; y = Math.max(0, ...others.map((o) => o.y + o.h)) + CLEAR + top; }
-    return { x, y };
+    SHELF_W = Math.max(SHELF_W, w);
+    return freeSlot(w, h, top, others);
   }
   function removeGhost(key) {
     const g = ghosts.get(key);
@@ -386,6 +413,34 @@ export function createStage(ctx, root, world, view) {
       if (w !== c.bw || h !== c.bh) { c.bw = w; c.bh = h; box.style.setProperty('--nk-w', `${w}px`); box.style.setProperty('--nk-h', `${h}px`); box.style.width = `${w}px`; box.style.height = `${h}px`; }
     }
   }
+  // WPC-33: the name and size tags sit below the selection box; when that would cover a cell caption (the selected box is at the foot of
+  // its cell, so its caption is right below) they sit above it, or (a caption there too) inside its corners. The tags' sizes are estimated from their text (they are pseudo-elements).
+  const captionRects = (sec) => {
+    const out = [];
+    for (const cap of sec ? sec.querySelectorAll('.cell:not(.mhide) figcaption') : []) {
+      if (!cap.firstChild) continue;
+      const rg = document.createRange(); rg.selectNodeContents(cap);
+      const r = rg.getBoundingClientRect();
+      if (r.width) out.push(r);
+    }
+    return out;
+  };
+  function tagSide(selEl) {
+    let side = 'below';
+    if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
+      const caps = captionRects(selEl.closest('section.cmp'));
+      if (caps.length) {
+        const r = selEl.getBoundingClientRect(), narrow = r.width < 190, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), cw = sizeChip.textContent.length * 6.4 + 14, H = 20, pad = 3;
+        const hits = (ys) => { // ys: [label top, chip top]
+          const boxes = [{ x: r.left - 1, w: lw, y: ys[0] }, { x: r.right - cw, w: cw, y: ys[1] }];
+          return caps.some((c) => boxes.some((b) => c.left < b.x + b.w + pad && c.right > b.x - pad && c.top < b.y + H + pad && c.bottom > b.y - pad));
+        };
+        const below = [r.bottom + 7, r.bottom + 8 + (narrow ? 24 : 0)], above = [r.top - 7 - H, r.top - 7 - H - (narrow ? 24 : 0)];
+        side = !hits(below) ? 'below' : !hits(above) ? 'above' : 'inside'; // (inside the box never meets a caption: they sit outside the cells)
+      }
+    }
+    if (selectBox.dataset.tags !== side) selectBox.dataset.tags = side;
+  }
   function refreshOverlays() {
     const sels = ctx.state.selections, sel = ctx.state.selection;
     if (!sels.length && !hoverEl && !measuring && !selectBox.style.display.includes('block') && !hoverBox.style.display.includes('block')) return; // nothing is shown, so there is nothing to place (and no layout to force)
@@ -393,6 +448,7 @@ export function createStage(ctx, root, world, view) {
     const selEl = selectedElement(sel);
     place(selectBox, selEl, sel && `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`, base);
     if (selEl?.isConnected && selectBox.style.display === 'block') { const r = selEl.getBoundingClientRect(), z = view.get().z; sizeChip.textContent = `${Math.round(r.width / z)} × ${Math.round(r.height / z)}`; }
+    tagSide(selEl);
     const others = sels.filter((s) => s !== sel);
     while (extras.length < others.length) { const d = document.createElement('div'); d.className = 'overlay-extra'; overlays.append(d); extras.push(d); }
     extras.forEach((d, i) => (others[i] ? place(d, selectedElement(others[i]), undefined, base) : (d.style.display = 'none')));
@@ -450,7 +506,8 @@ export function createStage(ctx, root, world, view) {
   function cull() {
     cullQueued = false;
     const mode = cullMode; cullMode = 'exact';
-    if (sections.size <= CULL_AFTER) { for (const sec of sections.values()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; } return; }
+    const drawn = []; // frames un-culled in this pass
+    if (sections.size <= CULL_AFTER) { for (const sec of sections.values()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); } if (drawn.length) regrown(drawn); return; }
     const { x, y, z } = view.get(), b = view.stageBox();
     const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
     const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
@@ -465,16 +522,17 @@ export function createStage(ctx, root, world, view) {
         off = sec.culled;
         if (sec.culled) { if (!out(near, sec)) { off = false; trickle = true; } else if (!out(wide, sec)) ahead.push(sec); }
       } else off = !keep.has(id) && out(near, sec);
-      if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else { delete sec.el.dataset.cull; delete sec.el.dataset.far; } }
+      if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else { delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); } }
       if (mode === 'exact' && sec.culled) { if (out(far, sec)) sec.el.dataset.far = '1'; else delete sec.el.dataset.far; }
     }
     if (mode !== 'exact') titlesNow(view.get()); // frames just drawn get their label scales now
     if (mode !== 'exact' && trickle) {
       const cy = (-y + b.height / 2) / z;
       ahead.sort((p, q) => Math.abs(p.pos.y - cy) - Math.abs(q.pos.y - cy));
-      for (const sec of ahead.slice(0, 4)) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; }
+      for (const sec of ahead.slice(0, 4)) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); }
       if (ahead.length > 4) queueCull('pan'); else trickle = false;
     } else if (mode === 'exact') trickle = false;
+    if (drawn.length) regrown(drawn);
   }
   const RANK = { zoom: 0, pan: 1, exact: 2 };
   const queueCull = (mode = 'exact') => { if (!cullQueued) cullMode = mode; else if (RANK[mode] > RANK[cullMode]) cullMode = mode; if (!cullQueued) { cullQueued = true; requestAnimationFrame(cull); } };

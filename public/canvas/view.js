@@ -123,7 +123,26 @@ export function createView(ctx, stageEl, worldEl) {
   view.flyTo = (r, opts = {}) => set(view.fitView(r, opts), { animate: true });
   view.stop = () => { if (anim) { cancelAnimationFrame(anim.raf); anim = null; } };
   view.setFitters = (f) => { fitters = f; };
-  view.fitAll = (opts = {}) => { const r = fitters.all(); return r ? view.fitRect(r, { pad: 72, max: 1, ...opts }) : set({ x: 80, y: 120, z: 1 }, opts); };
+  // Shift+1 must show every frame. Frames far off screen draw late and then grow, and a frame may be moved aside when it does: while the
+  // view is still exactly the fit the stage keeps it a fit (WPC-23). Any pan or zoom of the person's own ends this.
+  let lastFit = null, refitTimer = 0;
+  const near = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.z - b.z) < 1e-6;
+  const refit = () => {
+    clearTimeout(refitTimer);
+    refitTimer = setTimeout(() => {
+      if (!lastFit || anim || !near(v, lastFit)) return;
+      const r = fitters.all(); if (!r) return;
+      const t = view.fitView(r, { pad: 72, max: 1 });
+      if (!near(t, lastFit)) { lastFit = t; set(t); }
+    }, 120);
+  };
+  ctx.on('render', refit); ctx.on('layout', refit);
+  view.fitAll = (opts = {}) => {
+    const r = fitters.all();
+    if (!r) { lastFit = null; return set({ x: 80, y: 120, z: 1 }, opts); }
+    lastFit = view.fitView(r, { pad: 72, max: 1 });
+    return view.fitRect(r, { pad: 72, max: 1, ...opts });
+  };
   view.fitSelection = (opts = {}) => { const r = fitters.selection(); return r ? view.fitRect(r, { pad: 96, max: 4, ...opts }) : undefined; };
 
   const inside = (p) => p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom;
