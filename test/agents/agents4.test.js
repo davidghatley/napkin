@@ -87,3 +87,24 @@ test('WPC-37: a stopped project keeps no empty guard/ folder, temp files or lone
   s = await startServer(r.compDir);
   try { assert.equal((await http(s.url, '/api/proposals')).json.length, 1, 'it survived the restart'); } finally { await s.stop(); }
 });
+
+test('WPC-37: reject the only proposal, stop: nothing is left once the agent has heard the answer; before that the unheard answer stays', async () => {
+  const r = project();
+  let s = await startServer(r.compDir);
+  const t = await session(s.url, 'claude'), me = await session(s.url, 'david');
+  const rev = async () => (await http(s.url, '/api/components/Button')).json.revision;
+  const pr = await http(s.url, '/api/components/Button/edits', { method: 'POST', token: t, body: { baseRevision: await rev(), edits: [{ op: 'set', path: 'root.gap', value: 13 }], propose: true } });
+  assert.equal(pr.json.proposed, true, JSON.stringify(pr.json));
+  const id = (await http(s.url, '/api/proposals')).json[0].id;
+  assert.equal((await http(s.url, `/api/proposals/${id}/reject`, { method: 'POST', token: me, body: {} })).json.ok, true);
+  const heard = (await http(s.url, '/api/proposals/answered?by=claude', { token: t })).json;
+  assert.ok(heard.length > 0, 'the agent can hear the answer');
+  await sleep(200); await s.stop();
+  assert.ok(left(r.compDir).some((f) => f.endsWith('proposals.json')), 'unheard answer is kept');
+  s = await startServer(r.compDir);
+  const t2 = await session(s.url, 'claude');
+  const at = Math.max(...heard.map((h) => h.at));
+  await http(s.url, `/api/proposals/answered?by=claude&ack=${at}`, { token: t2 });
+  await sleep(200); await s.stop();
+  assert.deepEqual(left(r.dir).concat(left(r.compDir)), [], 'acknowledged: nothing of napkin is left');
+});

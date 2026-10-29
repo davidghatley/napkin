@@ -35,7 +35,7 @@ for (const [width, height] of [[1440, 900], [1280, 720]]) {
       for (let i = 0; i < 6; i++) assert.equal((await claude.apply('Button', [{ op: 'set', path: 'root.padding', value: `${10 + i}px` }], { propose: true })).proposed, true);
       await browser.waitFor(`napkin.proposals.list().length === 6 && document.querySelector('#proposals-tray').dataset.open === '1'`);
       await sleep(300);
-      assert.ok(await stageH() >= h0 * 0.7, `canvas ${await stageH()} of ${h0}`);
+      assert.ok(await stageH() >= h0 * 0.75, `canvas ${await stageH()} of ${h0}`);
       const g = await q(`(() => {
         const t = document.querySelector('#proposals-tray').getBoundingClientRect(), d = document.querySelector('#dock').getBoundingClientRect();
         const head = document.querySelector('#proposals-tray .pt-head').getBoundingClientRect();

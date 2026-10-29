@@ -31,7 +31,12 @@ export function cleanPrivate(root) {
   };
   const tidy = (folder) => {
     sweepTmp(folder);
-    try { const f = join(folder, 'proposals.json'), j = JSON.parse(readFileSync(f, 'utf8')); if (!j.proposals?.length && !j.answered?.length) unlinkSync(f); } catch { /* none, or not ours to judge */ }
+    try { // answers an agent has already acknowledged (seen) are pruned; the file goes when no proposal and no unheard answer is left
+      const f = join(folder, 'proposals.json'), j = JSON.parse(readFileSync(f, 'utf8'));
+      const unheard = (j.answered ?? []).filter((a) => a.at > Date.now() - 864e5 && a.at > (j.seen?.[a.proposedBy] ?? 0));
+      if (!j.proposals?.length && !unheard.length) unlinkSync(f);
+      else if (unheard.length !== (j.answered ?? []).length) writeAtomic(f, JSON.stringify({ ...j, answered: unheard }));
+    } catch { /* none, or not ours to judge */ }
     try { rmdirSync(join(folder, 'guard')); } catch { /* absent or not empty */ }
     try { if (readdirSync(folder).join() === '.gitignore') { unlinkSync(join(folder, '.gitignore')); rmdirSync(folder); } else if (!readdirSync(folder).length) rmdirSync(folder); } catch { /* in use */ }
   };

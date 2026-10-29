@@ -29,8 +29,9 @@ folder ignores itself in git through its own `.gitignore`. In an unconfigured re
 outside the repo and disables sidecar writes unless `--write-sidecars` is set.
 
 What a configured project (one with a `napkin.json`) keeps in `.napkin/` once napkin stops: nothing, unless
-agent proposals are still pending. Then exactly two files remain, so the proposals survive a restart:
-`proposals.json` (the pending proposals and which answers an agent has heard) and `.gitignore` (which hides the
+there are pending agent proposals, or answers (accepted or rejected) that the proposing agent has not yet
+acknowledged. Answers are dropped once the agent has heard them, or after 24 hours. Then exactly two files
+remain, so proposals and missed answers survive a restart: `proposals.json` and `.gitignore` (which hides the
 folder from git). The lock, the empty `guard/` folder and temp files are removed on a normal stop. If napkin is
 killed outright (`kill -9`), leftovers can stay until the next run; a lock left by a dead process never blocks
 the next `open`. Closing the terminal (SIGHUP) or killing the CLI stops the server too, within a second or two.
