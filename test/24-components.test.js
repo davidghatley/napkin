@@ -134,7 +134,7 @@ test('swapInstance keeps the props the new component also has and drops the rest
   } finally { await ws.close(); }
 });
 
-test('used-by graph: editing Button bundles Panel again, within 100 ms; delete and rename of a used component are refused', async () => {
+test('used-by graph: editing Button bundles Panel again, within 100 ms; delete of a used component is refused', async () => {
   const { dir } = folder();
   const ws = await openWorkspace(dir);
   try {
@@ -163,7 +163,7 @@ test('used-by graph: editing Button bundles Panel again, within 100 ms; delete a
     console.log(`0004 used-by: Button edit -> Panel bundle ready after p50 ${times[6].toFixed(0)} ms, max ${times.at(-1).toFixed(0)} ms (12 edits)`);
     assert.ok(times.at(-1) < 100, `max ${times.at(-1)} ms`);
     await assert.rejects(ws.delete('Button', { by: 'test' }), /used by Panel/);
-    await assert.rejects(ws.rename('Button', 'Knob', { by: 'test' }), /used by Panel/);
+    // (WPC-28: rename of a used component is no longer refused; it renames the import and tags in the users: see test/31-component-ops.test.js)
   } finally { await ws.close(); }
 });
 

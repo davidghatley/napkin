@@ -17,7 +17,8 @@ export function initComponentOps(ctx) {
   toast.id = 'cmp-toast'; toast.setAttribute('role', 'status'); toast.hidden = true;
   toast.innerHTML = '<span class="ut-msg"></span><button type="button" id="cmp-undo">Undo</button><button type="button" id="cmp-toast-dismiss" aria-label="Dismiss">×</button>';
   document.body.append(toast);
-  let deleted = null, previous = null, timer = null;
+  let last = null, previous = null, subject = null, fromRow = false, timer = null; // last: what Ctrl+Z undoes next, { kind: 'delete' | 'rename', ... }
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
   const nameOf = (id) => ctx.state.components.get(id)?.name ?? id;
   const showToast = (msg, undo) => {
@@ -26,13 +27,40 @@ export function initComponentOps(ctx) {
   };
   toast.querySelector('#cmp-toast-dismiss').onclick = () => { toast.hidden = true; };
 
-  function openDialog(html) {
-    previous = document.activeElement;
+  function openDialog(html, id, row) {
+    subject = id; fromRow = !!row || !!document.activeElement?.closest?.('#layers'); previous = document.activeElement;
     dialog.innerHTML = html;
     if (!dialog.open) { document.body.dataset.modal = 'component'; dialog.showModal(); }
   }
-  dialog.addEventListener('close', () => { delete document.body.dataset.modal; if (previous?.isConnected) previous.focus?.({ preventScroll: true }); });
+  // Focus goes back where it was; when that was the row menu (now hidden) or a row that was redrawn, to the component's row.
+  const focusRow = async (id) => {
+    for (let i = 0; i < 20; i++) {
+      const row = document.querySelector(`#layers .lcomp[data-component="${CSS.escape(id)}"]`);
+      if (row) { row.tabIndex = 0; row.focus({ preventScroll: true }); if (document.activeElement === row) return; }
+      await sleep(40);
+    }
+  };
+  dialog.addEventListener('close', () => {
+    delete document.body.dataset.modal;
+    const p = previous, row = fromRow; previous = null; fromRow = false;
+    if (row && subject) focusRow(subject);
+    else if (p?.isConnected && p !== document.body) p.focus?.({ preventScroll: true });
+  });
   const close = () => { if (dialog.open) dialog.close(); };
+
+  // The rename itself, then the selection and focus put back on the renamed component (its id may change when the folder keeps no sidecars).
+  async function renameTo(c, to) {
+    const sel = ctx.state.selection?.component === c.component ? ctx.state.selection : null;
+    const res = await ctx.fetch(`/api/components/${encodeURIComponent(c.component)}/rename`, { method: 'POST', ...json({ name: to }) });
+    const r = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
+    if (!r.ok) return r;
+    for (let i = 0; i < 200 && !(ctx.state.components.get(r.id)?.doc && ctx.state.components.get(r.id).name === r.name); i++) await sleep(25);
+    const now = ctx.state.components.get(r.id);
+    if (sel && now?.doc) ctx.select({ component: r.id, node: now.doc.root.id === sel.node || !findNode(now.doc, sel.node) ? now.doc.root.id : sel.node, variant: sel.variant });
+    if (fromRow) focusRow(r.id);
+    return r;
+  }
+  const findNode = (doc, id) => { let hit = null; (function walk(n) { if (n.id === id) hit = n; n.children?.forEach(walk); })(doc.root); return hit; };
 
   function pick(id) { // the component to act on: the one asked for, else the selected one
     const c = ctx.state.components.get(id ?? ctx.state.selection?.component);
@@ -40,15 +68,15 @@ export function initComponentOps(ctx) {
     return c;
   }
 
-  function rename(id) {
+  function rename(id, opts = {}) {
     const c = pick(id);
     if (!c) return false;
     if (c.readOnly) { ctx.hint(`${c.name} is read-only (${String(c.readOnly).replace(/\.$/, '')}), so it can't be renamed here. Rename it in your editor.`); return false; }
     openDialog(`<form method="dialog" id="cmp-rename" autocomplete="off"><h2 id="cmp-dialog-title">Rename ${esc(c.name)}</h2>
-      <p>The file, the exported function and its Props type change together. Where it sits on the canvas stays.</p>
+      <p>The file, the exported function and its Props type change together, and so do the import and tags in any component that uses it. Where it sits on the canvas stays.</p>
       <label>New name <input id="cmp-name" aria-label="New component name" value="${esc(c.name)}" spellcheck="false"></label>
       <p id="cmp-error" role="alert"></p>
-      <div class="cmp-btns"><button type="button" id="cmp-cancel">Cancel</button><button type="submit" id="cmp-ok" class="primary">Rename</button></div></form>`);
+      <div class="cmp-btns"><button type="button" id="cmp-cancel">Cancel</button><button type="submit" id="cmp-ok" class="primary">Rename</button></div></form>`, c.component, opts.fromRow);
     const input = dialog.querySelector('#cmp-name'), err = dialog.querySelector('#cmp-error');
     input.focus(); input.select();
     dialog.querySelector('#cmp-cancel').onclick = close;
@@ -59,19 +87,16 @@ export function initComponentOps(ctx) {
       if (to === c.name) { close(); return; }
       const bad = checkName('component', to, others);
       if (bad) { err.textContent = bad; input.focus(); return; }
-      const res = await ctx.fetch(`/api/components/${encodeURIComponent(c.component)}/rename`, { method: 'POST', ...json({ name: to }) });
-      const r = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
-      if (!r.ok) {
-        err.textContent = /needs a saved component identity/.test(r.error) ? 'Renaming needs napkin to save this component\'s identity. Reopen the folder with --write-sidecars, then try again.' : engineSentence('component', r.error, to);
-        input.focus(); return;
-      }
+      const r = await renameTo(c, to);
+      if (!r.ok) { err.textContent = engineSentence('component', r.error, to); input.focus(); return; }
       close();
-      ctx.hint(`Renamed ${c.name} to ${r.name}`);
+      last = { kind: 'rename', id: r.id, from: c.name, to: r.name };
+      showToast(`Renamed ${c.name} to ${r.name}. Ctrl+Z puts the old name back.`, true);
     };
     return true;
   }
 
-  async function remove(id) {
+  async function remove(id, opts = {}) {
     const c = pick(id);
     if (!c) return false;
     if (c.readOnly) { ctx.hint(`${c.name} is read-only (${String(c.readOnly).replace(/\.$/, '')}), so it can't be deleted here. Delete the file in your editor.`); return false; }
@@ -82,14 +107,14 @@ export function initComponentOps(ctx) {
     if (users.length) {
       openDialog(`<form method="dialog" id="cmp-delete"><h2 id="cmp-dialog-title">${esc(c.name)} is in use</h2>
         <p>${esc(c.name)} is used by ${users.map(esc).join(', ')}. Remove or swap those uses first, then delete it.</p>
-        <div class="cmp-btns"><button type="button" id="cmp-cancel" class="primary">Close</button></div></form>`);
+        <div class="cmp-btns"><button type="button" id="cmp-cancel" class="primary">Close</button></div></form>`, c.component, opts.fromRow);
       dialog.querySelector('#cmp-cancel').onclick = close; dialog.querySelector('#cmp-cancel').focus();
       return false;
     }
     openDialog(`<form method="dialog" id="cmp-delete"><h2 id="cmp-dialog-title">Delete ${esc(c.name)}?</h2>
       <p>This removes ${esc(file)} and its saved position. Nothing else uses ${esc(c.name)}. You can undo this right after.</p>
       <p id="cmp-error" role="alert"></p>
-      <div class="cmp-btns"><button type="button" id="cmp-cancel">Cancel</button><button type="submit" id="cmp-ok" class="danger">Delete</button></div></form>`);
+      <div class="cmp-btns"><button type="button" id="cmp-cancel">Cancel</button><button type="submit" id="cmp-ok" class="danger">Delete</button></div></form>`, c.component, opts.fromRow);
     dialog.querySelector('#cmp-cancel').onclick = close; dialog.querySelector('#cmp-cancel').focus();
     dialog.querySelector('form').onsubmit = async (ev) => {
       ev.preventDefault();
@@ -97,32 +122,41 @@ export function initComponentOps(ctx) {
       const r = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
       if (!r.ok) { dialog.querySelector('#cmp-error').textContent = plain(r.error); return; }
       close();
-      deleted = snap?.source ? { name: c.name, source: snap.source, canvas: snap.canvas } : null;
-      showToast(deleted ? `Deleted ${c.name}.` : `Deleted ${c.name}. Git can bring it back.`, !!deleted);
+      subject = null; // the row is gone
+      last = snap?.source ? { kind: 'delete', name: c.name, source: snap.source, canvas: snap.canvas, folder: file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '.' } : null;
+      showToast(last ? `Deleted ${c.name}. Ctrl+Z brings it back.` : `Deleted ${c.name}. Git can bring it back.`, !!last);
     };
     return true;
   }
 
-  async function undoDelete() {
-    const d = deleted;
+  async function undoLast() {
+    const d = last;
     if (!d) return false;
-    deleted = null;
-    const res = await ctx.fetch('/api/components', { method: 'POST', ...json({ name: d.name, source: d.source }) });
+    last = null;
+    if (d.kind === 'rename') {
+      const c = ctx.state.components.get(d.id);
+      if (!c) { showToast(`Can't put the old name back: ${d.to} is gone.`, false); return false; }
+      const r = await renameTo(c, d.from);
+      if (!r.ok) { last = d; showToast(`Can't put the old name back: ${engineSentence('component', r.error, d.from)}`, true); return false; }
+      showToast(`${d.to} is ${d.from} again.`, false);
+      return true;
+    }
+    const res = await ctx.fetch('/api/components', { method: 'POST', ...json({ name: d.name, source: d.source, folder: d.folder }) });
     const r = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
-    if (!r.ok) { deleted = d; showToast(`Can't bring ${d.name} back: ${plain(r.error)}`, true); return false; }
+    if (!r.ok) { last = d; showToast(`Can't bring ${d.name} back: ${plain(r.error)}`, true); return false; }
     if (d.canvas && (d.canvas.x || d.canvas.y)) await ctx.fetch(`/api/components/${encodeURIComponent(r.id)}/canvas`, { method: 'POST', ...json(d.canvas) });
     showToast(`Brought ${d.name} back.`, false);
     return true;
   }
-  toast.querySelector('#cmp-undo').onclick = undoDelete;
+  toast.querySelector('#cmp-undo').onclick = undoLast;
 
   addEventListener('keydown', (ev) => {
     if (document.body.dataset.modal || typing(ev.target) || ev.isComposing) return;
     if (ev.key === 'F2' && !ev.defaultPrevented && ctx.state.selection) { ev.preventDefault(); rename(); return; }
-    if (deleted && ev.key.toLowerCase() === 'z' && (ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey) { ev.preventDefault(); ev.stopImmediatePropagation(); undoDelete(); }
+    if (last && ev.key.toLowerCase() === 'z' && (ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey) { ev.preventDefault(); ev.stopImmediatePropagation(); undoLast(); }
   });
 
-  ctx.on('change', (f) => { if (f.by === 'you' || f.mine) deleted = null; }); // a newer edit of yours is what Cmd-Z undoes now
-  ctx.cmpOps = { rename, remove, undoDelete, nameOf };
+  ctx.on('change', (f) => { if ((f.by === 'you' || f.mine) && !/^(renamed|deleted|created)\b/.test(f.summary || '')) last = null; }); // a newer edit of yours is what Cmd-Z undoes now
+  ctx.cmpOps = { rename, remove, undoLast, undoDelete: undoLast, nameOf };
   return ctx.cmpOps;
 }

@@ -9,7 +9,7 @@
 // workspace.activity(): the last 200 { at, kind: 'change'|'added'|'removed', component, name, by, summary, revision? }
 import { explainError } from './errors.js';
 import { watch, existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, join, resolve, relative, sep } from 'node:path';
+import { basename, dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { openStore, brokenMessage } from './store.js';
 import { readSidecar as loadSidecar, sidecarPath } from './codecs.js';
@@ -356,12 +356,18 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     // Everything create() checks before it writes, so a propose-mode agent's request can be refused up front. Returns the file it would make.
     // Where a new component goes: beside the existing ones. In a folder opened recursively without a fixed components folder, that is
     // the most common directory of the component files (ties: the shallowest, then the first by name); otherwise the folder itself.
-    checkCreate(name, rootTag = 'div') {
+    checkCreate(name, rootTag = 'div', folder) {
       if (typeof name !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new CreateError(`component name "${name}" must be PascalCase (letters and digits, starting with a capital)`);
       if (typeof rootTag !== 'string' || !TAGS.has(rootTag) || VOID.has(rootTag)) throw new CreateError(`root tag "${rootTag}" is not supported`);
       if (wanted) throw new CreateError('this server opened a single file, so it cannot add components');
       const taken = [...entries.values()].some((e) => e.name.toLowerCase() === name.toLowerCase());
-      const file = join(createDir(), `${name}.tsx`);
+      let into = createDir();
+      if (folder !== undefined) { // an exact folder (bringing a deleted component back to where it was), inside this workspace
+        into = resolve(dir, String(folder));
+        const rel = relative(dir, into);
+        if (rel.startsWith('..') || isAbsolute(rel) || !existsSync(into)) throw new CreateError(`folder "${folder}" is not inside the components folder`);
+      }
+      const file = join(into, `${name}.tsx`);
       if (taken || existsSync(file)) throw new CreateError(`component "${name}" already exists`, 409);
       return file;
     },
@@ -372,15 +378,15 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       return { source, doc: readComponent(source).doc };
     },
     // opts.approvedBy: the person who accepted a proposal to create it; recorded beside the author in history.
-    async create(name, rootTag = 'div', { by, approvedBy, source } = {}) {
+    async create(name, rootTag = 'div', { by, approvedBy, source, folder } = {}) {
       needBy(by);
       if (source !== undefined) { // bringing a deleted component back: the text must be this component, in the dialect
         let back; try { back = readComponent(source).doc; } catch (err) { throw new CreateError(`that source is not a napkin component: ${err.message}`); }
         if (back.name !== name) throw new CreateError(`that source is ${back.name}, not ${name}`);
       }
-      this.checkCreate(name, rootTag);
+      this.checkCreate(name, rootTag, folder);
       await queue;
-      const file = this.checkCreate(name, rootTag);
+      const file = this.checkCreate(name, rootTag, folder);
       origins.set(file, { by, summary: `created ${name}`, ...(approvedBy && { approvedBy }) });
       try { createComponent(file, source ?? newComponentSource(name, rootTag)); }
       catch (err) { origins.delete(file); throw err.code === 'EEXIST' ? new CreateError(`component "${name}" already exists`, 409) : err; }
@@ -414,12 +420,12 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       needBy(by);
       const e = find(idOrName);
       if (!e) throw new CreateError('not found', 404);
-      if (!writeSidecars) throw new CreateError(`${e.path}: rename needs a saved component identity. Next: reopen with --write-sidecars to rename it.`, 403);
       if (typeof newName !== 'string' || !/^[A-Z][A-Za-z0-9]*$/.test(newName)) throw new CreateError(`component name "${newName}" must be PascalCase (letters and digits, starting with a capital)`);
       const bad = await e.store.sync();
       if (bad) throw new CreateError(brokenMessage(e.file, bad), 409);
-      const users = directUsers(e.file).map((x) => x.name);
-      if (users.length) throw new CreateError(`${e.name} is used by ${users.join(', ')}. Next: remove or swap those instances first, then rename it.`, 409);
+      // The components that use this one get their import and tags renamed too (a swapInstance per instance, one batch per file).
+      const swaps = directUsers(e.file).map((u) => ({ u, doc: docs.get(u.file) }));
+      for (const { u, doc: d } of swaps) if (!d) throw new CreateError(`${e.name} is used by ${u.name}, which is read-only, so napkin cannot update its import. Next: rename it in your editor, or make ${u.name} editable first.`, 409);
       const { readOnly, source, doc, revision } = await e.store.read();
       if (readOnly) throw new CreateError(`read-only: ${readOnly}`, 403);
       const old = doc.name;
@@ -435,8 +441,16 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       removals.set(oldFile, { by, summary: `renamed ${old} to ${newName}` });
       if (writeSidecars) writeSidecar(sidecarPath(file), side);
       moveComponent(oldFile, file, text); removeSidecar(sidecarPath(oldFile));
-      if (!(await until(() => find(id)?.file === file))) throw new Error(explainError('renamed the file but the workspace did not notice'));
-      return { id, name: newName };
+      if (!(await until(() => byFile(file) && !byFile(oldFile)))) throw new Error(explainError('renamed the file but the workspace did not notice'));
+      const now = byFile(file); // (without saved sidecars the id comes from the path, so it changes with the file)
+      for (const { u } of swaps) {
+        const user = byFile(u.file);
+        const ids = [...index(docs.get(u.file)).byId.values()].filter((n) => n.instance?.component === old).map((n) => n.id);
+        if (!user || !ids.length) continue;
+        const r = await user.store.apply({ baseRevision: (await user.store.read()).revision, edits: ids.map((x) => ({ op: 'swapInstance', id: x, component: newName })), by });
+        if (!r.ok) throw new CreateError(`renamed ${old} to ${newName}, but ${user.name} could not be updated: ${r.error}. Next: change its import of ${old} to ${newName} by hand.`, 409);
+      }
+      return { id: now.id, name: newName, path: now.path };
     },
     async settled() { await queue; await Promise.all([...entries.values()].map((e) => e.built)); },
     async close() { tokens.close(); closing = true; watcher.close(); await ready; await queue; for (const e of [...entries.values()]) await remove(e); await bundler.close(); },

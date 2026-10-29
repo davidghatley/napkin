@@ -24,7 +24,7 @@ create it. Renaming a component saves its identity so references remain stable.
 CSS custom property. Component theme chooses the token mode for previews.
 
 **Proposal.** An agent's validated change, held until you answer it. Pending
-proposals are saved in `.napkin/proposals.json`, so they survive a restart.
+proposals are saved in `proposals.json` (in `.napkin/` inside the components folder for a project with a `napkin.json`, otherwise in `~/.local/state/napkin`), so they survive a restart.
 Accept writes through the revision-checked store. Reject leaves component files
 unchanged.
 

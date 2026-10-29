@@ -124,8 +124,8 @@ export function initLayers(ctx, el) {
     const b = ev.target.closest('button[data-do]');
     if (!b) return;
     const { component, node } = menu.dataset; closeMenu();
-    if (b.dataset.do === 'crename') ctx.cmpOps.rename(component);
-    else if (b.dataset.do === 'cdelete') ctx.cmpOps.remove(component);
+    if (b.dataset.do === 'crename') ctx.cmpOps.rename(component, { fromRow: true });
+    else if (b.dataset.do === 'cdelete') ctx.cmpOps.remove(component, { fromRow: true });
     else if (b.dataset.do === 'rename') { const r = el.querySelector(`.lrow[data-component="${CSS.escape(component)}"][data-node="${CSS.escape(node)}"]`); if (r) startRename(r); }
     else if (b.dataset.do === 'duplicate') await ctx.ops.duplicate();
     else if (b.dataset.do === 'copy') { try { document.execCommand('copy'); } catch {} ctx.hint('Copied. Paste into any component with ⌘V'); }

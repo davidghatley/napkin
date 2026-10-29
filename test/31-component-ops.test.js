@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { lab } from './helpers/lab.js';
 import { sleep } from './helpers/harness.js';
+import { readComponent } from '../src/tsx/read.js';
 import { openWorkspace } from '../src/workspace.js';
 
 const fx = (n) => readFileSync(new URL(`../fixtures/${n}/${n}.tsx`, import.meta.url), 'utf8');
@@ -65,6 +66,8 @@ test('WPC-28: the row menu deletes after a confirm, names what uses it, and Undo
     await L.q(`document.querySelector('#cmp-ok').click()`);
     await waitFor(L, `!napkin.find('Button')`);
     assert.ok(!existsSync(join(L.compDir, 'Button.tsx')));
+    await waitFor(L, `!document.querySelector('#cmp-toast').hidden`);
+    assert.match(await L.q(`document.querySelector('#cmp-toast').textContent`), /Ctrl\+Z brings it back/);
     // undo (Cmd-Z right after) writes the same file back
     await key(L, 'z', { ctrlKey: true });
     await waitFor(L, `napkin.find('Button')?.doc`);
@@ -99,4 +102,95 @@ test('WPC-30: N in a folder opened recursively puts the new component beside the
     assert.ok(!existsSync(join(dir, 'Fresh.tsx')));
     assert.equal(r.path, 'src/ui/Fresh.tsx');
   } finally { await ws.close(); }
+});
+
+
+test('WPC-28: ws.create with a folder restores to the exact folder (nested layout)', { timeout: 60000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-nest-'));
+  mkdirSync(join(dir, 'src/components/ui'), { recursive: true });
+  for (const n of ['A', 'B', 'C']) writeFileSync(join(dir, 'src/components/ui', `${n}.tsx`), fx('Card').replace(/Card/g, n));
+  writeFileSync(join(dir, 'src/components/Hero.tsx'), fx('Card').replace(/Card/g, 'Hero'));
+  const ws = await openWorkspace(dir, { recursive: true, writeSidecars: false });
+  try {
+    const source = readFileSync(join(dir, 'src/components/Hero.tsx'), 'utf8');
+    await ws.delete('Hero', { by: 'you' });
+    const r = await ws.create('Hero', 'div', { by: 'you', source, folder: 'src/components' });
+    assert.equal(r.path, 'src/components/Hero.tsx');
+    assert.equal(readFileSync(join(dir, 'src/components/Hero.tsx'), 'utf8'), source);
+    await ws.delete('Hero', { by: 'you' });
+    await assert.rejects(ws.create('Hero', 'div', { by: 'you', source, folder: '../elsewhere' }), /not inside the components folder/);
+  } finally { await ws.close(); }
+});
+
+test('WPC-28: Ctrl+Z after a rename puts file, export names and sidecar back, as one step', { timeout: 90000 }, async () => {
+  const L = await lab({ Card: fx('Card'), Button: fx('Button') });
+  try {
+    const id = await L.id('Card');
+    await L.q(`napkin.select({ component: ${JSON.stringify(id)}, node: napkin.find('Card').doc.root.id, variant: {} })`);
+    const before = readFileSync(join(L.compDir, 'Card.tsx'), 'utf8');
+    await L.q(`napkin.cmpOps.rename()`);
+    await L.q(`(() => { document.querySelector('#cmp-name').value = 'Panel'; document.querySelector('#cmp-rename').requestSubmit(); })()`);
+    await waitFor(L, `!document.querySelector('#cmp-dialog').open && napkin.find('Panel')?.doc`);
+    assert.equal(await L.q(`napkin.state.selection?.component`), id, 'the selection stays on the renamed component');
+    assert.ok(existsSync(join(L.compDir, 'Panel.napkin.json')));
+    assert.match(await L.q(`document.querySelector('#cmp-toast').textContent`), /Ctrl\+Z/);
+    await key(L, 'z', { ctrlKey: true });
+    await waitFor(L, `!napkin.find('Panel') && napkin.find('Card')?.doc`);
+    assert.equal(readFileSync(join(L.compDir, 'Card.tsx'), 'utf8'), before);
+    assert.ok(existsSync(join(L.compDir, 'Card.napkin.json')) && !existsSync(join(L.compDir, 'Panel.napkin.json')));
+    assert.equal(await L.id('Card'), id);
+  } finally { await L.close(); }
+});
+
+test('WPC-28: renaming a used component renames the import and tags in its users, one revision per file; undo restores them', { timeout: 60000 }, async () => {
+  const data = (n) => readFileSync(new URL(`./fixtures/0004/${n}.tsx`, import.meta.url), 'utf8');
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-used-'));
+  writeFileSync(join(dir, 'Button.tsx'), data('Button')); writeFileSync(join(dir, 'Panel.tsx'), data('Panel'));
+  const ws = await openWorkspace(dir, { writeSidecars: false });
+  try {
+    const panelBefore = readFileSync(join(dir, 'Panel.tsx'), 'utf8');
+    assert.match(panelBefore, /import \{ Button \} from '\.\/Button'/);
+    const r = await ws.rename('Button', 'Knob', { by: 'you' });
+    assert.equal(r.name, 'Knob');
+    const panel = readFileSync(join(dir, 'Panel.tsx'), 'utf8');
+    assert.match(panel, /import \{ Knob \} from '\.\/Knob'/);
+    assert.doesNotMatch(panel, /\bButton\b/);
+    assert.deepEqual(ws.graph(ws.find('Knob')).usedBy, ['Panel']);
+    await ws.rename('Knob', 'Button', { by: 'you' });
+    // (the tag is re-printed by the writer, so compare what it says, not the bytes)
+    assert.deepEqual(readComponent(readFileSync(join(dir, 'Panel.tsx'), 'utf8')).doc, readComponent(panelBefore).doc);
+  } finally { await ws.close(); }
+});
+
+test('WPC-28: rename works in a folder without saved sidecars (the default open)', { timeout: 60000 }, async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-nosc-'));
+  writeFileSync(join(dir, 'Card.tsx'), fx('Card'));
+  const ws = await openWorkspace(dir, { writeSidecars: false });
+  try {
+    const r = await ws.rename('Card', 'Tile', { by: 'you' });
+    assert.equal(r.name, 'Tile');
+    assert.ok(existsSync(join(dir, 'Tile.tsx')) && !existsSync(join(dir, 'Card.tsx')));
+    assert.ok(!readdirSync(dir).some((f) => f.endsWith('.napkin.json')), 'no sidecar was written');
+    assert.equal(ws.find('Tile').id, r.id);
+  } finally { await ws.close(); }
+});
+
+test('WPC-28: after a rename focus stays on the renamed row; Cancel on delete from the row menu returns focus to the row', { timeout: 90000 }, async () => {
+  const L = await lab({ Card: fx('Card'), Button: fx('Button') });
+  try {
+    const id = await L.id('Card');
+    const row = `#layers .lcomp[data-component=${JSON.stringify(id)}]`;
+    await L.q(`document.querySelector(${JSON.stringify(row)}).focus()`);
+    await L.q(`document.querySelector(${JSON.stringify(row)}).dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }))`);
+    await waitFor(L, `document.querySelector('#cmp-dialog').open`);
+    await L.q(`(() => { document.querySelector('#cmp-name').value = 'Panel'; document.querySelector('#cmp-rename').requestSubmit(); })()`);
+    await waitFor(L, `napkin.find('Panel')?.doc && document.activeElement?.classList.contains('lcomp') && document.activeElement.dataset.component === ${JSON.stringify(id)}`);
+    // row menu -> Delete -> Cancel
+    await L.q(`document.querySelector(${JSON.stringify(row + ' .lmore')}).click()`);
+    await L.q(`document.querySelector('#lmenu [data-do=cdelete]').click()`);
+    await waitFor(L, `document.querySelector('#cmp-dialog').open && !!document.querySelector('#cmp-ok')`);
+    await L.q(`document.querySelector('#cmp-cancel').click()`);
+    await waitFor(L, `document.activeElement?.classList.contains('lcomp') && document.activeElement.dataset.component === ${JSON.stringify(id)}`);
+    assert.match(await L.q(`document.querySelector('#cmp-toast').textContent`), /./);
+  } finally { await L.close(); }
 });

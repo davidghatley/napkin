@@ -35,7 +35,7 @@ test('WPC-36: the README token count is the demo token count, and no guide says 
     const text = readFileSync(join(ROOT, file), 'utf8').replace(/\s+/g, ' ');
     assert.doesNotMatch(text, /(proposals?[^.]{0,60}(last only|server memory|live in memory)|History and proposals last)/i, `${file} says proposals do not survive a restart, but .napkin/proposals.json keeps them`);
   }
-  assert.match(readFileSync(join(ROOT, 'docs/guide/concepts.md'), 'utf8'), /\.napkin\/proposals\.json/);
+  assert.match(readFileSync(join(ROOT, 'docs/guide/concepts.md'), 'utf8'), /`proposals\.json`.*\.napkin\//s);
 });
 
 test('WPC-36: the quickstart makes the new folder outside this checkout', () => {

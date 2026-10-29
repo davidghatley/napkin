@@ -333,7 +333,7 @@ export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, c
         const n = needId(); if (n) return n;
         if (agentPermission(dir, caller) === 'propose' || (msg.propose && agentPermission(dir, caller) !== 'read')) return proposeCreate(msg, caller);
         const g = deny('create_component'); if (g) return g;
-        try { return res(201, { ok: true, ...(await ws.create(msg.name, msg.rootTag, { by: caller, ...(typeof msg.source === 'string' && { source: msg.source }) })) }); }
+        try { return res(201, { ok: true, ...(await ws.create(msg.name, msg.rootTag, { by: caller, ...(typeof msg.source === 'string' && { source: msg.source }), ...(typeof msg.folder === 'string' && { folder: msg.folder }) })) }); }
         catch (err) { if (err instanceof CreateError) return fail(err.status, err.message); throw err; }
       }
       return fail(405, 'method not allowed');

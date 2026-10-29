@@ -118,7 +118,7 @@ Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z undo and redo your own edits. They refuse to
 overwrite a later change to the same property by someone else. The bottom drawer
 has Code, History, Tokens, Inspect, Assets, Changes, and Activity. Undo stacks and
 recent history last for the server session. Pending agent proposals are saved in
-`.napkin/proposals.json` and survive a restart. Git keeps long-term history. napkin never commits.
+`proposals.json` and survive a restart: in `.napkin/` inside the components folder for a project with a `napkin.json`, otherwise in napkin's own state folder (`~/.local/state/napkin`), so a repo you only opened stays clean. Git keeps long-term history. napkin never commits.
 
 The disposable demo includes 22 tokens:
 
