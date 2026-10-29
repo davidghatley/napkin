@@ -37,7 +37,7 @@ test('REL-02: a second server on the same folder refuses to start and names the 
     const third = await startServer(other.compDir);
     await third.stop();
   } finally { await first.stop(); }
-  assert.equal(readdirSync(join(compDir, '.napkin')).filter((n) => /lock/.test(n)).length, 0, 'a clean stop removes the lock');
+  assert.equal((existsSync(join(compDir, '.napkin')) ? readdirSync(join(compDir, '.napkin')) : []).filter((n) => /lock/.test(n)).length, 0, 'a clean stop removes the lock (and, WPC-37, the then-empty .napkin folder)');
 });
 
 test('REL-02: a lock left by a dead process (kill -9) is taken over', async () => {
@@ -60,6 +60,7 @@ test('REL-02: an unreadable lock file counts as stale; a lock naming any live PI
   writeFileSync(lp, '{ not json');
   const a = await startServer(compDir);
   await a.stop();
+  mkdirSync(join(compDir, '.napkin'), { recursive: true }); // WPC-37: a clean stop removes the then-empty folder
   writeFileSync(lp, `${process.pid}\n`);
   const b = await runServer(compDir);
   assert.equal(b.code, 1);
