@@ -8,9 +8,9 @@
 // Also here: the canvas labels. A nested component draws its own elements (their data-n are the inner file's); after each
 // render the instance's root takes the instance's id as data-n and the inner elements stay unlabelled, so a click on a
 // nested Button selects the instance in the host, not an element of Button.
-import { plain, stripNext } from './words.js';
+import { plain, stripNext, checkName, engineSentence } from './words.js';
 import { index, propOf, axes, instancePropFits } from '/src/model.js';
-import { esc, errorLine, errors, run, ctxDoc } from './cmp-core.js';
+import { esc, errorLine, errors, run, ctxDoc, keepFocus } from './cmp-core.js';
 import { renderPanel } from './panel.js';
 
 const dirOf = (c) => String(c.path || '').split('/').slice(0, -1).join('/');
@@ -122,8 +122,11 @@ export function initInstances(ctx) {
     const { s, comp, doc } = ctxDoc(ctx);
     const name = panel.querySelector('#extract-name')?.value.trim();
     if (!s || !doc) return;
+    const taken = [...ctx.state.components.values()].map((c) => c.name);
+    const problem = checkName('component', name, taken);
+    if (problem) { errors.extract = problem; rerender(); keepFocus('extract-name'); return; } // the form stays open, the caret stays in the name
     const r = await (await ctx.fetch(`/api/components/${encodeURIComponent(s.component)}/extract`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: s.node, name }) })).json();
-    if (!r.ok) { errors.extract = stripNext(r.error); rerender(); return; }
+    if (!r.ok) { errors.extract = engineSentence('component', r.error, name); rerender(); keepFocus('extract-name'); return; }
     delete errors.extract; delete errors.extractOpen;
     ctx.hint(`${name} made from ${s.node}. It is a new file next to ${comp.name}.`);
     setTimeout(rerender, 0);
@@ -136,7 +139,7 @@ export function initInstances(ctx) {
     if (!s || !doc) return;
     const a = b.dataset.inst;
     if (a === 'insert') await insert(s.component, s.node, s.node, b.dataset.name);
-    else if (a === 'extract-open') { errors.extractOpen = s.node; rerender(); setTimeout(() => panel.querySelector('#extract-name')?.select(), 0); }
+    else if (a === 'extract-open') { delete errors.extract; errors.extractOpen = s.node; rerender(); keepFocus('extract-name'); }
     else if (a === 'extract-cancel') { delete errors.extractOpen; delete errors.extract; rerender(); }
     else if (a === 'open') ctx.nav.focus(ctx.named(b.dataset.name).find((c) => dirOf(c) === dirOf(comp))?.component ?? b.dataset.name);
     else if (a === 'bool') await run(ctx, 'compose', [{ op: 'set', path: `${s.node}.prop:${b.dataset.prop}`, value: b.dataset.value === '' ? null : b.dataset.value === 'true' }]);

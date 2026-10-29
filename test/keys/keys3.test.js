@@ -14,7 +14,7 @@ async function repo() {
   writeFileSync(join(dir, 'napkin.json'), '{"tokens":{"source":"tokens/tokens.json","css":"tokens/tokens.css"}}');
   const server = await startServer(compDir), b = await launchChromium({ width: 1440, height: 900 }), io = input(b);
   await b.goto(server.url); await b.waitFor('document.body.dataset.ready === "1"');
-  return { file, server, b, io, close: async () => { await b.close(); await server.stop(); } };
+  return { file, compDir, server, b, io, close: async () => { await b.close(); await server.stop(); } };
 }
 const pick = (b, c, n, variant) => b.eval(`napkin.select({ component: napkin.find(${JSON.stringify(c)}).component, node: ${JSON.stringify(n)}, variant: ${JSON.stringify(variant)} })`).then(() => sleep(350));
 
@@ -51,7 +51,7 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
       assert.ok(found.length >= (n === 'image' ? 25 : 80), `${found.length} controls indexed`);
       // Natural queries (the first 2-3 letters of a word of the label, or the initials of 2-3 words) reach every control, except these
       // siblings that share every word but the last (Height fill vs Height fixed, Stroke Width vs the Size Width ...): those need letters picked from the name.
-      const EXEMPT = /^(Height |Width |Stroke Width)/;
+      const EXEMPT = /^(Fixed width|Fill width|Hug width|Remove state axis|Name of state axis|Stroke Width)/;
       const unnatural = found.filter((f) => !f.natural && !EXEMPT.test(f.label));
       assert.deepEqual(unnatural.map((f) => f.label), [], 'a natural 2-3 letter query reaches each control first');
       assert.ok(found.filter((f) => !f.natural).length <= 8, 'few exceptions');
@@ -70,7 +70,9 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
         for (const ch of f.q) { await io.key(ch); keys++; }
         await io.key('Enter'); keys++;
         await sleep(80);
-        const want = f.add ? (f.field === 'add-prop' ? 'new-prop-name' : f.field === 'add-axis' ? 'new-axis-name' : `new-value-${f.field.replace(/^add-value-/, '')}`) : f.field;
+        let want0 = null;
+        if (/^sum-/.test(f.field)) want0 = await b.eval(`(() => { const s = document.getElementById(${JSON.stringify(f.field)}); const all = [...(s?.closest('details')?.querySelectorAll('input, select, textarea, button') ?? [])].filter((e) => !e.disabled && e.tabIndex >= 0 && e.type !== 'color' && getComputedStyle(e).display !== 'none' && !e.closest('[hidden]')); const x = all.find((e) => e.tagName !== 'BUTTON') || all[0]; return x ? x.id : ''; })()`); // Enter on a section moves into its first field
+        const want = want0 ? want0 : f.add ? (f.field === 'add-prop' ? 'new-prop-name' : f.field === 'add-axis' ? 'new-axis-name' : `new-value-${f.field.replace(/^add-value-/, '')}`) : f.field;
         const got = await b.eval(`document.activeElement.id`);
         assert.equal(got, want, `${c}.${n} "${f.label}" via "${f.q}"`);
         assert.ok(keys <= 5, `${f.label}: ${keys} keys`);
@@ -87,7 +89,7 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
     await t.test('Make base: when no variant value can be made the base, the palette says so', async () => {
       await pick(b, 'Card', 'image', {});
       await open(); for (const ch of 'make b') await io.key(ch);
-      assert.match(await b.eval(`document.querySelector('#q-list').innerText`), /Make base \(none available\)/);
+      assert.match(await b.eval(`document.querySelector('#q-list').innerText`), /Make base \(not possible here\)/);
       await io.key('Enter'); await sleep(150);
       assert.match(await b.eval(`document.querySelector('#hint').textContent`), /not the base yet/);
     });
@@ -155,5 +157,65 @@ test('round 3 polish: messages clear and name the field; the snap toast follows 
       await sleep(300);
       assert.equal(await b.eval(`document.querySelector('#snap-toast').hidden`), false);
     });
+  } finally { await r.close(); }
+});
+
+// Every panel form, every kind of refusal: ONE plain sentence, the caret stays in the field, nothing is written.
+const ENGINE_WORDS = /\b(prop|bad|axis name|invalid|edit #|variant value ")|""|\[[A-Za-z]+\.tsx\]|undefined|NaN/;
+const FORMS = [
+  { form: 'add setting', node: ['Button', 'root'], open: '#add-prop', field: 'new-prop-name', cases: [['Foo', /can't be a setting name/], ['', /Type a setting name first\./], ['label', /already a setting called "label"/]] },
+  { form: 'add variant', node: ['Button', 'root'], open: '#add-axis', field: 'new-axis-name', cases: [['Foo', /can't be a variant name/], ['', /Type a variant name first\./], ['size', /already a variant called "size"/], ['label', /already a setting called "label"/]] },
+  { form: 'add value', node: ['Button', 'root'], open: '#add-value-size', field: 'new-value-size', cases: [['Big Value', /can't be a value/], ['', /Type a value first\./], ['md', /already a value called "md"/]] },
+  { form: 'rename variant', node: ['Button', 'root'], field: 'axis-name-size', cases: [['Foo', /can't be a variant name/], ['', /Type a variant name first\./], ['state', /already a variant called "state"/], ['label', /already a setting called "label"/]] },
+  { form: 'rename value', node: ['Button', 'root'], field: 'value-name-size-md', cases: [['Big Value', /can't be a value/], ['', /Type a value first\./], ['sm', /already a value called "sm"/]] },
+  { form: 'rename setting', node: ['Button', 'root'], open: '#edit-settings', field: 'prop-name-label', cases: [['Foo', /can't be a setting name/], ['', /Type a setting name first\./], ['size', /already a variant called "size"/]] },
+  { form: 'make component', node: ['Button', 'label'], open: '#make-component', field: 'extract-name', cases: [['foo', /can't be a component name/], ['1x', /can't be a component name/], ['a b', /can't be a component name/], ['', /Type a component name first\./], ['Card', /already a component called "Card"/]] },
+];
+test('WPC-14: every panel form x {bad, empty, duplicate}: one plain sentence, caret in the field, file unchanged', { timeout: 590000 }, async (t) => {
+  const r = await repo(); const { b, io, compDir } = r;
+  const text = (f) => readFileSync(join(compDir, f), 'utf8');
+  try {
+    for (const spec of FORMS) for (const [value, expect] of spec.cases) await t.test(`${spec.form}: ${JSON.stringify(value)}`, async () => {
+      const before = [text('Button.tsx'), text('Card.tsx')];
+      await pick(b, spec.node[0], spec.node[1], { size: 'md', state: 'default' });
+      await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(350);
+      if (spec.open && !(await b.eval(`!!document.getElementById(${JSON.stringify(spec.field)})`))) { await b.eval(`document.querySelector(${JSON.stringify(spec.open)})?.click()`); await sleep(350); await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(250); }
+      await b.eval(`(() => { const e = document.getElementById(${JSON.stringify(spec.field)}); e.focus(); e.select(); })()`);
+      assert.equal(await b.eval('document.activeElement.id'), spec.field, 'the field can be focused');
+      if (value) await b.send('Input.insertText', { text: value }); else await io.key('Backspace');
+      await b.eval(`window.__f = []; document.addEventListener('focusin', (e) => __f.push('in:' + e.target.id), true); document.addEventListener('focusout', (e) => __f.push('out:' + e.target.id), true)`);
+      await io.key('Enter'); await sleep(700);
+      const msgs = JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#panel .field-error')].map((e) => e.textContent))`));
+      const toast = await b.eval(`document.querySelector('#error')?.textContent ?? ''`);
+      assert.equal(msgs.length, 1, `exactly one message in the panel: ${JSON.stringify(msgs)}`);
+      assert.match(msgs[0], expect, msgs[0]);
+      assert.doesNotMatch(msgs[0], ENGINE_WORDS, msgs[0]);
+      assert.equal(toast, '', 'and not a second one at the bottom');
+      assert.equal(await b.eval('document.activeElement.id'), spec.field, 'the caret stays in the field ' + await b.eval('JSON.stringify(__f) + document.getElementById(' + JSON.stringify(spec.field) + ')?.outerHTML.slice(0, 80)'));
+      assert.deepEqual([text('Button.tsx'), text('Card.tsx')], before, 'nothing written');
+      await b.eval(`document.querySelectorAll('#panel [data-cmp="close"], #panel #extract-cancel').forEach((x) => x.click())`);
+    });
+  } finally { await r.close(); }
+});
+
+// A regression lock for the queries people type most: the first result for each, on Button root (and Card image for the colour ones).
+test('common queries rank the expected control first', { timeout: 120000 }, async () => {
+  const r = await repo(); const { b } = r;
+  try {
+    await pick(b, 'Button', 'root', { size: 'md', state: 'default' });
+    const first = (q) => b.eval(`(napkin.quick.build(), napkin.quick.search(${JSON.stringify(q)})[0]?.label)`);
+    for (const [q, want] of [['bor', 'Stroke'], ['rad', 'Radius'], ['pad', 'Padding'], ['gap', 'Gap'], ['hei', 'Height'], ['wid', 'Width'], ['sha', 'Shadow'], ['hov', 'Default state hover'], ['fix', 'Fixed height'], ['fil', 'Fill'], ['str', 'Stroke'], ['rem sta', 'Remove state axis'], ['rst', 'Remove stroke'], ['add', 'Add'], ['av', 'Add variant'], ['top', 'Align top'], ['lef', 'Align left']]) {
+      if (q === 'add') continue; // "Add" only exists while a form is open
+      assert.equal(await first(q), want, `"${q}"`);
+    }
+    // Enter on a section summary moves into its first field: fil / str / col are <= 5 keys to the colour
+    for (const [q, id] of [['fil', 'background'], ['str', 'stroke-color']]) {
+      const io = r.io; await b.eval('document.activeElement.blur()');
+      await io.key('k', { ctrl: true }); await b.waitFor(`!document.querySelector('#quick').hidden && document.activeElement.id === 'q-input'`);
+      for (const ch of q) await io.key(ch); await io.key('Enter'); await sleep(250);
+      assert.equal(await b.eval('document.activeElement.id'), id, `${q} + Enter lands in the colour (5 keys)`);
+    }
+    const col = await first('col');
+    assert.match(col, /Colour|color/i, `"col" finds a colour first: ${col}`);
   } finally { await r.close(); }
 });

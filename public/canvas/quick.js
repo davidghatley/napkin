@@ -26,6 +26,7 @@ export function initQuick(ctx) {
   // Every control of the inspector, named by its section and label ("Fill colour", "Stroke colour", "Shadow", "Layout align top left",
   // "Settings label"), so Cmd-K reaches any property, not just the labelled number fields.
   const ALIAS = { Stroke: 'Border', Appearance: 'Corner opacity', Layout: 'Auto layout flex grid' };
+const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'], Text: ['font', 'type'], Layout: ['auto layout', 'flex'] }; // other words that find a section's controls
   const GENERIC = /^(Colour|Opacity|Width|Style|Size|Hug|Fill|Fixed|Block|Flex|Grid|Row|Column|Wrap|Left|Right|Top|Bottom|Center|All sides|Min \/ Max|Space between|Hide|Remove|Show)$/;
   // Names for the controls whose own label says little ("md", "×", "+ value"): built from the control's id.
   const BY_ID = [
@@ -33,7 +34,7 @@ export function initQuick(ctx) {
     [/^axis-name-(.+)$/, (m) => `Name of ${m[1]} axis`], [/^axis-(up|down)-(.+)$/, (m) => `Move ${m[2]} axis ${m[1]}`], [/^remove-axis-(.+)$/, (m) => `Remove ${m[1]} axis`],
     [/^value-name-([^-]+)-(.+)$/, (m) => `Name of value ${m[2]}`], [/^value-(up|down)-([^-]+)-(.+)$/, (m) => `Move ${m[3]} ${m[1]}`],
     [/^grip-value-([^-]+)-(.+)$/, (m) => `Drag ${m[2]} to reorder`], [/^remove-value-([^-]+)-(.+)$/, (m) => `Remove value ${m[2]}`], [/^make-base-([^-]+)-(.+)$/, (m) => `Make ${m[2]} the base`],
-    [/^remove-(fill|stroke)$/, (m) => `Clear ${m[1]}`], [/^seg-textAlign-(.+)$/, (m) => `Text align ${m[1]}`], [/^side-(.+)$/, (m) => m[1] === 'all' ? 'Stroke all sides' : `Stroke ${m[1].toLowerCase()} side`], [/^size-(width|height)-(hug|fill|fixed)$/, (m) => `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}`], [/^token-(.+)$/, (m, p) => `Bind ${fieldName(p, m[1])} to token`], [/^off-token-(.+)$/, (m, p) => `Snap ${fieldName(p, m[1])} to token`], [/^add-value-(.+)$/, (m) => `Add ${m[1]} value`], [/^add-axis$/, () => 'Add variant'], [/^add-prop$/, () => 'Add setting'],
+[/^seg-textAlign-(.+)$/, (m) => `Text align ${m[1]}`], [/^side-(.+)$/, (m) => m[1] === 'all' ? 'Stroke all sides' : `Stroke ${m[1].toLowerCase()} side`], [/^size-(width|height)-(hug|fill|fixed)$/, (m) => `${m[2][0].toUpperCase()}${m[2].slice(1)} ${m[1]}`], [/^token-(.+)$/, (m, p) => `Bind ${fieldName(p, m[1])} to token`], [/^off-token-(.+)$/, (m, p) => `Snap ${fieldName(p, m[1])} to token`], [/^add-value-(.+)$/, (m) => `Add ${m[1]} value`], [/^add-axis$/, () => 'Add variant'], [/^add-prop$/, () => 'Add setting'],
   ];
   const fieldName = (panel, id) => { const l = panel.querySelector(`label[for="${CSS.escape(id)}"]`); return ((l?.querySelector('.lt') || l)?.textContent.trim() || humanId(id)).toLowerCase(); };
   const humanId = (id) => id.replace(/[-_]+/g, ' ');
@@ -84,9 +85,10 @@ export function initQuick(ctx) {
     for (const [btn, form] of [['add-prop', 'new-prop-name'], ['add-axis', 'new-axis-name']]) { // the form is open, so its button is gone: the action still lands in the form
       if (panel?.querySelector('#' + form) && !panel.querySelector('#' + btn)) out.push({ kind: 'property', label: btn === 'add-prop' ? 'Add setting' : 'Add variant', hint: where, field: btn, add: true, boost: 16 });
     }
-    if (panel?.querySelector('#add-axis, #add-value-size, [id^="add-value-"], [id^="axis-name-"]') && !panel.querySelector('[id^="make-base-"]')) // say so instead of matching nothing
-      out.push({ kind: 'property', label: 'Make base (none available)', hint: where, note: 'Make base needs a variant value that is not the base yet. There is none here.', boost: 5 });
-    for (const p of panelControls()) out.push({ kind: 'property', label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, add: p.add, boost: 14 - p.label.length * 0.25 + (p.add ? 3 : p.button ? 0 : 0.5) - Math.min(p.order, 8) * 0.02 });
+    const controls = panelControls();
+    if (panel?.querySelector('#add-axis, [id^="add-value-"], [id^="axis-name-"]') && !controls.some((p) => /^make-base-/.test(p.id))) // none can be used: say so instead of matching nothing
+      out.push({ kind: 'property', label: 'Make base (not possible here)', hint: where, note: 'Make base needs a variant value that is not the base yet. There is none here.', boost: 5 });
+    for (const p of controls) out.push({ kind: 'property', keys: [...(KEYS[p.section] ?? []), ...(/^(remove|eye)-(fill|stroke)$/.test(p.id) ? ['clear'] : [])], label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, add: p.add, boost: 14 - p.label.length * 0.25 - (/^(value-(up|down|name)|grip-value|remove-value|make-base|axis-(up|down|name)|remove-axis)-/.test(p.id) ? 4 : 0) + (/^size-height-/.test(p.id) ? 0.6 : 0) + (p.add ? 3 : p.button ? 0 : 0.5) - Math.min(p.order, 8) * 0.02 });
     return out;
   }
   function build() {
@@ -172,6 +174,11 @@ export function initQuick(ctx) {
         const want = item.field === 'add-prop' ? 'new-prop-name' : item.field === 'add-axis' ? 'new-axis-name' : `new-value-${item.field.replace(/^add-value-/, '')}`;
         let tries = 0; const land = () => { const f = document.getElementById(want); if (f) { const open = (x) => { for (let d = x.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true; x.focus(); }; open(f); setTimeout(() => { if (document.activeElement.id !== want) { const g = document.getElementById(want); if (g) open(g); } }, 150); return; } if (++tries < 20) requestAnimationFrame(land); }; land();
         return;
+      }
+      if (el?.tagName === 'SUMMARY') { // Enter on a section moves into its first field
+        for (let d = el.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+        const fields = [...(el.closest('details')?.querySelectorAll('input, select, textarea, button') ?? [])].filter((x) => !x.disabled && x.tabIndex >= 0 && x.type !== 'color' && getComputedStyle(x).display !== 'none' && !x.closest('[hidden]'));
+        focusField(fields.find((x) => x.tagName !== 'BUTTON') || fields[0] || el); return; // a text field before any button
       }
       focusField(el); return;
     }

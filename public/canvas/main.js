@@ -70,12 +70,12 @@ const ctx = {
     else ctx.selectMany([...cur, sel]);
   },
   fetch: (path, init) => client.fetch(path, init), // fetch with this page's session (identity "you"); use for any /api write
-  async sendEdits(component, edits) {
+  async sendEdits(component, edits, opts = {}) {
     const c = ctx.state.components.get(component);
     const r = await client.sendEdits(component, ctx.clash?.base(component) ?? c.revision, edits); // clash.js: the revision you saw when you began on the field
     ctx.clash?.sent(component, r);
     if (!r.ok && r.stale?.length) ctx.emit('stale', { component, edits, result: r }); // a clash chip shows both values (AGT-10)
-    $('#error').textContent = r.ok || r.stale?.length ? '' : plain(r.error);
+    $('#error').textContent = r.ok || r.stale?.length || opts.quiet ? '' : plain(r.error); // a form says it beside its field (quiet): one message, not two
     return r;
   },
   hint(text) { const h = $('#hint'); h.textContent = plain(text); clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },

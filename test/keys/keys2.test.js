@@ -40,7 +40,7 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
   const r = await repo(); const { b, io } = r;
   try {
     await selectButton(b);
-    const cases = [['rad', 'borderRadius'], ['fc', 'background'], ['fil', 'sum-fill'], ['sc', 'stroke-color'], ['str', 'sum-stroke'], ['sha', 'add-effects'], ['ali', /^align-/], ['sl', 'propdef-label'], ['gap', 'gap'], ['wei', 'fontWeight']];
+    const cases = [['rad', 'borderRadius'], ['fc', 'background'], ['fil', 'background'], ['sc', 'stroke-color'], ['str', 'stroke-color'], ['sha', 'add-effects'], ['ali', /^align-/], ['set', 'propdef-label'], ['gap', 'gap'], ['wei', 'fontWeight']];
     for (const [q, want] of cases) await t.test(`Cmd-K "${q}" Enter (${q.length + 2} keys) lands on ${want}`, async () => {
       await b.eval(`document.activeElement.blur()`);
       await palette(io, b, q);

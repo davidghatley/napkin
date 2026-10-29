@@ -1,7 +1,7 @@
 // Shared by the components lane's panel parts (props.js, variants.js): escaping, small icons, one place for
 // errors, and `run`, which sends a batch through ctx.sendEdits (the one commit path) and redraws the panel.
 // Nothing here writes a file.
-import { stripNext } from './words.js';
+import { stripNext, engineSentence } from './words.js';
 import { renderPanel, forgetDraft } from './panel.js';
 
 export const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -30,17 +30,27 @@ export function ctxDoc(ctx) {
   return { s, comp, doc: comp?.doc };
 }
 
-export async function run(ctx, key, edits, clear = []) {
+// Put a refusal beside its field and keep the caret there. One sentence, in the panel only.
+export function keepFocus(id) {
+  if (!id) return;
+  const f = () => { const e = document.getElementById(id); if (!e || document.activeElement === e) return; for (let d = e.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true; e.focus({ preventScroll: true }); e.select?.(); };
+  for (const ms of [0, 60, 150, 400]) setTimeout(f, ms); // the panel may redraw once or twice after a refusal
+}
+export function refuse(ctx, key, text, field) { errors[key] = text; renderPanel(ctx); keepFocus(field); return { ok: false, error: text }; }
+
+// opts: { kind: 'setting' | 'axis' | 'value' | 'component' (the noun an engine refusal names), field: the input id that keeps focus, value }
+export async function run(ctx, key, edits, clear = [], opts = {}) {
   const { s } = ctxDoc(ctx);
   if (!s) return { ok: false, error: 'nothing selected' };
   let r;
   const was = ctx.state.components.get(s.component)?.revision;
-  try { r = await ctx.sendEdits(s.component, edits); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
-  clear.forEach(forgetDraft);
-  if (r.ok) delete errors[key]; else errors[key] = stripNext(r.error);
+  try { r = await ctx.sendEdits(s.component, edits, { quiet: true }); } catch (e) { r = { ok: false, error: String(e.message || e) }; }
+  if (r.ok) clear.forEach(forgetDraft);
+  if (r.ok) delete errors[key]; else errors[key] = opts.kind ? engineSentence(opts.kind, r.error, opts.value) : stripNext(r.error);
   // A batch that changed the file is followed by a render, which redraws the panel after the new pixels (PRF-02, as panel.js does).
   // A refusal or a batch that changed nothing (same revision) has no render coming: redraw now.
   if (!r.ok || r.revision === was) setTimeout(() => renderPanel(ctx), 0);
+  if (!r.ok) keepFocus(opts.field ?? clear[0]);
   return r;
 }
 

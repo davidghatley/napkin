@@ -6,18 +6,27 @@ const SEP = /[\s›>\-_./:]/;
 export function match(q, t) {
   if (!q) return { score: 0, at: [] };
   const lq = q.toLowerCase(), lt = t.toLowerCase();
-  const sub = lt.indexOf(lq);
+  const isStart = (i) => i === 0 || SEP.test(t[i - 1]) || (t[i - 1] === t[i - 1].toLowerCase() && t[i] !== t[i].toLowerCase());
+  let sub = lt.indexOf(lq);
+  for (let k = sub; k >= 0; k = lt.indexOf(lq, k + 1)) if (isStart(k)) { sub = k; break; } // prefer an occurrence that starts a word
   if (sub >= 0) { // a straight substring beats any scattered match
     const at = Array.from({ length: lq.length }, (_, i) => sub + i);
     const wordStart = sub === 0 || SEP.test(t[sub - 1]) || (t[sub - 1] === t[sub - 1].toLowerCase() && t[sub] !== t[sub].toLowerCase());
-    return { score: 60 + (sub === 0 ? 30 : 0) + (wordStart ? 15 : 0) + (lq.length === lt.length ? 40 : 0) - sub * 0.5 - lt.length * 0.05, at };
+    return { score: 60 + (sub === 0 ? 30 : 0) + (wordStart ? 40 : 0) + (lq.length === lt.length ? 40 : 0) - sub * 0.15 - lt.length * 0.05, at };
+  }
+  // Several typed words: each is the start of a later word of the text, in order ("rem sta" -> "Remove state axis").
+  if (/\s/.test(lq.trim())) {
+    const toks = lq.trim().split(/\s+/), words = []; for (let i = 0; i < t.length; i++) if (/[a-z0-9]/i.test(t[i]) && (i === 0 || SEP.test(t[i - 1]) || (t[i - 1] === t[i - 1].toLowerCase() && t[i] !== t[i].toLowerCase()))) words.push(i);
+    let w = 0, skipped = 0; const hit = [];
+    for (const tok of toks) { let k = w; while (k < words.length && !lt.startsWith(tok, words[k])) k++; if (k >= words.length) { hit.length = 0; break; } skipped += k - w; for (let n = 0; n < tok.length; n++) hit.push(words[k] + n); w = k + 1; }
+    if (hit.length) return { score: 100 - skipped * 3 - lt.length * 0.05, at: hit };
   }
   // An acronym: every query letter starts a word of the text, in order ("sl" -> "Stroke Left", "ras" -> "Remove axis state").
   if (lq.length >= 2 && !/\s/.test(lq)) {
     const starts = []; for (let i = 0; i < t.length; i++) if (/[a-z0-9]/i.test(t[i]) && (i === 0 || SEP.test(t[i - 1]) || (t[i - 1] === t[i - 1].toLowerCase() && t[i] !== t[i].toLowerCase()))) starts.push(i);
     const hit = []; let from = 0;
     for (const ch of lq) { const k = starts.findIndex((s, n) => n >= from && lt[s] === ch); if (k < 0) { hit.length = 0; break; } hit.push(starts[k]); from = k + 1; }
-    if (hit.length === lq.length) { const skipped = starts.indexOf(hit.at(-1)) + 1 - hit.length; return { score: 85 - skipped * 6 - lt.length * 0.05, at: hit }; }
+    if (hit.length === lq.length) { const skipped = starts.indexOf(hit.at(-1)) + 1 - hit.length; return { score: 70 - skipped * 6 - lt.length * 0.05, at: hit }; }
   }
   // Chunks: the query is cut into pieces of 1-3 letters, each the start of a later word ("rst" -> "Remove state axis": r|st).
   if (lq.length >= 3 && !/\s/.test(lq)) {
@@ -31,7 +40,7 @@ export function match(q, t) {
       }
     };
     go(0, 0, [], 0);
-    if (best && best.hit.length === lq.length) return { score: 88 - best.skipped * 3 - lt.length * 0.05, at: best.hit };
+    if (best && best.hit.length === lq.length) return { score: 72 - best.skipped * 3 - lt.length * 0.05, at: best.hit };
   }
   const at = [];
   let ti = 0, score = 0, prev = -2;
@@ -56,7 +65,8 @@ export function search(items, query, limit = 30) {
   const out = [];
   const q = query.trim();
   for (const item of items) {
-    const m = match(q, item.label);
+    let m = match(q, item.label);
+    for (const key of item.keys || []) { const km = match(q, key); if (km && (!m || km.score - 3 > m.score)) m = { score: km.score - 3, at: [] }; } // aliases: "border" finds Stroke
     if (m) out.push({ item, score: m.score + (item.boost || 0), at: m.at });
     else if (item.hint && q) { const h = match(q, `${item.label} ${item.hint}`); if (h) out.push({ item, score: h.score - 12 + (item.boost || 0), at: [] }); }
   }

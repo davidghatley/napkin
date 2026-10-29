@@ -42,3 +42,34 @@ export function problemBanner(file, problem) {
   const what = /syntax|unexpected|token|parse|expected/i.test(String(problem)) ? 'has a syntax error' : 'has a problem';
   return `${file} ${what}${line ? ` at line ${line}` : ''}. Showing the last version that worked. Fix the file and save.`;
 }
+
+// ---- form validation: one path for every panel form (setting, variant axis, variant value, component) ----
+// checkName() runs in the panel before anything is sent; engineSentence() puts an engine refusal into the same words, naming the right noun.
+const RESERVED_NAMES = new Set(['v', 's', 'base', 'variants', 'children', 'key', 'ref', 'style', 'class', 'default', 'new', 'delete', 'function', 'return', 'const', 'let', 'var', 'this']);
+const KINDS = {
+  setting: { re: /^[a-z][a-zA-Z0-9]*$/, what: 'setting name', noun: 'setting', help: 'Start with a lowercase letter, then use letters and digits only, like label or isActive.', reserved: true },
+  axis: { re: /^[a-z][a-zA-Z0-9]*$/, what: 'variant name', noun: 'variant', help: 'Start with a lowercase letter, then use letters and digits only, like size or tone.', reserved: true },
+  value: { re: /^[a-zA-Z0-9_-]+$/, what: 'value', noun: 'value', help: 'Use letters, digits, - or _ only, with no spaces, like big or extra-large.' },
+  component: { re: /^[A-Z][A-Za-z0-9]*$/, what: 'component name', noun: 'component', help: 'Start with a capital letter, then use letters and digits only, like Tooltip.' },
+};
+const dupSentence = (kind, name, existingNoun) => `There is already ${/^[aeiou]/.test(existingNoun || KINDS[kind].noun) ? 'an' : 'a'} ${existingNoun || KINDS[kind].noun} called "${String(name).slice(0, 30)}". Pick another name.`;
+// existing: an array of taken names, or { name: 'setting' | 'variant' | ... } when the noun differs
+export function checkName(kind, text, existing = []) {
+  const k = KINDS[kind], t = String(text ?? '').trim();
+  if (!t) return `Type a ${k.what} first.`;
+  if (!k.re.test(t)) return `"${t.slice(0, 30)}" can't be a ${k.what}. ${k.help}`;
+  if (k.reserved && RESERVED_NAMES.has(t)) return `"${t}" is a word napkin keeps for itself. Pick another ${k.what}.`;
+  const taken = Array.isArray(existing) ? (existing.includes(t) ? k.noun : null) : (Object.hasOwn(existing, t) ? existing[t] : null);
+  if (taken) return dupSentence(kind, t, taken);
+  return null;
+}
+export function engineSentence(kind, text, value) {
+  const s = String(text ?? '');
+  const k = KINDS[kind] ? kind : 'setting';
+  const quoted = /"([^"]*)"/.exec(s)?.[1] ?? value ?? '';
+  if (/already (exists|has)/.test(s) && !/^id "/.test(s.replace(/^invalid edit #\d+: /, ''))) return dupSentence(k, quoted);
+  if (/^(invalid edit #\d+: )?bad (prop|axis) name/.test(s)) return checkName(k === 'component' ? 'component' : k === 'value' ? 'axis' : k, quoted, []) ?? plain(s);
+  if (/bad (variant|base) value/.test(s)) return checkName('value', quoted, []) ?? plain(s);
+  if (/bad component name/.test(s)) return checkName('component', quoted, []) ?? plain(s);
+  return plain(s);
+}
