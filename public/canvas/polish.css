@@ -1,0 +1,55 @@
+/* FEEL-01 canvas polish: quieter chrome, no collisions on the canvas, a calmer dark theme. Loaded last; everything here is chrome (cells stay isolated). */
+
+/* ---- canvas: frame titles and selection tags never sit on each other ---- */
+.cmp .rev { display: none; }                                   /* the revision lives in the top bar and the tooltip, not in every title */
+.cmp-head:hover .rev, .cmp-head:focus-within .rev { display: inline; }
+#overlay-select::after { top: 0; bottom: auto; left: -1px; transform: translateY(calc(var(--nk-h, 0px) + 7px)); }  /* below the box, left; the title above stays readable */
+#overlay-select .osize { transform: translate(var(--nk-w, 0px), calc(var(--nk-h, 0px) + 7px + clamp(0px, calc((190px - var(--nk-w, 120px)) * 1000), 24px))) translateX(-100%); } /* a box narrower than 190 px puts the size on a second line */   /* below the box, right */
+
+/* ---- dark theme: a neutral mid-dark surround, clear frame edges, a faint grid ---- */
+:root[data-theme="dark"] { --nk-bg: #2a2d33; --nk-dot: #33373e; --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 12px 32px -10px rgba(0, 0, 0, .55); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --nk-bg: #2a2d33; --nk-dot: #33373e; --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 12px 32px -10px rgba(0, 0, 0, .55); } }
+:root[data-theme="dark"] .cmp-head .mctl { background: var(--nk-chrome); box-shadow: 0 0 0 1px var(--nk-line-2), 0 8px 20px -10px rgba(0, 0, 0, .6); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cmp-head .mctl { background: var(--nk-chrome); box-shadow: 0 0 0 1px var(--nk-line-2), 0 8px 20px -10px rgba(0, 0, 0, .6); } }
+
+/* ---- top bar: small, uniform tools ---- */
+#toolbar { min-height: 30px; padding: 2px; border-radius: 8px; gap: 1px; }
+#toolbar button { height: 24px; padding: 0 8px; gap: 5px; font: 500 11.5px var(--nk-sans); border-radius: 5px; }
+#toolbar kbd { display: none; }                                  /* the tooltip carries the key */
+#toolbar #tool-new { margin-left: 2px; padding-left: 8px; border-left: 1px solid var(--nk-line); border-radius: 0 5px 5px 0; }
+#quick-open { height: 28px; }
+#theme-toggle { width: 28px; height: 28px; }
+
+/* ---- layers: one row height, one icon size, quiet headers ---- */
+.pane-title { padding: 10px 14px 6px; font: 600 10px var(--nk-sans); letter-spacing: .08em; color: var(--nk-text-2); }
+.lrow .licon, .lrow .licon svg { width: 14px; height: 14px; }
+.lrow .licon { display: grid; place-items: center; }
+#changes summary { padding: 8px 14px; font: 600 10px var(--nk-sans); letter-spacing: .08em; color: var(--nk-text-2); }
+#changes-placeholder { display: none; }                           /* no big "No changes yet." block */
+#changes, #changes[open] { height: 33px; position: relative; }       /* always one quiet header: entries open upward over the layers, so nothing shifts when one arrives */
+#changes > :not(summary) { position: absolute; left: 0; right: 0; bottom: 33px; max-height: 190px; overflow: auto; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); z-index: 4; }
+#changes:not(:has(#log li)) > :not(summary) { display: none; }
+
+/* ---- bottom bar: summary, panels, hints, zoom, in groups ---- */
+#statusbar { gap: 14px; }
+#statusbar #drawer-tabs { display: inline-flex; gap: 0; padding-left: 14px; border-left: 1px solid var(--nk-line); margin-left: 2px; }
+#statusbar #drawer-tabs button { padding: 0 9px; }
+#statusbar .hints { font-size: 11px; color: var(--nk-text-2); }
+.zoomctl { width: 150px; flex: none; }
+
+/* ---- inspector: hairlines and light rows instead of boxes ---- */
+#panel .seg { background: transparent; padding: 0; gap: 0; border-radius: 0; border-bottom: 1px solid var(--nk-line); }
+#panel .seg button, #panel .seg .segopt { height: 24px; border-radius: 0; background: transparent; box-shadow: none; color: var(--nk-text-3); }
+#panel .seg button:hover:not(:disabled), #panel .seg .segopt:hover { background: transparent; color: var(--nk-text); }
+#panel .seg button[aria-checked="true"], #panel .seg .segopt:has(input:checked) { background: transparent; box-shadow: inset 0 -2px 0 var(--nk-accent); color: var(--nk-text); font-weight: 600; }
+#panel .fbox { background: transparent; box-shadow: inset 0 -1px 0 var(--nk-line); border-radius: 0; border-color: transparent; }
+#panel .fbox:hover { background: var(--nk-chrome-2); border-color: transparent; }
+#panel .fbox:focus-within { background: var(--nk-chrome); border-color: transparent; box-shadow: inset 0 -2px 0 var(--nk-accent); }
+details.sec { border-top: 1px solid var(--nk-line); }
+details.sec > summary { padding: 9px 14px 7px; font-weight: 600; }
+details.sec[data-sec="text"]:not(:has(.fbox:not(.inherited):not(.computed))) > summary { color: var(--nk-text-3); }  /* nothing set here: the section steps back */
+#panel .sec.empty .sectitle { color: var(--nk-text-3); font-weight: 500; }
+#panel .sec.empty .addbtn { color: var(--nk-text-3); }
+#statusbar #counts { flex: none; min-width: 176px; }              /* reserved, so the hints do not move when the counts and tabs fill in */
+#statusbar #drawer-tabs { flex: none; min-width: 372px; }
+#statusbar .hints { flex: none; margin-left: auto; text-align: right; }

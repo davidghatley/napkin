@@ -37,7 +37,7 @@ export function createView(ctx, stageEl, worldEl) {
     const lf = Math.round(clamp(1 / z, 1, 16) * 20) / 20; // titles and the axis strip stay readable down to the 200-component fit
     if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--nk-lf', lf); }
     // (an attribute written with the value it already has still repaints the page: only write on a change)
-    const hdr = z < 0.33 ? 'strip' : '', band = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
+    const hdr = z < 0.4 ? 'strip' : '', band = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
     if (stageEl.dataset.hdr !== hdr) stageEl.dataset.hdr = hdr;
     if (stageEl.dataset.zoomBand !== band) stageEl.dataset.zoomBand = band;
   }

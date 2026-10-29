@@ -214,7 +214,7 @@ export function createStage(ctx, root, world, view) {
   const headBox = (sec, z) => {
     const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
     const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
-    if (head && z < 0.33) { // far out the axis strip shows under the title (hidden now, so measured by its text)
+    if (head && z < 0.4) { // far out the axis strip shows under the title (hidden now, so measured by its text)
       const strip = head.querySelector('.axes-strip')?.textContent || '';
       if (strip) { nat.h += 20; nat.w = Math.max(nat.w, Math.ceil(strip.length * 6.8)); }
     }
