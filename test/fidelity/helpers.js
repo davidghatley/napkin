@@ -16,7 +16,7 @@ export async function plainApp(browser, compDir, source) {
   await browser.waitFor(`!!document.querySelector('#m [data-n=root]')`);
   await browser.eval(`document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))`);
 }
-export const boxOf = async (b, sel) => JSON.parse(await b.eval(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: Math.ceil(r.width), h: Math.ceil(r.height), rw: r.width, rh: r.height }; })())`));
+export const boxOf = async (b, sel) => JSON.parse(await b.eval(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(), q = (n) => Math.round(n * 100) / 100; /* float noise from the world transform (95.00001) is not a size */ return { x: r.left + scrollX, y: r.top + scrollY, w: Math.ceil(q(r.width)), h: Math.ceil(q(r.height)), rw: q(r.width), rh: q(r.height) }; })())`));
 export async function clip(b, box, beyond) {
   return Buffer.from((await b.send('Page.captureScreenshot', { format: 'png', clip: { x: box.x, y: box.y, width: box.w, height: box.h, scale: 1 }, captureBeyondViewport: beyond })).data, 'base64');
 }
