@@ -18,7 +18,8 @@ const TYPES = { '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css', '
 
 export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false } = {}) {
   const tsx = createTsxViews(engine);
-  engine.events.on('change', (c) => broadcast({ type: 'doc-change', ...c, affects: safe(() => engine.componentsUsing(c.path), []) }));
+  // Doc frames never carry a `component` key: the canvas's dialect client treats that key as one of its own components.
+  engine.events.on('change', ({ component, ...c }) => broadcast({ type: 'doc-change', ...c, via: component ?? null, affects: safe(() => engine.componentsUsing(c.path), []) }));
   engine.events.on('files', () => broadcast({ type: 'doc-files' }));
   engine.events.on('styles', (s) => broadcast({ type: 'doc-styles', ...s }));
   const safe = (fn, d) => { try { return fn(); } catch { return d; } };
