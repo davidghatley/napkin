@@ -1,0 +1,306 @@
+<title>napkin Dream 2</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="The re-dream of napkin on 2026-10-30: HTML/CSS first, React also supported, nothing imposed, and an interface a designer would choose over Figma. Baseline, dimensions, the 11 moments, mockups, plan and status.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<style>
+  body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: .5rem; margin: 1.2rem 0 1.6rem; max-width: var(--wide) !important; }
+  .stat div { border: 1px solid var(--rule); background: var(--sheet); padding: .6rem .75rem; }
+  .stat b { display: block; font: 600 1.6rem/1.1 var(--f-sans); font-variant-numeric: tabular-nums; }
+  .stat span { font: 500 10px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .who { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .8rem; max-width: var(--wide) !important; }
+  .who > div { border: 1px solid var(--rule); background: var(--sheet); padding: .7rem .9rem; min-width: 0; }
+  .who h4 { margin-top: 0; }
+  @media (max-width: 640px) { .who { grid-template-columns: minmax(0, 1fr); } }
+  .shot { max-width: var(--wide) !important; margin: 1rem 0 1.6rem; }
+  .shot .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; }
+  @media (max-width: 640px) { .shot .pair { grid-template-columns: minmax(0, 1fr); } }
+  .shot figure { margin: 0; min-width: 0; }
+  .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); }
+  .shot figcaption { font: 500 10px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-top: .3rem; }
+  .moments { counter-reset: m; list-style: none; padding: 0; max-width: var(--wide) !important; display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: .5rem; }
+  .moments li { border: 1px solid var(--rule); background: var(--sheet); padding: .6rem .8rem; min-width: 0; }
+  .moments li b { font: 600 .95rem var(--f-sans); }
+  .moments li .no { font: 600 11px var(--f-mono); color: var(--muted); margin-right: .4rem; }
+  .moments li.mock { border-color: var(--accent); }
+  .moments li .tag { font: 500 10px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-left: .3rem; }
+  .moments li p { margin: .3rem 0 0; }
+  figure img[data-full] { cursor: zoom-in; }
+  dialog.lb { border: 0; padding: 0; background: transparent; max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; margin: 0; }
+  dialog.lb::backdrop { background: rgba(10,10,12,.88); }
+  dialog.lb[open] { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: .6rem; }
+  dialog.lb img { max-width: min(96vw, 1600px); max-height: calc(100vh - 5rem); width: auto; height: auto; border: 1px solid rgba(255,255,255,.25); cursor: zoom-out; }
+  dialog.lb p { margin: 0; color: #eee; font: 500 12px var(--f-mono); letter-spacing: .06em; text-align: center; padding: 0 16px; }
+  dialog.lb button { position: fixed; border: 1px solid rgba(255,255,255,.35); background: rgba(0,0,0,.45); color: #fff; font: 500 18px var(--f-sans); width: 2.6rem; height: 2.6rem; cursor: pointer; }
+  dialog.lb .x { top: 12px; right: 12px; }
+  dialog.lb .prev { left: 12px; top: 50%; transform: translateY(-50%); }
+  dialog.lb .next { right: 12px; top: 50%; transform: translateY(-50%); }
+  dialog.lb button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  .svgwrap svg text { fill: var(--ink); }
+  .svgwrap svg .mut { fill: var(--muted); }
+  .svgwrap svg .box { fill: var(--sheet); stroke: var(--ink); stroke-width: 1.2; }
+  .svgwrap svg .lead { fill: var(--sheet); stroke: var(--accent); stroke-width: 2; }
+  .svgwrap svg .ln { stroke: var(--muted); stroke-width: 1.2; fill: none; }
+</style>
+
+<div class="runhead"><span><b>napkin</b> · Dream 2</span><span>Edition 1.0 · 2026-10-30 · feat/core @ 3181316</span></div>
+
+<main>
+
+<section class="cover">
+  <ul class="legend">
+    <li style="--dot: var(--ok)">done</li>
+    <li style="--dot: var(--warn)">running now</li>
+    <li style="--dot: var(--bad)">waiting for David</li>
+  </ul>
+  <h1>napkin Dream 2</h1>
+  <p class="sub">Open the files you have. See them as a browser draws them. Edit them in place, with agents, in an interface a designer would choose over Figma.</p>
+  <p class="lede">On 2026-10-30, David found that napkin couldn't open his own design system. Secret Sauce's components are plain HTML and CSS, and napkin only read React files written its own way. He said napkin is meant to be HTML/CSS first with React allowed, to render the files it loads as they are, and not to impose a token system. He also set the bar: "better than Figma", not a screenshot-for-screenshot match, but features and UX a designer would rather use, and that inspire. This page is the re-dream that came out of that: where napkin stands, what it should become, how each part is checked, the target mockups, and the plan. The AI lead (Claude, Opus) wrote it. David's decisions are marked as his.</p>
+
+  <div class="stat">
+    <div><b>0</b><span>secret-sauce components napkin finds today</span></div>
+    <div><b>0 / 61</b><span>shadcn components editable today</span></div>
+    <div><b>6</b><span>dimensions in the dream</span></div>
+    <div><b>11</b><span>moments Figma can't do</span></div>
+    <div><b>4</b><span>moments mocked up, light and dark</span></div>
+    <div><b>1</b><span>gate left: David locks the dream</span></div>
+  </div>
+</section>
+
+<section class="ch" id="c1">
+  <div class="num">Chapter 1</div>
+  <h2>Where napkin stands</h2>
+  <p class="deck">The first build passed 140 of its 141 criteria, but every one of them assumed a world of React files in napkin's own dialect.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Measured 2026-10-30</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td class="k">Open secret-sauce <code>ds/project</code> (23 HTML components, 1 shared CSS file)</td><td><span class="pill bad">0 found</span> "0 TSX files: 0 editable, 0 read-only"</td></tr>
+      <tr><td class="k">Open shadcn-style React components</td><td><span class="pill bad">0 of 61</span> editable</td></tr>
+      <tr><td class="k">What napkin expects</td><td><code>components/&lt;Name&gt;.tsx</code> in a narrow dialect (21 allowed tags, style objects), a <code>&lt;Name&gt;.napkin.json</code> sidecar per component, and a token source named in <code>napkin.json</code></td></tr>
+      <tr><td class="k">What its agent guide says</td><td>"napkin edits real React components: components/&lt;Name&gt;.tsx plus a &lt;Name&gt;.napkin.json sidecar."</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap"><b>How it got here.</b> On 2026-10-20 David approved "components are React TSX files plus a sidecar" (G1, decision 0003). The first build followed that faithfully. The plans made around it (the dialect, sidecars, a configured token source) are what now fight an HTML-first canvas. The canvas, keys, history, agents and performance work still carries over.</div>
+</section>
+
+<section class="ch" id="c2">
+  <div class="num">Chapter 2</div>
+  <h2>What changes</h2>
+  <p class="deck">The file is the truth, as it is. napkin adds nothing to your folder except the edits you make.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Today</th><th>Dream 2</th></tr></thead>
+    <tbody>
+      <tr><td>Only <code>components/*.tsx</code> in a narrow dialect</td><td>Any folder. <code>.html</code> and <code>.css</code> are first-class; <code>.tsx</code> and <code>.jsx</code> also open.</td></tr>
+      <tr><td>A file outside the dialect is read-only as a whole</td><td>Everything renders. Edits are refused one spot at a time, with the reason.</td></tr>
+      <tr><td>A sidecar per component, plus <code>napkin.json</code></td><td>Nothing required. Canvas layout and remembered choices live outside your folder.</td></tr>
+      <tr><td>A token source configured in <code>napkin.json</code></td><td>Tokens are the CSS variables your own files define. Nothing imposed.</td></tr>
+      <tr><td>Variants as base plus overrides in a sidecar</td><td>HTML: the variants already in the file (modifier classes, repeated examples). React: props.</td></tr>
+      <tr><td>Judged against Paper (won) and Figma (undecided)</td><td>A designer would choose napkin over Figma (chapter 3, D3).</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="ch" id="c3">
+  <div class="num">Chapter 3</div>
+  <h2>The dream, and how each part is checked</h2>
+  <p class="deck">Each dimension has a measure written down before any building starts. Builders can't edit the measures.</p>
+
+  <div class="tw"><table>
+    <thead><tr><th>Dimension</th><th>Measure</th><th>Pass</th></tr></thead>
+    <tbody>
+      <tr><td class="k">D1 · Opens anything</td><td>napkin's render compared pixel for pixel with Chromium opening the same file, at the same width, with the same stylesheets. Corpus: secret-sauce components and recipes, sample-40, playdough's shadcn components, 10 edge files.</td><td>100% render; ≤0.1% of pixels differ per component</td></tr>
+      <tr><td class="k">D2 · Tiny, exact edits</td><td>60 scripted edits: text, attributes, classes, inline style, CSS rules, variables, insert, move, delete, React props. Each is checked by its diff, a byte compare of everything else, the render after reopening, and undo.</td><td>Only the changed span; 0 reformatting; undo restores the file byte for byte</td></tr>
+      <tr><td class="k">D3 · Chosen over Figma</td><td>A scripted journey per moment (chapter 4), walked by a fresh critic. A designer panel of three fresh critics (Sonnet, Codex, Opus) watches napkin do real work on secret-sauce and answers: "which would you open tomorrow, and what would send you back to Figma?"</td><td>Every journey passes; 2 of 3 choose napkin; every "back to Figma" reason fixed or ruled out by David; 0 serious axe issues; CLS 0. David's verdict is final.</td></tr>
+      <tr><td class="k">D4 · Nothing imposed</td><td><code>napkin open &lt;folder&gt;</code> on each corpus folder, then one edit; <code>git status</code> after</td><td>1 command; 0 config files; 0 files added; first render ≤ 2 s for 23 components</td></tr>
+      <tr><td class="k">D5 · The proving demo, on HTML</td><td>A whole-product walk: a person and an agent edit secret-sauce's Callout and <code>bundle.css</code> live</td><td>Rejected edit never lands; the diff is exactly the accepted edits; files still open in a plain browser</td></tr>
+      <tr><td class="k">D6 · Nothing lost</td><td>Today's suite</td><td>Canvas, keys, history, agents and performance keep passing. Criteria that only existed for sidecars or the dialect are retired, each with a reason for David.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="ch" id="c4">
+  <div class="num">Chapter 4</div>
+  <h2>Eleven moments Figma can't do</h2>
+  <p class="deck">Figma draws a picture of your product. napkin runs the real files, so it can do these. The four outlined in blue are mocked up in chapter 5.</p>
+  <ol class="moments">
+    <li><span class="no">1</span><b>It's alive</b><p>Hover, focus, animation and scroll work in place. Hold Space-P to play; let go to edit.</p></li>
+    <li class="mock"><span class="no">2</span><b>Edit at the right scope</b><span class="tag">mockup</span><p>The inspector shows where each value comes from. One key picks this element, this class (with its use count) or this variable.</p></li>
+    <li class="mock"><span class="no">3</span><b>One rule lights up everywhere</b><span class="tag">mockup</span><p>Select a rule or variable and every place it applies glows. Edit once; the diff is one line.</p></li>
+    <li class="mock"><span class="no">4</span><b>Real responsiveness</b><span class="tag">mockup</span><p>Drag a frame's edge and it reflows for real. The file's own breakpoints are ticks on the ruler.</p></li>
+    <li><span class="no">5</span><b>Theme wipe</b><p>A slider wipes light into dark, or any theme the files define, across the whole canvas.</p></li>
+    <li><span class="no">6</span><b>Variables as instruments</b><p>Your custom properties as swatch, scale and type strips. Drag one onto an element to bind it. Off-scale values are flagged.</p></li>
+    <li class="mock"><span class="no">7</span><b>Agents in the canvas</b><span class="tag">mockup</span><p>Select something and type an intent. Three ghost alternatives appear; 1, 2 or 3 accepts one.</p></li>
+    <li><span class="no">8</span><b>Honest measurement</b><p>Real distances and the box model from computed styles, with contrast and focus-order overlays.</p></li>
+    <li><span class="no">9</span><b>A film strip of history</b><p>Scrub a component's history as thumbnails and restore any frame.</p></li>
+    <li><span class="no">10</span><b>Copy gives real code</b><p>Copying an element gives the actual HTML and CSS lines from the file.</p></li>
+    <li><span class="no">11</span><b>Zero chrome</b><p>Tab hides everything, so the canvas is the design.</p></li>
+  </ol>
+</section>
+
+<section class="ch" id="c5">
+  <div class="num">Chapter 5</div>
+  <h2>The target mockups</h2>
+  <p class="deck">Static HTML screens at 1440×900 that set the visual and UX bar. Every component is the real secret-sauce markup and CSS, and every class name, line number and use count comes from the files. Click any image to enlarge it; the arrow keys step through them.</p>
+
+  <h3>5.1 · Edit at the right scope (moment 2)</h3>
+  <p>The side padding of Note's "Rule" tag is being changed to 16px. Three scope cards appear: <b>E</b> this element (inline, <code>Note/preview.html:12</code>), <b>C</b> the class <code>.ss-note__tag</code> (3 uses, <code>components.css:122</code>, chosen here), and <b>V</b> the variable <code>--space-3</code> (25 uses). napkin sees that 16px is <code>--space-4</code> on the scale and writes the variable. The change is one line. Below it, every value shows where it comes from, including which rule wins.</p>
+  <div class="shot"><div class="pair">
+    <figure><img src="assets/dream2/m2-light.jpg" data-full="assets/dream2/full/m2-light.jpg" tabindex="0" role="button" alt="Mockup: Note component selected, padding edited with element, class and variable scope cards and a one-line diff, light" loading="lazy"><figcaption>Fig. 5.1a · Light</figcaption></figure>
+    <figure><img src="assets/dream2/m2-dark.jpg" data-full="assets/dream2/full/m2-dark.jpg" tabindex="0" role="button" alt="The same scope mockup in dark" loading="lazy"><figcaption>Fig. 5.1b · Dark</figcaption></figure>
+  </div></div>
+
+  <h3>5.2 · One rule lights up everywhere (moment 3)</h3>
+  <p>12 components at 70%, with <code>.ss-label</code> (line 50) selected. Its 4 uses (Callout, Plate, PressButton, Motion) get numbered outlines and show a tracking change from .14em to .12em live. Dashed outlines mark 13 other rules that type the same .14em by hand, with an offer to change all 14 together. The Styles panel lists each rule with how many elements it matches.</p>
+  <div class="shot"><div class="pair">
+    <figure><img src="assets/dream2/m3-light.jpg" data-full="assets/dream2/full/m3-light.jpg" tabindex="0" role="button" alt="Mockup: .ss-label rule selected, four uses outlined across components, a one-line diff and a list of rules with the same tracking, light" loading="lazy"><figcaption>Fig. 5.2a · Light</figcaption></figure>
+    <figure><img src="assets/dream2/m3-dark.jpg" data-full="assets/dream2/full/m3-dark.jpg" tabindex="0" role="button" alt="The same rule mockup in dark" loading="lazy"><figcaption>Fig. 5.2b · Dark</figcaption></figure>
+  </div></div>
+
+  <h3>5.3 · Real responsiveness (moment 4)</h3>
+  <p>The Plate frame dragged to 624px. The frame is a real page, so the file's own 640px breakpoint stacks the figure and key. The ruler carries ticks for each breakpoint in <code>components.css</code>. A strip below shows the same frame at 375, 560, 720 and 960, and the inspector says what changed at 640. Nothing is written to the file; width is a way of looking.</p>
+  <div class="shot"><div class="pair">
+    <figure><img src="assets/dream2/m4-light.jpg" data-full="assets/dream2/full/m4-light.jpg" tabindex="0" role="button" alt="Mockup: Plate frame resized to 624px with breakpoint ticks on the ruler and thumbnails at other widths, light" loading="lazy"><figcaption>Fig. 5.3a · Light</figcaption></figure>
+    <figure><img src="assets/dream2/m4-dark.jpg" data-full="assets/dream2/full/m4-dark.jpg" tabindex="0" role="button" alt="The same responsive mockup in dark" loading="lazy"><figcaption>Fig. 5.3b · Dark</figcaption></figure>
+  </div></div>
+
+  <h3>5.4 · Agents in the canvas (moment 7)</h3>
+  <p>The Callout's focal disc is selected and David typed "make the focal callout quieter". Three live options sit side by side (Ring, Tint, Halo), each with its changed values and the numeral's contrast ratio, calculated from the real colours. Claude explains it changed lines 73 and 80 together so Plate's key keeps matching, and left Plate's inline SVG alone. Keys 1, 2 and 3 accept.</p>
+  <div class="shot"><div class="pair">
+    <figure><img src="assets/dream2/m7-light.jpg" data-full="assets/dream2/full/m7-light.jpg" tabindex="0" role="button" alt="Mockup: intent typed on a selected callout, three ghost alternatives with contrast ratios and a word-level diff, light" loading="lazy"><figcaption>Fig. 5.4a · Light</figcaption></figure>
+    <figure><img src="assets/dream2/m7-dark.jpg" data-full="assets/dream2/full/m7-dark.jpg" tabindex="0" role="button" alt="The same agent mockup in dark" loading="lazy"><figcaption>Fig. 5.4b · Dark</figcaption></figure>
+  </div></div>
+  <div class="note tip"><b>Made up for the mockups:</b> the agent's reply and the option names in 5.4. Everything else on screen is a real value from the files. Two fonts (Plex Mono, Newsreader) load from Google Fonts, as in the secret-sauce previews.</div>
+</section>
+
+<section class="ch" id="c6">
+  <div class="num">Chapter 6</div>
+  <h2>The plan</h2>
+  <p class="deck">Measures first, then one owner for the engine, then lanes in parallel, then agents, then the panel.</p>
+
+  <div class="plate">
+    <header><span><b>Fig. 6.1</b> · Build order on feat/html</span><span>.dream-gauntlet/plan.md</span></header>
+    <div class="body solo">
+      <div class="svgwrap">
+        <svg viewBox="0 0 760 250" role="img" aria-label="Build order: P0 measures, then P1 engine, then three lanes in parallel (P2 inspector, P3 canvas, P5 time and code), then P4 agents, then smoothing, the designer panel and David's verdict.">
+          <rect class="lead" x="10" y="95" width="110" height="60"/>
+          <text x="65" y="120" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="13">P0 Measures</text>
+          <text class="mut" x="65" y="138" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">D1 · D2 · D4</text>
+          <rect class="box" x="150" y="95" width="110" height="60"/>
+          <text x="205" y="120" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="13">P1 Engine</text>
+          <text class="mut" x="205" y="138" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">one owner</text>
+          <rect class="box" x="300" y="20" width="130" height="50"/>
+          <text x="365" y="42" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="13">P2 Inspector</text>
+          <text class="mut" x="365" y="58" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">moments 2 · 6 · 8</text>
+          <rect class="box" x="300" y="100" width="130" height="50"/>
+          <text x="365" y="122" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="13">P3 Canvas</text>
+          <text class="mut" x="365" y="138" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">1 · 3 · 4 · 5 · 11</text>
+          <rect class="box" x="300" y="180" width="130" height="50"/>
+          <text x="365" y="202" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="13">P5 Time · code</text>
+          <text class="mut" x="365" y="218" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">moments 9 · 10</text>
+          <rect class="box" x="470" y="95" width="110" height="60"/>
+          <text x="525" y="120" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="13">P4 Agents</text>
+          <text class="mut" x="525" y="138" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">moment 7 · D5</text>
+          <rect class="box" x="620" y="95" width="130" height="60"/>
+          <text x="685" y="117" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="13">Smooth · panel</text>
+          <text class="mut" x="685" y="134" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">D3 · D6</text>
+          <text class="mut" x="685" y="148" text-anchor="middle" font-family="IBM Plex Mono" font-size="10">David's verdict</text>
+          <path class="ln" d="M120 125 H150 M260 125 H280 V45 H300 M280 125 H300 M280 125 V205 H300 M430 45 H450 V125 H470 M430 125 H470 M430 205 H450 V125 M580 125 H620"/>
+        </svg>
+      </div>
+    </div>
+    <div class="cap">P0 is outlined in blue because it is running now. P1 is coupled (reading, drawing and editing files), so one Opus builder owns it in sequence. The three middle lanes touch separate files and run in parallel with Sonnet builders. Every piece passes a fresh, blind critic before the lead merges it with the full suite green.</div>
+  </div>
+</section>
+
+<section class="ch" id="c7">
+  <div class="num">Chapter 7</div>
+  <h2>Who decided, who built</h2>
+  <div class="who">
+    <div>
+      <h4>David decided (2026-10-30)</h4>
+      <ul>
+        <li>HTML/CSS first, React also supported, render files as they are, no imposed token system.</li>
+        <li>The Figma bar is about features and UX a designer would prefer, and inspiring, not a one-to-one match.</li>
+        <li>Approved the re-dream and the INTENT.md change.</li>
+        <li>When a folder's files use variables nothing defines, napkin asks once which stylesheets apply and remembers that outside the folder.</li>
+        <li>Work on a copy of secret-sauce.</li>
+        <li>Public imagery for Figma background.</li>
+        <li>The napkin glyph is the 5×5 folded napkin, never the DH mark.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>The AI did</h4>
+      <ul>
+        <li>Measured the baseline (0 components found).</li>
+        <li>Wrote the dream, the 11 moments and their measures.</li>
+        <li>Updated INTENT.md and wrote decision 0013 (commit 3181316).</li>
+        <li>Built the four mockups (an Opus agent).</li>
+        <li>Wrote the plan and the engine contract the measures use.</li>
+        <li>Started the measures (an Opus agent, running).</li>
+        <li>Fixed the favicon and top-bar mark (8301c83).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="ch" id="c8">
+  <div class="num">Chapter 8</div>
+  <h2>Status and open items</h2>
+  <div class="tw"><table>
+    <thead><tr><th>Item</th><th>State</th><th>Owner</th></tr></thead>
+    <tbody>
+      <tr><td class="k">INTENT.md and decision 0013</td><td><span class="pill ok">done</span> 3181316</td><td>AI, approved by David</td></tr>
+      <tr><td class="k">Mockups of moments 2, 3, 4, 7</td><td><span class="pill ok">done</span></td><td>AI</td></tr>
+      <tr><td class="k">P0 measures (corpus, fidelity, edits, nothing-imposed)</td><td><span class="pill warn">running</span></td><td>AI</td></tr>
+      <tr><td class="k">Lock the dream: are these mockups the bar?</td><td><span class="pill bad">waiting</span></td><td>David</td></tr>
+      <tr><td class="k">Budget cap for the loop (spend so far $1,133 machine-wide since 10-21)</td><td><span class="pill bad">waiting</span></td><td>David</td></tr>
+      <tr><td class="k">Tailnet copy at port 8444 runs the old 10-21 build; point it at feat/html later?</td><td><span class="pill info">open</span></td><td>David</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="ch" id="c9">
+  <div class="num">Appendix</div>
+  <h2>Changelog</h2>
+  <dl>
+    <dt>1.0 · 2026-10-30</dt><dd>First edition: baseline, the dream, 11 moments, four mockups, plan, decisions and status.</dd>
+  </dl>
+</section>
+
+</main>
+<dialog class="lb" aria-label="Enlarged image">
+  <img alt="">
+  <p></p>
+  <button class="x" aria-label="Close">✕</button>
+  <button class="prev" aria-label="Previous image">‹</button>
+  <button class="next" aria-label="Next image">›</button>
+</dialog>
+<script>
+(() => {
+  const imgs = [...document.querySelectorAll('img[data-full]')];
+  const dlg = document.querySelector('dialog.lb'), big = dlg.querySelector('img'), cap = dlg.querySelector('p');
+  let i = 0;
+  const show = n => {
+    i = (n + imgs.length) % imgs.length;
+    const t = imgs[i];
+    big.src = t.dataset.full; big.alt = t.alt;
+    const fc = t.closest('figure')?.querySelector('figcaption');
+    cap.textContent = (fc ? fc.textContent : t.alt) + '  ·  ' + (i + 1) + ' / ' + imgs.length;
+  };
+  imgs.forEach((t, n) => {
+    t.addEventListener('click', () => { show(n); dlg.showModal(); });
+    t.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(n); dlg.showModal(); } });
+  });
+  dlg.querySelector('.x').onclick = () => dlg.close();
+  dlg.querySelector('.prev').onclick = e => { e.stopPropagation(); show(i - 1); };
+  dlg.querySelector('.next').onclick = e => { e.stopPropagation(); show(i + 1); };
+  dlg.addEventListener('click', e => { if (e.target === dlg || e.target === big) dlg.close(); });
+  dlg.addEventListener('keydown', e => { if (e.key === 'ArrowLeft') show(i - 1); if (e.key === 'ArrowRight') show(i + 1); });
+})();
+</script>
+<div class="foot">napkin · Dream 2 · Edition 1.0 · 2026-10-30</div>
