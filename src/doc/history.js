@@ -95,12 +95,10 @@ export function createFilm(engine) {
     if (!Object.keys(files).length || (s.frames.length && sigOf(s.frames.at(-1).files) === sig)) return null;
     for (const o of Object.values(files)) if (pendingBlobs.has(o)) putBlob(o, pendingBlobs.get(o));
     pendingBlobs.clear();
-    // The files a component draws from changed (a stylesheet was applied, a link added or removed): what came before was a
-    // different thing, and is never diffed against or kept as the oldest version. This is the new baseline.
-    const different = s.frames.length && keysOf(s.frames.at(-1).files) !== keysOf(files);
+    // (When the files a component draws from change, a stylesheet applied or removed, the old versions stay: list() shows a
+    // boundary between them and never compares across it.)
     const frame = { id: `n${at.toString(36)}${sha1(sig).slice(0, 5)}`, at, by, summary, files };
-    ref(frame, 1);                                              // first, so a blob the old and new versions share is kept
-    if (different) while (s.frames.length) ref(s.frames.shift(), -1);
+    ref(frame, 1);
     s.frames.push(frame);
     while (s.frames.length > KEEP) ref(s.frames.shift(), -1);
     save(s);
@@ -123,7 +121,7 @@ export function createFilm(engine) {
   function known(id) {
     const comp = engine.component(id), s = slot(comp.id), now = snapshot(comp);
     if (!s.frames.length) record(comp.id, now, { by: 'file', summary: 'The file as napkin first saw it' });
-    else if (keysOf(s.frames.at(-1).files) !== keysOf(now)) record(comp.id, now, { by: 'file', summary: 'The files as napkin first saw them' }); // stylesheets applied or removed: a new baseline
+    else if (keysOf(s.frames.at(-1).files) !== keysOf(now)) record(comp.id, now, { by: 'file', summary: 'The files as napkin saw them then' }); // stylesheets applied or removed: the old versions stay, behind a boundary
     else if (sigOf(s.frames.at(-1).files) !== sigOf(now)) {
       // changed while napkin was not looking (it was stopped, or someone saved in an editor): the ledger must know, or a
       // restore would silently undo that work
@@ -178,8 +176,9 @@ export function createFilm(engine) {
   const gitCache = new Map();   // component -> { at, key, frames }
   // Commits that touched any file of the write set, each with the file versions it had ({ path: oid }).
   function gitFrames(comp, paths) {
-    const key = paths.join('|'), hit = gitCache.get(comp.id);
-    if (hit && hit.key === key && Date.now() - hit.at < 5000) return hit.frames;
+    let head = ''; try { head = inRepo() ? git(['rev-parse', 'HEAD']).toString().trim() : ''; } catch { head = ''; }
+    const key = `${head}|${paths.join('|')}`, hit = gitCache.get(comp.id);
+    if (hit && hit.key === key) return hit.frames;       // a new commit is a new HEAD: it shows at once
     const frames = [];
     if (inRepo()) {
       try {
@@ -236,12 +235,11 @@ export function createFilm(engine) {
     const paths = writeSet(comp), nowFiles = snapshot(comp), nowSig = sigOf(nowFiles); pendingBlobs.clear();
     let relCache = null; const rel = () => (relCache ??= relevanceOf(engine, comp));
     const nowKeys = keysOf(nowFiles);
-    // only versions made of the same files as the component has now: never a diff, or an oldest version, across file sets
-    const all = s.frames.filter((f) => keysOf(f.files) === nowKeys).map((f) => ({ ...f, source: 'napkin' }));
+    const all = s.frames.map((f) => ({ ...f, source: 'napkin' }));
     // A commit always keeps its own place: an edit, a restore or an undo that happens to have the same bytes is its own
     // entry, never the commit's replacement. Only a frame that merely recorded the file as it already was (first seen, or
     // edited outside napkin) and equals a commit is that commit, not a second copy of it.
-    for (const g of [...gitFrames(comp, paths)].filter((g) => keysOf(g.files) === nowKeys).reverse()) { // oldest first, so commits of one second keep their order
+    for (const g of [...gitFrames(comp, paths)].reverse()) { // oldest first, so commits of one second keep their order
       const gs = sigOf(g.files);
       for (const twin of all.filter((f) => f.source === 'napkin' && sigOf(f.files) === gs)) {
         if (twin.by === 'file') all.splice(all.indexOf(twin), 1);
@@ -249,26 +247,43 @@ export function createFilm(engine) {
       }
       all.push(g);
     }
-    all.sort((a, b) => a.at - b.at || (a.ord ?? Infinity) - (b.ord ?? Infinity)); // commits of one second keep their order
+    // by time; within one second a commit comes before a napkin frame with the same bytes (git only has seconds), then commits keep their order
+    all.sort((a, b) => a.at - b.at || (a.ord ?? Infinity) - (b.ord ?? Infinity));
+    for (let i = 1; i < all.length; i++) { const a = all[i - 1], b = all[i]; if (a.source === 'napkin' && b.source === 'git' && Math.floor(a.at / 1000) === Math.floor(b.at / 1000) && sigOf(a.files) === sigOf(b.files)) { all[i - 1] = b; all[i] = a; } }
     // a version equals the files now when nothing differs, or only shared-stylesheet changes this component does not draw
     const nowFrame = { files: nowFiles };
-    const sameAsNow = (f) => { if (sigOf(f.files) === nowSig) return true; const diff = Object.keys(nowFiles).filter((p) => f.files[p] !== nowFiles[p]); return diff.every((p) => p !== comp.path && /\.css$/i.test(p)) && !!label(f, nowFrame, comp, rel).hidden; };
+    const sameAsNow = (f) => { if (sigOf(f.files) === nowSig) return true; if (keysOf(f.files) !== nowKeys) return false; const diff = Object.keys(nowFiles).filter((p) => f.files[p] !== nowFiles[p]); return diff.every((p) => p !== comp.path && /\.css$/i.test(p)) && !!label(f, nowFrame, comp, rel).hidden; };
     const out = [];
     let prevRaw = null, prevKept = null;
     for (const f of all) {
-      const l = label(prevRaw, f, comp, rel);
+      // Versions made of different files (a stylesheet applied or removed between them) are never compared: a boundary is
+      // shown, and the first version after it is described by its own words.
+      const crossing = !!prevRaw && keysOf(prevRaw.files) !== keysOf(f.files);
+      const l = crossing ? { what: '', more: 0, where: '', key: null } : label(prevRaw, f, comp, rel);
       const before = prevRaw; prevRaw = f;
       if (l.hidden) continue;                                  // a shared stylesheet changed in a way that is nothing of this component's
+      if (crossing) {
+        const was = Object.keys(before.files), is = Object.keys(f.files), add = is.filter((p) => !was.includes(p)), del = was.filter((p) => !is.includes(p));
+        const names = (xs) => xs.slice(0, 3).join(', ') + (xs.length > 3 ? ` and ${xs.length - 3} more` : '');
+        out.push({ boundary: true, id: `b${f.id}`, source: 'boundary', at: f.at, what: add.length && !del.length ? `Stylesheets applied: ${names(add)}` : del.length && !add.length ? `Stylesheets removed: ${names(del)}` : `Stylesheets changed: ${names(add)}${add.length && del.length ? ' in, ' : ''}${names(del)}${del.length ? ' out' : ''}`, count: 1, more: 0, ids: [] });
+        prevKept = null;
+      }
       let what = l.what, where = l.where, more = l.more, key = l.key;
       const verb = /^(undo|redo): /.exec(f.summary || '')?.[1];
       if (/^Restored /.test(f.summary || '')) { what = f.summary; where = ''; more = 0; key = null; }
-      else if (verb) { const was = prevKept?.what ?? ''; what = /^Restored/.test(was) ? `${verb === 'undo' ? 'Undid' : 'Redid'} the restore` : `${verb === 'undo' ? 'Undid' : 'Redid'} ${was || 'an edit'}`; more = 0; key = null; where = ''; }
+      else if (verb) {
+        // said from what was actually reversed (or redone), never from the label of the row before
+        const Verb = verb === 'undo' ? 'Undid' : 'Redid';
+        if (/^(undo|redo): Restored/.test(f.summary)) what = `${Verb} the restore`;
+        else if (!crossing && before) { const d = verb === 'undo' ? label(f, before, comp, rel) : label(before, f, comp, rel); what = `${Verb} ${d.what && !d.hidden ? d.what : 'an edit'}`; more = d.more ?? 0; }
+        else what = `${Verb} an edit`;
+        key = null; where = '';
+      }
       else if (!what) what = f.source === 'git' ? f.summary : (f.summary || 'Changed the files');
       const tail = out.at(-1);
-      const row = { id: f.id, ids: [f.id], count: 1, source: f.source, at: f.at, by: f.by, summary: f.summary, what, more, where, key, same: sameAsNow(f), beforeId: prevKept?.id ?? null, ...(f.short && { short: f.short }), ...(f.git && { git: f.git }) };
+      const row = { id: f.id, ids: [f.id], count: 1, source: f.source, at: f.at, by: f.by, summary: f.summary, what, more, where, key, same: sameAsNow(f), beforeId: prevKept?.id ?? null, ...(f.short && { short: f.short }), ...(f.git && { git: f.git }), ...(keysOf(f.files) !== nowKeys && { otherFiles: Object.keys(f.files) }) };
       Object.defineProperty(row, '_before', { value: before, enumerable: false, writable: true });
-      Object.defineProperty(row, '_beforeKept', { value: prevKept, enumerable: false, writable: true });
-      if (tail && row.source === 'napkin' && tail.source === 'napkin' && row.key && row.key === tail.key && row.by === tail.by && f.at - tail.at <= RUN_GAP) {
+      if (tail && !tail.boundary && row.source === 'napkin' && tail.source === 'napkin' && row.key && row.key === tail.key && row.by === tail.by && f.at - tail.at <= RUN_GAP && !crossing) {
         const l2 = label(tail._before, f, comp, rel);
         Object.assign(tail, { ids: [...tail.ids, f.id], count: tail.count + 1, id: f.id, at: f.at, summary: f.summary, same: row.same, what: l2.what || 'No net change', more: l2.more, where: l2.where });
         prevKept = tail;

@@ -50,3 +50,5 @@ body[data-time-open] #hint { bottom: 184px; }
 .doc-cell[data-time-previewing] > iframe.doc-frame { visibility: hidden; }
 #time-cue.narrow .tc-pill { right: auto; left: -2px; }
 #time-cue.narrow.above .tc-pill { right: auto; left: 6px; }
+/* a boundary: the files the component draws from changed here (a stylesheet applied or removed); versions are never compared across it */
+.tm-boundary { flex: none; width: 92px; align-self: stretch; display: grid; align-items: center; padding: 0 6px; border-left: 1px dashed var(--nk-line-2); border-right: 1px dashed var(--nk-line-2); color: var(--nk-text-2); font: 500 10.5px/1.35 var(--nk-sans); text-align: center; overflow-wrap: anywhere; }

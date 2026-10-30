@@ -401,25 +401,94 @@ test('restore: another component\'s edit that was undone is not in the way', asy
   } finally { t.stop(); }
 });
 
-test('film: applying stylesheets is a new baseline, not a ghost frame; a version uses only its own files', async () => {
+test('film: applying stylesheets leaves the earlier versions behind a boundary; each scrubs with its own files; restore keeps the applied setting', async () => {
   const t = await folderOf({ 'pill.html': '<!doctype html><html><head><meta charset="utf-8"></head><body><p class="pill">Hi</p></body></html>\n', 'tokens.css': ':root { --ink: #111; }\n', 'shared.css': '.pill { color: var(--ink); }\n' });
   try {
+    const textNode = async () => (await t.get('/api/component/pill.html')).tree[0].children[1].children[0].node;
+    assert.equal((await t.post('/api/edit', { component: 'pill.html', edits: [{ op: 'text', node: await textNode(), value: 'Hello' }] })).ok, true);   // before answering the ask-once dialog
     const before = await t.film('pill.html');
-    assert.equal(before.frames.length, 1);
+    assert.equal(before.frames.length, 2);
     assert.equal((await t.post('/api/styles', { applied: ['tokens.css', 'shared.css'] })).ok, true);
     const after = await t.film('pill.html');
-    assert.equal(after.frames.length, 1, 'one baseline, with the stylesheets');
-    assert.ok(!/Removed|tokens\.css/.test(after.frames[0].what), `no ghost label: ${after.frames[0].what}`);
-    assert.equal((await t.post('/api/edit', { component: 'pill.html', edits: [{ op: 'text', node: (await t.get('/api/component/pill.html')).tree[0].children[1].children[0].node, value: 'Hello' }] })).ok, true);
+    assert.deepEqual(after.frames.map((x) => (x.boundary ? 'boundary' : x.what)).slice(0, 2), ['The files as napkin saw them then', 'boundary'], JSON.stringify(after.frames.map((x) => x.what)));
+    assert.equal(after.frames.length, 4, 'the two earlier versions are all still there, behind a boundary');
+    assert.equal(after.frames[1].what, 'Stylesheets applied: tokens.css, shared.css');
+    assert.ok(!after.frames.some((x) => /Removed|tokens\.css$/.test(x.what ?? '') && !x.boundary), 'no label is computed across the boundary');
+    const old = after.frames[3];                                   // the file as first seen
+    assert.deepEqual(after.frames[2].otherFiles, ['pill.html'], 'it says it is made of other files than the ones used now');
+    const v = await t.text(`/view/pill.html?version=${old.id}`);
+    assert.doesNotMatch(v, /tokens\.css/, 'a version before the boundary draws with its own files only');
+    // restoring it puts its own file back and leaves the applied stylesheets as they are
+    const r = await t.post('/api/component/pill.html/film/restore', { frame: old.id });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.match(readFileSync(join(t.dir, 'pill.html'), 'utf8'), />Hi</);
+    assert.deepEqual((await t.get('/api/styles')).applied, ['tokens.css', 'shared.css']);
+    // after the boundary, labels work against the version before them
     const f = await t.film('pill.html');
-    assert.equal(f.frames.length, 2); assert.match(f.frames[0].what, /Hi → Hello|Hi/);
-    const v = await t.text(`/view/pill.html?version=${f.frames[1].id}`);
-    assert.match(v, /href="\/vraw\/pill\.html\/[^/]+\/tokens\.css"/);
-    assert.equal(await t.text(`/vraw/pill.html/${f.frames[1].id}/tokens.css`), ':root { --ink: #111; }\n');
-    assert.match(await t.text(`/vraw/pill.html/${f.frames[1].id}/other.css`), /not part of this version/, 'a stylesheet the version does not have is never the live one');
+    assert.equal(f.frames[0].what, 'Restored the version from ' + f.frames[0].what.replace('Restored the version from ', ''));
+    assert.equal(await t.text(`/vraw/pill.html/${after.frames[0].id}/tokens.css`), ':root { --ink: #111; }\n');
+    assert.match(await t.text(`/vraw/pill.html/${old.id}/tokens.css`), /not part of this version/, 'a stylesheet the version does not have is never the live one');
   } finally { t.stop(); }
 });
 
+test('film: a commit from before a stylesheet existed is a version, and each label is against the true previous one', async () => {
+  const t = await folderOf({ 'pill.html': '<!doctype html><html><head><meta charset="utf-8"></head><body><p>Shipped</p></body></html>\n' }, { git: true, commits: [
+    ['add the sheet', (d) => { writeFileSync(join(d, 'shared.css'), '.pill { color: red; }\n'); writeFileSync(join(d, 'pill.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css"></head><body><p>Shipped</p></body></html>\n'); execFileSync('git', ['-C', d, 'add', 'shared.css'], { stdio: 'ignore' }); }],
+    ['v2', (d) => writeFileSync(join(d, 'pill.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css"></head><body><p>Shipped v2</p></body></html>\n')],
+  ] });
+  try {
+    const f = await t.film('pill.html');
+    const rows = f.frames.map((x) => (x.boundary ? `| ${x.what}` : `${x.summary}: ${x.what}`));
+    assert.equal(f.frames.filter((x) => !x.boundary).length, 3, 'all three commits are versions of the HTML: ' + rows.join(' / '));
+    const v2 = f.frames.find((x) => x.summary === 'v2');
+    assert.equal(v2.what, 'Shipped → Shipped v2', 'against the commit before it, which has the same files');
+    assert.ok(f.frames.some((x) => x.boundary && /Stylesheets applied: shared\.css/.test(x.what)));
+    const start = f.frames.find((x) => x.summary === 'start');
+    assert.equal(start.what, 'start');
+    assert.deepEqual(start.otherFiles, ['pill.html']);
+  } finally { t.stop(); }
+});
+
+test('film: undo and redo are worded from what was reversed, not from the row before', async () => {
+  const t = await folderOf({ 'pill.html': page('pill'), 'shared.css': SHARED });
+  try {
+    await t.film('pill.html');
+    const set = async (v) => assert.equal((await t.post('/api/edit', { component: 'pill.html', edits: [rule('.pill', 'padding', v)] })).ok, true);
+    await set('2px 7px'); await set('3px 7px');
+    const ops = async (verb) => assert.equal((await t.post(`/api/${verb}`, { component: 'pill.html' })).ok, true);
+    await ops('undo'); await ops('undo'); await ops('redo'); await ops('redo');
+    const f = await t.film('pill.html');
+    const words = f.frames.map((x) => x.what);
+    assert.deepEqual(words.slice(0, 4), ['Redid padding 2px 7px → 3px 7px', 'Redid padding 1px 7px → 2px 7px', 'Undid padding 1px 7px → 2px 7px', 'Undid padding 2px 7px → 3px 7px'], JSON.stringify(words));
+    for (const w of words) assert.ok(!/(Undid|Redid) (Undid|Redid)/.test(w), w);
+    // a restore, then undo, redo, undo, undo
+    const first = f.frames.at(-1);
+    assert.equal((await t.post('/api/component/pill.html/film/restore', { frame: first.id })).ok, true);
+    await ops('undo'); await ops('redo'); await ops('undo'); await ops('undo');
+    const g = (await t.film('pill.html')).frames.map((x) => x.what);
+    for (const w of g.slice(0, 5)) assert.ok(!/(Undid|Redid) (Undid|Redid)/.test(w) && w, w);
+    assert.ok(/^Restored /.test(g.find((w) => /^Restored/.test(w)) ?? ''));
+    assert.ok(g.includes('Undid the restore') && g.includes('Redid the restore'), JSON.stringify(g));
+  } finally { t.stop(); }
+});
+
+test('film: a font change is a change for the component that uses it through a variable; a new commit shows at once', async () => {
+  const t = await folderOf({ 'pt.html': '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css"></head><body><p class="px">Stem</p></body></html>\n', 'other.html': page('nothing'), 'shared.css': ':root { --font-pixel: "Stem 7", monospace; }\n.px { font-family: var(--font-pixel); }\n@font-face { font-family: "Stem 7"; src: url(a.woff2); }\n@font-face { font-family: "Never"; src: url(n.woff2); }\n' }, { git: true });
+  try {
+    await t.film('pt.html'); await t.film('other.html');
+    const css = readFileSync(join(t.dir, 'shared.css'), 'utf8');
+    writeFileSync(join(t.dir, 'shared.css'), css.replace('url(a.woff2)', 'url(b.woff2)')); await t.wait(400);
+    const f = await t.film('pt.html');
+    assert.equal(f.frames[0].what, 'Changed font Stem 7', JSON.stringify(f.frames.map((x) => x.what)));
+    writeFileSync(join(t.dir, 'shared.css'), readFileSync(join(t.dir, 'shared.css'), 'utf8').replace('url(n.woff2)', 'url(m.woff2)')); await t.wait(400);
+    assert.equal((await t.film('pt.html')).frames[0].what, 'Changed font Stem 7', 'a face nobody uses is no frame');
+    assert.ok(!(await t.film('other.html')).frames.some((x) => /font/.test(x.what)));
+    // a commit made just now is in the list at once
+    writeFileSync(join(t.dir, 'pt.html'), readFileSync(join(t.dir, 'pt.html'), 'utf8').replace('>Stem<', '>Stem 7<')); await t.wait(300);
+    execFileSync('git', ['-C', t.dir, '-c', 'user.email=a@b.c', '-c', 'user.name=Ada', 'commit', '-q', '-am', 'fresh'], { stdio: 'ignore' });
+    assert.ok((await t.film('pt.html')).frames.some((x) => x.summary === 'fresh'));
+  } finally { t.stop(); }
+});
 test('film: a change to a shared sheet that changes nothing visible, or nothing this component draws, is no frame', async () => {
   const css = '.a { color: red; }\n.b { color: blue; }\n@keyframes spin { from { opacity: 0; } to { opacity: 1; } }\n@keyframes wobble { from { opacity: 0; } to { opacity: 1; } }\n.a { animation: spin 1s; }\n';
   const t = await folderOf({ 'a.html': page('a'), 'b.html': page('b'), 'shared.css': css });

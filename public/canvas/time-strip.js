@@ -114,6 +114,7 @@ export function initTimeStrip(ctx) {
 
   // ---------- the strip ----------
   const tileHtml = (t, i) => {
+    if (t.boundary) return `<div class="tm-boundary" id="tm-${i}" data-i="${i}" role="presentation" aria-hidden="true" title="${esc(t.what)}"><span>${esc(t.what)}</span></div>`;
     const label = t.now ? 'Now' : clock(t.at), what = wording(t), by = t.now ? '' : who(t);
     const tag = t.source === 'git' ? `<span class="tm-git" title="Commit ${esc(t.short)}: ${esc(t.summary)}">git ${esc(t.short)}</span>` : t.git ? `<span class="tm-git" title="Also commit ${esc(t.git.short)}: ${esc(t.git.subject)}">git ${esc(t.git.short)}</span>` : '';
     const n = (t.count > 1 ? `<span class="tm-count">${t.count} edits</span>` : '') + (t.more > 0 ? `<span class="tm-count">+${t.more} more</span>` : '');
@@ -157,6 +158,9 @@ export function initTimeStrip(ctx) {
     if (S.tiles.length === 1) info.textContent = 'No earlier versions yet. Edit something and each change shows up here.';
   }
 
+  // a boundary (stylesheets applied or removed) is a mark between versions, never a stop
+  const stepFrom = (i, d) => { let j = i + d; while (S.tiles[j]?.boundary) j += d; return S.tiles[j] ? j : i; };
+  const firstStop = () => S.tiles.findIndex((t) => !t.boundary);
   const versionOf = (t) => (S.side === 'before' ? t.beforeId : t.version);
   function pick(i, { scroll = true, quiet = false } = {}) {
     i = Math.max(0, Math.min(S.tiles.length - 1, i));
@@ -180,7 +184,9 @@ export function initTimeStrip(ctx) {
     if (!S.revealed && !t.now) { S.revealed = true; reveal(); }
     pick.t = setTimeout(() => showPreview(v), quiet ? 0 : 50); // a drag across many tiles draws only where it rests
     info.textContent = S.side === 'before' ? 'Before this change' : t.same ? 'Same as now' : '';
-    if (S.side === 'after' && !t.same) {
+    restoreBtn.title = t.otherFiles ? `Puts back this version's own files (${t.otherFiles.join(', ')}). The stylesheets applied now stay as they are.` : restoreBtn.title;
+    if (S.side === 'after' && t.otherFiles) info.textContent = `Made of other files than now (${t.otherFiles.length}): restoring puts back only these; applied stylesheets stay`;
+    else if (S.side === 'after' && !t.same) {
       const my = S.at, id = S.id;
       fetch(`/api/component/${enc(id)}/film/${enc(t.version)}/diff`).then((x) => x.json()).then((d) => {
         if (my !== S.at || id !== S.id || !d.ok || S.side !== 'after') return;
@@ -237,9 +243,9 @@ export function initTimeStrip(ctx) {
   track.addEventListener('keydown', (ev) => {
     if (ev.metaKey || ev.ctrlKey || ev.altKey) return;
     const k = ev.key;
-    if (k === 'ArrowLeft' || k === 'ArrowUp') pick(S.at - 1);
-    else if (k === 'ArrowRight' || k === 'ArrowDown') pick(S.at + 1);
-    else if (k === 'Home') pick(0);
+    if (k === 'ArrowLeft' || k === 'ArrowUp') pick(stepFrom(S.at, -1));
+    else if (k === 'ArrowRight' || k === 'ArrowDown') pick(stepFrom(S.at, 1));
+    else if (k === 'Home') pick(firstStop());
     else if (k === 'End') pick(S.tiles.length - 1);
     else if (k === 'Enter') restore();
     else if (k === 'b' || k === 'B') flip();

@@ -39,9 +39,13 @@ export function relevanceOf(engine, comp) {
   varsIn(own).forEach((v) => used.add(v));
   for (const r of rules) if (r.kind === 'style' && matchesAny(r.selector)) for (const d of r.decls) varsIn(d.value).forEach((v) => used.add(v));
   for (let grew = true; grew;) { grew = false; for (const r of rules) for (const d of r.decls) if (used.has(d.prop)) for (const v of varsIn(d.value)) if (!used.has(v)) { used.add(v); grew = true; } }
+  // custom property values (all the definitions there are: the cascade is the browser's business), so var(--font-pixel) can be read
+  const defs = new Map();
+  for (const r of rules) for (const d of r.decls) if (d.prop.startsWith('--')) defs.set(d.prop, `${defs.get(d.prop) ?? ''} ${d.value}`);
+  const resolve = (text, depth = 0) => (depth > 6 ? text : String(text).replace(/var\(\s*(--[\w-]+)\s*(?:,([^)]*))?\)/g, (_, name, fb) => (defs.has(name) ? resolve(defs.get(name), depth + 1) : fb ?? '')));
   // names of animations and font families the component's own text and the rules that match it mention
-  let animText = own, fontText = own.toLowerCase();
-  for (const r of rules) if (r.kind === 'style' && matchesAny(r.selector)) for (const d of r.decls) { if (/^animation/.test(d.prop)) animText += ' ' + d.value; if (/^font/.test(d.prop)) fontText += ' ' + d.value.toLowerCase(); }
+  let animText = resolve(own), fontText = resolve(own).toLowerCase();
+  for (const r of rules) if (r.kind === 'style' && matchesAny(r.selector)) for (const d of r.decls) { if (/^animation/.test(d.prop)) animText += ' ' + resolve(d.value); if (/^font/.test(d.prop)) fontText += ' ' + resolve(d.value).toLowerCase(); }
   const esc = (t) => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return {
     related: (t) => {

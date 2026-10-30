@@ -176,6 +176,36 @@ test('M9 a film strip of time: CSS edits are frames, scrub the versions, before 
   } finally { await t.stop(); }
 });
 
+test('M9 a boundary where a stylesheet was applied: never a stop, versions before it say they are made of other files', { timeout: 120000 }, async () => {
+  const t = await setup();
+  const { browser, io, dir } = t;
+  try {
+    assert.equal(await setText(browser, 'h2', 'Fresh bread daily'), true);          // before the ask-once answer
+    writeFileSync(join(dir, 'extra.css'), '.card { outline: 1px solid teal; }\n');
+    await sleep(500);
+    assert.equal(await browser.eval(`napkin.fetch('/api/styles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ applied: ['extra.css'] }) }).then((r) => r.ok)`), true);
+    await sleep(500);
+    assert.equal(await setText(browser, 'p', 'Hot from the oven.'), true);
+    await select(browser, await nodeOf(browser, 'h2'));
+    await io.key('h');
+    await browser.waitFor(`document.querySelectorAll('#time .tm-boundary').length === 1`);
+    assert.match(await browser.eval(`document.querySelector('#time .tm-boundary').textContent`), /Stylesheets applied: extra\.css/);
+    const kinds = await browser.eval(`JSON.stringify([...document.querySelectorAll('#time .tm-track > *')].map((n) => n.classList.contains('tm-boundary') ? 'boundary' : n.dataset.source))`);
+    const row = JSON.parse(kinds), at = row.indexOf('boundary');
+    assert.ok(at > 0 && at < row.length - 1, kinds);
+    // walk left from Now past the boundary: it is never selected, and the version beyond says what it is made of
+    const seen = [];
+    for (let i = 0; i < at + 1; i++) { await io.key('ArrowLeft'); seen.push(await browser.eval(`document.querySelector('#time .tm-tile[aria-selected="true"]')?.dataset.i`)); }
+    assert.ok(!seen.includes(String(at)), `the boundary is never a stop: ${seen} (boundary at ${at})`);
+    assert.match(await browser.eval(`document.querySelector('#time-info').textContent`), /other files than now/);
+    await previewReady(browser);
+    assert.equal(await browser.eval(`!!document.querySelector('.time-preview').contentDocument.querySelector('link[href*="extra.css"]')`), false, 'drawn with its own files');
+    await io.key('Enter');
+    await browser.waitFor(`document.querySelector('#hint')?.textContent.startsWith('Restored')`);
+    assert.deepEqual(await browser.eval(`fetch('/api/styles').then((r) => r.json()).then((j) => j.applied)`), ['extra.css'], 'the applied stylesheets are untouched');
+  } finally { await t.stop(); }
+});
+
 test('M9 the frame is never hidden by the strip: it is brought into view above it', { timeout: 120000 }, async () => {
   const t = await setup();
   const { browser, io } = t;
