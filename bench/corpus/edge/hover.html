@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge: hover and focus rules</title>
+<style>
+body { margin: 0; padding: 20px; font: 15px/22px system-ui, sans-serif; background: #ffffff; }
+.btn { padding: 8px 14px; border: 2px solid #16181d; background: #f4f1ea; color: #16181d; cursor: pointer; }
+.btn:hover { background: #ffe8a3; }
+.btn:focus-visible { outline: 2px solid #2236b0; outline-offset: 2px; }
+.btn--primary { background: #2236b0; color: #ffffff; }
+.btn--primary:hover{background:#16248a}
+.is-big { font-size: 18px; }
+a:hover { text-decoration: none }
+</style>
+</head>
+<body>
+<button class="btn  btn--primary   is-big" type="button">Primary</button>
+<button class="btn" type="button">Plain</button>
+<a href="#top">A link with a hover rule</a>
+</body>
+</html>

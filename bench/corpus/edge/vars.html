@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge: variables and fallbacks</title>
+<style>
+:root {
+  --accent: #2236b0;
+  --gap:12px;
+}
+body { margin: 0; padding: var(--gap); font: 15px/22px system-ui, sans-serif; background: var(--never-defined-ground, #fffbeb); }
+.chip { display: inline-block; padding: calc(var(--gap) / 2) var(--gap); color: var(--accent, red); border: 2px solid var(--a, var(--b, #cc0000)); }
+.chip--local { background: var(--local); }
+</style>
+</head>
+<body>
+<span class="chip">accent with a fallback</span>
+<span class="chip chip--local" style="--local: #e0f2fe; color: var(--local-ink, #0c4a6e)">local var</span>
+</body>
+</html>

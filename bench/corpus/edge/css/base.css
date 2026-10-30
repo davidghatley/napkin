@@ -1,0 +1,10 @@
+@import url("import-tokens.css");
+
+/* base.css: reached through a <link>, and it @imports the tokens */
+body { margin: 0; background: var(--edge-ground); color: var(--edge-ink); font: 15px/22px system-ui, sans-serif; }
+.box{padding:20px;border:2px solid var(--edge-ink);max-width:420px}
+.box__title { margin: 0 0 6px; font-size: 18px; letter-spacing: .02em; }
+.box__body {
+	margin: 0;   /* tab-indented on purpose */
+	color: var(--edge-muted);
+}

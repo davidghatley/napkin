@@ -1,0 +1,2 @@
+# The edge corpus is byte-exact test input (table.html is CRLF on purpose): never convert line endings.
+edge/** -text

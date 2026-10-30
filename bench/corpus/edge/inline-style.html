@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge: inline style block</title>
+<style>
+  /* keep: this comment and the odd spacing below are part of the test */
+  body{margin:0;font:16px/24px system-ui,sans-serif;background:#faf9f5;color:#1d1f24}
+  .card   {  padding : 24px ;border:1px solid #c9c9c0;   /* trailing note */
+             background: #ffffff;
+             margin: 16px;
+  }
+  .card h2 { margin: 0 0 8px; font-size: 20px; color: #2236b0 !important; }
+  .card .meta{color:#6b6f76;font-size:13px}
+  .card .lede { font-weight: 700 }
+</style>
+</head>
+<body>
+<div class="card" data-z="1" id="c1"   title='single quoted'>
+  <h2>Café menu — naïve</h2>
+  <p class="meta">Updated <time datetime="2026-10-30">30 Oct</time> &amp; checked</p>
+  <!-- a comment between elements: keep me -->
+  <p class=meta data-x=unquoted data-flag>Third line</p>
+  <p class="meta" >Fourth line, odd space before the bracket</p>
+</div>
+</body>
+</html>
