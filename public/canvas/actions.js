@@ -38,6 +38,7 @@ export const ACTIONS = [
   action('layer-rename', 'Finish / cancel layer rename or reorder', 'Enter / Escape', ['Enter', 'Escape'], refs('layers', 'keydown')),
   action('number', 'Nudge number field', '↑ ↓ · Shift ×10 · Alt ×0.1', ['ArrowUp', 'ArrowDown'], refs('panel', 'keydown')),
   action('panel-cancel', 'Cancel field edit or scrub', 'Escape', ['Escape'], refs('panel', 'keydown')),
+  action('doc-field', 'HTML panel: apply a value / put it back', 'Enter (Shift+Enter: new line in text) · Escape', ['Enter', 'Escape'], refs('doc-panel', 'keydown')),
   action('font', 'Font menu: move / choose / close', '↑ ↓ · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('panel', 'keydown')),
   action('native', 'Controls: move focus / activate / expand section', 'Tab · Shift+Tab · Enter · Space', [], refs('panel', 'keydown')),
   action('play', 'Play mode: cells become live components you can click and type into', 'P', ['KeyP'], refs('play', 'keydown'), (c) => c.play.toggle(), 'view'),
@@ -69,7 +70,7 @@ export const ACTIONS = [
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'component-ops.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'matrix.js:keydown': 1, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
+  'colorpop.js:keydown': 2, 'component-ops.js:keydown': 1, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'matrix.js:keydown': 1, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
   'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
   'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };

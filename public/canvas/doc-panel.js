@@ -7,6 +7,21 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const normSel = (t) => String(t).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\s*([,>+~])\s*/g, '$1').trim();
 const normMedia = (t) => String(t ?? '').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').replace(/\s*:\s*/g, ': ').trim().toLowerCase();
 const rulesCache = new Map(); // component -> { stamp, data }
+// One keyboard listener for the whole panel (registered once; actions.js lists it): Enter applies the field (Shift+Enter
+// is a new line in the text), Escape puts the field back and leaves it. The add rows commit through a 'doc-commit' event.
+const wired = new WeakSet();
+function wireKeys(el) {
+  if (wired.has(el)) return; wired.add(el);
+  el.addEventListener('keydown', (ev) => {
+    const t = ev.target;
+    if (!t.closest?.('.doc-body') || !('value' in t)) return;
+    if (ev.key === 'Escape') { t.value = t.defaultValue; t.blur(); return; }
+    if (ev.key !== 'Enter' || (ev.shiftKey && t.id === 'doc-text')) return;
+    ev.preventDefault();
+    if (t.id === 'doc-class-add' || t.closest('.decl.add')) t.dispatchEvent(new CustomEvent('doc-commit', { bubbles: true }));
+    else t.blur(); // its change event applies it
+  });
+}
 let stamp = 0;
 export const docsChanged = () => { stamp++; };
 
@@ -90,6 +105,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       <code class="prop">${esc(prop)}</code><input class="val" data-key="${esc(k)}" value="${esc(value)}" aria-label="${esc(prop)}" spellcheck="false"${computed ? ` title="now ${esc(computed)}"` : ''}>${important ? '<span class="imp">!important</span>' : ''}${kind !== 'var' ? `<button type="button" class="decl-x" aria-label="Remove ${esc(prop)}">×</button>` : ''}${src}</div>`;
   }
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
+  wireKeys(el);
 
   // ---------- edits ----------
   const showError = (msg) => { const e = el.querySelector('#doc-error'); if (!e) return; e.hidden = !msg; e.textContent = msg || ''; };
@@ -101,11 +117,9 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     return j;
   }
   const ruleEdit = (r, prop, value) => { const rr = data.rules[r]; return { op: 'rule', file: rr.file, selector: rr.selector, ...(rr.media.length ? { media: rr.media.at(-1) } : {}), index: index(rr), prop, value }; };
-  el.querySelector('#doc-text')?.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); ev.target.blur(); } if (ev.key === 'Escape') { ev.target.value = node.text; ev.target.blur(); } });
   el.querySelector('#doc-text')?.addEventListener('change', (ev) => { if (ev.target.value !== node.text) send([{ op: 'text', node: sel.node, value: ev.target.value }]); });
   el.querySelectorAll('.cls-x').forEach((b) => b.addEventListener('click', () => send([{ op: 'class', node: sel.node, remove: [b.dataset.remove] }])));
-  el.querySelector('#doc-class-add')?.addEventListener('keydown', (ev) => {
-    if (ev.key !== 'Enter') return; ev.preventDefault();
+  el.querySelector('#doc-class-add')?.addEventListener('doc-commit', (ev) => {
     const add = ev.target.value.trim().replace(/^\./, '').split(/\s+/).filter(Boolean);
     if (add.length) send([{ op: 'class', node: sel.node, add }]).then((j) => { if (j.ok) ev.target.value = ''; });
   });
@@ -116,7 +130,6 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       if (kind === 'rule') return send([ruleEdit(Number(row.dataset.rule), prop, value)]);
       return send([{ op: 'var', file: row.dataset.file, name: prop, value, ...(row.dataset.media ? { media: row.dataset.media } : {}), index: Number(row.dataset.index) }]);
     };
-    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); input.blur(); } if (ev.key === 'Escape') { input.value = input.defaultValue; input.blur(); } });
     input.addEventListener('change', () => { if (input.value.trim() && input.value !== input.defaultValue) commit(input.value.trim()); });
     row.querySelector('.decl-x')?.addEventListener('click', () => commit(null));
   }
@@ -128,7 +141,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       const edit = p.dataset.rule !== undefined ? ruleEdit(Number(p.dataset.rule), prop, value) : { op: 'style', node: sel.node, prop, value };
       send([edit]);
     };
-    v.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); go(); } });
-    p.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); v.focus(); } });
+    v.addEventListener('doc-commit', go);
+    p.addEventListener('doc-commit', () => v.focus());
   }
 }
