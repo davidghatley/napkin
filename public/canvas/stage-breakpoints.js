@@ -80,7 +80,7 @@ export function initBreakpoints(ctx) {
     const rows = [...conds.values()].map(({ m, mine, other }) => {
       const wc = widthConditions(m), px = wc[0].px;
       let match = false; try { match = !!win?.matchMedia(m).matches; } catch { /* a query the browser does not take */ }
-      return { m, px, kind: wc[0].kind, match, mine, other };
+      return { m, px, kind: wc[0].kind, strict: !!wc[0].strict, match, mine, other };
     }).sort((a, b) => a.px - b.px);
     const here = rows.filter((r) => r.mine.length), elsewhere = rows.flatMap((r) => r.other.map((x) => ({ r, x })));
     const file = [...new Set(rules.filter((r) => (r.media || []).length).map((r) => r.file))][0];

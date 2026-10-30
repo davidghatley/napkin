@@ -75,6 +75,22 @@ export function initDocs(ctx) {
   ctx.on('progress', (p) => { if (p.done) api.reconcileSoon(); });
 
   // A file changed (an edit by anyone, or a save in an editor): redraw every frame it reaches.
+  // Frames reload beside the old document (so an edit never flashes): at most DOC_BATCH at a time, so a change that reaches every frame never has twice as many iframes in the page.
+  const BATCH = 6, queue = new Set();
+  let running = false;
+  function redraw(id) {
+    queue.add(id);
+    if (running) return;
+    running = true;
+    (async () => {
+      while (queue.size) {
+        const batch = [...queue].slice(0, BATCH);
+        for (const id of batch) queue.delete(id);
+        await Promise.all(batch.map((id) => ctx.stage.render(id).catch(console.error)));
+      }
+      running = false;
+    })();
+  }
   ctx.on('doc-change', (f) => {
     docsChanged();
     // (the server names the components an HTML or CSS file reaches; a JSX file reaches the components it holds)
@@ -84,7 +100,7 @@ export function initDocs(ctx) {
       const c = ctx.state.components.get(id);
       if (!c || c.kind !== 'html') continue;
       if (c.path === f.path) c.revision = f.revision;
-      ctx.stage.render(id).catch(console.error);
+      redraw(id);
     }
     if (f.path?.endsWith('.css')) refreshStyles();
   });
@@ -92,7 +108,7 @@ export function initDocs(ctx) {
   ctx.on('doc-styles', async () => {
     docsChanged();
     await refreshStyles();
-    for (const c of ctx.state.components.values()) if (c.kind === 'html') ctx.stage.render(c.component).catch(console.error);
+    for (const c of ctx.state.components.values()) if (c.kind === 'html') redraw(c.component);
   });
   async function refreshStyles() { api.styles = await getJson('/api/styles'); ask(); }
 

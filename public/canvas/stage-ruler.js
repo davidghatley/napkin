@@ -10,13 +10,13 @@ const LEN = /^(-?[\d.]+)(px|em|rem)$/;
 const toPx = (n, unit) => Number(n) * (unit === 'px' ? 1 : 16);
 // width conditions in a media query: (min-width: 640px), (max-width: 40em), (width >= 640px), (640px <= width), (width < 40rem)
 const CONDS = [
-  [/\(\s*(min|max)-width\s*:\s*(-?[\d.]+)(px|em|rem)\s*\)/gi, (m) => [m[1].toLowerCase(), toPx(m[2], m[3])]],
-  [/\(\s*width\s*(>=|>|<=|<)\s*(-?[\d.]+)(px|em|rem)\s*\)/gi, (m) => [m[1][0] === '>' ? 'min' : 'max', toPx(m[2], m[3])]],
-  [/\(\s*(-?[\d.]+)(px|em|rem)\s*(<=|<|>=|>)\s*width\s*\)/gi, (m) => [m[3][0] === '<' ? 'min' : 'max', toPx(m[1], m[2])]],
+  [/\(\s*(min|max)-width\s*:\s*(-?[\d.]+)(px|em|rem)\s*\)/gi, (m) => [m[1].toLowerCase(), toPx(m[2], m[3]), false]],
+  [/\(\s*width\s*(>=|>|<=|<)\s*(-?[\d.]+)(px|em|rem)\s*\)/gi, (m) => [m[1][0] === '>' ? 'min' : 'max', toPx(m[2], m[3]), m[1].length === 1]],
+  [/\(\s*(-?[\d.]+)(px|em|rem)\s*(<=|<|>=|>)\s*width\s*\)/gi, (m) => [m[3][0] === '<' ? 'min' : 'max', toPx(m[1], m[2]), m[3].length === 1]],
 ];
 export function widthConditions(text) {
   const out = [];
-  for (const [re, f] of CONDS) for (const m of String(text).matchAll(re)) { const [kind, px] = f(m); if (Number.isFinite(px) && px > 0) out.push({ kind, px }); }
+  for (const [re, f] of CONDS) for (const m of String(text).matchAll(re)) { const [kind, px, strict] = f(m); if (Number.isFinite(px) && px > 0) out.push({ kind, px, strict }); }
   return out;
 }
 function* mediaRules(sheet, depth = 0) {
@@ -35,22 +35,22 @@ function* nested(rule, depth) {
 export function breakpoints(doc) {
   const by = new Map();
   if (!doc) return [];
-  for (const sheet of doc.styleSheets) for (const text of mediaRules(sheet)) for (const { kind, px } of widthConditions(text)) {
+  for (const sheet of doc.styleSheets) for (const text of mediaRules(sheet)) for (const { kind, px, strict } of widthConditions(text)) {
     const k = Math.round(px * 100) / 100;
-    const b = by.get(k) || { px: k, rules: 0, kinds: new Set() };
-    b.rules++; b.kinds.add(kind); by.set(k, b);
+    const b = by.get(k) || { px: k, rules: 0, kinds: new Set(), strict: new Set() };
+    b.rules++; b.kinds.add(kind); if (strict) b.strict.add(kind); by.set(k, b);
   }
   return [...by.values()].sort((a, b) => a.px - b.px);
 }
 // Which breakpoints apply at this width: the nearest "and under" above it and the nearest "and up" below it.
 export function applying(bps, width) {
-  const max = bps.filter((b) => b.kinds.has('max') && width <= b.px).sort((a, b) => a.px - b.px)[0];
-  const min = bps.filter((b) => b.kinds.has('min') && width >= b.px).sort((a, b) => b.px - a.px)[0];
+  const max = bps.filter((b) => b.kinds.has('max') && (b.strict.has('max') ? width < b.px : width <= b.px)).sort((a, b) => a.px - b.px)[0];
+  const min = bps.filter((b) => b.kinds.has('min') && (b.strict.has('min') ? width > b.px : width >= b.px)).sort((a, b) => b.px - a.px)[0];
   return { max, min };
 }
 export function describe(bps, width) {
   const { max, min } = applying(bps, width);
-  const parts = [max && `${Math.round(max.px)} and under`, min && `${Math.round(min.px)} and up`].filter(Boolean);
+  const parts = [max && (max.strict.has('max') ? `under ${Math.round(max.px)}` : `${Math.round(max.px)} and under`), min && (min.strict.has('min') ? `over ${Math.round(min.px)}` : `${Math.round(min.px)} and up`)].filter(Boolean);
   return `${Math.round(width)} px${parts.length ? ` · ${parts.join(', ')}` : ''}`;
 }
 export function snap(bps, width, within) {

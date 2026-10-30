@@ -17,7 +17,44 @@ const href = (path) => '/raw/' + path.split('/').map(encodeURIComponent).join('/
 const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
 // A component that draws nothing with no props (a Badge or Button with no children) would be an empty box: say so, quietly, in its frame.
-const EMPTY_NOTE = `setTimeout(function(){var r=document.getElementById('root');if(!r||document.querySelector('[data-napkin-error]'))return;if(r.textContent.trim())return;var any=false,els=r.querySelectorAll('*');for(var i=0;i<els.length&&!any;i++){var e=els[i],t=e.localName;if(/^(img|svg|picture|video|canvas|iframe|audio|object|embed|hr)$/.test(t)){any=true;break}if(/^(input|select|textarea)$/.test(t)&&e.type!=='hidden'){any=true;break}if(t==='button'){continue}var c=getComputedStyle(e);if(c.display==='none'||c.visibility==='hidden')continue;var b=e.getBoundingClientRect();if(b.width<1||b.height<1)continue;if((c.backgroundColor!=='rgba(0, 0, 0, 0)'&&c.backgroundColor!=='transparent')||c.backgroundImage!=='none'||c.boxShadow!=='none'||c.outlineStyle!=='none'){any=true}}if(any)return;var p=document.createElement('p');p.setAttribute('data-napkin','');p.setAttribute('data-napkin-empty','');p.style.cssText='margin:0;padding:10px 12px;font:12px/1.4 ui-sans-serif,system-ui,sans-serif;color:#5b6270;background:#f3f4f6';p.textContent='Renders nothing without props.';document.body.append(p)},250);`;
+const EMPTY_NOTE = `(function(){
+var NOTE=null,timer=0;
+var MEDIA=/^(img|svg|picture|video|canvas|iframe|audio|object|embed|hr)$/;
+var PROPS=['backgroundColor','backgroundImage','boxShadow','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth','borderTopStyle','borderRightStyle','borderBottomStyle','borderLeftStyle','borderTopColor','borderRightColor','borderBottomColor','borderLeftColor','outlineStyle'];
+var ref=null;
+function bare(){if(ref)return ref;var b=document.createElement('button');b.style.cssText='position:absolute;left:-9999px;top:0';document.body.append(b);var c=getComputedStyle(b);ref={};PROPS.forEach(function(k){ref[k]=c[k]});b.remove();return ref}
+function clear(c){return c==='rgba(0, 0, 0, 0)'||c==='transparent'}
+function drawn(c,isButton){
+ // a box that draws something: a fill, an image, a shadow, an outline, a border with width (a button counts only what differs from a bare button)
+ var r=isButton?bare():null,k;
+ if(c.backgroundImage!=='none'&&(!r||c.backgroundImage!==r.backgroundImage))return true;
+ if(!clear(c.backgroundColor)&&(!r||c.backgroundColor!==r.backgroundColor))return true;
+ if(c.boxShadow!=='none'&&(!r||c.boxShadow!==r.boxShadow))return true;
+ if(c.outlineStyle!=='none'&&(!r||c.outlineStyle!==r.outlineStyle))return true;
+ var sides=['Top','Right','Bottom','Left'];
+ for(k=0;k<4;k++){var w=parseFloat(c['border'+sides[k]+'Width']),st=c['border'+sides[k]+'Style'],col=c['border'+sides[k]+'Color'];if(w>0&&st!=='none'&&st!=='hidden'&&!clear(col)){if(!r||w!==parseFloat(r['border'+sides[k]+'Width'])||st!==r['border'+sides[k]+'Style']||col!==r['border'+sides[k]+'Color'])return true}}
+ return false}
+function pseudo(e){var p=['::before','::after'];for(var i=0;i<2;i++){var c=getComputedStyle(e,p[i]);if(c.content&&c.content!=='none'&&c.content!=='normal'&&c.display!=='none'){if(c.content.length>2)return true;var b=parseFloat(c.width)>0&&parseFloat(c.height)>0;if(b&&drawn(c,false))return true;if(drawn(c,false)&&(parseFloat(c.width)>0||parseFloat(c.height)>0))return true}}return false}
+function hasContent(){
+ var r=document.getElementById('root');if(!r)return true;
+ if(r.textContent.trim())return true;
+ var els=r.querySelectorAll('*');
+ for(var i=0;i<els.length;i++){var e=els[i],t=e.localName;
+  if(MEDIA.test(t))return true;
+  if(/^(input|select|textarea)$/.test(t)&&e.type!=='hidden')return true;
+  var c=getComputedStyle(e);if(c.display==='none'||c.visibility==='hidden')continue;
+  var b=e.getBoundingClientRect();
+  if(pseudo(e))return true;
+  if(t==='button'){if(e.children.length)return true;if(drawn(c,true)&&b.width>=1&&b.height>=1)return true;continue}
+  if(b.width<1||b.height<1)continue;
+  if(drawn(c,false))return true}
+ return pseudo(r)}
+function show(){if(NOTE)return;NOTE=document.createElement('p');NOTE.setAttribute('data-napkin','');NOTE.setAttribute('data-napkin-empty','');NOTE.style.cssText='margin:0;padding:10px 12px;font:12px/1.4 ui-sans-serif,system-ui,sans-serif;color:#5b6270;background:#f3f4f6';NOTE.textContent='Renders nothing without props.';document.body.append(NOTE)}
+function hide(){if(NOTE){NOTE.remove();NOTE=null}}
+function check(){if(document.querySelector('[data-napkin-error]')){hide();return}if(hasContent())hide();else show()}
+function later(){clearTimeout(timer);timer=setTimeout(check,120)}
+setTimeout(function(){check();new MutationObserver(later).observe(document.getElementById('root')||document.body,{subtree:true,childList:true,characterData:true,attributes:true})},250);
+})();`;
 
 export function htmlView(engine, comp) {
   const entry = engine.read(comp.path);

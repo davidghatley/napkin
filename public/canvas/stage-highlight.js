@@ -356,7 +356,8 @@ export function initHighlight(ctx) {
       if (lastFocusOnPanel()) { if (ev.shiftKey && document.activeElement === side.querySelector('#hl-keep')) { ev.preventDefault(); ev.stopImmediatePropagation(); stageEl.focus({ preventScroll: true }); walk(-1); } return; } // inside the panel Tab keeps its normal job
       if (!(ev.target === stageEl || (stageEl.contains(ev.target) && !ev.target.closest('button, a[href], input, select, textarea, summary, [role=dialog], [role=slider], #bp-panel, #bp-strip, #theme-wipe, #play-bar, #ask-styles')))) return; // from a control elsewhere, Tab moves focus as it always did
       ev.preventDefault(); ev.stopImmediatePropagation();
-      if (!ev.shiftKey && change && walkAt === places.length - 1) { side.querySelector('#hl-keep')?.focus(); return; }
+      const onPlace = walkAt >= 0 && places[walkAt] && ctx.state.selection?.component === places[walkAt].id && ctx.state.selection?.node === places[walkAt].node; // the place is selected first; only the Tab after that goes on to Keep
+      if (!ev.shiftKey && change && walkAt === places.length - 1 && onPlace) { side.querySelector('#hl-keep')?.focus(); return; }
       walk(ev.shiftKey ? -1 : 1);
       return;
     }

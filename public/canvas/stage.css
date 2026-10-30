@@ -165,7 +165,9 @@ body[data-focus] .cmp:not([data-focused]) :is(figcaption, .cell-ruler, .hl-box b
 #bp-panel .bp-diff .bp-prop { color: var(--nk-text-2); font: 11px var(--nk-mono); }
 #bp-panel .bp-diff .bp-chg { margin-left: auto; font: 11px var(--nk-mono); overflow-wrap: anywhere; text-align: right; }
 
-/* the theme wipe: a frame's title, caption and ruler wear the theme of the side of the line it is on */
-.cmp[data-wipe-theme="dark"] { --nk-chrome: #1b1d23; --nk-chrome-2: #23262d; --nk-chrome-3: #2b2f37; --nk-line: #2c2f37; --nk-line-2: #3a3e48; --nk-text: #e8eaf0; --nk-text-2: #b4bac7; --nk-text-3: #959cab; --nk-accent-text: #8fadff; --nk-accent: #6e93ff; }
-.cmp[data-wipe-theme="light"] { --nk-chrome: #fbfbfc; --nk-chrome-2: #f3f4f6; --nk-chrome-3: #eaecf0; --nk-line: #dde0e6; --nk-line-2: #cdd1d9; --nk-text: #1c1f27; --nk-text-2: #4f5663; --nk-text-3: #626a79; --nk-accent-text: #2c52d2; --nk-accent: #3459e2; }
-.cmp[data-wipe-theme] .cmp-title h3, .cmp[data-wipe-theme] .cmp-head { color: var(--nk-text); }
+/* the theme wipe: a frame's title, caption and ruler sit on their own light backing whatever side of the line they are on, so they read on both themes */
+body[data-wipe] .cmp-title, body[data-wipe] .doc-cell figcaption, body[data-wipe] .cell-ruler {
+  --nk-chrome: #fbfbfc; --nk-chrome-2: #f3f4f6; --nk-text: #1c1f27; --nk-text-2: #4f5663; --nk-text-3: #626a79; --nk-accent-text: #2c52d2; --nk-accent: #3459e2; --nk-line-2: #cdd1d9;
+  background-color: #fbfbfc; color: #1c1f27; border-radius: 4px; box-shadow: 0 0 0 1px #cdd1d9; }
+body[data-wipe] .cmp-title { padding: 2px 6px; }
+body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }

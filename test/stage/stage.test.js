@@ -114,6 +114,20 @@ test('M3 one rule lights up everywhere: highlight by rule, by variable, count, l
     assert.ok(await b.eval(`document.querySelectorAll('.hl-box.on').length === 1`), 'the walked-to place is marked');
     assert.equal(await b.eval(`napkin.view.get().z >= 0.5`), true, 'at a zoom a person can read');
     await b.eval(`napkin.stage.clearHighlight()`);
+    // one lit place and a pending change: the first Tab selects the place, the next one reaches Keep
+    await b.eval(`napkin.stage.highlight({ selector: '.spinner', file: 'components.css' }); napkin.select(null); document.querySelector('#stage').focus()`);
+    await sleep(300);
+    assert.equal(await b.eval(`napkin.highlight.places()`), 1);
+    const sid = await b.eval(`napkin.find('Spinner').component`);
+    await b.eval(`napkin.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: ${JSON.stringify(sid)}, baseRevision: napkin.find('Spinner').revision, edits: [{ op: 'rule', file: 'components.css', selector: '.spinner', prop: 'width', value: '22px' }] }) }).then((r) => r.text())`);
+    await b.waitFor(`!!document.querySelector('#hl-keep')`);
+    await b.eval(`document.querySelector('#stage').focus()`);
+    await t.key('keyDown', 'Tab', 'Tab', { vk: 9 }); await t.key('keyUp', 'Tab', 'Tab', { vk: 9 });
+    assert.equal(await b.eval(`napkin.state.selection?.component === ${JSON.stringify(sid)} && document.activeElement.id !== 'hl-keep'`), true, 'the place is selected first');
+    await t.key('keyDown', 'Tab', 'Tab', { vk: 9 }); await t.key('keyUp', 'Tab', 'Tab', { vk: 9 });
+    assert.equal(await b.eval(`document.activeElement.id`), 'hl-keep', 'then Keep');
+    await b.eval(`document.querySelector('#hl-revert').click()`); await b.waitFor(`!document.querySelector('#hl-keep')`);
+    await b.eval(`napkin.stage.clearHighlight()`);
     // the way a person gets there: Cmd-K, Alt+H, pick the rule, Enter
     await b.eval(`napkin.stage.clearHighlight()`);
     assert.equal(await b.eval(`document.querySelector('#hl-bar').hidden`), true);
@@ -233,11 +247,19 @@ test('M5 theme wipe: a slider wipes light into dark (and the files\' own themes)
     assert.equal(await cardBg('Card', 'left'), 'rgb(255, 255, 255)', 'left of the line it is the light card');
     assert.equal(await b.eval(`getComputedStyle(document.querySelector('#stage')).backgroundColor`), 'rgb(20, 22, 27)', 'the stage right of the line is the dark canvas');
     assert.equal(await b.eval(`getComputedStyle(document.querySelector('#wipe-stage')).backgroundColor`), 'rgb(232, 234, 238)', 'and left of it the light canvas');
-    // titles, captions and rulers wear the theme of their side
-    await b.eval(`napkin.theme.set({ at: 0 })`); await sleep(300);
-    assert.equal(await b.eval(`[...document.querySelectorAll('.cmp')].every((e) => e.dataset.wipeTheme === 'dark')`), true, 'all frames are right of the line: dark');
-    assert.equal(await b.eval(`getComputedStyle(document.querySelector('.cmp .cmp-title h3')).color`), 'rgb(232, 234, 240)', 'a frame title is light on the dark side');
-    assert.equal(await b.eval(`getComputedStyle(document.querySelector('.cmp .cell-ruler')).backgroundColor`), 'rgb(27, 29, 35)', 'and its ruler is a dark strip');
+    // titles, captions and rulers stay readable whichever side of the line they are on, with the line at 25%, 50% and 75%
+    const readable = () => b.eval(`(() => {
+      const lum = (c) => { const m = c.match(/[\\d.]+/g).map(Number), f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+      const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const back = (e) => { for (let n = e; n; n = n.parentElement) { const c = getComputedStyle(n).backgroundColor; if (!/rgba\\(0, 0, 0, 0\\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
+      const bad = [];
+      for (const e of document.querySelectorAll('.cmp .cmp-title h3, .cmp .doc-cell figcaption, .cmp .cell-ruler .rt span')) {
+        const cs = getComputedStyle(e); if (cs.visibility === 'hidden' || !e.getBoundingClientRect().width) continue;
+        const r = ratio(cs.color, back(e)); if (r < 4.5) bad.push(e.className + ' ' + e.textContent.slice(0, 12) + ' ' + r.toFixed(2));
+      }
+      return JSON.stringify(bad);
+    })()`);
+    for (const at of [25, 50, 75]) { await b.eval(`napkin.theme.set({ at: ${at} })`); await sleep(300); assert.deepEqual(JSON.parse(await readable()), [], `titles, captions and ruler labels read with the line at ${at}%`); }
     await b.eval(`napkin.theme.set({ at: 50 })`);
     // another theme the files define: [data-theme="sepia"]
     await b.eval(`napkin.theme.set({ left: 'sepia', right: 'dark', at: 50 })`);
@@ -417,9 +439,14 @@ test('fit-all with 60 frames: the frames in view load progressively under a budg
     // the budget holds after a styles answer too ("apply stylesheets" redraws every frame)
     await b.eval(`napkin.nav.unfocus({ animate: false }); napkin.view.fitAll({ animate: false })`);
     await sleep(800);
+    // the iframes in the page, sampled all through the redraw (a reloading frame sits beside its old document for a moment)
+    await b.eval(`window.__max = 0; window.__sampler = setInterval(() => { window.__max = Math.max(window.__max, document.querySelectorAll('#world iframe').length); }, 20)`);
     await b.eval(`napkin.fetch('/api/styles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ applied: ['x.css'] }) }).then((r) => r.text())`);
-    await sleep(3000);
+    await sleep(6000);
+    await b.eval(`clearInterval(window.__sampler)`);
     assert.ok((await live()) <= 40, `after applying stylesheets at most 40 frames are live (${await live()})`);
+    const peak = await b.eval(`window.__max`);
+    assert.ok(peak <= 46, `at most 40 frames plus one batch of 6 are in the page at any moment (peak ${peak})`);
   } finally { await t.close(); }
 });
 
@@ -439,5 +466,29 @@ test('a component that draws nothing without props says so in its frame; one tha
     // the browser's benign "ResizeObserver loop" message is not an error of the component
     await b.eval(`(() => { const w = napkin.stage.sections.get(napkin.find('Full').component).docFrame.doc().defaultView; w.dispatchEvent(new ErrorEvent('error', { message: 'ResizeObserver loop completed with undelivered notifications.' })); })()`);
     assert.equal(await b.eval(`!!napkin.stage.sections.get(napkin.find('Full').component).docFrame.doc().querySelector('[data-napkin-error]')`), false);
+  } finally { await t.close(); }
+});
+
+test('"Renders nothing without props" appears only for a component that really draws nothing, and goes when content arrives', { timeout: 90000 }, async () => {
+  const files = {
+    'SizedButton.tsx': `export function SizedButton() { return <button style={{ width: 80, height: 30, background: '#3366cc' }} />; }\n`,
+    'Bordered.tsx': `export function Bordered() { return <div style={{ width: 40, height: 20, border: '2px solid #333' }} />; }\n`,
+    'Separator.tsx': `export function Separator() { return <div style={{ borderTop: '1px solid #999', width: 100 }} />; }\n`,
+    'Pseudo.tsx': `export function Pseudo() { return <><style>{'.pp::before { content: ""; display: block; width: 30px; height: 10px; background: red }'}</style><div className="pp" /></>; }\n`,
+    'Late.tsx': `import { useState, useEffect } from 'react';\nexport function Late() { const [on, set] = useState(false); useEffect(() => { const t = setTimeout(() => set(true), 600); return () => clearTimeout(t); }, []); return on ? <p>arrived</p> : null; }\n`,
+    'EmptyDiv.tsx': `export function EmptyDiv() { return <div />; }\n`,
+    'EmptyButton.tsx': `export function EmptyButton() { return <button />; }\n`,
+  };
+  const t = await open(files);
+  try {
+    const { b } = t;
+    const note = (n) => b.eval(`!!napkin.stage.sections.get(napkin.find(${JSON.stringify(n)}).component).docFrame?.doc()?.querySelector('[data-napkin-empty]')`);
+    await b.waitFor(`['EmptyDiv', 'EmptyButton'].every((n) => !!napkin.stage.sections.get(napkin.find(n)?.component)?.docFrame?.doc()?.querySelector('[data-napkin-empty]'))`, 15000);
+    for (const n of ['EmptyDiv', 'EmptyButton']) assert.equal(await note(n), true, `${n} draws nothing: the note`);
+    for (const n of ['SizedButton', 'Bordered', 'Separator', 'Pseudo']) assert.equal(await note(n), false, `${n} draws something: no note`);
+    // content that arrives after the note would have gone up (600 ms): the note goes away
+    await sleep(1500);
+    assert.equal(await note('Late'), false, 'the note leaves when content arrives');
+    assert.match(await b.eval(`napkin.stage.sections.get(napkin.find('Late').component).docFrame.doc().body.textContent`), /arrived/);
   } finally { await t.close(); }
 });
