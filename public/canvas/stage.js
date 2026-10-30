@@ -729,7 +729,7 @@ export function createStage(ctx, root, world, view) {
     auto.delete(d.id);
     try {
       const r = c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
-        ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, ...pos }) })
+        ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, x: pos.x, y: pos.y }) })
         : await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     } catch (e) { document.querySelector('#error').textContent = `Could not save the position: ${plain(e.message)}`; }

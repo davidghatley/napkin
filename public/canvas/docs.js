@@ -22,7 +22,8 @@ export function initDocs(ctx) {
       for (const c of f.components) {
         seen.add(c.id);
         const prev = ctx.state.components.get(c.id);
-        ctx.state.components.set(c.id, { ...(prev || {}), component: c.id, name: c.name, path: f.path, kind: 'html', revision: f.revision, doc: null, canvas: prev?.canvas || layout?.frames?.[c.id] || { x: 0, y: 0 } });
+        const saved = layout?.frames?.[c.id];
+        ctx.state.components.set(c.id, { ...(prev || {}), component: c.id, name: c.name, path: f.path, kind: 'html', revision: f.revision, doc: null, canvas: prev?.canvas || (saved && saved.x !== undefined ? { x: saved.x, y: saved.y } : { x: 0, y: 0 }), width: prev?.width ?? saved?.width });
       }
     }
     return seen;

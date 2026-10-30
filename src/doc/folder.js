@@ -288,10 +288,13 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return { ok: true, applied: [...applied] };
   }
 
-  function setLayout(id, x, y) {
+  // Where a frame sits ({ x, y }) and how wide it is drawn ({ width }); either may be sent alone.
+  function setLayout(id, { x, y, width } = {}) {
     const comp = component(id);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new DocError('send { component, x, y } with numbers. Next: retry with the frame position', 400);
-    layout[comp.id] = { x: Math.round(x), y: Math.round(y) };
+    const num = (v) => v === undefined || v === null || Number.isFinite(v);
+    if (!num(x) || !num(y) || !num(width) || (x === undefined) !== (y === undefined) || (x === undefined && width === undefined)) throw new DocError('send { component, x, y } and/or { width } as numbers. Next: retry with the frame position or width', 400);
+    const cur = layout[comp.id] || {};
+    layout[comp.id] = { ...cur, ...(x !== undefined && { x: Math.round(x), y: Math.round(y) }), ...(width !== undefined && { width: width === null ? undefined : Math.max(120, Math.min(2400, Math.round(width))) }) };
     mkdirSync(state, { recursive: true });
     writeAtomic(join(state, 'layout.json'), JSON.stringify({ folder: real, frames: layout }) + '\n');
     return { ok: true, component: comp.id, canvas: layout[comp.id] };

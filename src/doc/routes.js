@@ -67,7 +67,8 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
       if (path === '/api/layout') {
         if (method === 'GET') return json(res, 200, { ok: true, frames: engine.layout() }), true;
         const m = await body(req); who(req);
-        return json(res, 200, engine.setLayout(m?.component, Number(m?.x), Number(m?.y))), true;
+        const n = (v) => (v === undefined || v === null ? v : Number(v));
+        return json(res, 200, engine.setLayout(m?.component, { x: n(m?.x), y: n(m?.y), width: n(m?.width) })), true;
       }
       if (method === 'POST' && path === '/api/edit') {
         const m = await body(req);

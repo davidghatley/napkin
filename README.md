@@ -1,8 +1,9 @@
 # napkin
 
-napkin is a local canvas for React TSX components. Edit a component in the browser,
-in a text editor, or through an agent over MCP. The file on disk is the component
-your app imports. There is no export step or napkin runtime dependency.
+napkin is a local canvas for components: plain HTML/CSS first, React TSX/JSX too.
+Edit a component in the browser, in a text editor, or through an agent over MCP.
+The file on disk is the component your app or page uses. There is no export step,
+no napkin runtime dependency, and nothing napkin needs inside your folder.
 
 ## Quickstart
 
@@ -27,6 +28,22 @@ Press **N** to create a component. **F**, **T**, and **I** draw a frame, text, o
 image inside a component. **Ctrl/Cmd+K** finds components, layers, and actions.
 **?** opens the shortcut sheet. The [user guide](docs/guide/README.md) covers the
 canvas, variants, agents, files, tokens, and undo.
+
+## Open any folder
+
+```sh
+node src/cli.js open path/to/your/components
+```
+
+Every `.html` file is a component (drawn exactly as the browser draws that file,
+in its own frame, so `@media` answers to the frame's width), and so is every
+exported component of a `.tsx`/`.jsx` file. Click an element to edit its text,
+classes, inline style and the CSS rules that match it; each change is a small edit
+in place, with undo. If the files use CSS variables that nothing they load defines
+(a design system whose previews rely on a host page), napkin asks once which of the
+folder's stylesheets apply and remembers the answer outside the folder. napkin
+writes nothing into the folder except the edits you make. The engine and its HTTP
+contract are described in [decision 0014](docs/decisions/0014-document-engine.md).
 
 ## A 40-component sample
 

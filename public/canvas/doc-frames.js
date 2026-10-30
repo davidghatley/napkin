@@ -30,10 +30,23 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   const cell = document.createElement('figure');
   cell.className = 'cell doc-cell'; cell.dataset.variant = '{}';
   const cap = document.createElement('figcaption');
-  cell.append(cap);
+  // The frame's width is the document's viewport: drag the grip and the component reflows for real (its own @media).
+  const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.dataset.nodrag = '1'; grip.title = 'Drag to change the frame width. Double-click for 640 px.';
+  cell.append(cap, grip);
   let iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
   const proxies = new WeakMap();
   cap.textContent = `${width} px`;
+  const saveWidth = () => ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: id, width }) }).catch(() => {});
+  grip.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0) return;
+    ev.preventDefault(); ev.stopPropagation(); grip.setPointerCapture(ev.pointerId);
+    const x0 = ev.clientX, w0 = width, z = ctx.view?.get().z || 1;
+    const move = (e) => api.setWidth(w0 + (e.clientX - x0) / z);
+    const up = () => { grip.removeEventListener('pointermove', move); saveWidth(); };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up, { once: true });
+  });
+  grip.addEventListener('dblclick', (ev) => { ev.stopPropagation(); api.setWidth(DOC_WIDTH); saveWidth(); });
 
   // An element inside the frame, seen from the canvas page: rects in page pixels, closest() answered by the frame.
   const proxy = (el) => {
@@ -103,7 +116,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     while (el && !map.byEl.has(el)) el = el.parentElement || el.getRootNode?.().host || null;
     return el ? proxy(el) : null;
   }
-  return {
+  const api = {
     cell, load, pick,
     element: (node) => proxy(map.byNode.get(node)),
     has: (node) => map.byNode.has(node) || nodes.has(node),
@@ -113,4 +126,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     setWidth(w) { width = Math.max(120, Math.min(2400, Math.round(w))); cap.textContent = `${width} px`; if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(); },
     destroy() { gen++; ro?.disconnect(); iframe?.remove(); },
   };
+  const w = ctx.state.components.get(id)?.width;
+  if (w) api.setWidth(w);
+  return api;
 }
