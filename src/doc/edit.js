@@ -129,6 +129,18 @@ function textSplices(s, node, value, run) {
 
 // ---------- class ----------
 const CLASS_FNS = new Set(['cn', 'clsx', 'classNames', 'classnames', 'cx', 'twMerge', 'cva']);
+// The class list of a JSX element as text, when there is one napkin can edit: className="a b", className={"a b"}, or the first plain string of cn("a b", …).
+// null when there is none (no className, or built only from variables).
+export function classLiteral(node) {
+  if (!node.jsx) return null;
+  const a = attrOf(node, 'className');
+  if (!a || a.valStart === null) return null;
+  if (a.quote) return a.value;
+  const e = a.expr, plain = (x) => x && (x.type === 'StringLiteral' ? x.value : x.type === 'TemplateLiteral' && !x.expressions.length ? x.quasis[0].value.cooked : null);
+  if (plain(e) !== null && plain(e) !== undefined) return plain(e);
+  if (e && e.type === 'CallExpression' && e.callee.type === 'Identifier' && CLASS_FNS.has(e.callee.name)) { const lit = e.arguments.map(plain).find((v) => v !== null && v !== undefined); return lit ?? null; }
+  return null;
+}
 function classSplices(s, node, add = [], remove = []) {
   const name = node.jsx ? 'className' : 'class';
   const a = attrOf(node, name);

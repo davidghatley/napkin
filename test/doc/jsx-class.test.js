@@ -67,3 +67,18 @@ test('a new attribute lands after the spread, on its own line when the tag is wr
     assert.match(t.text(), /<span className=\{clsx\('chip', \{ on \}\)\} title="c">/);
   } finally { t.done(); }
 });
+
+test('the tree gives the classes of a cn() list as the node\'s class (the panel shows them as chips), and removing a chip is one exact edit, undone in one step', () => {
+  const t = setup();
+  try {
+    const node = t.eng.tree('T.tsx#Textarea').tree[0];
+    assert.equal(node.attrs.class, 'border-input flex min-h-16 w-full');
+    assert.equal(t.eng.tree('T.tsx#Chip').tree[0].attrs.class, 'chip');
+    assert.equal(t.eng.tree('T.tsx#None').tree[0].attrs.class, undefined, 'a list with no plain string has no chips');
+    t.edit('Textarea', { op: 'class', remove: ['min-h-16'] });
+    assert.deepEqual(changed(SRC, t.text()).length >= 1, true);
+    assert.equal(t.eng.tree('T.tsx#Textarea').tree[0].attrs.class, 'border-input flex w-full');
+    t.eng.undo('T.tsx#Textarea', 't');
+    assert.equal(t.text(), SRC, 'one undo puts the file back exactly');
+  } finally { t.done(); }
+});

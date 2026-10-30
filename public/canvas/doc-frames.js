@@ -37,7 +37,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   grip.tabIndex = -1; grip.setAttribute('role', 'slider'); grip.setAttribute('aria-label', 'Frame width'); grip.setAttribute('aria-valuemin', '120'); grip.setAttribute('aria-valuemax', '2400');
   const ruler = createRuler({ doc: () => iframe?.contentDocument || null, commitWidth: (w) => { api.setWidth(w); saveWidth(); }, get width() { return width; } });
   cell.append(cap, ruler.el, grip);
-  let iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
+  let widthAt = 0, iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
   const proxies = new WeakMap();
   const say = (w, snapped) => { cap.textContent = ruler.say(w, snapped); grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuetext', `${w} px`); };
   say(width);
@@ -47,9 +47,23 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     ev.preventDefault(); ev.stopPropagation(); grip.setPointerCapture(ev.pointerId);
     const x0 = ev.clientX, w0 = width, z = ctx.view?.get().z || 1;
     // the file's own breakpoints pull the width in (within 8 screen pixels); Alt drags freely
+    // detents: a breakpoint holds the width while the pointer is within 12 screen px of it, takes it from 8 px away, and takes it when one step carries the pointer across it
+    let stuck = null, prev = w0;
     const move = (e) => {
-      const raw = w0 + (e.clientX - x0) / z, s = e.altKey ? { px: raw, snapped: false } : ruler.snap(raw, 8 / z);
-      api.setWidth(s.px, s.snapped);
+      const raw = w0 + (e.clientX - x0) / z;
+      let px = raw, snapped = false;
+      if (!e.altKey) {
+        const pts = ruler.points().map((b) => Math.round(b.px));
+        if (stuck !== null && Math.abs(raw - stuck) <= 12 / z) { px = stuck; snapped = true; }
+        else {
+          stuck = null;
+          const crossed = pts.find((p) => (prev < p && raw >= p) || (prev > p && raw <= p));
+          const s = crossed !== undefined ? { px: crossed, snapped: true } : ruler.snap(raw, 8 / z);
+          if (s.snapped) { stuck = s.px; px = s.px; snapped = true; }
+        }
+      }
+      prev = raw;
+      api.setWidth(px, snapped);
     };
     const up = () => { grip.removeEventListener('pointermove', move); delete cell.dataset.resizing; say(width); saveWidth(); };
     cell.dataset.resizing = '1';
@@ -98,7 +112,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     const d = iframe?.contentDocument;
     if (!d?.documentElement) return;
     const h = Math.max(24, Math.min(4000, Math.ceil(d.documentElement.getBoundingClientRect().height)));
-    if (iframe.style.height !== `${h}px`) { iframe.style.height = `${h}px`; onResize(); }
+    if (iframe.style.height !== `${h}px`) { iframe.style.height = `${h}px`; onResize(Date.now() - widthAt < 2000); }
   }
   const settle = (f) => new Promise((res) => {
     const done = () => res(); const t = setTimeout(done, 4000);
@@ -152,7 +166,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     iframe: () => iframe, doc: () => iframe?.contentDocument || null, tree: () => tree,
     get width() { return width; },
     grip, ruler, commitWidth: (w) => { api.setWidth(w); saveWidth(); },
-    setWidth(w, snapped = false) { width = Math.max(120, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(); grip.setAttribute('aria-valuenow', String(width)); grip.setAttribute('aria-valuetext', `${width} px`); ctx.emit('framewidth', { component: id, width }); },
+    setWidth(w, snapped = false) { widthAt = Date.now(); width = Math.max(120, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(true); grip.setAttribute('aria-valuenow', String(width)); grip.setAttribute('aria-valuetext', `${width} px`); ctx.emit('framewidth', { component: id, width }); },
     destroy() { gen++; ro?.disconnect(); iframe?.remove(); },
   };
   const w = ctx.state.components.get(id)?.width;

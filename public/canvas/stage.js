@@ -153,6 +153,12 @@ export function createStage(ctx, root, world, view) {
       }
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
+    // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
+    if (c.kind === 'html' && !sec.docFrame && ctx.state.components.size > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
+      sec.pending = true; sec.el.dataset.ready = '1';
+      if (!sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
+      return;
+    }
     sec.pending = false;
     if (c.kind === 'html') return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
@@ -207,7 +213,7 @@ export function createStage(ctx, root, world, view) {
   // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
   async function renderDoc(id, c, sec, token) {
     if (!sec.docFrame) {
-      sec.docFrame = createDocFrame(ctx, id, { onResize: () => { if (!sections.has(id)) return; measure(sec); if (laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
       sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
       sec.el.dataset.kind = 'html';
     }

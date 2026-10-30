@@ -46,7 +46,7 @@ export function initChrome(ctx) {
     if (ev.key !== 'Tab' || ev.ctrlKey || ev.metaKey || ev.altKey || ev.shiftKey || ev.isComposing) return;
     if (document.body.dataset.modal || /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || ev.target.isContentEditable) return;
     const onCanvas = ev.target === stageEl || (!!ev.target.closest?.('#stage') && !ev.target.closest(INTERACTIVE));
-    if (!hidden() && !onCanvas) return;
+    if (!hidden() && (!onCanvas || ctx.highlight?.active())) return; // (while something is lit, Tab walks its places: stage-highlight.js)
     ev.preventDefault(); ev.stopImmediatePropagation();
     toggle();
   }, true);

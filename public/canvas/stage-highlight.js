@@ -194,17 +194,29 @@ export function initHighlight(ctx) {
     side.querySelector('#hl-keep')?.addEventListener('click', () => keepChange());
     side.querySelector('#hl-revert')?.addEventListener('click', () => revertChange());
   }
-  // the clicked place gets a stronger outline (and the canvas flies to it when it is not on screen)
-  function focusPlace(k) {
+  // the walked-to place gets a stronger outline, and the canvas flies to it when it is not comfortably on screen (at a zoom a person can read)
+  let walkAt = -1;
+  function focusPlace(k, { fly = true } = {}) {
     for (const el of document.querySelectorAll('.hl-box.on')) el.classList.remove('on');
     const p = places[k]; if (!p) return;
-    const layer = layers.get(p.id);
-    const idx = [...(ctx.stage.sections.get(p.id)?.docFrame ? elementsIn(p.id, ctx.stage.sections.get(p.id).docFrame).list : [])].findIndex((x) => x.el === p.el);
-    layer?.querySelector(`.hl-box[data-i="${idx}"]`)?.classList.add('on');
-    const r = ctx.stage.componentRect?.(p.id);
-    const box = ctx.view.stageBox(), v = ctx.view.get();
-    if (r && (r.x * v.z + v.x < 0 || (r.x + r.w) * v.z + v.x > box.width || r.y * v.z + v.y < 0 || (r.y + r.h) * v.z + v.y > box.height)) ctx.view.flyTo(r, { pad: 96, max: Math.max(0.6, v.z) });
+    walkAt = k;
+    const f = ctx.stage.sections.get(p.id)?.docFrame;
+    const idx = f ? elementsIn(p.id, f).list.findIndex((x) => x.el === p.el) : -1;
+    layers.get(p.id)?.querySelector(`.hl-box[data-i="${idx}"]`)?.classList.add('on');
+    const prox = f?.element(p.node); if (!prox || !fly) return;
+    const r = prox.getBoundingClientRect(), box = ctx.view.stageBox(), v = ctx.view.get();
+    const inside = r.left >= box.left + 8 && r.right <= box.right - 8 && r.top >= box.top + 8 && r.bottom <= box.bottom - 8;
+    if (!inside || v.z < 0.5) ctx.view.flyTo(ctx.view.rectToWorld(r), { pad: 200, max: 1.25 });
   }
+  function walk(dir) {
+    if (!places.length) return false;
+    const k = walkAt < 0 ? (dir > 0 ? 0 : places.length - 1) : (walkAt + dir + places.length) % places.length;
+    const p = places[k];
+    if (p.node) ctx.select({ component: p.id, node: p.node, variant: {} });
+    focusPlace(k);
+    return true;
+  }
+  const lastFocusOnPanel = () => side.contains(document.activeElement) || bar.contains(document.activeElement);
 
   // ---- the change: the one-line diff of an edit to a file this highlight reads, with Keep and Revert (Revert is undo) ----
   async function textOf(path) { try { const r = await fetch('/raw/' + path.split('/').map(encodeURIComponent).join('/'), { cache: 'no-store' }); return r.ok ? await r.text() : null; } catch { return null; } }
@@ -257,14 +269,16 @@ export function initHighlight(ctx) {
     label = spec.variable ?? spec.selector.replace(/\s+/g, ' ').trim();
     for (const l of layers.values()) l.remove(); layers.clear();
     change = null;
+    walkAt = -1;
     redraw();
     snapshot();
+    if (places.length) requestAnimationFrame(() => focusPlace(0)); // fly to the first place
     ctx.emit('highlight', { ...spec, ...counts });
     return { ...counts };
   }
   function clear() {
     if (!spec) return;
-    spec = null; places = []; change = null; baselines.clear();
+    spec = null; places = []; change = null; walkAt = -1; baselines.clear();
     for (const l of layers.values()) l.remove(); layers.clear();
     bar.hidden = true; side.hidden = true; delete document.body.dataset.highlight;
     ctx.emit('highlight', null);
@@ -337,9 +351,18 @@ export function initHighlight(ctx) {
   addEventListener('keydown', (ev) => {
     if (ev.isComposing) return;
     if (ev.code === 'Escape' && spec && box.hidden && !document.body.dataset.modal && !/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) { ev.preventDefault(); ev.stopImmediatePropagation(); clear(); return; }
+    // while something is lit, Tab and Shift-Tab walk its places (select, and fly there); the last Tab goes on to Keep / Revert when there is a change to decide on
+    if (ev.key === 'Tab' && spec && box.hidden && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.isComposing && !document.body.dataset.modal && !/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) {
+      if (lastFocusOnPanel()) { if (ev.shiftKey && document.activeElement === side.querySelector('#hl-keep')) { ev.preventDefault(); ev.stopImmediatePropagation(); stageEl.focus({ preventScroll: true }); walk(-1); } return; } // inside the panel Tab keeps its normal job
+      if (!(ev.target === stageEl || (stageEl.contains(ev.target) && !ev.target.closest('button, a[href], input, select, textarea, summary, [role=dialog], [role=slider], #bp-panel, #bp-strip, #theme-wipe, #play-bar, #ask-styles')))) return; // from a control elsewhere, Tab moves focus as it always did
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      if (!ev.shiftKey && change && walkAt === places.length - 1) { side.querySelector('#hl-keep')?.focus(); return; }
+      walk(ev.shiftKey ? -1 : 1);
+      return;
+    }
     if (ev.code === 'KeyH' && ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !(document.body.dataset.modal && box.hidden)) { ev.preventDefault(); ev.stopImmediatePropagation(); pick(); }
   }, true);
 
-  ctx.highlight = { pick, active: () => (spec ? { ...spec, ...counts } : null), places: () => counts.places, rows: () => places.map((p) => ({ component: p.id, node: p.node, indirect: p.indirect })) };
+  ctx.highlight = { walk, keep: keepChange, revert: revertChange, hasChange: () => !!change, pick, active: () => (spec ? { ...spec, ...counts } : null), places: () => counts.places, rows: () => places.map((p) => ({ component: p.id, node: p.node, indirect: p.indirect })) };
   return ctx.highlight;
 }

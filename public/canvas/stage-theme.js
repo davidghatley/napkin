@@ -131,6 +131,12 @@ export function initTheme(ctx) {
     if (!S.on) return;
     const box = stageEl.getBoundingClientRect(), lineX = box.left + (S.at / 100) * box.width;
     line.style.left = `${(S.at / 100) * box.width}px`; stageBg.style.width = `${(S.at / 100) * box.width}px`;
+    // titles, captions and rulers wear the theme of the side of the line their frame sits on
+    for (const [id, sec] of ctx.stage.sections) {
+      if (!sec.docFrame) continue;
+      const r = sec.el.getBoundingClientRect(), left = r.left + r.width / 2 < lineX;
+      sec.el.dataset.wipeTheme = (themeById(left ? S.left : S.right).scheme) || 'light';
+    }
     for (const [id, c] of cards) { const fr = ctx.stage.sections.get(id)?.frame; if (!fr) continue; const r = fr.getBoundingClientRect(), z = fr.offsetWidth ? r.width / fr.offsetWidth : 1, w = fr.offsetWidth, x = Math.max(0, Math.min(w, (lineX - r.left) / z)); c.style.clipPath = `inset(0 ${w - x}px 0 0)`; }
     for (const [id, f] of frames()) {
       const b = clones.get(id), a = f.iframe();
@@ -187,7 +193,7 @@ export function initTheme(ctx) {
     S.on = false; delete document.body.dataset.wipe; bar.hidden = true; line.hidden = true;
     for (const b of clones.values()) b.remove(); clones.clear();
     for (const c of cards.values()) c.remove(); cards.clear();
-    for (const sec of ctx.stage.sections.values()) sec.frame.style.background = '';
+    for (const sec of ctx.stage.sections.values()) { sec.frame.style.background = ''; delete sec.el.dataset.wipeTheme; }
     stageBg.hidden = true; stageEl.style.backgroundColor = ownStage;
     for (const [id] of frames()) ctx.stage.render(id).catch(console.error); // load them again: the frames leave in their own theme
     ctx.emit('wipe', { on: false });

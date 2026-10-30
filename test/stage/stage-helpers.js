@@ -18,7 +18,7 @@ export const COMPONENTS = `body { margin: 0; background: var(--paper); color: va
 .btn:hover { background: var(--accent); color: #fff; }
 .spinner { width: 20px; height: 20px; background: var(--ink); animation: spin 1s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-@media (max-width: 480px) { .card { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .card { grid-template-columns: 1fr; } .ghost { margin: 0; } }
 @media (min-width: 800px) { .card { padding: 32px; } }
 `;
 const page = (body) => `<!doctype html>\n<html><head><meta charset="utf-8"><link rel="stylesheet" href="../tokens.css"><link rel="stylesheet" href="../components.css"></head>\n<body>\n${body}\n</body></html>\n`;

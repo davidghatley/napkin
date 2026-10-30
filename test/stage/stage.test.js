@@ -102,6 +102,18 @@ test('M3 one rule lights up everywhere: highlight by rule, by variable, count, l
       assert.deepEqual(hashes(t.dir), before, 'Revert put the file back');
       await b.waitFor(`document.querySelectorAll('.hl-box').length === 4`);
     }
+    // Tab and Shift-Tab walk the lit places; Tab does not hide the chrome meanwhile; the last Tab reaches Keep when there is a change
+    await b.eval(`napkin.stage.highlight({ selector: '.label', file: 'components.css' }); document.querySelector('#stage').focus()`);
+    await sleep(300);
+    const walked = [];
+    for (let i = 0; i < 4; i++) { await t.key('keyDown', 'Tab', 'Tab', { vk: 9 }); await t.key('keyUp', 'Tab', 'Tab', { vk: 9 }); walked.push(await b.eval(`JSON.stringify([napkin.state.selection?.component, napkin.state.selection?.node])`)); }
+    assert.equal(new Set(walked).size, 4, 'four Tabs select four different places');
+    assert.equal(await b.eval(`document.body.dataset.chrome || 'shown'`), 'shown', 'Tab did not hide the chrome');
+    await t.key('keyDown', 'Tab', 'Tab', { vk: 9, modifiers: 8 });
+    assert.equal(await b.eval(`JSON.stringify([napkin.state.selection?.component, napkin.state.selection?.node])`), walked[2], 'Shift-Tab walks back');
+    assert.ok(await b.eval(`document.querySelectorAll('.hl-box.on').length === 1`), 'the walked-to place is marked');
+    assert.equal(await b.eval(`napkin.view.get().z >= 0.5`), true, 'at a zoom a person can read');
+    await b.eval(`napkin.stage.clearHighlight()`);
     // the way a person gets there: Cmd-K, Alt+H, pick the rule, Enter
     await b.eval(`napkin.stage.clearHighlight()`);
     assert.equal(await b.eval(`document.querySelector('#hl-bar').hidden`), true);
@@ -138,6 +150,16 @@ test('M4 real responsiveness: the file\'s breakpoints are ticks on the ruler, dr
     await b.waitFor(`getComputedStyle(${f}.doc().querySelector('.card')).gridTemplateColumns.split(' ').length === 1`);
     assert.equal(await b.eval(`${f}.doc().defaultView.innerWidth`), 480, 'the document sees a 480 px window');
     assert.match(await b.eval(`${f}.cell.querySelector('figcaption').textContent`), /^480 px · 480 and under$/);
+    // detents: drag through the 480 tick in big steps: it takes the width, holds it, and lets go only when the pointer has moved on
+    const g2 = JSON.parse(await b.eval(`(() => { const r = ${f}.cell.querySelector('.cell-grip').getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()`));
+    const at = (w) => g2.x + (w - 480) * grip.z;
+    await t.mouse('mousePressed', g2.x, g2.y);
+    await t.mouse('mouseMoved', at(540), g2.y); assert.equal(await b.eval(`${f}.width`), 540);
+    await t.mouse('mouseMoved', at(470), g2.y); assert.equal(await b.eval(`${f}.width`), 480, 'one step across a tick lands on it');
+    await t.mouse('mouseMoved', at(474), g2.y); assert.equal(await b.eval(`${f}.width`), 480, 'and it holds');
+    await t.mouse('mouseMoved', at(455), g2.y); assert.equal(await b.eval(`${f}.width`), 455, 'then lets go');
+    await t.mouse('mouseReleased', at(455), g2.y);
+    await b.eval(`${f}.commitWidth(480)`);
     // click a tick: jump
     await b.eval(`${f}.cell.querySelector('.rt[data-px="800"]').click()`);
     await b.waitFor(`${f}.width === 800 && getComputedStyle(${f}.doc().querySelector('.card')).paddingLeft === '32px'`);
@@ -147,11 +169,15 @@ test('M4 real responsiveness: the file\'s breakpoints are ticks on the ruler, dr
     assert.equal(await b.eval(`napkin.widths.step(1)`), true); assert.equal(await b.eval(`${f}.width`), 800);
     // the breakpoints panel: the file's own @media conditions, which apply now, and the frame at other widths
     await t.key('keyDown', 'b', 'KeyB'); await t.key('keyUp', 'b', 'KeyB');
-    await b.waitFor(`!document.querySelector('#bp-panel').hidden && document.querySelectorAll('#bp-panel .bp-rows li button').length === 2`);
-    assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#bp-panel .bp-rows li')].map((li) => [li.querySelector('.bp-px').textContent, li.querySelector('.bp-state').textContent]))`)), [['480', 'not in frame'], ['800', 'applies now']], 'at 800 px only the min-width rule applies');
-    assert.match(await b.eval(`document.querySelector('#bp-panel .bp-diff .on').textContent`), /\.card/);
+    await b.waitFor(`!document.querySelector('#bp-panel').hidden && document.querySelectorAll('#bp-panel .bp-rows:not(.dim) li button').length === 2`);
+    assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#bp-panel .bp-rows:not(.dim) li')].map((li) => [li.querySelector('.bp-px').textContent, li.querySelector('.bp-state').textContent]))`)), [['480', 'not at this width'], ['800', 'applies now']], 'at 800 px only the min-width rule applies');
+    await b.waitFor(`/padding\\s+16px → 32px/.test(document.querySelector('#bp-changes')?.textContent || '')`);
+    assert.match(await b.eval(`document.querySelector('#bp-panel h4.dim').textContent`), /Not in this frame · 1 rule/);
+    assert.match(await b.eval(`document.querySelector('#bp-panel .bp-rows.dim').textContent`), /\.ghost/);
+    assert.equal(await b.eval(`document.querySelector('#bp-panel .bp-rows:not(.dim)').textContent.includes('.ghost')`), false, 'a rule with nothing in the frame is not listed as applying');
+    
     await b.eval(`document.querySelector('#bp-panel button[data-px="480"]').click()`);
-    await b.waitFor(`${f}.width === 480 && document.querySelector('#bp-panel .bp-rows li.on .bp-px')?.textContent === '480'`);
+    await b.waitFor(`${f}.width === 480 && document.querySelector('#bp-panel .bp-rows:not(.dim) li.on .bp-px')?.textContent === '480'`);
     assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#bp-strip button')].map((x) => x.dataset.px))`)), ['480', '800'], 'the same frame at the file\'s own widths');
     await b.waitFor(`[...document.querySelectorAll('#bp-strip iframe')].every((i) => i.src)`);
     await b.eval(`document.querySelector('#bp-strip button[data-px="800"]').click()`);
@@ -207,6 +233,12 @@ test('M5 theme wipe: a slider wipes light into dark (and the files\' own themes)
     assert.equal(await cardBg('Card', 'left'), 'rgb(255, 255, 255)', 'left of the line it is the light card');
     assert.equal(await b.eval(`getComputedStyle(document.querySelector('#stage')).backgroundColor`), 'rgb(20, 22, 27)', 'the stage right of the line is the dark canvas');
     assert.equal(await b.eval(`getComputedStyle(document.querySelector('#wipe-stage')).backgroundColor`), 'rgb(232, 234, 238)', 'and left of it the light canvas');
+    // titles, captions and rulers wear the theme of their side
+    await b.eval(`napkin.theme.set({ at: 0 })`); await sleep(300);
+    assert.equal(await b.eval(`[...document.querySelectorAll('.cmp')].every((e) => e.dataset.wipeTheme === 'dark')`), true, 'all frames are right of the line: dark');
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('.cmp .cmp-title h3')).color`), 'rgb(232, 234, 240)', 'a frame title is light on the dark side');
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('.cmp .cell-ruler')).backgroundColor`), 'rgb(27, 29, 35)', 'and its ruler is a dark strip');
+    await b.eval(`napkin.theme.set({ at: 50 })`);
     // another theme the files define: [data-theme="sepia"]
     await b.eval(`napkin.theme.set({ left: 'sepia', right: 'dark', at: 50 })`);
     await b.waitFor(`[...napkin.theme.clones().values()].every((c) => c.contentDocument?.documentElement.getAttribute('data-theme') === 'sepia')`);
@@ -337,6 +369,12 @@ test('the new chrome (highlight bar and list, ruler, wipe bar and line) passes a
       await b.eval(`napkin.nav.focus(${JSON.stringify(card)}, null, { animate: false }); napkin.select({ component: ${JSON.stringify(card)}, node: napkin.stage.sections.get(${JSON.stringify(card)}).docFrame.tree().tree[0].node, variant: {} })`);
       await sleep(400);
       await run(`${theme}: a focused frame with its ruler`);
+      // the other frames are dimmed while one is focused: with the view pulled back so they are on screen, their captions and rulers must not fail contrast
+      await b.eval(`napkin.view.set({ x: 400, y: 120, z: 0.7 }, { animate: false })`); await sleep(400);
+      assert.ok(await b.eval(`document.querySelectorAll('body[data-focus] .cmp:not([data-focused]) figcaption').length > 0`), 'dimmed frames are there');
+      assert.equal(await b.eval(`[...document.querySelectorAll('body[data-focus] .cmp:not([data-focused]) :is(figcaption, .cell-ruler)')].every((e) => getComputedStyle(e).visibility === 'hidden')`), true, 'the captions and rulers of dimmed frames are hidden, not left at 0.16 contrast');
+      await run(`${theme}: dimmed frames beside the focused one`);
+      await b.eval(`napkin.nav.focus(${JSON.stringify(card)}, null, { animate: false })`); await sleep(300);
       await b.eval(`napkin.breakpoints.open()`); await b.waitFor(`!document.querySelector('#bp-panel').hidden`); await sleep(300);
       await run(`${theme}: the breakpoints panel and the widths strip`);
       await b.eval(`napkin.breakpoints.close(); napkin.stage.sections.get(${JSON.stringify(card)}).docFrame.cell.dataset.resizing = '1'`);
@@ -354,6 +392,7 @@ test('the new chrome (highlight bar and list, ruler, wipe bar and line) passes a
 
 test('fit-all with 60 frames: the frames in view load progressively under a budget (never all 60 live), the rest are named, and zooming to one loads it', { timeout: 120000 }, async () => {
   const files = {};
+  files['x.css'] = 'p { color: #333 }';
   for (let i = 0; i < 60; i++) files[`P${String(i).padStart(2, '0')}/index.html`] = `<!doctype html><meta charset="utf-8"><body style="margin:0"><p style="padding:8px;font:14px sans-serif">Frame ${i}</p>`;
   const t = await open(files, { scheme: 'light' });
   try {
@@ -375,12 +414,19 @@ test('fit-all with 60 frames: the frames in view load progressively under a budg
     await b.eval(`napkin.nav.focus(${JSON.stringify(id)}, null, { animate: false })`);
     await b.waitFor(`!!napkin.stage.sections.get(${JSON.stringify(id)}).docFrame?.doc()?.body?.textContent.includes('Frame')`, 20000);
     assert.ok((await live()) <= 41);
+    // the budget holds after a styles answer too ("apply stylesheets" redraws every frame)
+    await b.eval(`napkin.nav.unfocus({ animate: false }); napkin.view.fitAll({ animate: false })`);
+    await sleep(800);
+    await b.eval(`napkin.fetch('/api/styles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ applied: ['x.css'] }) }).then((r) => r.text())`);
+    await sleep(3000);
+    assert.ok((await live()) <= 40, `after applying stylesheets at most 40 frames are live (${await live()})`);
   } finally { await t.close(); }
 });
 
 test('a component that draws nothing without props says so in its frame; one that draws something does not', { timeout: 90000 }, async () => {
   const t = await open({
     'Empty.tsx': `export function Empty({ children }) { return <span className="badge">{children}</span>; }\n`,
+    'Btn.tsx': `export function Btn() { return <button className="x" />; }\n`,
     'Full.tsx': `export function Full() { return <button style={{ padding: 8 }}>Go</button>; }\n`,
   });
   try {
@@ -389,5 +435,9 @@ test('a component that draws nothing without props says so in its frame; one tha
     assert.match(await b.eval(`napkin.stage.sections.get(napkin.find('Empty').component).docFrame.doc().querySelector('[data-napkin-empty]').textContent`), /Renders nothing without props/);
     await sleep(500);
     assert.equal(await b.eval(`!!napkin.stage.sections.get(napkin.find('Full').component).docFrame.doc().querySelector('[data-napkin-empty]')`), false);
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('Btn')?.component)?.docFrame?.doc()?.querySelector('[data-napkin-empty]')`, 10000); // an empty button: no content, only its own box
+    // the browser's benign "ResizeObserver loop" message is not an error of the component
+    await b.eval(`(() => { const w = napkin.stage.sections.get(napkin.find('Full').component).docFrame.doc().defaultView; w.dispatchEvent(new ErrorEvent('error', { message: 'ResizeObserver loop completed with undelivered notifications.' })); })()`);
+    assert.equal(await b.eval(`!!napkin.stage.sections.get(napkin.find('Full').component).docFrame.doc().querySelector('[data-napkin-error]')`), false);
   } finally { await t.close(); }
 });

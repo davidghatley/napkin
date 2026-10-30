@@ -155,3 +155,17 @@ body[data-chrome="hidden"] #bp-panel, body[data-chrome="hidden"] #bp-strip { dis
 #layers .lskip { display: flex; gap: 8px; align-items: baseline; padding: 4px 14px; color: var(--nk-text-2); font-size: 12px; }
 #layers .lskip .lnote { margin-left: auto; font-size: 11px; }
 body[data-play] .doc-cell figcaption, body[data-play] .cell-ruler, body[data-play] .cell-grip, body[data-play] #hl-side, body[data-play] #bp-panel, body[data-play] #bp-strip { visibility: hidden !important; }
+
+/* a frame dimmed behind a focused one keeps no caption or ruler (they would sit at 0.16 contrast) */
+body[data-focus] .cmp:not([data-focused]) :is(figcaption, .cell-ruler, .hl-box b) { visibility: hidden !important; }
+#bp-panel h4.dim { color: var(--nk-text-2); }
+#bp-panel .bp-rows.dim button { color: var(--nk-text-2); font-style: italic; }
+#bp-panel .bp-rows.dim button { cursor: pointer; }
+#bp-panel .bp-diff .none { padding: 2px 6px; color: var(--nk-text-2); font-size: 11.5px; }
+#bp-panel .bp-diff .bp-prop { color: var(--nk-text-2); font: 11px var(--nk-mono); }
+#bp-panel .bp-diff .bp-chg { margin-left: auto; font: 11px var(--nk-mono); overflow-wrap: anywhere; text-align: right; }
+
+/* the theme wipe: a frame's title, caption and ruler wear the theme of the side of the line it is on */
+.cmp[data-wipe-theme="dark"] { --nk-chrome: #1b1d23; --nk-chrome-2: #23262d; --nk-chrome-3: #2b2f37; --nk-line: #2c2f37; --nk-line-2: #3a3e48; --nk-text: #e8eaf0; --nk-text-2: #b4bac7; --nk-text-3: #959cab; --nk-accent-text: #8fadff; --nk-accent: #6e93ff; }
+.cmp[data-wipe-theme="light"] { --nk-chrome: #fbfbfc; --nk-chrome-2: #f3f4f6; --nk-chrome-3: #eaecf0; --nk-line: #dde0e6; --nk-line-2: #cdd1d9; --nk-text: #1c1f27; --nk-text-2: #4f5663; --nk-text-3: #626a79; --nk-accent-text: #2c52d2; --nk-accent: #3459e2; }
+.cmp[data-wipe-theme] .cmp-title h3, .cmp[data-wipe-theme] .cmp-head { color: var(--nk-text); }

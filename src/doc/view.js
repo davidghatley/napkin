@@ -17,7 +17,7 @@ const href = (path) => '/raw/' + path.split('/').map(encodeURIComponent).join('/
 const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
 // A component that draws nothing with no props (a Badge or Button with no children) would be an empty box: say so, quietly, in its frame.
-const EMPTY_NOTE = `setTimeout(function(){var r=document.getElementById('root');if(!r||document.querySelector('[data-napkin-error]'))return;var b=r.getBoundingClientRect();if(b.height>=1||r.textContent.trim())return;var p=document.createElement('p');p.setAttribute('data-napkin','');p.setAttribute('data-napkin-empty','');p.style.cssText='margin:0;padding:10px 12px;font:12px/1.4 ui-sans-serif,system-ui,sans-serif;color:#5b6270;background:#f3f4f6';p.textContent='Renders nothing without props.';document.body.append(p)},200);`;
+const EMPTY_NOTE = `setTimeout(function(){var r=document.getElementById('root');if(!r||document.querySelector('[data-napkin-error]'))return;if(r.textContent.trim())return;var any=false,els=r.querySelectorAll('*');for(var i=0;i<els.length&&!any;i++){var e=els[i],t=e.localName;if(/^(img|svg|picture|video|canvas|iframe|audio|object|embed|hr)$/.test(t)){any=true;break}if(/^(input|select|textarea)$/.test(t)&&e.type!=='hidden'){any=true;break}if(t==='button'){continue}var c=getComputedStyle(e);if(c.display==='none'||c.visibility==='hidden')continue;var b=e.getBoundingClientRect();if(b.width<1||b.height<1)continue;if((c.backgroundColor!=='rgba(0, 0, 0, 0)'&&c.backgroundColor!=='transparent')||c.backgroundImage!=='none'||c.boxShadow!=='none'||c.outlineStyle!=='none'){any=true}}if(any)return;var p=document.createElement('p');p.setAttribute('data-napkin','');p.setAttribute('data-napkin-empty','');p.style.cssText='margin:0;padding:10px 12px;font:12px/1.4 ui-sans-serif,system-ui,sans-serif;color:#5b6270;background:#f3f4f6';p.textContent='Renders nothing without props.';document.body.append(p)},250);`;
 
 export function htmlView(engine, comp) {
   const entry = engine.read(comp.path);
@@ -85,7 +85,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
     }
     const code = b.code.replace(/<\/script/gi, '<\\/script');
     // a throw while the module loads (nothing to catch it): say so in the frame too
-    const onerr = `addEventListener('error',function(e){var p=document.createElement('pre');p.setAttribute('data-napkin-error','');p.style.cssText='white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;background:#fff;margin:0;padding:12px;overflow-wrap:anywhere';p.textContent='napkin could not run '+${JSON.stringify(comp.path)}+': '+(e.message||e);document.body.append(p)});`.replace(/<\//g, '<\\/');
+    const onerr = `addEventListener('error',function(e){if(/ResizeObserver loop/.test(e.message||''))return;var p=document.createElement('pre');p.setAttribute('data-napkin-error','');p.style.cssText='white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;background:#fff;margin:0;padding:12px;overflow-wrap:anywhere';p.textContent='napkin could not run '+${JSON.stringify(comp.path)}+': '+(e.message||e);document.body.append(p)});`.replace(/<\//g, '<\\/');
     return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${onerr}</script><script>${code}</script><script>${EMPTY_NOTE}</script></body></html>`) };
   }
   return { view, bundle };
