@@ -63,7 +63,8 @@ function removeAttr(s, node, name) {
 // ---------- text ----------
 function textSplices(s, node, value) {
   if (node.selfClosing || node.openEnd === node.closeStart && node.end === node.openEnd) refuse(`<${node.tag}> (${at(s, node.start)}) has no content to hold text`);
-  if (node.jsx ? !node.textOnly : node.children.length) refuse(`<${node.tag}> (${at(s, node.start)}) holds other elements; edit the text of one of them instead`);
+  if (!node.jsx && ['script', 'style'].includes(node.name)) refuse(`<${node.tag}> (${at(s, node.start)}) holds code, not text; edit its rules or the file instead`);
+  if (node.jsx ? !node.textOnly : node.children.length) refuse(`<${node.tag}> (${at(s, node.start)}) holds ${node.jsx ? 'elements or {…} expressions' : 'other elements'}; edit the text of one of them instead`);
   const a = node.openEnd, b = node.closeStart, inner = s.slice(a, b);
   const lead = inner.length - inner.replace(/^[ \t\r\n\f]+/, '').length, trail = inner.length - inner.replace(/[ \t\r\n\f]+$/, '').length;
   const v = toL(value);
