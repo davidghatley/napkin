@@ -19,6 +19,8 @@ Decision 0013 makes the file text the source of truth: napkin opens any folder, 
 6. **The dialect engine stays beside it.** The TSX-dialect workspace (`src/workspace.js`, `src/store.js`) still serves the canvas's dialect features (variant matrices, props, instances, proposals) for dialect files. The server answers the engine contract for every file of the folder from the new engine, and routes `/api/undo` by component id.
 
 ## Consequences
+![The canvas on a copy of secret-sauce ds/project after the ask-once answer (tokens.css, components.css): 22 HTML components in their own frames; Note's tag selected, its text, classes, matching rules with file and line, and the variables they use, each editable at its source](../evidence/P1-canvas-ss-ds.png)
+
 - D1 measures 100% of the P0 corpus within 0.1% of the browser's own render; D2's 60 edits are exact to the byte; D4 leaves `git status` clean.
 - Provenance (moment 2) and rule highlighting (moment 3) read `GET /api/component/<id>/rules`: every rule of a component's cascade with its file, line and byte range, in cascade order. The canvas matches rules to elements in the iframe itself (`element.matches`, `matchMedia`), so the answer is the browser's.
 - Two edit paths exist for dialect TSX until the canvas's dialect features move onto the splice path: the contract's ops go through `src/doc/edit.js`, the canvas's dialect ops through `src/store.js`. Both write whole files atomically and both are watched, so they see each other's changes.
