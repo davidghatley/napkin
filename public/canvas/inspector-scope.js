@@ -68,7 +68,7 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
       sub: `${rule.file.split('/').pop()}:${rule.line}${u?.where ? ` · ${u.where}` : ''}`,
       warn: strongerHere ? `${winner.source.kind === 'inline' ? 'this element’s inline style' : winner.source.selector} still wins here` : null,
       preview: { selector: rule.selector, media: rule.media.at(-1) ?? null },
-      edit: { op: 'rule', file: rule.file, selector: rule.selector, ...(rule.media.length ? { media: rule.media.at(-1) } : {}), index: index(rule), prop, value },
+      edit: { op: 'rule', file: rule.file, selector: rule.selector, media: rule.media.at(-1) ?? '', index: index(rule), prop, value },
       diff: { head: `${rule.file} · ${rule.selector}${rule.media.length ? ` @media ${rule.media.at(-1)}` : ''}`, lines: [...(d ? [{ kind: 'del', line: d.line, text: declLine(prop, d.value, d.important) }] : []), { kind: 'add', line: d ? d.line : (rule.decls.at(-1)?.line ?? rule.line) + 1, text: declLine(prop, value, d?.important) }] },
     });
   } else out.push({ id: 'class', key: 'C', title: 'Class', code: null, disabled: true, why: classes.length ? 'No rule for this class yet in the folder’s stylesheets' : 'This element has no class', sub: classes.length ? 'add the property in a class by hand first' : 'add a class above to use this scope' });
@@ -87,7 +87,7 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
       id: 'variable', key: 'V', title: 'Variable', code: change.name, count: u?.count ?? null, countText: u ? `${u.count} use${u.count === 1 ? '' : 's'}` : '',
       sub: `${src.file.split('/').pop()}:${src.declLine}${src.selector && !/^:root$/.test(src.selector.trim()) ? ` · ${src.selector}` : ''}${u?.where ? ` · ${u.where}` : ''}`,
       preview: { selector: src.selector, media: src.media.at(-1) ?? null },
-      edit: { op: 'var', file: src.file, name: change.name, value: change.value, ...(src.media.length ? { media: src.media.at(-1) } : {}), index: k },
+      edit: { op: 'var', file: src.file, name: change.name, value: change.value, media: src.media.at(-1) ?? '', index: k },
       diff: { head: `${src.file} · ${src.selector}${src.media.length ? ` @media ${src.media.at(-1)}` : ''}`, lines: [{ kind: 'del', line: src.declLine, text: declLine(change.name, old) }, { kind: 'add', line: src.declLine, text: declLine(change.name, change.value) }] },
     });
   } else out.push({

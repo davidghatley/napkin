@@ -35,6 +35,8 @@ export const FILES = {
 .ss-note--rule .ss-note__tag { background: var(--vermilion); color: var(--on-vermilion); }
 .ss-note__body { padding: 11px; font-size: 16px; line-height: 24px; }
 .ss-pill { display: inline-block; padding: 2px 6px; border: 1px solid var(--cobalt); color: var(--cobalt); }
+.ss-row { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-2); margin: var(--space-4) 0; }
+.ss-faint { margin: 0; color: #aaaaaa; }
 `,
   'Note/preview.html': `<!doctype html>
 <html lang="en">
@@ -58,7 +60,8 @@ export const FILES = {
 <link rel="stylesheet" href="../components.css">
 </head>
 <body>
-<span class="ss-pill">Shipped</span> <a href="#x">A link</a> <button type="button">Go</button>
+<div class="ss-row"><span class="ss-pill">Shipped</span><a href="#x">A link</a><button type="button">Go</button><button type="button" tabindex="1">First</button></div>
+<p class="ss-faint">Faint words</p>
 </body>
 </html>
 `,
@@ -100,8 +103,7 @@ export async function open({ files = FILES, dir = writeFolder(files), width = 14
     },
     async select(component, node) {
       await q(`napkin.select({ component: ${JSON.stringify(component)}, node: ${JSON.stringify(node)}, variant: {} })`);
-      await browser.waitFor(`document.querySelector('#panel #doc-values, #panel .doc-body')`);
-      await browser.waitFor(`!!napkin.inspector && document.querySelector('#panel .doc-body')`);
+      await browser.waitFor(`!!napkin.inspector && !!document.querySelector('#panel .doc-head[data-node="${node}"] ~ .doc-body')`);
       await sleep(250);
     },
     // type into a value field like a person (focus, select all, insert text); does not leave the field

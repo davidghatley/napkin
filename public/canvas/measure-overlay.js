@@ -57,16 +57,19 @@ export function initMeasure(ctx) {
     const gaps = [];
     if (/flex|grid/.test(cs.display)) {
       const kids = [...el.children].filter((c) => { const s = win.getComputedStyle(c); return s.display !== 'none' && s.position !== 'absolute' && s.position !== 'fixed'; }).map((c) => rectIn(iframe, c, base));
+      const between = (band) => kids.some((k) => k.x < band.x + band.w - 0.5 && k.x + k.w > band.x + 0.5 && k.y < band.y + band.h - 0.5 && k.y + k.h > band.y + 0.5);
       for (let i = 0; i < kids.length; i++) for (let j = i + 1; j < kids.length; j++) {
         const a = kids[i], c = kids[j], ox = Math.min(a.x + a.w, c.x + c.w) - Math.max(a.x, c.x), oy = Math.min(a.y + a.h, c.y + c.h) - Math.max(a.y, c.y);
-        if (oy > 1 && c.x - (a.x + a.w) > 0.5 && c.x - (a.x + a.w) < 400 * z) gaps.push({ x: a.x + a.w, y: Math.max(a.y, c.y), w: c.x - (a.x + a.w), h: oy, v: (c.x - (a.x + a.w)) / z });
-        else if (ox > 1 && c.y - (a.y + a.h) > 0.5 && c.y - (a.y + a.h) < 400 * z) gaps.push({ x: Math.max(a.x, c.x), y: a.y + a.h, w: ox, h: c.y - (a.y + a.h), v: (c.y - (a.y + a.h)) / z });
+        let band = null;
+        if (oy > 1 && c.x - (a.x + a.w) > 0.5) band = { x: a.x + a.w, y: Math.max(a.y, c.y), w: c.x - (a.x + a.w), h: oy, v: (c.x - (a.x + a.w)) / z };
+        else if (ox > 1 && c.y - (a.y + a.h) > 0.5) band = { x: Math.max(a.x, c.x), y: a.y + a.h, w: ox, h: c.y - (a.y + a.h), v: (c.y - (a.y + a.h)) / z };
+        if (band && !between(band)) gaps.push(band); // only the space between neighbours: nothing sits in it
       }
     }
     const seen = new Set();
     for (const gp of gaps) { const k = `${Math.round(gp.x)}|${Math.round(gp.y)}|${Math.round(gp.w)}|${Math.round(gp.h)}`; if (seen.has(k)) continue; seen.add(k); g.append(div('im-gap', box(gp.x, gp.y, gp.w, gp.h))); g.append(div('im-num im-g', { left: `${gp.x + gp.w / 2}px`, top: `${gp.y + gp.h / 2}px` }, String(r1(gp.v)))); }
     const name = `${el.localName}${el.id ? '#' + el.id : ''}${[...el.classList].map((c) => '.' + c).join('')}`;
-    const fmt = (a) => (a.every((v) => v === a[0]) ? String(r1(a[0])) : a.map(r1).join(' '));
+    const fmt = (a) => (a.every((v) => v === a[0]) ? String(r1(a[0])) : a[0] === a[2] && a[1] === a[3] ? `${r1(a[0])} ${r1(a[1])}` : a.map(r1).join(' ')); // as CSS shorthand
     const read = div('im-read', { left: `${R.x}px`, top: `${Math.max(2, R.y - 26)}px` });
     read.innerHTML = '';
     const nm = document.createElement('b'); nm.textContent = name; read.append(nm);

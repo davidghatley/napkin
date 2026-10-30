@@ -24,7 +24,9 @@
 #panel .pbind:hover, #panel .pbind:focus-visible { background: var(--nk-accent-soft); }
 
 /* ---------- the staged edit: scope, the change, Apply ---------- */
-#panel #doc-staged:empty { display: none; }
+#panel #doc-dock { position: sticky; bottom: 0; z-index: 3; display: grid; background: var(--nk-chrome); box-shadow: 0 -1px 0 var(--nk-line), 0 -10px 24px rgba(20, 24, 36, .14); max-height: 78vh; overflow-y: auto; }
+#panel #doc-dock[hidden] { display: none; }
+#panel .prow.editing { scroll-margin-bottom: var(--dock, 0px); }
 #panel .dsec.staged { background: color-mix(in srgb, var(--nk-accent) 5%, var(--nk-chrome)); border-top: 0; border-bottom: 1px solid var(--nk-line); }
 #panel .dsec.staged h3 code { font: 600 11.5px var(--nk-mono); }
 #panel .pnote { margin: 0; font: 11.5px/1.5 var(--nk-sans); color: var(--nk-text-2); }
@@ -37,21 +39,24 @@
 #panel .opt b { grid-area: t; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
 #panel .opt b code { font: 600 11.5px var(--nk-mono); color: var(--nk-accent-text); }
 #panel .opt .count { grid-area: c; font: 11px var(--nk-sans); color: var(--nk-text-3); }
-#panel .opt .sub { grid-area: s; font: 10.5px var(--nk-mono); color: var(--nk-text-3); overflow-wrap: anywhere; }
+#panel .opt .sub { grid-area: s; font: 10.5px var(--nk-mono); color: var(--nk-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* one line, so the counts that arrive late never move anything */
 #panel .opt .sub em { font-style: normal; color: var(--nk-warn, #b54708); }
 #panel .opt:hover { box-shadow: inset 0 0 0 1px var(--nk-line-2); }
 #panel .opt.on { background: var(--nk-accent-soft); box-shadow: inset 0 0 0 1px var(--nk-accent); }
+#panel .opt.on .count, #panel .opt.on .sub { color: var(--nk-text-2); }
 #panel .opt.on kbd { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent, #fff); }
 #panel .opt[aria-disabled="true"] { opacity: .55; cursor: default; }
 #panel .opt:focus-visible, #panel .linkish:focus-visible, #panel .pbind:focus-visible, #panel .ivchip:focus-visible, #panel .mchip:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 1px; }
 #panel .diff { border: 1px solid var(--nk-line); border-radius: 6px; overflow: hidden; font: 10.5px/18px var(--nk-mono); }
 #panel .diff > div { display: grid; grid-template-columns: 30px 14px minmax(0, 1fr); padding: 1px 8px 1px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 #panel .diff > .h { display: block; padding: 2px 8px; background: var(--nk-chrome-2); color: var(--nk-text-3); border-bottom: 1px solid var(--nk-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#panel .diff .d { background: color-mix(in srgb, #d92d20 13%, var(--nk-chrome)); color: color-mix(in srgb, #b42318 75%, var(--nk-text)); }
-#panel .diff .a { background: color-mix(in srgb, #12b76a 15%, var(--nk-chrome)); color: color-mix(in srgb, #067647 75%, var(--nk-text)); }
-#panel .diff i, #panel .diff u { font-style: normal; text-decoration: none; opacity: .75; text-align: right; padding-right: 4px; }
-#panel .doc-foot { position: sticky; bottom: 0; z-index: 2; display: flex; gap: 8px; padding: 10px 14px; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); }
-#panel .doc-foot[hidden] { display: none; }
+#panel .diff .d { background: color-mix(in srgb, #d92d20 14%, var(--nk-chrome)); color: var(--nk-text); }
+#panel .diff .a { background: color-mix(in srgb, #12b76a 16%, var(--nk-chrome)); color: var(--nk-text); }
+#panel .diff i { font-style: normal; text-align: right; padding-right: 4px; color: var(--nk-text-2); }
+#panel .diff u { font-style: normal; text-decoration: none; text-align: center; font-weight: 700; }
+#panel .diff .d u { color: color-mix(in srgb, #d92d20 85%, var(--nk-text)); }
+#panel .diff .a u { color: color-mix(in srgb, #12b76a 75%, var(--nk-text)); }
+#panel .doc-foot { display: flex; gap: 8px; padding: 10px 14px; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); }
 #panel .doc-foot button { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border: 1px solid var(--nk-line-2); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 500 12.5px var(--nk-sans); cursor: pointer; }
 #panel .doc-foot button.primary { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent, #fff); }
 #panel .doc-foot button.primary kbd { background: transparent; border-color: color-mix(in srgb, #fff 45%, transparent); color: inherit; }

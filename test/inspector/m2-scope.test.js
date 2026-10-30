@@ -118,3 +118,32 @@ test('M2: Escape puts the value back and writes nothing; a disabled scope says w
     assert.equal(await a.q(`document.querySelectorAll('style[data-napkin-preview]').length`), 0, 'the preview is gone');
   } finally { await a.close(); }
 });
+
+test('M2: a variable shows the definition that applies to this element (selector and inheritance, not the last one written)', { timeout: 60000 }, async () => {
+  const files = {
+    'tokens.css': ':root { --a: 10px; }\n@media (max-width: 400px) { :root { --a: 1px; } }\n.theme-x { --a: 99px; }\n.card.alt { --a: 30px; }\n.later { --a: 77px; }\n',
+    'c.css': '@media (max-width: 400px) { .t { padding: 2px; } }\n.t { padding: var(--a); }\n',
+    'p.html': '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="tokens.css"><link rel="stylesheet" href="c.css"></head><body>\n<div class="card"><span class="t" id="plain">A</span></div>\n<div class="card alt"><span class="t" id="alt">B</span></div>\n<div class="theme-x"><div><span class="t" id="deep">C</span></div></div>\n</body></html>\n',
+  };
+  const a = await open({ files });
+  try {
+    const row = async (id) => { const n = await a.node('p.html', (x) => x.attrs.id === id); await a.select('p.html', n.node); return a.q(`document.querySelector('.decl[data-prop="--a"]').innerText + ' | ' + document.querySelector('.decl[data-prop="--a"] input').value`); };
+    assert.match(await row('plain'), /tokens\.css:1.*\| 10px/);
+    assert.match(await row('alt'), /tokens\.css:4.*\| 30px/, 'the selector that matches wins over the later .later');
+    assert.match(await row('deep'), /tokens\.css:3 ↑.*\| 99px/, 'inherited from the nearest ancestor that sets it');
+    // editing the variable edits that definition, nothing else
+    const before = readAll(a.dir);
+    await a.typeIn('.decl[data-prop="--a"] input', '31px');
+    await a.io.key('Tab');
+    await a.browser.waitFor(`document.querySelector('.decl[data-prop="--a"] input')?.value === '31px' && document.querySelector('.decl[data-prop="--a"] .src').textContent.startsWith('tokens.css:3')`, 8000);
+    assert.deepEqual(diffOf(a, before), { 'tokens.css': [['.theme-x { --a: 99px; }', '.theme-x { --a: 31px; }']] });
+    // the same selector in a media block and outside it: the scope edit lands in the one the panel showed
+    await a.select('p.html', (await a.node('p.html', (x) => x.attrs.id === 'plain')).node);
+    const b0 = readAll(a.dir);
+    await a.typeIn('#pv-padding', '5');
+    await a.browser.waitFor(`!!document.querySelector('#doc-staged .scope')`);
+    await a.io.key('c', { alt: true, code: 'KeyC' }); await a.io.key('Enter');
+    await a.browser.waitFor(`!document.querySelector('#doc-staged .scope')`, 8000);
+    assert.deepEqual(diffOf(a, b0), { 'c.css': [['.t { padding: var(--a); }', '.t { padding: 5px; }']] });
+  } finally { await a.close(); }
+});

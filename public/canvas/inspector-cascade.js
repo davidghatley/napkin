@@ -13,6 +13,7 @@
 // on the element sets it; var() is resolved on the element it is used on, with its fallback.
 // What it does not: @layer order, @container, shorthand against longhand (padding vs padding-left), animations.
 
+const PSEUDO_EL = /::?(before|after|first-line|first-letter|marker|placeholder|selection|backdrop|file-selector-button)\b/i;
 const cmp = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 
 // ---------- @media ----------
@@ -113,9 +114,10 @@ export function createCascade(rules, ad, opts = {}) {
     for (const r of styleRules) {
       const sm = sheets[r.sheet]?.media;
       if ((sm && !media(sm)) || !r.media.every(media)) continue;
-      let best = null, part = null;
-      for (const p of r.parts) if (ad.matches(el, p.selector) && (!best || cmp(p.specificity, best) > 0)) { best = p.specificity; part = p.selector; }
-      if (best) m.push({ rule: r, spec: best, part });
+      let best = null, part = null, real = false;
+      for (const p of r.parts) if (ad.matches(el, p.selector)) { if (!PSEUDO_EL.test(p.selector)) real = true; if (!best || cmp(p.specificity, best) > 0) { best = p.specificity; part = p.selector; } }
+      // a rule that only reaches a pseudo-element (::before, ::first-line) is listed with the element but styles another box
+      if (best) m.push({ rule: r, spec: best, part, pseudo: !real });
     }
     m.sort((a, b) => cmp(a.spec, b.spec) || a.rule.order - b.rule.order);
     matchCache.set(el, m);
@@ -124,7 +126,7 @@ export function createCascade(rules, ad, opts = {}) {
   // Every declaration of `prop` that reaches el, weakest first; the last one wins.
   function candidates(el, prop) {
     const out = [];
-    for (const m of matched(el)) m.rule.decls.forEach((d, k) => { if (sameProp(d.prop, prop)) out.push({ kind: 'rule', rank: d.important ? 2 : 0, spec: m.spec, order: m.rule.order, k, d, m }); });
+    for (const m of matched(el)) if (!m.pseudo) m.rule.decls.forEach((d, k) => { if (sameProp(d.prop, prop)) out.push({ kind: 'rule', rank: d.important ? 2 : 0, spec: m.spec, order: m.rule.order, k, d, m }); });
     inlineOf(el).forEach((d, k) => { if (sameProp(d.prop, prop)) out.push({ kind: 'inline', rank: d.important ? 3 : 1, spec: [0, 0, 0], order: Infinity, k, d }); });
     return out.sort((a, b) => a.rank - b.rank || (a.rank === 0 || a.rank === 2 ? cmp(a.spec, b.spec) : 0) || a.order - b.order || a.k - b.k);
   }
@@ -177,12 +179,13 @@ export function createCascade(rules, ad, opts = {}) {
     const props = new Map(); // prop key -> winner
     const all = [];          // every declaration reaching el, with its place
     const note = (c) => { all.push(c); };
-    for (const m of matched(el)) m.rule.decls.forEach((d, k) => note({ kind: 'rule', m, d, k }));
+    for (const m of matched(el)) if (!m.pseudo) m.rule.decls.forEach((d, k) => note({ kind: 'rule', m, d, k }));
     inlineOf(el).forEach((d, k) => note({ kind: 'inline', d, k }));
     const keyOf = (p) => (p.startsWith('--') ? p : p.toLowerCase());
     for (const c of all) { const key = keyOf(c.d.prop); if (!props.has(key)) props.set(key, candidates(el, c.d.prop).at(-1)); }
     const usedVars = new Set();
     const shape = (c) => {
+      if (c.m?.pseudo) return { prop: c.d.prop, value: c.d.value, important: !!c.d.important, line: c.d.line, state: 'pseudo' };
       const winner = props.get(keyOf(c.d.prop));
       const applied = winner.d === c.d;
       const info = { prop: c.d.prop, value: c.d.value, important: !!c.d.important, ...(c.kind === 'rule' && { line: c.d.line }), state: applied ? 'applied' : 'overridden' };

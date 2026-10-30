@@ -77,7 +77,7 @@ async function measureUse(ctx, kind, subject) {
   const key = kind === 'rule' ? `r:${subject.file}:${subject.line}` : `v:${subject}`;
   if (usage.has(key)) return usage.get(key);
   const comps = [...ctx.state.components.values()].filter((c) => c.kind === 'html');
-  let count = 0; const per = [];
+  let count = 0; const per = [], decls = new Set(); // for a variable: each declaration counts once, however many components share its stylesheet
   for (const c of comps) {
     let d; try { d = await rulesFor(c.component); } catch { continue; }
     if (kind === 'rule') {
@@ -87,14 +87,15 @@ async function measureUse(ctx, kind, subject) {
       let n = 0; try { n = doc.querySelectorAll(r.selector.replace(PSEUDO_EL, '').trim() || '*').length; } catch { /* invalid */ }
       if (n) { count += n; per.push({ name: c.name, n }); }
     } else {
-      const decls = new Set();
-      for (const r of d.rules) for (const x of r.decls) if (x.uses.includes(subject)) decls.add(`${r.file}:${x.start}`);
-      if (decls.size) { count += decls.size; per.push({ name: c.name, n: decls.size }); }
+      let here = 0;
+      for (const r of d.rules) for (const x of r.decls) if (x.uses.includes(subject)) { here++; decls.add(`${r.file}:${x.start}`); }
+      if (here) per.push({ name: c.name, n: here });
     }
   }
+  if (kind === 'var') count = decls.size;
   const where = kind === 'rule'
     ? (per.length === 1 ? (per[0].n > 1 ? `all ${WORDS[per[0].n] ?? per[0].n} in ${per[0].name}` : `in ${per[0].name}`) : per.length ? `${per.length} components` : '')
-    : (count ? `${count} declaration${count === 1 ? '' : 's'} in ${per.length} component${per.length === 1 ? '' : 's'}` : '');
+    : (count ? `${count} rule${count === 1 ? '' : 's'}, ${per.length} of ${comps.length} components` : '');
   const out = { count, where };
   usage.set(key, out);
   return out;
@@ -216,12 +217,11 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const rulesStrong = [...explain.rules].reverse();
 
   el.innerHTML = `
-    <div class="selhead doc-head">
+    <div class="selhead doc-head" data-node="${esc(sel.node)}">
       <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(label)}</span></div>
       <p class="hint mono" id="doc-source">${esc(comp.path)}:${node.line}</p>
     </div>
     <div class="doc-body">
-      <div id="doc-staged" aria-live="polite"></div>
       ${textOnly ? `<section class="dsec"><h3>Text</h3><textarea id="doc-text" data-key="text" rows="${Math.min(6, Math.max(1, Math.ceil(node.text.length / 34)))}" aria-label="Text">${esc(node.text)}</textarea></section>` : ''}
       ${node.runs?.length ? `<section class="dsec"><h3>Text <span class="where">${node.runs.length} run${node.runs.length === 1 ? '' : 's'} between its elements</span></h3>${node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join('')}</section>` : ''}
       <section class="dsec"><h3>Classes</h3>
@@ -253,7 +253,10 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       </section>
       <p class="field-error" id="doc-error" hidden></p>
     </div>
-    <div class="doc-foot" id="doc-foot" hidden><button type="button" class="primary" id="doc-apply">Apply <kbd>↵</kbd></button><button type="button" id="doc-cancel">Cancel <kbd>Esc</kbd></button></div>`;
+    <div id="doc-dock" hidden>
+      <div id="doc-staged" aria-live="polite"></div>
+      <div class="doc-foot" id="doc-foot"><button type="button" class="primary" id="doc-apply">Apply <kbd>↵</kbd></button><button type="button" id="doc-cancel">Cancel <kbd>Esc</kbd></button></div>
+    </div>`;
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
   wireKeys(el);
 
@@ -266,7 +269,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (!j.ok) showError(plain(j.error)); else { stamp++; usage.clear(); if (j.revision) comp.revision = j.revision; }
     return j;
   }
-  const ruleEdit = (r, prop, value) => { const rr = data.rules[r]; return { op: 'rule', file: rr.file, selector: rr.selector, ...(rr.media.length ? { media: rr.media.at(-1) } : {}), index: index(rr), prop, value }; };
+  const ruleEdit = (r, prop, value) => { const rr = data.rules[r]; return { op: 'rule', file: rr.file, selector: rr.selector, media: rr.media.at(-1) ?? '', index: index(rr), prop, value }; }; // media '' means the rule outside any @media, so the index counts the same rules as index()
   el.querySelector('#doc-text')?.addEventListener('change', (ev) => { if (ev.target.value !== node.text) send([{ op: 'text', node: sel.node, value: ev.target.value }]); });
   el.querySelectorAll('.doc-run').forEach((t) => t.addEventListener('change', () => { if (t.value !== t.defaultValue) send([{ op: 'text', node: sel.node, run: Number(t.dataset.run), value: t.value }]); }));
   el.querySelectorAll('.cls-x').forEach((b) => b.addEventListener('click', () => send([{ op: 'class', node: sel.node, remove: [b.dataset.remove] }])));
@@ -279,7 +282,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const commit = (value) => {
       if (kind === 'style') return send([{ op: 'style', node: sel.node, prop, value }]);
       if (kind === 'rule') return send([ruleEdit(Number(row.dataset.rule), prop, value)]);
-      return send([{ op: 'var', file: row.dataset.file, name: prop, value, ...(row.dataset.media ? { media: row.dataset.media } : {}), index: Number(row.dataset.index) }]);
+      return send([{ op: 'var', file: row.dataset.file, name: prop, value, media: row.dataset.media, index: Number(row.dataset.index) }]);
     };
     input?.addEventListener('change', () => { if (input.value.trim() && input.value !== input.defaultValue) commit(input.value.trim()); });
     row.querySelector('.decl-x')?.addEventListener('click', () => commit(null));
@@ -328,10 +331,10 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     }
   }
   function renderStaged() {
-    const host = el.querySelector('#doc-staged'), foot = el.querySelector('#doc-foot');
+    const host = el.querySelector('#doc-staged'), dock = el.querySelector('#doc-dock');
     if (!host) return;
     el.querySelectorAll('.prow').forEach((r) => r.classList.toggle('editing', !!staged && r.dataset.prop === staged.prop));
-    if (!staged) { host.innerHTML = ''; foot.hidden = true; preview(null); light(null); return; }
+    if (!staged) { host.innerHTML = ''; dock.hidden = true; preview(null); light(null); return; }
     const had = host.contains(document.activeElement) ? (document.activeElement.dataset.scope || document.activeElement.id) : null; // a redraw keeps the focus where it was
     const opts = optionsFor(), chosen = chosenOf(opts);
     if (chosen) staged.scope = chosen.id;
@@ -343,7 +346,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       if (!usage.has(k)) measureUse(ctx, o.id === 'class' ? 'rule' : 'var', subject).then(() => { if (staged && live === me) renderStaged(); });
     }
     const one = (o) => `<button type="button" role="radio" class="opt${o.id === staged.scope ? ' on' : ''}" aria-checked="${o.id === staged.scope}" data-scope="${o.id}"${o.disabled ? ' aria-disabled="true"' : ''}>
-      <kbd>${o.key}</kbd><b>${o.title}${o.code ? ` <code>${esc(o.code)}</code>` : ''}</b><span class="count">${esc(o.countText ?? '')}</span><span class="sub">${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · <em>${esc(o.warn)}</em>` : ''}</span></button>`;
+      <kbd>${o.key}</kbd><b>${o.title}${o.code ? ` <code>${esc(o.code)}</code>` : ''}</b><span class="count">${esc(o.countText ?? '')}</span><span class="sub" title="${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · ${esc(o.warn)}` : ''}">${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · <em>${esc(o.warn)}</em>` : ''}</span></button>`;
     const n = chosen?.diff.lines.some((l) => l.kind === 'del') ? 1 : chosen?.diff.lines.length ?? 0;
     host.innerHTML = `<section class="dsec staged">
       <h3>Change <code>${esc(staged.prop)}</code> <span class="where">${chosen && chosen.id !== 'element' ? 'the canvas shows it before you apply' : 'this element only'}</span></h3>
@@ -353,7 +356,10 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       <h3>The change <span class="where">${n} line${n === 1 ? '' : 's'}</span></h3>
       <div class="diff" id="doc-diff"><div class="h">${esc(chosen?.diff.head ?? '')}</div>${(chosen?.diff.lines ?? []).map((l) => `<div class="${l.kind === 'del' ? 'd' : 'a'}"><i>${l.line}</i><u>${l.kind === 'del' ? '−' : '+'}</u>${esc(l.text)}</div>`).join('')}</div>
     </section>`;
-    foot.hidden = false;
+    const first = dock.hidden;
+    dock.hidden = false;
+    // the dock covers the bottom of the panel instead of pushing the values down; the value being edited is kept above it
+    if (first) { el.style.setProperty('--dock', `${dock.offsetHeight + 8}px`); el.querySelector('.prow.editing')?.scrollIntoView({ block: 'nearest' }); }
     host.querySelectorAll('[data-scope]').forEach((b) => b.addEventListener('click', () => setScope(b.dataset.scope)));
     host.querySelector('#doc-raw')?.addEventListener('click', toggleBound);
     if (had) (host.querySelector(`[data-scope="${had}"]`) || host.querySelector(`#${had}`))?.focus({ preventScroll: true });
