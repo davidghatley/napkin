@@ -19,7 +19,8 @@ const enc = encodeURIComponent;
 
 export function createTimeRoutes(engine, { tsx, who, json, body, fail }) {
   const film = createFilm(engine);
-  const guard = (fn) => { try { return fn(); } catch (e) { if (e instanceof FilmError) throw new DocError(explainError(e.message), e.status); throw e; } };
+  film.sweep(); // a removed component's film goes when the folder opens, not on the first look at the strip
+  const guard = (fn) => { try { return fn(); } catch (e) { if (e instanceof FilmError) throw new DocError(/Next:/.test(e.message) ? e.message : explainError(e.message), e.status); throw e; } };
   return async function handle(req, res, url) {
     const path = url.pathname, method = req.method;
     if (method === 'GET' && path.startsWith('/view/') && url.searchParams.has('version')) {
@@ -58,7 +59,7 @@ export function createTimeRoutes(engine, { tsx, who, json, body, fail }) {
       const plan = guard(() => film.restorePlan(comp.id, b.frame));
       const when = new Date(plan.frame.at).toLocaleString('en-GB', { hour12: false, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       if (!plan.files.length) return json(res, 200, { ok: true, noop: true, changed: [], component: comp.id }), true;
-      return json(res, 200, engine.restore(comp.id, { files: plan.files, by, summary: `Restored the version from ${when}` })), true;
+      return json(res, 200, engine.restore(comp.id, { files: plan.files, by, summary: plan.frame.short ? `Restored commit ${plan.frame.short}` : `Restored the version from ${when}` })), true;
     }
     return fail(res, 404, 'not found: use /film, /film/<frame>/diff, /film/restore or /copy'), true;
   };

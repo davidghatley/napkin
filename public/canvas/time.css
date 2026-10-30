@@ -1,8 +1,8 @@
 /* The film strip (moment 9, time-strip.js) and the quiet pieces around Copy gives real code. Canvas tokens only (canvas.css). */
-#time { container-type: inline-size; position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px 8px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px/1.4 var(--nk-sans); }
+#time { container-type: inline-size; position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head acts" "track track"; gap: 6px 10px; align-items: center; padding: 6px 12px 8px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px/1.4 var(--nk-sans); }
 #time[hidden] { display: none; }
 body[data-time-open] #hint { bottom: 184px; }
-.tm-head { display: flex; align-items: center; gap: 12px; min-height: 28px; }
+.tm-head { grid-area: head; display: flex; min-width: 0; align-items: center; gap: 12px; min-height: 28px; }
 .tm-title { margin: 0; font: 600 12.5px var(--nk-sans); white-space: nowrap; }
 .tm-file { font: 400 11px var(--nk-mono); color: var(--nk-text-3); margin-left: 6px; display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; direction: rtl; text-align: left; }
 .tm-info { flex: 1; min-width: 0; color: var(--nk-text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -17,7 +17,8 @@ body[data-time-open] #hint { bottom: 184px; }
 #time button:focus-visible { outline: 2px solid var(--nk-select); outline-offset: 2px; }
 .tm-track:focus-visible { outline: none; }
 .tm-track:focus-visible .tm-tile[aria-selected="true"] .tm-thumb { box-shadow: 0 0 0 2px var(--nk-accent), 0 0 0 5px var(--nk-accent-soft); }
-.tm-track { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 4px 4px 6px; scrollbar-width: thin; border-radius: 6px; cursor: grab; user-select: none; touch-action: pan-x; }
+.tm-acts { grid-area: acts; display: flex; align-items: center; gap: 8px; }
+.tm-track { grid-area: track; display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 4px 4px 6px; scrollbar-width: thin; border-radius: 6px; cursor: grab; user-select: none; touch-action: pan-x; }
 .tm-track:active { cursor: grabbing; }
 .tm-tile { flex: none; width: 140px; display: grid; gap: 3px; padding: 0; border-radius: 6px; }
 .tm-thumb { position: relative; width: 140px; height: 72px; overflow: hidden; border-radius: 5px; background: var(--nk-frame); box-shadow: inset 0 0 0 1px var(--nk-line-2); }

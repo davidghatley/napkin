@@ -154,8 +154,8 @@ test('film: 230 edits leave 200 frames and as many blobs; frames of a removed co
     rmSync(join(t.dir, 'solo.html'));
     const eng2 = openFolder(t.dir, { stateDir: t.stateDir });
     const h = createDocRoutes(eng2, { identify: () => 'you' });
-    await new Promise((resolve) => { h({ method: 'GET', headers: {} }, { writeHead() {}, end: () => resolve() }, new URL('http://x/api/component/card.html/film')); });
-    assert.ok(readdirSync(join(eng2.state, 'film', 'blobs')).length <= 6, 'the removed file\'s blobs went with it');
+    void h; // no request at all: opening the folder is what cleans
+    assert.ok(readdirSync(join(eng2.state, 'film', 'blobs')).length <= 6, 'the removed file\'s blobs went with it, on open');
     eng2.close();
   } finally { t.stop(); }
 });
@@ -228,5 +228,107 @@ test('film: a React component keeps versions too, and a version is bundled from 
     const back = await t.post(`/api/component/${encodeURIComponent(id)}/film/restore`, { frame: old.id });
     assert.equal(back.ok, true);
     assert.match(readFileSync(join(t.dir, 'Badge.tsx'), 'utf8'), />Hello</);
+  } finally { t.stop(); }
+});
+
+test('film: restoring a git version keeps every commit in its place; the restore and the undo are entries of their own', async () => {
+  const t = await boot({ git: true });
+  try {
+    const labels = (f) => f.frames.filter((x) => x.source === 'git').map((x) => [x.id, x.what, x.summary]);
+    const f0 = await t.get('/api/component/card.html/film');
+    const commits0 = labels(f0);
+    assert.equal(commits0.length, 2);
+    const first = f0.frames.at(-1);                               // the oldest commit
+    const r = await t.post('/api/component/card.html/film/restore', { frame: first.id });
+    assert.equal(r.ok, true);
+    const f1 = await t.get('/api/component/card.html/film');
+    assert.deepEqual(labels(f1), commits0, 'both commits are still there once, in order, with the same words');
+    assert.equal(f1.frames[0].source, 'napkin'); assert.match(f1.frames[0].what, /^Restored commit [0-9a-f]{7}$/);
+    assert.equal(f1.frames[0].same, true);
+    assert.equal(f1.frames.filter((x) => x.same).length, 2, 'the restore is Now; the commit it restored is marked the same as now, not absorbed');
+    assert.equal((await t.post('/api/undo', { component: 'card.html' })).ok, true);
+    const f2 = await t.get('/api/component/card.html/film');
+    assert.deepEqual(labels(f2), commits0);
+    assert.equal(f2.frames[0].what, 'Undid the restore');
+    assert.equal(new Set(f2.frames.map((x) => x.id)).size, f2.frames.length);
+    for (const x of f2.frames) assert.ok(x.what && !/undefined|\[object/.test(x.what), `a real label: ${x.what}`);
+  } finally { t.stop(); }
+});
+
+test('film: a shared stylesheet edited while napkin was stopped is not clobbered by a restore either', async () => {
+  const t = await boot();
+  try {
+    writeFileSync(join(t.dir, 'pill.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="card.css"></head><body><span class="card">Pill</span></body></html>\n');
+    t.eng.rescan();
+    await t.get('/api/component/pill.html/film');
+    const r = await t.post('/api/edit', { component: 'pill.html', edits: [{ op: 'rule', file: 'card.css', selector: '.card', index: 0, prop: 'padding', value: '40px' }] });
+    assert.equal(r.ok, true);
+    const old = (await t.get('/api/component/pill.html/film')).frames.at(-1);
+    t.stop();
+    // napkin is not running: the stylesheet is edited by hand
+    writeFileSync(join(t.dir, 'card.css'), readFileSync(join(t.dir, 'card.css'), 'utf8') + '.mine { color: teal }\n');
+    const eng2 = openFolder(t.dir, { stateDir: t.stateDir });
+    const h = createDocRoutes(eng2, { identify: (tok) => (tok === 'tok' ? 'you' : null) });
+    const srv = createServer(async (req, res) => { if (!(await h(req, res, new URL(req.url, 'http://x')))) { res.writeHead(404); res.end('{}'); } });
+    await new Promise((r2) => srv.listen(0, '127.0.0.1', r2));
+    try {
+      const res = await (await fetch(`http://127.0.0.1:${srv.address().port}/api/component/pill.html/film/restore`, { method: 'POST', headers: { authorization: 'Bearer tok', 'content-type': 'application/json' }, body: JSON.stringify({ frame: old.id }) })).json();
+      assert.equal(res.ok, false); assert.match(res.error, /card\.css is shared, and it changed at \d\d:\d\d outside napkin after this version\. Restoring would undo that\. Next:/);
+      assert.match(readFileSync(join(t.dir, 'card.css'), 'utf8'), /\.mine/, 'nothing was written');
+    } finally { eng2.close(); srv.close(); }
+  } finally { try { t.stop(); } catch { /* already */ } }
+});
+
+test('film: labels say the truth: a whole element added, restores and undos in words, no hidden count', async () => {
+  const t = await boot();
+  try {
+    writeFileSync(join(t.dir, 'pills.html'), '<!doctype html><html><body><p><span class="ss-pill">Shipped</span> <span class="ss-pill">Blocked</span></p></body></html>\n');
+    t.eng.rescan();
+    const id = 'pills.html';
+    await t.get(`/api/component/${id}/film`);
+    const tr = await t.get(`/api/component/${id}`);
+    const p = find(tr.tree, 'p');
+    const r = await t.post('/api/edit', { component: id, baseRevision: tr.revision, edits: [{ op: 'insert', parent: p.node, index: 1, html: '<span class="ss-pill">QA done</span>' }] });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    let f = await t.get(`/api/component/${id}/film`);
+    assert.equal(f.frames[0].what, 'Added <span class="ss-pill">QA done</span>');
+    assert.equal((await t.post('/api/undo', { component: id })).ok, true);
+    f = await t.get(`/api/component/${id}/film`);
+    assert.equal(f.frames[0].what, 'Undid Added <span class="ss-pill">QA done</span>');
+    // several things in one write: the first is said, the rest are a count of their own
+    const tr2 = await t.get(`/api/component/${id}`);
+    await t.post('/api/edit', { component: id, baseRevision: tr2.revision, edits: [{ op: 'attr', node: find(tr2.tree, 'p').node, name: 'class', value: 'row' }, { op: 'attr', node: find(tr2.tree, 'p').node, name: 'title', value: 'x' }] });
+    f = await t.get(`/api/component/${id}/film`);
+    assert.ok(f.frames[0].more >= 1, JSON.stringify(f.frames[0]));
+    assert.ok(!/and \d+ more/.test(f.frames[0].what), 'the count is not inside the words');
+  } finally { t.stop(); }
+});
+
+test('film: a shared stylesheet edit nothing of this component uses is no frame of it, and writes nothing for it', async () => {
+  const t = await boot();
+  try {
+    writeFileSync(join(t.dir, 'other.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="card.css"></head><body><b class="elsewhere">x</b></body></html>\n');
+    t.eng.rescan();
+    await t.get('/api/component/other.html/film'); await t.get('/api/component/card.html/film');
+    const slotOf = (id) => readdirSync(join(t.eng.state, 'film')).filter((n) => n !== 'blobs' && n !== 'ledger.json').map((n) => join(t.eng.state, 'film', n, 'frames.json')).find((p) => JSON.parse(readFileSync(p, 'utf8')).comp === id);
+    const before = readFileSync(slotOf('other.html'), 'utf8');
+    // .card is used by card.html only
+    const r = await t.post('/api/edit', { component: 'card.html', edits: [{ op: 'rule', file: 'card.css', selector: '.card', index: 0, prop: 'padding', value: '40px' }] });
+    assert.equal(r.ok, true);
+    assert.equal(readFileSync(slotOf('other.html'), 'utf8'), before, 'other.html\'s frames were not rewritten');
+    const fo = await t.get('/api/component/other.html/film');
+    assert.equal(fo.frames.length, 1, 'no frame for a change it never draws');
+    const fc = await t.get('/api/component/card.html/film');
+    assert.match(fc.frames[0].what, /padding/);
+    // and a variable the component does not use, or uses only through another
+    writeFileSync(join(t.dir, 'card.css'), readFileSync(join(t.dir, 'card.css'), 'utf8') + ':root { --ink: #111; --sheet: var(--ink); --unused: 1px; }\n.elsewhere { color: var(--sheet); }\n');
+    await new Promise((r2) => setTimeout(r2, 200));
+    const r2 = await t.post('/api/edit', { component: 'card.html', edits: [{ op: 'var', file: 'card.css', name: '--unused', value: '2px' }] });
+    assert.equal(r2.ok, true, JSON.stringify(r2));
+    const r3 = await t.post('/api/edit', { component: 'card.html', edits: [{ op: 'var', file: 'card.css', name: '--ink', value: '#222' }] });
+    assert.equal(r3.ok, true, JSON.stringify(r3));
+    const fo2 = await t.get('/api/component/other.html/film');
+    assert.match(fo2.frames[0].what, /--ink/, 'a variable it uses through another property is a frame of it');
+    assert.ok(!fo2.frames.some((f) => /--unused/.test(f.what)), 'one it does not use is not');
   } finally { t.stop(); }
 });

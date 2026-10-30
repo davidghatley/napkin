@@ -13,7 +13,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeAtomic } from '../atomic.js';
 import { removeInState } from './state-rm.js';
-import { describe } from './film-diff.js';
+import { describe, cssTouched } from './film-diff.js';
+import { relevanceOf } from './film-relevance.js';
 
 const KEEP = 200;               // napkin frames kept per component
 const MAX_BYTES = 2_000_000;    // a file bigger than this is not kept
@@ -106,15 +107,29 @@ export function createFilm(engine) {
   function known(id) {
     const comp = engine.component(id), s = slot(comp.id), now = snapshot(comp);
     if (!s.frames.length) record(comp.id, now, { by: 'file', summary: 'The file as napkin first saw it' });
-    else if (sigOf(s.frames.at(-1).files) !== sigOf(now)) record(comp.id, now, { by: 'file', summary: 'Edited outside napkin' });
+    else if (sigOf(s.frames.at(-1).files) !== sigOf(now)) {
+      // changed while napkin was not looking (it was stopped, or someone saved in an editor): the ledger must know, or a
+      // restore would silently undo that work
+      const last = s.frames.at(-1);
+      for (const [p, oid] of Object.entries(now)) {
+        if (last.files[p] === oid) continue;
+        let mtime = 0; try { mtime = engine.read(p).mtimeMs || 0; } catch { /* gone */ }
+        const at = Math.max(mtime, last.at + 1);
+        if (!(ledger[p] || []).some((e) => e.oid === oid)) { (ledger[p] ||= []).push({ at, oid, comp: null, by: 'file' }); ledger[p] = ledger[p].slice(-100); saveLedger(); }
+      }
+      record(comp.id, now, { by: 'file', summary: 'Edited outside napkin' });
+    }
     pendingBlobs.clear();
     return comp;
   }
   engine.events.on('commit', (c) => quiet(() => {
     load();
     (ledger[c.path] ||= []).push({ at: c.at, oid: oidOf(c.after), comp: c.component ?? null, by: c.by }); ledger[c.path] = ledger[c.path].slice(-100); saveLedger();
+    let touched = null;
     for (const id of usersOf(c.path)) {
       let comp; try { comp = engine.component(id); } catch { continue; }
+      // a shared stylesheet's change that nothing of this component uses is no moment of it (and costs it no write)
+      if (c.path !== comp.path && /\.css$/i.test(c.path)) { touched ??= cssTouched(c.before.toString('utf8'), c.after.toString('utf8')); const rel = relevanceOf(engine, comp); if (touched.length && !touched.some((t) => rel.related(t))) continue; }
       const s = slot(comp.id);
       if (!s.frames.length) record(comp.id, snapshot(comp, new Map([[c.path, c.before]])), { by: 'file', summary: 'The file as napkin first saw it', at: c.at - 1 });
       record(comp.id, snapshot(comp), { by: c.by, summary: c.kind === 'edit' ? c.summary : `${c.kind}: ${c.summary}`, at: c.at });
@@ -180,15 +195,15 @@ export function createFilm(engine) {
 
   // ---------- the list ----------
   const labelCache = new Map();
-  function label(prev, cur) {
-    const k = `${prev ? sigOf(prev.files) : ''}>${sigOf(cur.files)}`;
+  function label(prev, cur, comp, rel) {
+    const k = `${comp.id}|${prev ? sigOf(prev.files) : ''}>${sigOf(cur.files)}`;
     if (labelCache.has(k)) return labelCache.get(k);
-    let r = { what: '', where: '', key: null };
+    let r = { what: '', more: 0, where: '', key: null };
     if (prev) {
       const paths = [...new Set([...Object.keys(prev.files), ...Object.keys(cur.files)])].filter((p) => prev.files[p] !== cur.files[p]);
       const b = blobsOf(paths.flatMap((p) => [prev.files[p], cur.files[p]]).filter(Boolean));
       const txt = (o) => (o && b.has(o) ? b.get(o).toString('utf8') : null);
-      r = paths.length ? describe(paths.map((p) => ({ path: p, a: txt(prev.files[p]), b: txt(cur.files[p]) }))) : r;
+      r = paths.length ? describe(paths.map((p) => ({ path: p, a: txt(prev.files[p]), b: txt(cur.files[p]) })), { related: (t) => rel().related(t) }) : r;
     }
     labelCache.set(k, r); if (labelCache.size > 2000) labelCache.delete(labelCache.keys().next().value);
     return r;
@@ -197,26 +212,41 @@ export function createFilm(engine) {
   function list(id) {
     const comp = known(id), s = slot(comp.id);
     const paths = writeSet(comp), nowSig = sigOf(snapshot(comp)); pendingBlobs.clear();
+    let relCache = null; const rel = () => (relCache ??= relevanceOf(engine, comp));
     const all = s.frames.map((f) => ({ ...f, source: 'napkin' }));
-    const sigs = new Map(all.map((f) => [sigOf(f.files), f]));
+    // A commit always keeps its own place: an edit, a restore or an undo that happens to have the same bytes is its own
+    // entry, never the commit's replacement. Only a frame that merely recorded the file as it already was (first seen, or
+    // edited outside napkin) and equals a commit is that commit, not a second copy of it.
     for (const g of [...gitFrames(comp, paths)].reverse()) { // oldest first, so commits of one second keep their order
-      const twin = sigs.get(sigOf(g.files));
-      if (!twin) { all.push(g); continue; }
-      // one frame for one set of bytes: a commit napkin also made an edit of keeps the edit, the file as first seen becomes the commit
-      twin.git = { short: g.short, subject: g.summary, author: g.by };
-      if (twin.by === 'file' && /first saw/.test(twin.summary)) all.splice(all.indexOf(twin), 1, g);
+      const gs = sigOf(g.files);
+      for (const twin of all.filter((f) => f.source === 'napkin' && sigOf(f.files) === gs)) {
+        if (twin.by === 'file') all.splice(all.indexOf(twin), 1);
+        else if (!/^(Restored|undo:|redo:)/.test(twin.summary)) twin.git = { short: g.short, subject: g.summary, author: g.by };
+      }
+      all.push(g);
     }
     all.sort((a, b) => a.at - b.at || (a.ord ?? Infinity) - (b.ord ?? Infinity)); // commits of one second keep their order
     const out = [];
-    all.forEach((f, k) => {
-      const prev = all[k - 1] ?? null, l = label(prev, f), tail = out.at(-1);
-      const row = { id: f.id, ids: [f.id], count: 1, source: f.source, at: f.at, by: f.by, summary: f.summary, what: l.what, where: l.where, key: l.key, same: sigOf(f.files) === nowSig, beforeId: prev?.id ?? null, ...(f.short && { short: f.short }), ...(f.git && { git: f.git }) };
-      Object.defineProperty(row, '_before', { value: prev, enumerable: false, writable: true });
+    let prevRaw = null, prevKept = null;
+    for (const f of all) {
+      const l = label(prevRaw, f, comp, rel);
+      const before = prevRaw; prevRaw = f;
+      if (l.hidden) continue;                                  // a shared stylesheet changed in a way that is nothing of this component's
+      let what = l.what, where = l.where, more = l.more, key = l.key;
+      const verb = /^(undo|redo): /.exec(f.summary || '')?.[1];
+      if (/^Restored /.test(f.summary || '')) { what = f.summary; where = ''; more = 0; key = null; }
+      else if (verb) { const was = prevKept?.what ?? ''; what = /^Restored/.test(was) ? `${verb === 'undo' ? 'Undid' : 'Redid'} the restore` : `${verb === 'undo' ? 'Undid' : 'Redid'} ${was || 'an edit'}`; more = 0; key = null; where = ''; }
+      else if (!what) what = f.source === 'git' ? f.summary : (f.summary || 'Changed the files');
+      const tail = out.at(-1);
+      const row = { id: f.id, ids: [f.id], count: 1, source: f.source, at: f.at, by: f.by, summary: f.summary, what, more, where, key, same: sigOf(f.files) === nowSig, beforeId: prevKept?.id ?? null, ...(f.short && { short: f.short }), ...(f.git && { git: f.git }) };
+      Object.defineProperty(row, '_before', { value: before, enumerable: false, writable: true });
+      Object.defineProperty(row, '_beforeKept', { value: prevKept, enumerable: false, writable: true });
       if (tail && row.source === 'napkin' && tail.source === 'napkin' && row.key && row.key === tail.key && row.by === tail.by && f.at - tail.at <= RUN_GAP) {
-        const l2 = label(tail._before, f);
-        Object.assign(tail, { ids: [...tail.ids, f.id], count: tail.count + 1, id: f.id, at: f.at, summary: f.summary, same: row.same, what: l2.what, where: l2.where });
-      } else out.push(row);
-    });
+        const l2 = label(tail._before, f, comp, rel);
+        Object.assign(tail, { ids: [...tail.ids, f.id], count: tail.count + 1, id: f.id, at: f.at, summary: f.summary, same: row.same, what: l2.what, more: l2.more, where: l2.where });
+        prevKept = tail;
+      } else { out.push(row); prevKept = row; }
+    }
     return { git: inRepo(), now: { sig: sha1(nowSig).slice(0, 12) }, frames: out.reverse() };
   }
   const findFrame = (comp, frameId) => {
@@ -264,12 +294,12 @@ export function createFilm(engine) {
         const clobber = (ledger[p] || []).filter((e) => e.at > frame.at && e.comp !== comp.id).at(-1);
         if (clobber && usersOf(p).some((u) => u !== comp.id)) {
           const when = new Date(clobber.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-          throw new FilmError(`${p} is shared, and it changed at ${when}${clobber.comp ? ` while you worked on ${clobber.comp.split('#').pop()}` : ' outside napkin'} after this version. Restoring would undo that. Next: restore a newer version, or change the rule in ${p} directly`, 409);
+          throw new FilmError(`${p} is shared, and it changed at ${when}${clobber.comp ? ` while you worked on ${clobber.comp.split('#').pop()}` : ' outside napkin'} after this version. Restoring would undo that.. Next: restore a newer version, or change the rule in ${p} directly`, 409);
         }
       }
       write.push({ path: p, bytes });
     }
     return { comp, frame, files: write };
   }
-  return { list, snapshotOf, diff, restorePlan, known };
+  return { list, snapshotOf, diff, restorePlan, known, sweep: load };
 }

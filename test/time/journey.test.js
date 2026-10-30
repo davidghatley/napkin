@@ -182,12 +182,18 @@ test('M9 the frame is never hidden by the strip: it is brought into view above i
   try {
     await setText(browser, 'h2', 'Fresh bread daily');
     await select(browser, await nodeOf(browser, 'h2'));
-    await browser.eval(`napkin.view.set({ x: 300, y: 600, z: 1 })`); await sleep(200);   // the frame sits where the strip will be
+    await browser.eval(`napkin.view.set({ x: 300, y: 600, z: 0.25 })`); await sleep(200);   // small, and where the strip will be
     await io.key('h');
     await browser.waitFor(`document.querySelectorAll('#time .tm-tile').length >= 3`);
     await io.key('ArrowLeft'); await previewReady(browser); await sleep(500);
     const m = JSON.parse(await browser.eval(`JSON.stringify((() => { const c = document.querySelector('.doc-cell').getBoundingClientRect(), s = document.querySelector('#time').getBoundingClientRect(); return { above: c.bottom <= s.top, top: c.top >= document.querySelector('#stage').getBoundingClientRect().top }; })())`));
     assert.deepEqual(m, { above: true, top: true });
+    assert.ok(await browser.eval(`napkin.view.get().z`) >= 0.5, 'the first scrub brings the frame up to a size you can read');
+    // Tab order: the track, then Before, Fit, Restore (then Close)
+    const order = [];
+    await browser.eval(`document.querySelector('#time-track').focus()`);
+    for (let i = 0; i < 4; i++) { await io.key('Tab'); order.push(await browser.eval(`document.activeElement.id`)); }
+    assert.deepEqual(order, ['time-flip', 'time-fit', 'time-restore', 'time-close'], 'Tab walks Before, Fit, Restore, Close');
   } finally { await t.stop(); }
 });
 

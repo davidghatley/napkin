@@ -31,13 +31,14 @@ export function initTimeStrip(ctx) {
   const S = { open: false, id: null, film: null, tiles: [], at: -1, gen: 0, preview: null, side: 'after', revealed: false, crop: null, kind: null };
   const el = document.createElement('section');
   el.id = 'time'; el.hidden = true; el.dataset.nodrag = '1'; el.setAttribute('aria-label', 'Versions of the selected component');
+  // DOM order is Tab order: the track first, then Before, Fit, Restore, Close (CSS puts the buttons back in the header row)
   el.innerHTML = `<header class="tm-head"><h2 class="tm-title">Versions <span class="tm-file" id="time-file"></span></h2>
     <span class="tm-cue" id="time-cue-chip" hidden>Earlier version</span><span class="tm-info" id="time-info" role="status" aria-live="polite"></span>
-    <span class="tm-keys">← → scrub · B before / after · Enter restore · Esc close</span>
-    <button type="button" id="time-flip" class="tm-btn" aria-pressed="false" title="Flip between the version before this change and after it (B)" disabled>Before</button>
+    <span class="tm-keys">← → scrub · B before / after · Enter restore · Esc close</span></header>
+    <div class="tm-track" id="time-track" role="listbox" tabindex="0" aria-label="Versions, oldest first. Left and right move, Enter restores"></div>
+    <div class="tm-acts"><button type="button" id="time-flip" class="tm-btn" aria-pressed="false" title="Flip between the version before this change and after it (B)" disabled>Before</button>
     <button type="button" id="time-fit" class="tm-btn" title="Bring the component into view above the strip">Fit</button>
-    <button type="button" id="time-restore" class="tm-restore" disabled aria-label="Restore this version">Restore</button><button type="button" id="time-close" class="tm-close" aria-label="Close versions">×</button></header>
-    <div class="tm-track" id="time-track" role="listbox" tabindex="0" aria-label="Versions, oldest first. Left and right move, Enter restores"></div>`;
+    <button type="button" id="time-restore" class="tm-restore" disabled aria-label="Restore this version">Restore</button><button type="button" id="time-close" class="tm-close" aria-label="Close versions">×</button></div>`;
   stage.append(el);
   const cue = document.createElement('div');
   cue.id = 'time-cue'; cue.hidden = true; cue.setAttribute('aria-hidden', 'true'); cue.innerHTML = '<span class="tc-pill"></span>';
@@ -71,11 +72,14 @@ export function initTimeStrip(ctx) {
     const fr = frameOf(S.id); if (!fr) return;
     const r = fr.cell.getBoundingClientRect(), st = stage.getBoundingClientRect(), stripTop = el.getBoundingClientRect().top;
     const m = 14, top = st.top + m + 24, bottom = stripTop - m - 8, left = st.left + m, right = st.right - m;
+    const v = ctx.view.get();
     const inside = r.top >= top - 24 && r.bottom <= bottom && r.left >= left && r.right <= right;
-    if (inside && !force) return;
-    const v = ctx.view.get(), availW = right - left, availH = bottom - top;
-    const z = Math.max(0.05, Math.min(v.z, availW / (r.width / v.z), availH / (r.height / v.z)));
-    const wx = (r.left - st.left - v.x) / v.z, wy = (r.top - st.top - v.y) / v.z, ww = r.width / v.z, wh = r.height / v.z;
+    if (inside && v.z >= 0.5 && !force) return;
+    const availW = right - left, availH = bottom - top, ww = r.width / v.z, wh = r.height / v.z;
+    // legible: a frame seen small is brought up to 100% when it fits (never below what fits), a frame already big enough only moves
+    const fit = Math.min(availW / ww, availH / wh);
+    const z = Math.max(0.05, v.z < 0.5 ? Math.min(fit, 1) : Math.min(v.z, fit));
+    const wx = (r.left - st.left - v.x) / v.z, wy = (r.top - st.top - v.y) / v.z;
     const cx = (left + right) / 2 - st.left, cy = (top + bottom) / 2 - st.top;
     ctx.view.set({ x: cx - (wx + ww / 2) * z, y: cy - (wy + wh / 2) * z, z }, { animate: true });
   }
@@ -112,9 +116,9 @@ export function initTimeStrip(ctx) {
   const tileHtml = (t, i) => {
     const label = t.now ? 'Now' : clock(t.at), what = wording(t), by = t.now ? '' : who(t);
     const tag = t.source === 'git' ? `<span class="tm-git" title="Commit ${esc(t.short)}: ${esc(t.summary)}">git ${esc(t.short)}</span>` : t.git ? `<span class="tm-git" title="Also commit ${esc(t.git.short)}: ${esc(t.git.subject)}">git ${esc(t.git.short)}</span>` : '';
-    const n = t.count > 1 ? `<span class="tm-count">${t.count} edits</span>` : '';
+    const n = (t.count > 1 ? `<span class="tm-count">${t.count} edits</span>` : '') + (t.more > 0 ? `<span class="tm-count">+${t.more} more</span>` : '');
     const tip = [what, t.where, t.source === 'git' ? `${t.by}: ${t.summary}` : by ? `${by}${t.summary ? ': ' + t.summary : ''}` : t.summary].filter(Boolean).join('\n');
-    return `<div class="tm-tile" id="tm-${i}" role="option" aria-selected="false" aria-label="${esc(`${label}. ${what}${t.count > 1 ? `. ${t.count} edits` : ''}${t.same && !t.now ? '. Same as now' : ''}`)}" data-i="${i}" data-source="${t.now ? 'now' : t.source}"${t.version ? ` data-version="${esc(t.version)}"` : ''} title="${esc(tip)}">
+    return `<div class="tm-tile" id="tm-${i}" role="option" aria-selected="false" aria-label="${esc(`${label}. ${what}${t.count > 1 ? `. ${t.count} edits` : ''}${t.more > 0 ? `. and ${t.more} more` : ''}${t.same && !t.now ? '. Same as now' : ''}`)}" data-i="${i}" data-source="${t.now ? 'now' : t.source}"${t.version ? ` data-version="${esc(t.version)}"` : ''} title="${esc(tip)}">
       <div class="tm-thumb" aria-hidden="true"></div><div class="tm-meta"><span class="tm-time">${esc(label)}</span>${tag}${n}</div><div class="tm-what">${esc(what)}</div></div>`;
   };
 
@@ -142,7 +146,7 @@ export function initTimeStrip(ctx) {
     // the newest frame is what the files are now: it is the "Now" tile, not a second copy of it (and says what the last change was)
     const newest = r.frames[0]?.same ? r.frames[0] : null;
     const frames = newest ? r.frames.slice(1) : r.frames;
-    S.tiles = [...frames.reverse().map((f) => ({ ...f, version: f.id })), { now: true, same: true, what: newest?.what ?? '', where: newest?.where ?? '', count: newest?.count ?? 1, beforeId: newest?.beforeId ?? null, summary: newest?.summary ?? '', source: newest?.source ?? 'napkin', by: newest?.by }];
+    S.tiles = [...frames.reverse().map((f) => ({ ...f, version: f.id })), { now: true, same: true, what: newest?.what ?? '', where: newest?.where ?? '', count: newest?.count ?? 1, more: newest?.more ?? 0, beforeId: newest?.beforeId ?? null, summary: newest?.summary ?? '', source: newest?.source ?? 'napkin', by: newest?.by }];
     const prev = keep && S.at >= 0 ? S.tiles[S.at]?.id : null;
     thumbsOf.reset();
     S.crop = cropOf();
