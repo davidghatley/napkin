@@ -18,6 +18,8 @@ import { initMeasure } from './measure-overlay.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const normSel = (t) => String(t).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\s*([,>+~])\s*/g, '$1').trim();
 const normMedia = (t) => String(t ?? '').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').replace(/\s*:\s*/g, ': ').trim().toLowerCase();
+// a value the browser would not take is not written (var() values are checked where they resolve)
+const validValue = (prop, value) => { if (prop.startsWith('--') || /var\(/.test(value)) return true; try { return CSS.supports(prop, value); } catch { return true; } };
 const WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
 const rulesCache = new Map(); // component -> { stamp, data }
 const usage = new Map();      // 'r:file:line' / 'v:--name' -> { count, where }; cleared when a file changes
@@ -356,17 +358,20 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   let pvTok = 0, pvKey = null;
   async function preview(opt) {
     const tok = ++pvTok;
-    if (!opt || !target) { pvKey = null; pv.clear(); return; }
+    if (!opt || !target || staged?.invalid) { pvKey = null; pv.clear(); return; }
     const key = JSON.stringify(opt.edit);
     if (key === pvKey) return;
     const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: comp.component, baseRevision: comp.revision, edits: [opt.edit], dryRun: true }) });
     const j = await r.json().catch(() => ({ ok: false, error: `the preview failed (${r.status})` }));
     if (tok !== pvTok || !staged) return;
     if (!j.ok) { pvKey = null; pv.clear(); showError(plain(j.error)); return; }
-    showError(''); pvKey = key; pv.apply(j.files || []);
+    showError(''); pvKey = key;
+    const shown = await pv.apply(j.files || []);
     await new Promise((res) => requestAnimationFrame(res));
     if (tok !== pvTok || !staged) return;
-    const fx = effectOf(opt);
+    // a change the frames cannot show is said so; it is never reported as a rule that loses
+    const unseen = (j.files || []).find((f) => !shown.has(f.path));
+    const fx = unseen ? { unseen: unseen.path } : effectOf(opt);
     if (JSON.stringify(fx) !== JSON.stringify(staged.fx?.[key])) { staged.fx = { [key]: fx }; renderStaged(); }
   }
   // Does the typed value show on this element now? The same value on a bare copy of it (nothing else styling it) is what
@@ -395,6 +400,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   function whyNot(opt, fx) {
     if (!fx) return null;
     if (fx.invalid) return { text: `not a value ${staged.prop} accepts` };
+    if (fx.unseen) return { text: /\.css$/i.test(fx.unseen) ? `this rule is in an @imported sheet (${base(fx.unseen)}); the preview can’t show it` : `this change is in ${base(fx.unseen)}; the preview can’t show it` };
     const l = opt.losers?.[0];
     if (!l) return { text: `won’t show: something else on the page wins ${fx.bad.slice(0, 2).join(', ')}` };
     const same = l.by.kind === 'rule' && opt.id === 'class' && l.by.order === data.rules.findIndex((r) => r.file === opt.edit.file && r.selector === opt.edit.selector && normMedia(r.media.at(-1)) === normMedia(opt.edit.media));
@@ -421,7 +427,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     }
     const one = (o) => `<button type="button" role="radio" class="opt${o.id === staged.scope ? ' on' : ''}" aria-checked="${o.id === staged.scope}" tabindex="${o.id === staged.scope ? 0 : -1}" data-scope="${o.id}"${o.disabled ? ' aria-disabled="true"' : ''} title="${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · ${esc(o.warn)}` : ''}">
       <kbd>${o.key}</kbd><span class="otxt"><b>${o.title}</b><span class="osub">${o.id === 'element' ? 'inline style' : o.disabled ? 'not here' : `${o.code ? esc(o.code) : ''}${o.countText ? ` · ${esc(o.countText)}` : ''}`}</span></span></button>`;
-    const fx = chosen ? staged.fx?.[JSON.stringify(chosen.edit)] : null, not = whyNot(chosen, fx);
+    const fx = staged.invalid ? { invalid: true } : chosen ? staged.fx?.[JSON.stringify(chosen.edit)] : null, not = whyNot(chosen, fx);
+    const applyBtn = el.querySelector('#doc-apply'); if (applyBtn) { applyBtn.disabled = !!staged.invalid; applyBtn.title = staged.invalid ? `Not a value ${staged.prop} accepts` : ''; }
     const n = chosen?.diff.lines.some((l) => l.kind === 'del') ? 1 : chosen?.diff.lines.length ?? 0;
     const where = chosen ? chosen.sub : (opts.find((o) => o.id === staged.scope)?.why ?? '');
     host.innerHTML = `<section class="dsec staged">
@@ -444,11 +451,14 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   function stage(prop, text) {
     const w = winners[prop];
     if (!w) return false;
-    if (!text.trim() || text.trim() === w.value) { staged = null; renderStaged(); return false; }
+    const t = text.trim();
+    if (!t) { staged = null; renderStaged(); return false; }
+    if (t === w.value || normalizeTyped(prop, t) === w.value) { staged = null; renderStaged(); ctx.hint(`No change: ${prop} is already ${w.value}`); return false; }
     const prev = staged?.prop === prop ? staged : null;
     const field = el.querySelector(`.vrow input[data-prop="${CSS.escape(prop)}"]`); // a variable bound from the strips shows in the field
     if (field && field.value !== text) field.value = text;
-    staged = { key: selKey, prop, text, typed: normalizeTyped(prop, text.trim()), raw: prev?.raw ?? false, scope: prev?.scope ?? null, forceRule: prev?.forceRule ?? null };
+    const typed0 = normalizeTyped(prop, t);
+    staged = { key: selKey, prop, text, typed: typed0, invalid: !validValue(prop, typed0), raw: prev?.raw ?? false, scope: prev?.scope ?? null, forceRule: prev?.forceRule ?? null };
     const opts = optionsFor();
     if (!staged.scope || !opts.find((o) => o.id === staged.scope && !o.disabled)) staged.scope = defaultScope(opts, w);
     renderStaged();
@@ -475,7 +485,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     staged = null; renderStaged(); showError('');
   }
   async function apply() {
-    if (!staged) return null;
+    if (!staged || staged.invalid) { if (staged?.invalid) showError(`Not a value ${staged.prop} accepts`); return null; }
     const chosen = chosenOf(optionsFor());
     if (!chosen) return null;
     if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur();

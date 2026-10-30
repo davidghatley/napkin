@@ -70,7 +70,7 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
     const lost = m ? wouldLose(m, prop, !!d?.important) : []; // what would still beat the new value, so the preview and the file agree
     out.push({
       id: 'class', key: 'C', title: single ? 'Class' : 'Rule', code: single ? rule.selector.trim() : rule.selector, count: u?.count ?? null, countText: u ? `${u.count} use${u.count === 1 ? '' : 's'}` : '',
-      sub: `${rule.file.split('/').pop()}:${rule.line}${u?.where ? ` · ${u.where}` : ''}`,
+      sub: `${rule.file.split('/').pop()}:${rule.line}${rule.media.length ? ` · in @media ${rule.media.at(-1)}` : ''}${u?.where ? ` · ${u.where}` : ''}`,
       warn: loseText(lost), losers: lost,
       preview: { selector: rule.selector, media: rule.media.at(-1) ?? null },
       edit: { op: 'rule', file: rule.file, selector: rule.selector, media: rule.media.at(-1) ?? '', index: index(rule), prop, value },
@@ -90,7 +90,7 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
     const old = defs.find((x) => x.file === src.file && x.line === src.declLine)?.value ?? info.raw;
     out.push({
       id: 'variable', key: 'V', title: 'Variable', code: change.name, count: u?.count ?? null, countText: u ? `${u.count} use${u.count === 1 ? '' : 's'}` : '',
-      sub: `${src.file.split('/').pop()}:${src.declLine}${src.selector && !/^:root$/.test(src.selector.trim()) ? ` · ${src.selector}` : ''}${u?.where ? ` · ${u.where}` : ''}`,
+      sub: `${src.file.split('/').pop()}:${src.declLine}${src.media.length ? ` · in @media ${src.media.at(-1)}` : ''}${src.selector && !/^:root$/.test(src.selector.trim()) ? ` · ${src.selector}` : ''}${u?.where ? ` · ${u.where}` : ''}`,
       preview: { selector: src.selector, media: src.media.at(-1) ?? null },
       edit: { op: 'var', file: src.file, name: change.name, value: change.value, media: src.media.at(-1) ?? '', index: k },
       diff: { head: `${src.file} · ${src.selector}${src.media.length ? ` @media ${src.media.at(-1)}` : ''}`, lines: [{ kind: 'del', line: src.declLine, text: declLine(change.name, old) }, { kind: 'add', line: src.declLine, text: declLine(change.name, change.value) }] },
