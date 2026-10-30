@@ -13,7 +13,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeAtomic } from '../atomic.js';
 import { removeInState } from './state-rm.js';
-import { describe, cssTouched } from './film-diff.js';
+import { describe, cssTouched, touchKey, touchWords } from './film-diff.js';
 import { relevanceOf } from './film-relevance.js';
 
 const KEEP = 200;               // napkin frames kept per component
@@ -23,6 +23,7 @@ const RUN_GAP = 10 * 60 * 1000; // edits of one thing within this are one run
 const sha1 = (b) => createHash('sha1').update(b).digest('hex');
 // git's object id of a file's bytes: the one name for a content in napkin's blobs and in git
 export const oidOf = (bytes) => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+const keysOf = (files) => Object.keys(files).sort().join('|');
 const sigOf = (files) => Object.entries(files).sort(([a], [b]) => (a < b ? -1 : 1)).map(([p, o]) => `${p}:${o}`).join('|');
 
 export class FilmError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
@@ -94,8 +95,13 @@ export function createFilm(engine) {
     if (!Object.keys(files).length || (s.frames.length && sigOf(s.frames.at(-1).files) === sig)) return null;
     for (const o of Object.values(files)) if (pendingBlobs.has(o)) putBlob(o, pendingBlobs.get(o));
     pendingBlobs.clear();
+    // The files a component draws from changed (a stylesheet was applied, a link added or removed): what came before was a
+    // different thing, and is never diffed against or kept as the oldest version. This is the new baseline.
+    const different = s.frames.length && keysOf(s.frames.at(-1).files) !== keysOf(files);
     const frame = { id: `n${at.toString(36)}${sha1(sig).slice(0, 5)}`, at, by, summary, files };
-    s.frames.push(frame); ref(frame, 1);
+    ref(frame, 1);                                              // first, so a blob the old and new versions share is kept
+    if (different) while (s.frames.length) ref(s.frames.shift(), -1);
+    s.frames.push(frame);
     while (s.frames.length > KEEP) ref(s.frames.shift(), -1);
     save(s);
     return frame;
@@ -104,9 +110,20 @@ export function createFilm(engine) {
   const quiet = (fn) => { try { return fn(); } catch (e) { console.error('film:', e.message); return null; } };
 
   // First time napkin looks at a component, and again if its files changed while napkin was not looking.
+  // The bytes napkin last had for a file (from the newest frame of any component that holds it), or null.
+  function lastBytes(path) {
+    let best = null;
+    for (const sl of slots.values()) for (const f of sl.frames) if (f.files[path] && (!best || f.at > best.at)) best = f;
+    return best ? blobsOf([best.files[path]]).get(best.files[path]) ?? null : null;
+  }
+  // What a write to a file changed, for the ledger: the rules and variables of a stylesheet (null: unknown), nothing for markup.
+  const touchesOf = (path, before, after) => { if (!/\.css$/i.test(path)) return undefined; if (!before) return null; return cssTouched(before.toString('utf8'), after.toString('utf8')).slice(0, 60); };
+  const note = (path, entry) => { (ledger[path] ||= []).push(entry); ledger[path] = ledger[path].slice(-100); saveLedger(); };
+
   function known(id) {
     const comp = engine.component(id), s = slot(comp.id), now = snapshot(comp);
     if (!s.frames.length) record(comp.id, now, { by: 'file', summary: 'The file as napkin first saw it' });
+    else if (keysOf(s.frames.at(-1).files) !== keysOf(now)) record(comp.id, now, { by: 'file', summary: 'The files as napkin first saw them' }); // stylesheets applied or removed: a new baseline
     else if (sigOf(s.frames.at(-1).files) !== sigOf(now)) {
       // changed while napkin was not looking (it was stopped, or someone saved in an editor): the ledger must know, or a
       // restore would silently undo that work
@@ -114,8 +131,9 @@ export function createFilm(engine) {
       for (const [p, oid] of Object.entries(now)) {
         if (last.files[p] === oid) continue;
         let mtime = 0; try { mtime = engine.read(p).mtimeMs || 0; } catch { /* gone */ }
-        const at = Math.max(mtime, last.at + 1);
-        if (!(ledger[p] || []).some((e) => e.oid === oid)) { (ledger[p] ||= []).push({ at, oid, comp: null, by: 'file' }); ledger[p] = ledger[p].slice(-100); saveLedger(); }
+        if ((ledger[p] || []).some((e) => e.oid === oid)) continue;
+        const was = blobsOf([last.files[p]]).get(last.files[p]) ?? null;
+        note(p, { at: Math.max(mtime, last.at + 1), oid, comp: null, by: 'file', t: touchesOf(p, was, engine.read(p).buf) });
       }
       record(comp.id, now, { by: 'file', summary: 'Edited outside napkin' });
     }
@@ -124,12 +142,12 @@ export function createFilm(engine) {
   }
   engine.events.on('commit', (c) => quiet(() => {
     load();
-    (ledger[c.path] ||= []).push({ at: c.at, oid: oidOf(c.after), comp: c.component ?? null, by: c.by }); ledger[c.path] = ledger[c.path].slice(-100); saveLedger();
-    let touched = null;
+    const touched = touchesOf(c.path, c.before, c.after);
+    note(c.path, { at: c.at, oid: oidOf(c.after), comp: c.component ?? null, by: c.by, ...(touched !== undefined && { t: touched }) });
     for (const id of usersOf(c.path)) {
       let comp; try { comp = engine.component(id); } catch { continue; }
       // a shared stylesheet's change that nothing of this component uses is no moment of it (and costs it no write)
-      if (c.path !== comp.path && /\.css$/i.test(c.path)) { touched ??= cssTouched(c.before.toString('utf8'), c.after.toString('utf8')); const rel = relevanceOf(engine, comp); if (touched.length && !touched.some((t) => rel.related(t))) continue; }
+      if (c.path !== comp.path && touched !== undefined) { const rel = relevanceOf(engine, comp); if (!touched?.length || !touched.some((t) => rel.related(t))) continue; }
       const s = slot(comp.id);
       if (!s.frames.length) record(comp.id, snapshot(comp, new Map([[c.path, c.before]])), { by: 'file', summary: 'The file as napkin first saw it', at: c.at - 1 });
       record(comp.id, snapshot(comp), { by: c.by, summary: c.kind === 'edit' ? c.summary : `${c.kind}: ${c.summary}`, at: c.at });
@@ -140,10 +158,14 @@ export function createFilm(engine) {
     if (c.by !== 'file' || c.kind !== 'file') return;
     load();
     let cur; try { cur = engine.read(c.path).buf; } catch { return; }
-    (ledger[c.path] ||= []).push({ at: Date.now(), oid: oidOf(cur), comp: null, by: 'file' }); ledger[c.path] = ledger[c.path].slice(-100); saveLedger();
+    const prev = lastBytes(c.path), touched = touchesOf(c.path, prev, cur);
+    if (prev && prev.equals(cur)) return;
+    note(c.path, { at: Date.now(), oid: oidOf(cur), comp: null, by: 'file', ...(touched !== undefined && { t: touched }) });
     for (const id of usersOf(c.path)) {
       const s = slots.get(id); if (!s?.frames.length) continue;
       let comp; try { comp = engine.component(id); } catch { continue; }
+      // the same rule as for a write of napkin's own: a shared stylesheet change nothing of this component uses is no moment of it
+      if (c.path !== comp.path && touched) { const rel = relevanceOf(engine, comp); if (!touched.length || !touched.some((t) => rel.related(t))) continue; }
       record(comp.id, snapshot(comp), { by: 'file', summary: 'Edited outside napkin' }); pendingBlobs.clear();
     }
   }));
@@ -211,13 +233,15 @@ export function createFilm(engine) {
   // Frames newest first: napkin's and git's merged (a version both have is one frame), each said in words, runs of one thing merged.
   function list(id) {
     const comp = known(id), s = slot(comp.id);
-    const paths = writeSet(comp), nowSig = sigOf(snapshot(comp)); pendingBlobs.clear();
+    const paths = writeSet(comp), nowFiles = snapshot(comp), nowSig = sigOf(nowFiles); pendingBlobs.clear();
     let relCache = null; const rel = () => (relCache ??= relevanceOf(engine, comp));
-    const all = s.frames.map((f) => ({ ...f, source: 'napkin' }));
+    const nowKeys = keysOf(nowFiles);
+    // only versions made of the same files as the component has now: never a diff, or an oldest version, across file sets
+    const all = s.frames.filter((f) => keysOf(f.files) === nowKeys).map((f) => ({ ...f, source: 'napkin' }));
     // A commit always keeps its own place: an edit, a restore or an undo that happens to have the same bytes is its own
     // entry, never the commit's replacement. Only a frame that merely recorded the file as it already was (first seen, or
     // edited outside napkin) and equals a commit is that commit, not a second copy of it.
-    for (const g of [...gitFrames(comp, paths)].reverse()) { // oldest first, so commits of one second keep their order
+    for (const g of [...gitFrames(comp, paths)].filter((g) => keysOf(g.files) === nowKeys).reverse()) { // oldest first, so commits of one second keep their order
       const gs = sigOf(g.files);
       for (const twin of all.filter((f) => f.source === 'napkin' && sigOf(f.files) === gs)) {
         if (twin.by === 'file') all.splice(all.indexOf(twin), 1);
@@ -226,6 +250,9 @@ export function createFilm(engine) {
       all.push(g);
     }
     all.sort((a, b) => a.at - b.at || (a.ord ?? Infinity) - (b.ord ?? Infinity)); // commits of one second keep their order
+    // a version equals the files now when nothing differs, or only shared-stylesheet changes this component does not draw
+    const nowFrame = { files: nowFiles };
+    const sameAsNow = (f) => { if (sigOf(f.files) === nowSig) return true; const diff = Object.keys(nowFiles).filter((p) => f.files[p] !== nowFiles[p]); return diff.every((p) => p !== comp.path && /\.css$/i.test(p)) && !!label(f, nowFrame, comp, rel).hidden; };
     const out = [];
     let prevRaw = null, prevKept = null;
     for (const f of all) {
@@ -238,12 +265,12 @@ export function createFilm(engine) {
       else if (verb) { const was = prevKept?.what ?? ''; what = /^Restored/.test(was) ? `${verb === 'undo' ? 'Undid' : 'Redid'} the restore` : `${verb === 'undo' ? 'Undid' : 'Redid'} ${was || 'an edit'}`; more = 0; key = null; where = ''; }
       else if (!what) what = f.source === 'git' ? f.summary : (f.summary || 'Changed the files');
       const tail = out.at(-1);
-      const row = { id: f.id, ids: [f.id], count: 1, source: f.source, at: f.at, by: f.by, summary: f.summary, what, more, where, key, same: sigOf(f.files) === nowSig, beforeId: prevKept?.id ?? null, ...(f.short && { short: f.short }), ...(f.git && { git: f.git }) };
+      const row = { id: f.id, ids: [f.id], count: 1, source: f.source, at: f.at, by: f.by, summary: f.summary, what, more, where, key, same: sameAsNow(f), beforeId: prevKept?.id ?? null, ...(f.short && { short: f.short }), ...(f.git && { git: f.git }) };
       Object.defineProperty(row, '_before', { value: before, enumerable: false, writable: true });
       Object.defineProperty(row, '_beforeKept', { value: prevKept, enumerable: false, writable: true });
       if (tail && row.source === 'napkin' && tail.source === 'napkin' && row.key && row.key === tail.key && row.by === tail.by && f.at - tail.at <= RUN_GAP) {
         const l2 = label(tail._before, f, comp, rel);
-        Object.assign(tail, { ids: [...tail.ids, f.id], count: tail.count + 1, id: f.id, at: f.at, summary: f.summary, same: row.same, what: l2.what, more: l2.more, where: l2.where });
+        Object.assign(tail, { ids: [...tail.ids, f.id], count: tail.count + 1, id: f.id, at: f.at, summary: f.summary, same: row.same, what: l2.what || 'No net change', more: l2.more, where: l2.where });
         prevKept = tail;
       } else { out.push(row); prevKept = row; }
     }
@@ -283,18 +310,36 @@ export function createFilm(engine) {
     }
     return { removed, added, first, component: comp.id };
   }
-  // What a restore would write, or why it must not: a shared stylesheet that somebody else's edit changed since that version
-  // would be undone with it.
+  // What a restore would write, or why it must not. A shared stylesheet is put back only when nothing would be undone that
+  // another component draws: the rules and variables that differ between the version and the file now are each traced to
+  // whoever last changed them since that version (napkin's ledger). One made by this component is its own to undo; one made by
+  // anybody else, or by nobody napkin saw (git commits, an editor, napkin not running), is refused when another component uses it.
+  // Where the sheets differ only in comments or white space, the current file is left as it is.
   function restorePlan(id, frameId) {
     const { comp, frame, files } = snapshotOf(id, frameId), write = [];
     for (const [p, bytes] of files) {
       let now = null; try { now = engine.read(p).buf; } catch { /* gone: the version brings it back */ }
       if (now && now.equals(bytes)) continue;
-      if (p !== comp.path && now) {
-        const clobber = (ledger[p] || []).filter((e) => e.at > frame.at && e.comp !== comp.id).at(-1);
-        if (clobber && usersOf(p).some((u) => u !== comp.id)) {
-          const when = new Date(clobber.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-          throw new FilmError(`${p} is shared, and it changed at ${when}${clobber.comp ? ` while you worked on ${clobber.comp.split('#').pop()}` : ' outside napkin'} after this version. Restoring would undo that.. Next: restore a newer version, or change the rule in ${p} directly`, 409);
+      if (p !== comp.path && now && /\.css$/i.test(p)) {
+        const differ = cssTouched(bytes.toString('utf8'), now.toString('utf8'));
+        if (!differ.length) continue;
+        // Own: the file says now what this component itself set that rule or variable to, so nothing of anyone else's is
+        // present in it (another component's change of it that was undone or put back leaves nothing). Anything else is
+        // somebody else's, or nobody napkin saw (git commits, an editor, napkin not running).
+        const mine = new Map(), editor = new Map();
+        for (const e of ledger[p] || []) if (e.at > frame.at && Array.isArray(e.t)) for (const t of e.t) { const k = touchKey(t); editor.set(k, e.comp ?? ''); if (e.comp === comp.id) { if (!mine.has(k)) mine.set(k, new Set()); mine.get(k).add(t.to); } }
+        const foreign = differ.filter((t) => !(mine.has(touchKey(t)) && (t.to === undefined || mine.get(touchKey(t)).has(t.to))));
+        const users = foreign.length ? usersOf(p).filter((u) => u !== comp.id) : [];
+        const names = []; let hit = null;
+        for (const u of users) {
+          let other; try { other = engine.component(u); } catch { continue; }
+          const rel = relevanceOf(engine, other), mine = foreign.filter((t) => rel.related(t));
+          if (mine.length) { names.push(other.name); hit ??= mine; }
+        }
+        if (hit) {
+          const who = editor.get(touchKey(hit[0]));
+          const by = who ? ` while you worked on ${engine.has(who) ? engine.component(who).name : who}` : ' outside napkin or in git';
+          throw new FilmError(`${p} is shared: ${touchWords(hit[0])}${hit.length > 1 ? ` and ${hit.length - 1} more` : ''} changed after this version${by}, and ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} draw${names.length === 1 ? 's' : ''} it. Restoring would undo that.. Next: restore a newer version, or change the rule in ${p} directly`, 409);
         }
       }
       write.push({ path: p, bytes });

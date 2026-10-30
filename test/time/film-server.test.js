@@ -116,7 +116,7 @@ test('film: a CSS edit is a frame of every component that uses the stylesheet; a
     const r2 = await t.post('/api/edit', { component: 'card.html', edits: [{ op: 'rule', file: 'card.css', selector: '.card', index: 0, prop: 'border', value: '2px solid red' }] });
     assert.equal(r2.ok, true);
     const refused = await t.post('/api/component/pill.html/film/restore', { frame: oldest.id });
-    assert.equal(refused.ok, false); assert.match(refused.error, /card\.css is shared, and it changed at \d\d:\d\d while you worked on card\.html after this version/);
+    assert.equal(refused.ok, false); assert.match(refused.error, /card\.css is shared: \.card border changed after this version while you worked on card, and card draws it\. Restoring would undo that\. Next:/);
     assert.match(readFileSync(join(t.dir, 'card.css'), 'utf8'), /2px solid red/, 'nothing was written');
   } finally { t.stop(); }
 });
@@ -266,15 +266,20 @@ test('film: a shared stylesheet edited while napkin was stopped is not clobbered
     const old = (await t.get('/api/component/pill.html/film')).frames.at(-1);
     t.stop();
     // napkin is not running: the stylesheet is edited by hand
-    writeFileSync(join(t.dir, 'card.css'), readFileSync(join(t.dir, 'card.css'), 'utf8') + '.mine { color: teal }\n');
+    writeFileSync(join(t.dir, 'card.css'), readFileSync(join(t.dir, 'card.css'), 'utf8').replace(/padding:\s*40px/, 'padding: 99px') + '.mine { color: teal }\n');
     const eng2 = openFolder(t.dir, { stateDir: t.stateDir });
     const h = createDocRoutes(eng2, { identify: (tok) => (tok === 'tok' ? 'you' : null) });
     const srv = createServer(async (req, res) => { if (!(await h(req, res, new URL(req.url, 'http://x')))) { res.writeHead(404); res.end('{}'); } });
     await new Promise((r2) => srv.listen(0, '127.0.0.1', r2));
     try {
       const res = await (await fetch(`http://127.0.0.1:${srv.address().port}/api/component/pill.html/film/restore`, { method: 'POST', headers: { authorization: 'Bearer tok', 'content-type': 'application/json' }, body: JSON.stringify({ frame: old.id }) })).json();
-      assert.equal(res.ok, false); assert.match(res.error, /card\.css is shared, and it changed at \d\d:\d\d outside napkin after this version\. Restoring would undo that\. Next:/);
+      assert.equal(res.ok, false); assert.match(res.error, /card\.css is shared: \.card padding changed after this version outside napkin or in git, and card draws it\. Restoring would undo that\. Next:/);
       assert.match(readFileSync(join(t.dir, 'card.css'), 'utf8'), /\.mine/, 'nothing was written');
+      // a change nothing else draws (a rule no other component has an element for) is not in the way
+      writeFileSync(join(t.dir, 'card.css'), readFileSync(join(t.dir, 'card.css'), 'utf8').replace('padding: 99px', 'padding: 40px'));
+      await new Promise((r2) => setTimeout(r2, 150));
+      const ok = await (await fetch(`http://127.0.0.1:${srv.address().port}/api/component/pill.html/film/restore`, { method: 'POST', headers: { authorization: 'Bearer tok', 'content-type': 'application/json' }, body: JSON.stringify({ frame: old.id }) })).json();
+      assert.equal(ok.ok, true, JSON.stringify(ok));
     } finally { eng2.close(); srv.close(); }
   } finally { try { t.stop(); } catch { /* already */ } }
 });
@@ -330,5 +335,126 @@ test('film: a shared stylesheet edit nothing of this component uses is no frame 
     const fo2 = await t.get('/api/component/other.html/film');
     assert.match(fo2.frames[0].what, /--ink/, 'a variable it uses through another property is a frame of it');
     assert.ok(!fo2.frames.some((f) => /--unused/.test(f.what)), 'one it does not use is not');
+  } finally { t.stop(); }
+});
+
+// ---- round 4: restores that must not silently undo anyone else's work, and frames that must be true ----
+async function folderOf(files, { git = false, commits = [] } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-time4-'));
+  for (const [p, c] of Object.entries(files)) writeFileSync(join(dir, p), c);
+  const sh = (...a) => execFileSync('git', ['-C', dir, '-c', 'user.email=a@b.c', '-c', 'user.name=Ada', ...a], { stdio: 'ignore' });
+  if (git) { sh('init', '-q'); sh('add', '.'); sh('commit', '-q', '-m', 'start'); for (const [msg, edit] of commits) { edit(dir); sh('commit', '-q', '-am', msg); } }
+  const stateDir = mkdtempSync(join(tmpdir(), 'napkin-time4-state-'));
+  const eng = openFolder(dir, { stateDir });
+  const handle = createDocRoutes(eng, { identify: (t) => (t === 'tok' ? 'you' : null) });
+  const srv = createServer(async (req, res) => { if (!(await handle(req, res, new URL(req.url, 'http://x')))) { res.writeHead(404); res.end('{}'); } });
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const base = `http://127.0.0.1:${srv.address().port}`;
+  const get = async (p) => (await fetch(base + p)).json();
+  const text = async (p) => (await fetch(base + p)).text();
+  const post = async (p, b) => (await fetch(base + p, { method: 'POST', headers: { authorization: 'Bearer tok', 'content-type': 'application/json' }, body: JSON.stringify(b) })).json();
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  return { dir, eng, get, text, post, wait, film: (id) => get(`/api/component/${encodeURIComponent(id)}/film`), stop: () => { eng.close(); srv.close(); } };
+}
+const page = (cls, body = 'x') => `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css"></head><body><p class="${cls}">${body}</p></body></html>\n`;
+const SHARED = '.pill { padding: 1px 7px; }\n.note { padding: 4px; }\n';
+const rule = (sel, prop, value) => ({ op: 'rule', file: 'shared.css', selector: sel, index: 0, prop, value });
+
+test('restore: commits that came before napkin and changed rules other components draw are not silently undone', async () => {
+  const t = await folderOf({ 'pill.html': page('pill'), 'note.html': page('note'), 'shared.css': SHARED }, { git: true, commits: [
+    ['note body padding', (d) => writeFileSync(join(d, 'shared.css'), '.pill { padding: 1px 7px; }\n.note { padding: 12px; }\n')],
+    ['pill label', (d) => writeFileSync(join(d, 'pill.html'), page('pill', 'Shipped'))],
+  ] });
+  try {
+    const f = await t.film('pill.html');
+    const start = f.frames.at(-1);
+    assert.equal(start.summary, 'start');
+    const cssNow = readFileSync(join(t.dir, 'shared.css'), 'utf8');
+    const r = await t.post('/api/component/pill.html/film/restore', { frame: start.id });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /shared\.css is shared: \.note padding changed after this version outside napkin or in git, and note draws it\. Restoring would undo that\. Next:/);
+    assert.equal(readFileSync(join(t.dir, 'shared.css'), 'utf8'), cssNow, 'nothing was written');
+    assert.match(readFileSync(join(t.dir, 'pill.html'), 'utf8'), /Shipped/);
+    assert.ok(!f.frames.some((x) => x.summary === 'note body padding'), 'the commit that only changed a rule Pill never draws is no frame of Pill');
+    assert.equal(f.frames.length, 2);
+  } finally { t.stop(); }
+});
+
+test('restore: another component\'s edit that was undone is not in the way', async () => {
+  const t = await folderOf({ 'pill.html': page('pill'), 'note.html': page('note'), 'shared.css': SHARED });
+  try {
+    await t.film('pill.html'); await t.film('note.html');
+    const a = (await t.film('pill.html')).frames[0];                       // Pill's frame A: the files as first seen
+    assert.equal((await t.post('/api/edit', { component: 'note.html', edits: [rule('.note', 'padding', '30px')] })).ok, true);
+    assert.equal((await t.post('/api/undo', { component: 'note.html' })).ok, true);          // the bytes are A's again
+    assert.equal((await t.post('/api/edit', { component: 'pill.html', edits: [rule('.pill', 'padding', '1px 14px')] })).ok, true);   // Pill's own rule
+    const fa = (await t.film('pill.html')).frames.at(-1);
+    const r = await t.post('/api/component/pill.html/film/restore', { frame: fa.id });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.equal(readFileSync(join(t.dir, 'shared.css'), 'utf8'), SHARED);
+    void a;
+    // but while the other component's change is still there, it is refused
+    assert.equal((await t.post('/api/edit', { component: 'note.html', edits: [rule('.note', 'padding', '31px')] })).ok, true);
+    assert.equal((await t.post('/api/edit', { component: 'pill.html', edits: [rule('.pill', 'padding', '1px 15px')] })).ok, true);
+    const r2 = await t.post('/api/component/pill.html/film/restore', { frame: fa.id });
+    assert.equal(r2.ok, false); assert.match(r2.error, /\.note padding changed after this version while you worked on note, and note draws it/);
+  } finally { t.stop(); }
+});
+
+test('film: applying stylesheets is a new baseline, not a ghost frame; a version uses only its own files', async () => {
+  const t = await folderOf({ 'pill.html': '<!doctype html><html><head><meta charset="utf-8"></head><body><p class="pill">Hi</p></body></html>\n', 'tokens.css': ':root { --ink: #111; }\n', 'shared.css': '.pill { color: var(--ink); }\n' });
+  try {
+    const before = await t.film('pill.html');
+    assert.equal(before.frames.length, 1);
+    assert.equal((await t.post('/api/styles', { applied: ['tokens.css', 'shared.css'] })).ok, true);
+    const after = await t.film('pill.html');
+    assert.equal(after.frames.length, 1, 'one baseline, with the stylesheets');
+    assert.ok(!/Removed|tokens\.css/.test(after.frames[0].what), `no ghost label: ${after.frames[0].what}`);
+    assert.equal((await t.post('/api/edit', { component: 'pill.html', edits: [{ op: 'text', node: (await t.get('/api/component/pill.html')).tree[0].children[1].children[0].node, value: 'Hello' }] })).ok, true);
+    const f = await t.film('pill.html');
+    assert.equal(f.frames.length, 2); assert.match(f.frames[0].what, /Hi → Hello|Hi/);
+    const v = await t.text(`/view/pill.html?version=${f.frames[1].id}`);
+    assert.match(v, /href="\/vraw\/pill\.html\/[^/]+\/tokens\.css"/);
+    assert.equal(await t.text(`/vraw/pill.html/${f.frames[1].id}/tokens.css`), ':root { --ink: #111; }\n');
+    assert.match(await t.text(`/vraw/pill.html/${f.frames[1].id}/other.css`), /not part of this version/, 'a stylesheet the version does not have is never the live one');
+  } finally { t.stop(); }
+});
+
+test('film: a change to a shared sheet that changes nothing visible, or nothing this component draws, is no frame', async () => {
+  const css = '.a { color: red; }\n.b { color: blue; }\n@keyframes spin { from { opacity: 0; } to { opacity: 1; } }\n@keyframes wobble { from { opacity: 0; } to { opacity: 1; } }\n.a { animation: spin 1s; }\n';
+  const t = await folderOf({ 'a.html': page('a'), 'b.html': page('b'), 'shared.css': css });
+  const save = (s) => writeFileSync(join(t.dir, 'shared.css'), s);
+  try {
+    await t.film('a.html'); await t.film('b.html');
+    const n0 = (await t.film('a.html')).frames.length;
+    save(css + '/* a note to self */\n'); await t.wait(300);                                // a comment
+    save(css.replace('.a { color: red; }', '.a  {\n  color: red;\n}')); await t.wait(300);   // white space
+    save(css.replace('@keyframes wobble { from { opacity: 0; } to { opacity: 1; } }', '@keyframes wobble { from { opacity: 0; } to { opacity: .5; } }')); await t.wait(300); // an animation a does not use
+    save(css.replace('.b { color: blue; }', '.b { color: teal; }')); await t.wait(300);       // a rule a does not draw
+    assert.equal((await t.film('a.html')).frames.length, n0, 'none of those is a moment of a.html');
+    const fa = await t.film('a.html');
+    assert.equal(fa.frames[0].same, true, 'and what it has is still Now');
+    save(css.replace('@keyframes spin { from { opacity: 0; } to { opacity: 1; } }', '@keyframes spin { from { opacity: 0; } to { opacity: .2; } }')); await t.wait(400);
+    const f2 = await t.film('a.html');
+    assert.equal(f2.frames.length, n0 + 1, 'an animation it uses is a real change');
+    assert.equal(f2.frames[0].what, 'Changed animation spin');
+    assert.ok(!(await t.film('b.html')).frames.some((x) => /animation/.test(x.what)), 'and not one of b.html\'s');
+  } finally { t.stop(); }
+});
+
+test('film: a run that ends where it began says so, and Now stays marked when only unrelated sheets changed', async () => {
+  const t = await folderOf({ 'a.html': '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="shared.css"></head><body><h1>Done</h1></body></html>\n', 'b.html': page('b'), 'shared.css': '.b { padding: 1px; }\n' });
+  try {
+    await t.film('a.html');
+    for (const v of ['Done?', 'Done']) {
+      const tr = await t.get('/api/component/a.html');
+      assert.equal((await t.post('/api/edit', { component: 'a.html', baseRevision: tr.revision, edits: [{ op: 'text', node: tr.tree[0].children[1].children[0].node, value: v }] })).ok, true);
+    }
+    const f = await t.film('a.html');
+    assert.equal(f.frames[0].count, 2); assert.equal(f.frames[0].what, 'No net change');
+    assert.equal((await t.post('/api/edit', { component: 'b.html', edits: [rule('.b', 'padding', '9px')] })).ok, true);
+    const g = await t.film('a.html');
+    assert.equal(g.frames[0].same, true, 'the newest frame is still Now');
+    assert.equal(g.frames.filter((x) => x.same).length >= 1, true);
   } finally { t.stop(); }
 });

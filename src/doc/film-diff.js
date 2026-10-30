@@ -23,34 +23,57 @@ function wordDiff(a, b) {
   return [xm.join(' '), ym.join(' ')];
 }
 
+const unq = (v) => String(v).trim().replace(/^["']|["']$/g, '');
 function cssMap(s) {
   const m = new Map(), seen = new Map();
   for (const r of s == null ? [] : parseCss(s).rules) {
-    if (r.kind !== 'style') continue;
-    const sel = fromL(r.selector).replace(/\s+/g, ' ').trim(), ctx = r.context.map((c) => `@${c.name} ${fromL(c.prelude)}`).join(' ');
-    const rk = `${ctx}|${sel}`, n = (seen.set(rk, (seen.get(rk) ?? -1) + 1), seen.get(rk));
     const decls = new Map(); for (const d of r.decls) decls.set(d.prop, fromL(d.value) + (d.important ? ' !important' : ''));
-    m.set(`${rk}#${n}`, { sel, decls });
+    let rk, entry;
+    if (r.kind === 'style') {
+      const sel = fromL(r.selector).replace(/\s+/g, ' ').trim(), ctx = r.context.map((c) => `@${c.name} ${fromL(c.prelude)}`).join(' ');
+      rk = `${ctx}|${sel}`; entry = { sel, decls };
+    } else if (r.kind === 'keyframe') {
+      const name = fromL(r.context.find((c) => /keyframes$/.test(c.name))?.prelude ?? '').trim(), sel = fromL(r.selector).trim();
+      rk = `@keyframes ${name}|${sel}`; entry = { sel, decls, at: 'keyframes', name };
+    } else if (r.kind === 'font-face') {
+      const name = unq(decls.get('font-family') ?? '');
+      rk = `@font-face|${name}`; entry = { sel: '@font-face', decls, at: 'font-face', name };
+    } else if (r.kind === 'property') {
+      const name = fromL(r.selector).replace(/^@property\s*/, '').trim();
+      rk = `@property|${name}`; entry = { sel: ':root', decls, at: 'property', name };
+    } else continue;
+    const n = (seen.set(rk, (seen.get(rk) ?? -1) + 1), seen.get(rk));
+    m.set(`${rk}#${n}`, entry);
   }
   return m;
 }
+// One item per thing that changed. A keyframes block, a font face or an @property is one thing, however many lines of it moved.
 function cssItems(pathName, a, b) {
-  const A = cssMap(a), B = cssMap(b), out = [];
+  const A = cssMap(a), B = cssMap(b), out = [], atSeen = new Set();
+  const at = (e, verb) => {
+    const k = `${e.at}:${e.name}`; if (atSeen.has(k)) return; atSeen.add(k);
+    if (e.at === 'property') out.push({ text: `${verb} @property ${e.name}`, where: pathName, key: `prop:${e.name}`, touch: { sel: ':root', prop: e.name } });
+    else out.push({ text: e.at === 'keyframes' ? `${verb} animation ${e.name}` : `${verb} font ${e.name}`, where: pathName, key: `${e.at}:${e.name}`, touch: { at: e.at, name: e.name } });
+  };
   for (const [k, rb] of B) {
     const ra = A.get(k);
+    if (rb.at) { if (!ra) at(rb, 'Added'); else if ([...rb.decls].some(([p, v]) => ra.decls.get(p) !== v) || [...ra.decls.keys()].some((p) => !rb.decls.has(p))) at(rb, 'Changed'); continue; }
     if (!ra) { out.push({ text: `Added ${clip(rb.sel, 30)}`, where: pathName, key: `css+${rb.sel}`, touch: { sel: rb.sel, prop: null } }); continue; }
     for (const [prop, v] of rb.decls) {
-      const where = `${rb.sel}${DOT}${pathName}`, touch = { sel: rb.sel, prop };
+      const where = `${rb.sel}${DOT}${pathName}`, touch = { sel: rb.sel, prop, to: v };
       if (!ra.decls.has(prop)) out.push({ text: `${prop} ${clip(v)}`, where, key: `css:${rb.sel}|${prop}`, touch });
       else if (ra.decls.get(prop) !== v) out.push({ text: `${prop} ${clip(ra.decls.get(prop))}${ARROW}${clip(v)}`, where, key: `css:${rb.sel}|${prop}`, touch });
     }
-    for (const prop of ra.decls.keys()) if (!rb.decls.has(prop)) out.push({ text: `Removed ${prop}`, where: `${rb.sel}${DOT}${pathName}`, key: `css:${rb.sel}|${prop}`, touch: { sel: rb.sel, prop } });
+    for (const prop of ra.decls.keys()) if (!rb.decls.has(prop)) out.push({ text: `Removed ${prop}`, where: `${rb.sel}${DOT}${pathName}`, key: `css:${rb.sel}|${prop}`, touch: { sel: rb.sel, prop, to: null } });
   }
-  for (const [k, ra] of A) if (!B.has(k)) out.push({ text: `Removed ${clip(ra.sel, 30)}`, where: pathName, key: `css-${ra.sel}`, touch: { sel: ra.sel, prop: null } });
+  for (const [k, ra] of A) if (!B.has(k)) { if (ra.at) at(ra, 'Removed'); else out.push({ text: `Removed ${clip(ra.sel, 30)}`, where: pathName, key: `css-${ra.sel}`, touch: { sel: ra.sel, prop: null } }); }
   return out;
 }
-// The rules and variables a stylesheet edit touched: [{ sel, prop }] (what the film strip asks `related` about).
+// The rules and variables a stylesheet edit touched: [{ sel, prop } | { at, name }] (what the film strip asks `related` about).
+// Empty when the two sheets parse to the same rules (a comment, white space, the order of nothing that matters).
 export const cssTouched = (a, b) => cssItems('', a, b).map((i) => i.touch);
+export const touchKey = (t) => (t.at ? `@${t.at}:${t.name}` : `${t.sel}|${t.prop ?? ''}`);
+export const touchWords = (t) => (t.at ? `${t.at === 'keyframes' ? 'animation' : 'font'} ${t.name}` : t.prop ? `${t.sel} ${t.prop}` : t.sel);
 
 // ---------- markup ----------
 const tokens = (line) => line.match(/<[^>]*>|[^<]+/g)?.map((t) => (t.startsWith('<') ? t : t.replace(/\s+/g, ' '))).filter((t) => t.trim()) ?? [];
@@ -132,7 +155,7 @@ export function describe(changes, { related = () => true } = {}) {
     if (c.b == null) { items.push({ text: `Removed ${c.path}`, where: c.path, key: null }); continue; }
     items.push(...(/\.css$/i.test(c.path) ? cssItems(c.path, c.a, c.b) : htmlItems(c.path, c.a, c.b)));
   }
-  if (!items.length) return { what: 'No visible change', more: 0, where: '', key: null };
+  if (!items.length) return changes.every((c) => /\.css$/i.test(c.path)) ? { what: 'Shared styles changed', more: 0, where: '', key: null, hidden: true } : { what: 'No visible change', more: 0, where: '', key: null }; // the same rules in a sheet: a comment, white space
   const kept = items.filter((i) => !i.touch || related(i.touch));
   if (!kept.length) return { what: 'Shared styles changed', more: 0, where: '', key: null, hidden: true };
   items = kept;

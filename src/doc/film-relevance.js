@@ -39,5 +39,15 @@ export function relevanceOf(engine, comp) {
   varsIn(own).forEach((v) => used.add(v));
   for (const r of rules) if (r.kind === 'style' && matchesAny(r.selector)) for (const d of r.decls) varsIn(d.value).forEach((v) => used.add(v));
   for (let grew = true; grew;) { grew = false; for (const r of rules) for (const d of r.decls) if (used.has(d.prop)) for (const v of varsIn(d.value)) if (!used.has(v)) { used.add(v); grew = true; } }
-  return { related: ({ sel, prop }) => (prop && prop.startsWith('--') ? used.has(prop) : matchesAny(sel)) };
+  // names of animations and font families the component's own text and the rules that match it mention
+  let animText = own, fontText = own.toLowerCase();
+  for (const r of rules) if (r.kind === 'style' && matchesAny(r.selector)) for (const d of r.decls) { if (/^animation/.test(d.prop)) animText += ' ' + d.value; if (/^font/.test(d.prop)) fontText += ' ' + d.value.toLowerCase(); }
+  const esc = (t) => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return {
+    related: (t) => {
+      if (t.at === 'keyframes') return new RegExp(`(^|[^\\w-])${esc(t.name)}($|[^\\w-])`).test(animText);
+      if (t.at === 'font-face') return fontText.includes(String(t.name).toLowerCase());
+      return t.prop && t.prop.startsWith('--') ? used.has(t.prop) : matchesAny(t.sel);
+    },
+  };
 }

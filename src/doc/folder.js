@@ -467,7 +467,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     write(files);
     stack.splice(k, 1);
     push(toStack, comp.id, { ...st, files: files.map((f) => ({ path: f.path, before: kind === 'undo' ? f.after : f.before, after: kind === 'undo' ? f.before : f.after })) });
-    return done2(comp, st, kind);
+    return done2(comp, { ...st, files }, kind); // the files as they were really written (the commit event says which way)
   }
 
   // Put files back to the bytes of an earlier version (the film strip's Restore): one step across all of them, so one undo.

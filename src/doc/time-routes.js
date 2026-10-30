@@ -29,7 +29,7 @@ export function createTimeRoutes(engine, { tsx, who, json, body, fail }) {
       let v;
       if (comp.kind === 'html') {
         const fake = (p) => { const buf = snap.files.get(p); const e = { buf, s: L(buf), rev: 'version' }; if (p === comp.path) e.html = parseHtml(e.s); return e; };
-        v = htmlView({ read: (p) => (snap.files.has(p) ? fake(p) : engine.read(p)), applied: () => engine.applied() }, comp, { prefix: `/vraw/${enc(comp.id)}/${enc(snap.frame.id)}/` });
+        v = htmlView({ read: (p) => (snap.files.has(p) ? fake(p) : engine.read(p)), applied: () => engine.applied().filter((p) => snap.files.has(p)) }, comp, { prefix: `/vraw/${enc(comp.id)}/${enc(snap.frame.id)}/` });
       } else v = await tsx.view(comp, snap.files);
       res.writeHead(v.status || 200, { 'content-type': v.type, 'cache-control': 'no-store' });
       return res.end(v.body), true;
@@ -39,6 +39,8 @@ export function createTimeRoutes(engine, { tsx, who, json, body, fail }) {
       const rel = decodeURIComponent(raw[3]);
       const snap = guard(() => film.snapshotOf(decodeURIComponent(raw[1]), decodeURIComponent(raw[2])));
       const bytes = snap.files.get(rel);
+      // A stylesheet the version does not have is not part of it: never the live one. (Images, fonts and the like are the folder's own.)
+      if (!bytes && /\.css$/i.test(rel)) { res.writeHead(200, { 'content-type': 'text/css', 'cache-control': 'no-store' }); return res.end('/* not part of this version */\n'), true; }
       if (!bytes) { res.writeHead(302, { location: '/raw/' + rel.split('/').map(enc).join('/'), 'cache-control': 'no-store' }); return res.end(), true; }
       res.writeHead(200, { 'content-type': TYPES[extname(rel).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-store' });
       return res.end(bytes), true;
