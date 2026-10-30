@@ -37,7 +37,7 @@ function drawn(c,isButton){
 function pseudo(e){var p=['::before','::after'];for(var i=0;i<2;i++){var c=getComputedStyle(e,p[i]);if(c.content&&c.content!=='none'&&c.content!=='normal'&&c.display!=='none'){if(c.content.length>2)return true;var b=parseFloat(c.width)>0&&parseFloat(c.height)>0;if(b&&drawn(c,false))return true;if(drawn(c,false)&&(parseFloat(c.width)>0||parseFloat(c.height)>0))return true}}return false}
 function hasContent(){
  var r=document.getElementById('root');if(!r)return true;
- if(r.textContent.trim())return true;
+ var w=document.createTreeWalker(r,NodeFilter.SHOW_TEXT),n;while((n=w.nextNode())){if(!n.nodeValue.trim())continue;var pe=n.parentElement;if(!pe||/^(style|script|noscript|template)$/.test(pe.localName))continue;if(pe.getClientRects().length&&getComputedStyle(pe).visibility!=='hidden')return true}
  var els=r.querySelectorAll('*');
  for(var i=0;i<els.length;i++){var e=els[i],t=e.localName;
   if(MEDIA.test(t))return true;
@@ -45,7 +45,7 @@ function hasContent(){
   var c=getComputedStyle(e);if(c.display==='none'||c.visibility==='hidden')continue;
   var b=e.getBoundingClientRect();
   if(pseudo(e))return true;
-  if(t==='button'){if(e.children.length)return true;if(drawn(c,true)&&b.width>=1&&b.height>=1)return true;continue}
+  if(t==='button'){if(drawn(c,true)&&b.width>=1&&b.height>=1)return true;continue}
   if(b.width<1||b.height<1)continue;
   if(drawn(c,false))return true}
  return pseudo(r)}

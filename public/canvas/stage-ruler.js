@@ -37,20 +37,22 @@ export function breakpoints(doc) {
   if (!doc) return [];
   for (const sheet of doc.styleSheets) for (const text of mediaRules(sheet)) for (const { kind, px, strict } of widthConditions(text)) {
     const k = Math.round(px * 100) / 100;
-    const b = by.get(k) || { px: k, rules: 0, kinds: new Set(), strict: new Set() };
-    b.rules++; b.kinds.add(kind); if (strict) b.strict.add(kind); by.set(k, b);
+    const b = by.get(k) || { px: k, rules: 0, kinds: new Set(), strict: new Set(), loose: new Set() };
+    b.rules++; b.kinds.add(kind); (strict ? b.strict : b.loose).add(kind); by.set(k, b); // (a file can have both (width < 640px) and (max-width: 640px): they differ at 640)
   }
   return [...by.values()].sort((a, b) => a.px - b.px);
 }
 // Which breakpoints apply at this width: the nearest "and under" above it and the nearest "and up" below it.
 export function applying(bps, width) {
-  const max = bps.filter((b) => b.kinds.has('max') && (b.strict.has('max') ? width < b.px : width <= b.px)).sort((a, b) => a.px - b.px)[0];
-  const min = bps.filter((b) => b.kinds.has('min') && (b.strict.has('min') ? width > b.px : width >= b.px)).sort((a, b) => b.px - a.px)[0];
-  return { max, min };
+  const okMax = (b) => (b.loose.has('max') && width <= b.px) || (b.strict.has('max') && width < b.px);
+  const okMin = (b) => (b.loose.has('min') && width >= b.px) || (b.strict.has('min') && width > b.px);
+  const max = bps.filter((b) => b.kinds.has('max') && okMax(b)).sort((a, b) => a.px - b.px)[0];
+  const min = bps.filter((b) => b.kinds.has('min') && okMin(b)).sort((a, b) => b.px - a.px)[0];
+  return { max, min, maxStrict: !!max && !(max.loose.has('max') && width <= max.px), minStrict: !!min && !(min.loose.has('min') && width >= min.px) };
 }
 export function describe(bps, width) {
-  const { max, min } = applying(bps, width);
-  const parts = [max && (max.strict.has('max') ? `under ${Math.round(max.px)}` : `${Math.round(max.px)} and under`), min && (min.strict.has('min') ? `over ${Math.round(min.px)}` : `${Math.round(min.px)} and up`)].filter(Boolean);
+  const { max, min, maxStrict, minStrict } = applying(bps, width);
+  const parts = [max && (maxStrict ? `under ${Math.round(max.px)}` : `${Math.round(max.px)} and under`), min && (minStrict ? `over ${Math.round(min.px)}` : `${Math.round(min.px)} and up`)].filter(Boolean);
   return `${Math.round(width)} px${parts.length ? ` · ${parts.join(', ')}` : ''}`;
 }
 export function snap(bps, width, within) {

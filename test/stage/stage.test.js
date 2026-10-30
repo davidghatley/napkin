@@ -476,6 +476,9 @@ test('"Renders nothing without props" appears only for a component that really d
     'Separator.tsx': `export function Separator() { return <div style={{ borderTop: '1px solid #999', width: 100 }} />; }\n`,
     'Pseudo.tsx': `export function Pseudo() { return <><style>{'.pp::before { content: ""; display: block; width: 30px; height: 10px; background: red }'}</style><div className="pp" /></>; }\n`,
     'Late.tsx': `import { useState, useEffect } from 'react';\nexport function Late() { const [on, set] = useState(false); useEffect(() => { const t = setTimeout(() => set(true), 600); return () => clearTimeout(t); }, []); return on ? <p>arrived</p> : null; }\n`,
+    'StyleText.tsx': `export function StyleText() { return <style>{'.q { color: red }'}</style>; }\n`,
+    'Hidden.tsx': `export function Hidden() { return <p style={{ display: 'none' }}>not shown</p>; }\n`,
+    'SpanButton.tsx': `export function SpanButton() { return <button><span /></button>; }\n`,
     'EmptyDiv.tsx': `export function EmptyDiv() { return <div />; }\n`,
     'EmptyButton.tsx': `export function EmptyButton() { return <button />; }\n`,
   };
@@ -483,12 +486,26 @@ test('"Renders nothing without props" appears only for a component that really d
   try {
     const { b } = t;
     const note = (n) => b.eval(`!!napkin.stage.sections.get(napkin.find(${JSON.stringify(n)}).component).docFrame?.doc()?.querySelector('[data-napkin-empty]')`);
-    await b.waitFor(`['EmptyDiv', 'EmptyButton'].every((n) => !!napkin.stage.sections.get(napkin.find(n)?.component)?.docFrame?.doc()?.querySelector('[data-napkin-empty]'))`, 15000);
-    for (const n of ['EmptyDiv', 'EmptyButton']) assert.equal(await note(n), true, `${n} draws nothing: the note`);
+    await b.waitFor(`['EmptyDiv', 'EmptyButton', 'StyleText', 'Hidden', 'SpanButton'].every((n) => !!napkin.stage.sections.get(napkin.find(n)?.component)?.docFrame?.doc()?.querySelector('[data-napkin-empty]'))`, 15000);
+    for (const n of ['EmptyDiv', 'EmptyButton', 'StyleText', 'Hidden', 'SpanButton']) assert.equal(await note(n), true, `${n} draws nothing (style text, display:none text and a button holding an empty span are not content): the note`);
     for (const n of ['SizedButton', 'Bordered', 'Separator', 'Pseudo']) assert.equal(await note(n), false, `${n} draws something: no note`);
     // content that arrives after the note would have gone up (600 ms): the note goes away
     await sleep(1500);
     assert.equal(await note('Late'), false, 'the note leaves when content arrives');
     assert.match(await b.eval(`napkin.stage.sections.get(napkin.find('Late').component).docFrame.doc().body.textContent`), /arrived/);
+  } finally { await t.close(); }
+});
+
+test('the breakpoints panel words strict conditions as they are: (width < 640px) is "under 640", (width > 900px) is "over 900"', { timeout: 90000 }, async () => {
+  const t = await open({
+    'a/index.html': '<!doctype html><link rel="stylesheet" href="../s.css"><div class="q">hi</div>',
+    's.css': '@media (width < 640px) { .q { color: red } }\n@media (width > 900px) { .q { color: blue } }\n@media (max-width: 500px) { .q { margin: 0 } }\n',
+  });
+  try {
+    const { b } = t;
+    const id = await t.id('a');
+    await b.eval(`napkin.nav.focus(${JSON.stringify(id)}, null, { animate: false }); napkin.select({ component: ${JSON.stringify(id)}, node: napkin.stage.sections.get(${JSON.stringify(id)}).docFrame.tree().tree.at(-1).node, variant: {} }); napkin.breakpoints.open()`);
+    await b.waitFor(`document.querySelectorAll('#bp-panel .bp-rows:not(.dim) li button').length === 3`);
+    assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#bp-panel .bp-rows:not(.dim) li')].map((li) => li.querySelector('.bp-px').textContent + ' ' + li.querySelector('.bp-kind').textContent))`)), ['500 and under', '640 under', '900 over']);
   } finally { await t.close(); }
 });
