@@ -97,12 +97,19 @@ export function createFilm(engine) {
     pendingBlobs.clear();
     // (When the files a component draws from change, a stylesheet applied or removed, the old versions stay: list() shows a
     // boundary between them and never compares across it.)
-    const frame = { id: `n${at.toString(36)}${sha1(sig).slice(0, 5)}`, at, by, summary, files };
+    const frame = { id: `n${at.toString(36)}${sha1(sig).slice(0, 5)}`, at, by, summary, files, applied: engine.applied().filter((p) => p in files) }; // `applied`: the sheets applied then, in the order they were
     ref(frame, 1);
     s.frames.push(frame);
     while (s.frames.length > KEEP) ref(s.frames.shift(), -1);
     save(s);
     return frame;
+  }
+  // every component any version of which holds the file (frames are kept, whatever is applied now)
+  function usersEver(path) {
+    load();
+    const out = [];
+    for (const sl of slots.values()) if (sl.frames.some((f) => path in f.files) && engine.has(sl.comp)) out.push(sl.comp);
+    return out;
   }
   const usersOf = (path) => { try { return engine.componentsUsing(path); } catch { return []; } };
   const quiet = (fn) => { try { return fn(); } catch (e) { console.error('film:', e.message); return null; } };
@@ -245,11 +252,17 @@ export function createFilm(engine) {
         if (twin.by === 'file') all.splice(all.indexOf(twin), 1);
         else if (!/^(Restored|undo:|redo:)/.test(twin.summary)) twin.git = { short: g.short, subject: g.summary, author: g.by };
       }
-      all.push(g);
+      all.push({ ...g });
     }
-    // by time; within one second a commit comes before a napkin frame with the same bytes (git only has seconds), then commits keep their order
-    all.sort((a, b) => a.at - b.at || (a.ord ?? Infinity) - (b.ord ?? Infinity));
-    for (let i = 1; i < all.length; i++) { const a = all[i - 1], b = all[i]; if (a.source === 'napkin' && b.source === 'git' && Math.floor(a.at / 1000) === Math.floor(b.at / 1000) && sigOf(a.files) === sigOf(b.files)) { all[i - 1] = b; all[i] = a; } }
+    // by time. Git keeps seconds only, so a commit made right after an edit is dated up to a second before it: a commit whose
+    // bytes equal a napkin frame of the same second comes just after that frame (it contains it), never before.
+    for (const g of all) {
+      if (g.source !== 'git') continue;
+      const sig = sigOf(g.files), sec = Math.floor(g.at / 1000);
+      const n = all.filter((f) => f.source === 'napkin' && !/^(Restored|undo:|redo:)/.test(f.summary || '') && Math.floor(f.at / 1000) === sec && sigOf(f.files) === sig).sort((x, y) => y.at - x.at)[0];
+      if (n && g.at <= n.at) { g.at = n.at + 1; }
+    }
+    all.sort((a, b) => a.at - b.at || (a.ord ?? Infinity) - (b.ord ?? Infinity)); // commits of one second keep their order
     // a version equals the files now when nothing differs, or only shared-stylesheet changes this component does not draw
     const nowFrame = { files: nowFiles };
     const sameAsNow = (f) => { if (sigOf(f.files) === nowSig) return true; if (keysOf(f.files) !== nowKeys) return false; const diff = Object.keys(nowFiles).filter((p) => f.files[p] !== nowFiles[p]); return diff.every((p) => p !== comp.path && /\.css$/i.test(p)) && !!label(f, nowFrame, comp, rel).hidden; };
@@ -262,11 +275,15 @@ export function createFilm(engine) {
       const l = crossing ? { what: '', more: 0, where: '', key: null } : label(prevRaw, f, comp, rel);
       const before = prevRaw; prevRaw = f;
       if (l.hidden) continue;                                  // a shared stylesheet changed in a way that is nothing of this component's
+      // The first version after a boundary that only adds or removes files, with the bytes of the shared ones the same as before,
+      // has nothing new in it: the boundary says it all.
+      const empty = crossing && f.by === 'file' && /saw them then/.test(f.summary || '') && Object.keys(f.files).every((p) => !(p in before.files) || before.files[p] === f.files[p]) && Object.keys(before.files).every((p) => !(p in f.files) || before.files[p] === f.files[p]);
       if (crossing) {
         const was = Object.keys(before.files), is = Object.keys(f.files), add = is.filter((p) => !was.includes(p)), del = was.filter((p) => !is.includes(p));
         const names = (xs) => xs.slice(0, 3).join(', ') + (xs.length > 3 ? ` and ${xs.length - 3} more` : '');
         out.push({ boundary: true, id: `b${f.id}`, source: 'boundary', at: f.at, what: add.length && !del.length ? `Stylesheets applied: ${names(add)}` : del.length && !add.length ? `Stylesheets removed: ${names(del)}` : `Stylesheets changed: ${names(add)}${add.length && del.length ? ' in, ' : ''}${names(del)}${del.length ? ' out' : ''}`, count: 1, more: 0, ids: [] });
         prevKept = null;
+        if (empty) continue;
       }
       let what = l.what, where = l.where, more = l.more, key = l.key;
       const verb = /^(undo|redo): /.exec(f.summary || '')?.[1];
@@ -344,7 +361,11 @@ export function createFilm(engine) {
         const mine = new Map(), editor = new Map();
         for (const e of ledger[p] || []) if (e.at > frame.at && Array.isArray(e.t)) for (const t of e.t) { const k = touchKey(t); editor.set(k, e.comp ?? ''); if (e.comp === comp.id) { if (!mine.has(k)) mine.set(k, new Set()); mine.get(k).add(t.to); } }
         const foreign = differ.filter((t) => !(mine.has(touchKey(t)) && (t.to === undefined || mine.get(touchKey(t)).has(t.to))));
-        const users = foreign.length ? usersOf(p).filter((u) => u !== comp.id) : [];
+        // Who draws this sheet: whoever does now, and every component any of whose versions held it (a sheet that is not applied
+        // at the moment is still somebody's). If nobody else can be found for a sheet this component does not draw now either,
+        // a change of someone else's that is still in the file blocks the restore: napkin cannot tell whose it is.
+        const users = foreign.length ? [...new Set([...usersOf(p), ...usersEver(p)])].filter((u) => u !== comp.id) : [];
+        if (foreign.length && !users.length && !(p in snapshot(comp))) throw new FilmError(`${p} is not applied now, and ${touchWords(foreign[0])} changed in it after this version${editor.has(touchKey(foreign[0])) && editor.get(touchKey(foreign[0])) ? ` while you worked on ${editor.get(touchKey(foreign[0]))}` : ' outside napkin or in git'}. Napkin cannot tell who uses it, and restoring would undo that.. Next: apply the stylesheet again, or restore a newer version`, 409);
         const names = []; let hit = null;
         for (const u of users) {
           let other; try { other = engine.component(u); } catch { continue; }

@@ -29,7 +29,7 @@ export function createTimeRoutes(engine, { tsx, who, json, body, fail }) {
       let v;
       if (comp.kind === 'html') {
         const fake = (p) => { const buf = snap.files.get(p); const e = { buf, s: L(buf), rev: 'version' }; if (p === comp.path) e.html = parseHtml(e.s); return e; };
-        v = htmlView({ read: (p) => (snap.files.has(p) ? fake(p) : engine.read(p)), applied: () => engine.applied().filter((p) => snap.files.has(p)) }, comp, { prefix: `/vraw/${enc(comp.id)}/${enc(snap.frame.id)}/` });
+        v = htmlView({ read: (p) => (snap.files.has(p) ? fake(p) : engine.read(p)), applied: () => (snap.frame.applied ?? engine.applied()).filter((p) => snap.files.has(p)) }, comp, { prefix: `/vraw/${enc(comp.id)}/${enc(snap.frame.id)}/` });
       } else v = await tsx.view(comp, snap.files);
       res.writeHead(v.status || 200, { 'content-type': v.type, 'cache-control': 'no-store' });
       return res.end(v.body), true;

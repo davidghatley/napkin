@@ -410,12 +410,10 @@ test('film: applying stylesheets leaves the earlier versions behind a boundary; 
     assert.equal(before.frames.length, 2);
     assert.equal((await t.post('/api/styles', { applied: ['tokens.css', 'shared.css'] })).ok, true);
     const after = await t.film('pill.html');
-    assert.deepEqual(after.frames.map((x) => (x.boundary ? 'boundary' : x.what)).slice(0, 2), ['The files as napkin saw them then', 'boundary'], JSON.stringify(after.frames.map((x) => x.what)));
-    assert.equal(after.frames.length, 4, 'the two earlier versions are all still there, behind a boundary');
-    assert.equal(after.frames[1].what, 'Stylesheets applied: tokens.css, shared.css');
-    assert.ok(!after.frames.some((x) => /Removed|tokens\.css$/.test(x.what ?? '') && !x.boundary), 'no label is computed across the boundary');
-    const old = after.frames[3];                                   // the file as first seen
-    assert.deepEqual(after.frames[2].otherFiles, ['pill.html'], 'it says it is made of other files than the ones used now');
+    assert.deepEqual(after.frames.map((x) => (x.boundary ? 'boundary' : x.what)), ['boundary', 'Hi → Hello', 'The file as napkin first saw it'], 'the earlier versions are all still there, behind a boundary; a frame with nothing new beside it is not a row of its own');
+    assert.equal(after.frames[0].what, 'Stylesheets applied: tokens.css, shared.css');
+    const old = after.frames[2];                                   // the file as first seen
+    assert.deepEqual(old.otherFiles, ['pill.html'], 'it says it is made of other files than the ones used now');
     const v = await t.text(`/view/pill.html?version=${old.id}`);
     assert.doesNotMatch(v, /tokens\.css/, 'a version before the boundary draws with its own files only');
     // restoring it puts its own file back and leaves the applied stylesheets as they are
@@ -426,7 +424,7 @@ test('film: applying stylesheets leaves the earlier versions behind a boundary; 
     // after the boundary, labels work against the version before them
     const f = await t.film('pill.html');
     assert.equal(f.frames[0].what, 'Restored the version from ' + f.frames[0].what.replace('Restored the version from ', ''));
-    assert.equal(await t.text(`/vraw/pill.html/${after.frames[0].id}/tokens.css`), ':root { --ink: #111; }\n');
+    assert.equal(await t.text(`/vraw/pill.html/${f.frames[0].id}/tokens.css`), ':root { --ink: #111; }\n');
     assert.match(await t.text(`/vraw/pill.html/${old.id}/tokens.css`), /not part of this version/, 'a stylesheet the version does not have is never the live one');
   } finally { t.stop(); }
 });
@@ -525,5 +523,52 @@ test('film: a run that ends where it began says so, and Now stays marked when on
     const g = await t.film('a.html');
     assert.equal(g.frames[0].same, true, 'the newest frame is still Now');
     assert.equal(g.frames.filter((x) => x.same).length >= 1, true);
+  } finally { t.stop(); }
+});
+
+// ---- round 6 ----
+const bare = (cls, body) => `<!doctype html><html><head><meta charset="utf-8"></head><body><p class="${cls}">${body}</p></body></html>\n`;
+const textEdit = async (t, id, value) => { const tr = await t.get(`/api/component/${encodeURIComponent(id)}`); return t.post('/api/edit', { component: id, baseRevision: tr.revision, edits: [{ op: 'text', node: tr.tree[0].children[1].children[0].node, value }] }); };
+
+test('restore across a boundary is refused when it would undo another component\'s work, even with the sheets un-applied', async () => {
+  const t = await folderOf({ 'pixel.html': bare('px', 'Hi'), 'pill.html': bare('ss-pill', 'Pill'), 'tokens.css': ':root { --ink: #111; }\n', 'components.css': '.ss-pill { padding: 1px 7px; }\n.px { color: var(--ink); }\n' });
+  try {
+    assert.equal((await t.post('/api/styles', { applied: ['tokens.css', 'components.css'] })).ok, true);
+    await t.film('pixel.html'); await t.film('pill.html');
+    assert.equal((await textEdit(t, 'pixel.html', 'Hi 1')).ok, true);
+    const v = (await t.film('pixel.html')).frames[0];                                  // V holds both sheets
+    assert.equal((await t.post('/api/edit', { component: 'pill.html', edits: [{ op: 'rule', file: 'components.css', selector: '.ss-pill', index: 0, prop: 'padding', value: '1px 14px' }] })).ok, true);
+    assert.equal((await textEdit(t, 'pixel.html', 'Hi 2')).ok, true);
+    assert.equal((await t.post('/api/styles', { applied: [] })).ok, true);
+    const css = readFileSync(join(t.dir, 'components.css'), 'utf8'), html = readFileSync(join(t.dir, 'pixel.html'), 'utf8');
+    const r = await t.post('/api/component/pixel.html/film/restore', { frame: v.id });
+    assert.equal(r.ok, false, JSON.stringify(r));
+    assert.match(r.error, /components\.css is shared: \.ss-pill padding changed after this version while you worked on pill, and pill draws it\./);
+    assert.equal(readFileSync(join(t.dir, 'components.css'), 'utf8'), css); assert.equal(readFileSync(join(t.dir, 'pixel.html'), 'utf8'), html, 'nothing was written');
+    // the version still previews with the sheets it holds, in their recorded order, though none is applied now
+    const view = await t.text(`/view/pixel.html?version=${v.id}`);
+    const links = [...view.matchAll(/href="\/vraw\/pixel\.html\/[^/]+\/([^"]+\.css)"/g)].map((m) => m[1]);
+    assert.deepEqual(links, ['tokens.css', 'components.css']);
+    assert.equal(await t.text(`/vraw/pixel.html/${v.id}/components.css`), '.ss-pill { padding: 1px 7px; }\n.px { color: var(--ink); }\n');
+  } finally { t.stop(); }
+});
+
+test('film: a commit made in the same second as the edit it contains comes after it, and the undo is worded from the right frames', async () => {
+  const t = await folderOf({ 'pills.html': '<!doctype html><html><body><p><span class="ss-pill">Shipped</span> <span class="ss-pill">Blocked</span></p></body></html>\n' }, { git: true });
+  try {
+    await t.film('pills.html');
+    const tr = await t.get('/api/component/pills.html');
+    const before = Date.now();
+    assert.equal((await t.post('/api/edit', { component: 'pills.html', baseRevision: tr.revision, edits: [{ op: 'insert', parent: tr.tree[0].children[0].children[0].node, index: 1, html: '<span class="ss-pill">c5</span>' }] })).ok, true);
+    const at = Math.floor(Date.now() / 1000);
+    execFileSync('git', ['-C', t.dir, '-c', 'user.email=a@b.c', '-c', 'user.name=Ada', 'commit', '-q', '-am', 'c5'], { stdio: 'ignore', env: { ...process.env, GIT_COMMITTER_DATE: `${at} +0000`, GIT_AUTHOR_DATE: `${at} +0000` } });
+    void before;
+    assert.equal((await t.post('/api/undo', { component: 'pills.html' })).ok, true);
+    const f = await t.film('pills.html');
+    const rows = f.frames.map((x) => `${x.source}:${x.summary}`);
+    const iEdit = f.frames.findIndex((x) => x.source === 'napkin' && /^insert/.test(x.summary)), iCommit = f.frames.findIndex((x) => x.summary === 'c5');
+    assert.ok(iCommit >= 0 && iEdit >= 0, rows.join(' / '));
+    assert.ok(iCommit < iEdit, `newest first: the commit (${iCommit}) is above the edit it contains (${iEdit})`);
+    assert.match(f.frames[0].what, /^Undid Added <span class="ss-pill">c5<\/span>$/, JSON.stringify(f.frames.map((x) => x.what)));
   } finally { t.stop(); }
 });
