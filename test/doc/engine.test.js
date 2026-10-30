@@ -100,7 +100,9 @@ test('refusals are one spot at a time; ambiguous rules list their matches; nothi
     eng.edit('p.html', { by: 't', edits: [{ op: 'rule', file: 's.css', selector: '.a', media: '(min-width: 9px)', prop: 'color', value: 'teal' }] });
     assert.match(readFileSync(join(dir, 's.css'), 'utf8'), /\{ \.a \{ color: teal \} \}/);
     const t = eng.tree('C.tsx#C');
-    assert.throws(() => eng.edit('C.tsx#C', { by: 't', edits: [{ op: 'class', node: t.tree[0].node, add: ['y'] }] }), /computed in code/);
+    // (lead ruling 2026-10-30, round 2: a class list built by cn()/clsx() is edited in its first plain string; it is refused only with no string at all: test/doc/jsx-class.test.js)
+    eng.edit('C.tsx#C', { by: 't', edits: [{ op: 'class', node: t.tree[0].node, add: ['y'] }] });
+    assert.match(readFileSync(join(dir, 'C.tsx'), 'utf8'), /className=\{cn\("x y"\)\}/);
     eng.edit('C.tsx#C', { by: 't', edits: [{ op: 'text', node: t.tree[0].node, value: 'a {b}' }] });
     assert.match(readFileSync(join(dir, 'C.tsx'), 'utf8'), /\{"a \{b\}"\}/);
     eng.setStyles(['s.css']);

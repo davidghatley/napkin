@@ -14,7 +14,7 @@ import { L, toL, fromL, lineOf, applySplices, mapPos } from './source.js';
 import { parseHtml, byId as htmlNode, attrOf } from './html.js';
 import { parseCss, varUses, stripCommentsKeep, specificity, splitList } from './css.js';
 import { parseJsx, componentTree } from './jsx.js';
-import { planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf, runsOf, decodeText } from './edit.js';
+import { classLiteral, planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf, runsOf, decodeText } from './edit.js';
 import { writeAtomic } from '../atomic.js';
 import { explainError } from '../errors.js';
 
@@ -108,7 +108,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       if (kind === 'css') return { path, kind, revision, components: [] };
       let comps = [];
       try { const c = jsx(path); comps = c.jsx.error ? [{ id: `${path}#${fileComponentName(path)}`, name: fileComponentName(path), broken: true }] : c.jsx.components.map((x) => ({ id: `${path}#${x.name}`, name: x.name })); } catch { /* unreadable: listed with none */ }
-      return { path, kind, revision, components: comps, ...(cache.get(path)?.jsx?.error && { error: explainError(cache.get(path).jsx.error, { file: path }) }) };
+      const parseError = cache.get(path)?.jsx?.error;
+      // a file that parses and exports no component has no frame; it is listed, with the reason
+      return { path, kind, revision, components: comps, ...(parseError ? { error: explainError(parseError, { file: path }) } : !comps.length && cache.get(path)?.jsx ? { noComponent: `no component exported: ${path} exports no function that returns elements` } : {}) };
     });
   }
   function component(id) {
@@ -140,7 +142,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const t = componentTree(parsed, decl);
     return { entry: e, roots: t.roots, flat: t.flat, find: (nid) => t.flat.find((x) => x.id === String(nid)) || null };
   }
-  const attrMap = (s, n) => Object.fromEntries(n.attrs.filter((a) => !a.spread).map((a) => [fromL(a.name), a.valStart === null ? '' : a.quote || !n.jsx ? fromL(a.value) : `{${fromL(a.value.slice(1, -1))}}`]));
+  const attrMap = (s, n) => { const o = attrMapRaw(s, n); if (n.jsx) { const c = classLiteral(n); if (c !== null && o.class === undefined) o.class = c; } return o; };
+  const attrMapRaw = (s, n) => Object.fromEntries(n.attrs.filter((a) => !a.spread).map((a) => [fromL(a.name), a.valStart === null ? '' : a.quote || !n.jsx ? fromL(a.value) : `{${fromL(a.value.slice(1, -1))}}`]));
   function tree(id) {
     const comp = component(id);
     if (comp.broken) return { component: comp.id, file: comp.path, kind: comp.kind, name: comp.name, revision: read(comp.path).rev, tree: [], error: explainError(`${comp.path}: ${comp.broken}`, { next: 'fix the syntax error, then save; napkin reads it again.' }) };

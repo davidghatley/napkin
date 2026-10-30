@@ -5,12 +5,13 @@
 // (GET /api/component/<id>); an element the browser made up (an implied <tbody>) passes its children through.
 //   createDocFrame(ctx, id, { onResize }) -> { cell, load(revision), pick(clientX, clientY), element(node), has(node),
 //                                              iframe(), doc(), tree(), node(id), width, setWidth(w) }
+import { createRuler } from './stage-ruler.js';
 const enc = encodeURIComponent;
 export const DOC_WIDTH = 640;
 
 // DOM elements <-> source nodes. Tags are compared case-insensitively; a DOM element with no source node (implied by
 // the parser, or made by a script) is walked through with the same source list.
-export function mapDom(document, roots) {
+export function mapDom(document, roots, host = null) {
   const byNode = new Map(), byEl = new Map();
   const same = (el, n) => el.localName.toLowerCase() === String(n.tag).toLowerCase();
   const walk = (domKids, srcKids, i) => {
@@ -22,7 +23,8 @@ export function mapDom(document, roots) {
     }
     return i;
   };
-  walk([document.documentElement], roots, 0);
+  if (host) walk([...host.children], roots, 0); // a JSX component: its elements are inside the page's #root, which is not one of them
+  else walk([document.documentElement], roots, 0);
   return { byNode, byEl };
 }
 
@@ -31,20 +33,57 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   cell.className = 'cell doc-cell'; cell.dataset.variant = '{}';
   const cap = document.createElement('figcaption');
   // The frame's width is the document's viewport: drag the grip and the component reflows for real (its own @media).
-  const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.dataset.nodrag = '1'; grip.title = 'Drag to change the frame width. Double-click for 640 px.';
-  cell.append(cap, grip);
-  let iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
+  const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.dataset.nodrag = '1'; grip.title = 'Drag to change the frame width. Double-click for 640 px. With the keyboard: arrows 1 px, Shift 10 px, Page Up and Page Down the next breakpoint.';
+  grip.tabIndex = -1; grip.setAttribute('role', 'slider'); grip.setAttribute('aria-label', 'Frame width'); grip.setAttribute('aria-valuemin', '120'); grip.setAttribute('aria-valuemax', '2400');
+  const ruler = createRuler({ doc: () => iframe?.contentDocument || null, commitWidth: (w) => { api.setWidth(w); saveWidth(); }, get width() { return width; } });
+  cell.append(cap, ruler.el, grip);
+  let widthAt = 0, iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
   const proxies = new WeakMap();
-  cap.textContent = `${width} px`;
+  const say = (w, snapped) => { cap.textContent = ruler.say(w, snapped); grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuetext', `${w} px`); };
+  say(width);
   const saveWidth = () => ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: id, width }) }).catch(() => {});
   grip.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault(); ev.stopPropagation(); grip.setPointerCapture(ev.pointerId);
     const x0 = ev.clientX, w0 = width, z = ctx.view?.get().z || 1;
-    const move = (e) => api.setWidth(w0 + (e.clientX - x0) / z);
-    const up = () => { grip.removeEventListener('pointermove', move); saveWidth(); };
+    // the file's own breakpoints pull the width in (within 8 screen pixels); Alt drags freely
+    // detents: a breakpoint holds the width while the pointer is within 12 screen px of it, takes it from 8 px away, and takes it when one step carries the pointer across it
+    let stuck = null, prev = w0;
+    const move = (e) => {
+      const raw = w0 + (e.clientX - x0) / z;
+      let px = raw, snapped = false;
+      if (!e.altKey) {
+        const pts = ruler.points().map((b) => Math.round(b.px));
+        if (stuck !== null && Math.abs(raw - stuck) <= 12 / z) { px = stuck; snapped = true; }
+        else {
+          stuck = null;
+          const crossed = pts.find((p) => (prev < p && raw >= p) || (prev > p && raw <= p));
+          const s = crossed !== undefined ? { px: crossed, snapped: true } : ruler.snap(raw, 8 / z);
+          if (s.snapped) { stuck = s.px; px = s.px; snapped = true; }
+        }
+      }
+      prev = raw;
+      api.setWidth(px, snapped);
+    };
+    const up = () => { grip.removeEventListener('pointermove', move); delete cell.dataset.resizing; say(width); saveWidth(); };
+    cell.dataset.resizing = '1';
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up, { once: true });
+  });
+  // the grip of the selected frame can be reached by keyboard: arrows move 1 px (Shift 10), Page Up and Page Down jump to the next breakpoint
+  grip.addEventListener('keydown', (ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const step = ev.shiftKey ? 10 : 1;
+    let to = null;
+    if (ev.code === 'ArrowRight' || ev.code === 'ArrowUp') to = width + step;
+    else if (ev.code === 'ArrowLeft' || ev.code === 'ArrowDown') to = width - step;
+    else if (ev.code === 'PageUp' || ev.code === 'PageDown') { const pts = ruler.points().map((b) => Math.round(b.px)); to = ev.code === 'PageUp' ? pts.find((p) => p > width) : [...pts].reverse().find((p) => p < width); if (to === undefined) { ctx.hint(`No ${ev.code === 'PageUp' ? 'wider' : 'narrower'} breakpoint`); to = null; } }
+    else if (ev.code === 'Home') to = DOC_WIDTH;
+    if (to === null) { if (['PageUp', 'PageDown'].includes(ev.code)) { ev.preventDefault(); ev.stopPropagation(); } return; }
+    ev.preventDefault(); ev.stopPropagation();
+    const s = ruler.snap(to, 0.5);
+    api.setWidth(s.px, s.snapped);
+    clearTimeout(grip._save); grip._save = setTimeout(saveWidth, 250);
   });
   grip.addEventListener('dblclick', (ev) => { ev.stopPropagation(); api.setWidth(DOC_WIDTH); saveWidth(); });
 
@@ -73,7 +112,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     const d = iframe?.contentDocument;
     if (!d?.documentElement) return;
     const h = Math.max(24, Math.min(4000, Math.ceil(d.documentElement.getBoundingClientRect().height)));
-    if (iframe.style.height !== `${h}px`) { iframe.style.height = `${h}px`; onResize(); }
+    if (iframe.style.height !== `${h}px`) { iframe.style.height = `${h}px`; onResize(Date.now() - widthAt < 2000); }
   }
   const settle = (f) => new Promise((res) => {
     const done = () => res(); const t = setTimeout(done, 4000);
@@ -95,7 +134,8 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     if (my !== gen || !next.isConnected) { next.remove(); return false; }
     const old = iframe;
     iframe = next; tree = t; nodes = flatten(t.tree || []);
-    map = mapDom(next.contentDocument, t.tree || []);
+    const fk = ctx.state.components.get(id)?.fileKind;
+    map = mapDom(next.contentDocument, t.tree || [], fk === 'tsx' || fk === 'jsx' ? next.contentDocument.getElementById('root') : null);
     for (const [el, node] of map.byEl) { const p = proxies.get(el); if (p) p.dataset.n = node; }
     next.classList.remove('doc-next');
     if (old && old !== next) old.remove();
@@ -104,6 +144,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     // keyboard focus never stays inside a frame while editing: the canvas's keys keep working
     next.contentWindow.addEventListener('focus', () => { if (!document.body.dataset.play) next.blur(); });
     size();
+    ruler.update(); say(width);
     return true;
   }
   // The element under a page point (nearest one with a source node), or null.
@@ -119,11 +160,13 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   const api = {
     cell, load, pick,
     element: (node) => proxy(map.byNode.get(node)),
+    nodeOf: (el) => map.byEl.get(el) ?? null,
     has: (node) => map.byNode.has(node) || nodes.has(node),
     node: (node) => nodes.get(node) || null,
     iframe: () => iframe, doc: () => iframe?.contentDocument || null, tree: () => tree,
     get width() { return width; },
-    setWidth(w) { width = Math.max(120, Math.min(2400, Math.round(w))); cap.textContent = `${width} px`; if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(); },
+    grip, ruler, commitWidth: (w) => { api.setWidth(w); saveWidth(); },
+    setWidth(w, snapped = false) { widthAt = Date.now(); width = Math.max(120, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(true); grip.setAttribute('aria-valuenow', String(width)); grip.setAttribute('aria-valuetext', `${width} px`); ctx.emit('framewidth', { component: id, width }); },
     destroy() { gen++; ro?.disconnect(); iframe?.remove(); },
   };
   const w = ctx.state.components.get(id)?.width;

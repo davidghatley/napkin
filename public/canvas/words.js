@@ -9,7 +9,7 @@ export function plain(text) {
   const os = osError(s); if (os) return os;
   const nothing = s.match(NOTHING);
   if (nothing) return `Nothing to ${nothing[1].toLowerCase()} yet.`;
-  s = s.replace(/\s*Next:[\s\S]*$/, '').replace(/^(undo|redo) refused: /, '').replace(/^invalid edit #\d+: /, '').replace(/\s*\/api\/[\w/.-]*/g, '').trim();
+  s = s.replace(/\s*Next:[\s\S]*$/, '').replace(/^(undo|redo) refused: /, '').replace(/^invalid edit #\d+: /, '').replace(/^edit #\d+ \([a-z]+\): /, '').replace(/\s*\/api\/[\w/.-]*/g, '').trim();
   if (/^id ".*" already exists/.test(s)) return 'That id is already used';
   s = s.replace(/\s*\[[^\]]*\.(?:tsx|json)\]\s*$/, '').trim(); // the file is already named by the field the message sits beside
   const bad = /^bad prop name "(.*)"$/.exec(s);
@@ -67,7 +67,7 @@ export function engineSentence(kind, text, value) {
   const s = String(text ?? '');
   const k = KINDS[kind] ? kind : 'setting';
   const quoted = /"([^"]*)"/.exec(s)?.[1] ?? value ?? '';
-  if (/already (exists|has)/.test(s) && !/^id "/.test(s.replace(/^invalid edit #\d+: /, ''))) return dupSentence(k, quoted);
+  if (/already (exists|has)/.test(s) && !/^id "/.test(s.replace(/^invalid edit #\d+: /, '').replace(/^edit #\d+ \([a-z]+\): /, ''))) return dupSentence(k, quoted);
   if (/^(invalid edit #\d+: )?bad (prop|axis) name/.test(s)) return checkName(k === 'component' ? 'component' : k === 'value' ? 'axis' : k, quoted, []) ?? plain(s);
   if (/bad (variant|base) value/.test(s)) return checkName('value', quoted, []) ?? plain(s);
   if (/bad component name/.test(s)) return checkName('component', quoted, []) ?? plain(s);

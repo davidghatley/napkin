@@ -60,22 +60,26 @@ test('OPN-03: accepting adoption independently invalidates the existing bundle',
     assert.match(missing.json.error, /missing-id/);
   } finally { await api.close(); await ws.close(); rmSync(dir, { recursive: true, force: true }); }
 });
+// Rewritten for decision 0013 (lead ruling 2026-10-30): was a dialect cell with a `.build-error` card, now the file's /view frame, which says why it could
+// not be built inside the frame; each error stays inside its own measured frame, the frames do not overlap, duplicate names show their paths; intent unchanged.
 test('OPN-02: build errors stay within measured frames; duplicate names include paths', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-errors-ui-'));
   for (const name of ['a', 'b', 'c', 'd']) { mkdirSync(join(dir, name)); createComponent(join(dir, name, 'accordion.tsx'), `import { X } from './missing'; export function Accordion() { return <X />; }`); }
   const s = await cli(dir), b = await launchChromium({ width: 1440, height: 960 });
   try {
     await b.goto(s.url); await b.waitFor('document.body.dataset.ready === "1"');
-    await b.waitFor('document.querySelectorAll(".build-error:not(:empty)").length === 4');
+    await b.waitFor(`[...napkin.stage.sections.values()].filter((s) => s.docFrame?.doc()?.querySelector('[data-napkin-error]')?.textContent).length === 4`);
     const result = await b.eval(`(() => {
       const frames = [...document.querySelectorAll('.cmp')];
-      return frames.map(el => { const f = el.querySelector('.frame').getBoundingClientRect(), e = el.querySelector('.build-error').getBoundingClientRect(); return { title: el.querySelector('h3').textContent, text: el.textContent, bounded: e.left >= f.left - 1 && e.right <= f.right + 1 && e.top >= f.top - 1 && e.bottom <= f.bottom + 1, x:f.x, y:f.y, r:f.right, b:f.bottom }; });
+      return frames.map(el => { const df = napkin.stage.sections.get(el.dataset.component).docFrame, f = el.querySelector('.frame').getBoundingClientRect(), e = df.element(df.tree().tree[0]?.node)?.getBoundingClientRect() ?? (() => { const p = df.doc().querySelector('[data-napkin-error]').getBoundingClientRect(), fr = df.iframe().getBoundingClientRect(); return new DOMRect(fr.left + p.left, fr.top + p.top, p.width, p.height); })(); return { title: el.querySelector('h3').textContent, text: el.textContent + df.doc().body.textContent, bounded: e.left >= f.left - 1 && e.right <= f.right + 1 && e.top >= f.top - 1 && e.bottom <= f.bottom + 1, x:f.x, y:f.y, r:f.right, b:f.bottom }; });
     })()`);
-    for (const r of result) { assert.equal(r.bounded, true); assert.match(r.title, /accordion · [abcd]\/accordion.tsx/); assert.ok(!r.text.includes(dir)); }
+    for (const r of result) { assert.equal(r.bounded, true); assert.match(r.title, /Accordion · [abcd]\/accordion.tsx/); assert.ok(!r.text.includes(dir)); assert.match(r.text, /could not build [abcd]\/accordion\.tsx.*line \d+/); }
     for (let i = 0; i < result.length; i++) for (let j = i + 1; j < result.length; j++) { const a = result[i], c = result[j]; assert.ok(a.r <= c.x || c.r <= a.x || a.b <= c.y || c.b <= a.y); }
-    assert.match(await b.eval('document.querySelector("#layers").textContent'), /accordion · a\/accordion.tsx/);
-    await b.eval('document.querySelector(".build-error summary").click()');
-    assert.equal(await b.eval('document.querySelector(".build-error").open'), true);
+    assert.match(await b.eval('document.querySelector("#layers").textContent'), /Accordion · a\/accordion.tsx/);
+    // (was: click the card's <summary> and it opens) now: focus a broken frame and its whole reason is there, whole, readable and inside the stage
+    await b.eval(`napkin.nav.focus(napkin.find('Accordion').component, null, { animate: false }); true`);
+    await b.waitFor(`(() => { const df = napkin.stage.sections.get(napkin.find('Accordion').component).docFrame, e = df.doc().querySelector('[data-napkin-error]'); const r = df.iframe().getBoundingClientRect(), z = r.width / df.iframe().offsetWidth, s = document.querySelector('#stage').getBoundingClientRect(); return e.scrollWidth <= e.clientWidth + 1 && parseFloat(getComputedStyle(e).fontSize) * z >= 6 && r.left >= s.left - 1 && r.right <= s.right + 1; })()`);
+    assert.match(await b.eval(`napkin.stage.sections.get(napkin.find('Accordion').component).docFrame.doc().querySelector('[data-napkin-error]').textContent`), /Could not resolve "\.\/missing"/);
   } finally { await b.close(); await s.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 test('OPN big repo: address precedes scan and arrives within two seconds; progress streams', async () => {
@@ -93,6 +97,8 @@ test('OPN big repo: address precedes scan and arrives within two seconds; progre
   } finally { await s.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+// Rewritten for decision 0013 (lead ruling 2026-10-30): was dialect bundles fetched on reveal and a `.mount` inside the stage, now /view iframes that do not
+// load until their frame is revealed, and the revealed frame's document inside the stage; intent unchanged.
 test('OPN: offscreen previews bundle on reveal, and refreshed errors keep real frame bounds', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-lazy-'));
   for (let i = 0; i < 60; i++) createComponent(join(dir, `Item${String(i).padStart(2, '0')}.tsx`), `export function Item${i}() { return <div style={{ width: 450, height: 240 }}>Preview ${i}</div>; }`);
@@ -103,23 +109,27 @@ test('OPN: offscreen previews bundle on reveal, and refreshed errors keep real f
     await b.eval('napkin.view.set({ x: 80, y: 120, z: 1 }); true');
     writeFileSync(join(dir, 'Item59.tsx'), `export function Item59() { return <div style={{ width: 450, height: 240 }}>Preview 59, edited</div>; }`);
     await b.waitFor('[...napkin.stage.sections.values()].some(s => s.pending)');
+    const loaded = await b.eval('document.querySelectorAll("iframe.doc-frame").length');
+    assert.ok(loaded < 60, `frames far off screen do not load until revealed (${loaded} of 60 have an iframe)`);
     const pending = await b.eval('[...napkin.stage.sections.entries()].filter(([,s]) => s.pending).map(([id]) => id)');
     assert.ok(pending.length > 0);
     const id = pending[0];
     await b.eval(`napkin.stage.reveal(${JSON.stringify(id)}); true`);
-    await b.waitFor(`!!document.querySelector('section[data-component="${id}"] .mount')`);
+    await b.waitFor(`!!napkin.stage.sections.get(${JSON.stringify(id)}).docFrame?.doc()?.body?.textContent.includes('Preview')`);
     assert.equal(await b.eval(`napkin.stage.sections.get(${JSON.stringify(id)}).pending`), false);
-    await b.waitFor(`(() => { const el = document.querySelector('section[data-component="${id}"] .mount'), r = el.getBoundingClientRect(), s = document.querySelector('#stage').getBoundingClientRect(); return r.left >= s.left && r.right <= s.right && r.top >= s.top && r.bottom <= s.bottom; })()`);
+    await b.waitFor(`(() => { const el = napkin.stage.sections.get(${JSON.stringify(id)}).docFrame.iframe(), r = el.getBoundingClientRect(), s = document.querySelector('#stage').getBoundingClientRect(); return r.left >= s.left && r.right <= s.right && r.top >= s.top && r.bottom <= s.bottom; })()`);
   } finally { await b.close(); await s.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 
+// Rewritten for decision 0013 (lead ruling 2026-10-30): was a read-only dialect cell (`.mount`) before the adoption, now the file's /view frame; after Accept the
+// canvas shows the adopted file without a reload (the file is now one the dialect edits, so it is drawn once, as a cell) and fetches one fresh bundle; intent unchanged.
 test('OPN-03: the live canvas fetches a fresh bundle after adoption Accept', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-canvas-adopt-'));
   createComponent(join(dir, 'Greeting.tsx'), simple);
   const s = await cli(dir), b = await launchChromium({ width: 1440, height: 960 });
   try {
-    await b.goto(s.url); await b.waitFor('document.body.dataset.ready === "1" && document.querySelector(".mount")?.textContent === "Hello"');
-    assert.equal(await b.eval('!!document.querySelector(".mount [data-n]")'), false);
+    await b.goto(s.url); await b.waitFor('document.body.dataset.ready === "1" && napkin.stage.sections.get(napkin.find("Greeting")?.component)?.docFrame?.doc()?.body?.textContent.includes("Hello")');
+    assert.equal(await b.eval('!!document.querySelector(".mount [data-n]")'), false, 'before: the /view frame of the file as it is');
     await b.eval('window.bundleFetches = []; const fetchBefore = window.fetch; window.fetch = (...args) => { if (String(args[0]).startsWith("/bundle/")) bundleFetches.push(args[0]); return fetchBefore(...args); }; true');
     const token = await session(s.url, 'you');
     const p = await http(s.url, '/api/components/Greeting/adoption', { method: 'POST', token, body: {} });
@@ -128,6 +138,7 @@ test('OPN-03: the live canvas fetches a fresh bundle after adoption Accept', asy
     assert.equal(accepted.status, 200);
     await b.waitFor('!!document.querySelector(".mount [data-n=root]")');
     assert.equal(await b.eval('bundleFetches.length'), 1);
+    assert.equal(await b.eval('document.querySelectorAll("section.cmp").length'), 1, 'the file is on the canvas once');
     assert.equal(await b.eval('document.querySelector(".mount").textContent'), 'Hello');
     assert.equal(await b.eval('document.querySelector(".badge").hidden'), true);
   } finally { await b.close(); await s.stop(); rmSync(dir, { recursive: true, force: true }); }

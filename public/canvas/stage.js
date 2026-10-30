@@ -16,7 +16,7 @@ import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
 
-let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
+let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function createStage(ctx, root, world, view) {
@@ -146,18 +146,25 @@ export function createStage(ctx, root, world, view) {
     const sec = section(id);
     const token = ++sec.token;
     header(id);
-    if (c.kind === 'html') return renderDoc(id, c, sec, token);
     if (!force && ctx.state.components.size > CULL_AFTER) {
       if (!sec.pos) {
-        sec.frame.innerHTML = '<div class="bundle-pending">Preview loads when in view</div>';
+        sec.frame.innerHTML = c.kind === 'html' ? `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>` : '<div class="bundle-pending">Preview loads when in view</div>';
         measure(sec); placeNew(id);
       }
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
+    // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
+    if (c.kind === 'html' && !sec.docFrame && ctx.state.components.size > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
+      sec.pending = true; sec.el.dataset.ready = '1';
+      if (!sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
+      return;
+    }
     sec.pending = false;
+    if (c.kind === 'html') return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
+      if (ctx.docs?.takeOver(id)) return; // the dialect could not build it: the engine draws the file as /view (which says why)
       sec.unmounts.forEach(u => u()); sec.unmounts = [];
       sec.frame.replaceChildren(errorCard(`build failed: ${(await res.json().catch(() => ({}))).error || res.status}`));
       finish(sec, id, c.revision);
@@ -194,11 +201,20 @@ export function createStage(ctx, root, world, view) {
     refreshOverlays();
   }
 
+  // A frame taken out of memory: its iframe goes, its place and size stay, and it says what it is until it is in view again.
+  function unloadDoc(id, sec) {
+    const c = ctx.state.components.get(id);
+    const w = sec.frame.offsetWidth, h = sec.frame.offsetHeight;
+    sec.docFrame?.destroy(); sec.docFrame = null; sec.pending = true;
+    sec.frame.style.minWidth = `${w}px`; sec.frame.style.minHeight = `${h}px`;
+    sec.frame.innerHTML = `<div class="bundle-pending">${esc(c?.name ?? id)} · ${esc(c?.path ?? '')}<br>loads when you scroll to it</div>`;
+  }
+
   // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
   async function renderDoc(id, c, sec, token) {
     if (!sec.docFrame) {
-      sec.docFrame = createDocFrame(ctx, id, { onResize: () => { if (!sections.has(id)) return; measure(sec); if (laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); refreshOverlays(); ctx.emit('layout', {}); } });
-      sec.frame.replaceChildren(sec.docFrame.cell);
+      sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
       sec.el.dataset.kind = 'html';
     }
     let ok = false;
@@ -551,8 +567,22 @@ export function createStage(ctx, root, world, view) {
     const near = box(NEAR), wide = box(WIDE), far = box(1); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
     const ahead = [];
+    // A frame of the document engine is a whole page, so they load progressively and under a budget: a few per pass for the frames in view (at fit-all too), never more than
+    // DOC_BUDGET at once. When the frames in view want more than the budget, the loaded ones farthest from the view are unloaded (they keep their size and their name).
+    const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html';
+    let docs = [...sections.values()].filter((x) => x.docFrame).length, started = 0, wanting = false;
     for (const [id, sec] of sections) {
-      if (sec.pending && visible(sec)) render(id, true).catch(console.error);
+      if (sec.pending && visible(sec) && isDocSec(id)) {
+        if (docs < DOC_BUDGET && started < DOC_BATCH) { docs++; started++; render(id, true).catch(console.error); } else wanting = true;
+      } else if (sec.pending && visible(sec)) render(id, true).catch(console.error);
+    }
+    if (wanting) { // unload the farthest loaded frames to make room, then come back for the rest
+      const cy = (-y + b.height / 2) / z, cx = (-x + b.width / 2) / z;
+      const away = [...sections].filter(([id, sec]) => sec.docFrame && sec.pos && !keep.has(id) && !visible(sec)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
+      for (const [id, sec] of away.slice(0, DOC_BATCH)) unloadDoc(id, sec);
+      setTimeout(() => queueCull(), 120);
+    }
+    for (const [id, sec] of sections) {
       if (!sec.pos || !sec.size.w) continue;
       let off;
       if (mode !== 'exact') { // a gesture (pan or zoom): nothing is taken out, what comes into view is drawn within a frame
@@ -598,6 +628,7 @@ export function createStage(ctx, root, world, view) {
   }
   ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.el.style.removeProperty('--nk-ls'); sec.headLf = undefined; sec.chipLs = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
   ctx.on('select', () => {
+    for (const [gid, gsec] of sections) if (gsec.docFrame) gsec.docFrame.grip.tabIndex = ctx.state.selections.some((q) => q.component === gid) ? 0 : -1; // only the selected frame's grip is a Tab stop
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
     for (const [id, sec] of sections) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }

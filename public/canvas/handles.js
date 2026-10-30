@@ -429,7 +429,7 @@ export function initHandles(ctx) {
   // ------------------------------------------------------------------------------------------ preview widths (LAY-11)
   stageEl.addEventListener('pointerdown', (ev) => {
     const grip = ev.target.closest?.('.cell-grip');
-    if (!grip || ev.button !== 0) return;
+    if (!grip || ev.button !== 0 || grip.closest('.doc-cell')) return; // an HTML or JSX frame sizes itself (doc-frames.js)
     ev.preventDefault(); ev.stopPropagation();
     const cell = grip.closest('.cell'), mount = cell.querySelector('.mount'), id = cell.closest('.cmp').dataset.component, z = zoom();
     const w0 = mount.getBoundingClientRect().width / z, was = mount.style.width;

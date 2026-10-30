@@ -151,6 +151,7 @@ test('round 3 polish: messages clear and name the field; the snap toast follows 
       await b.waitFor(`document.querySelector('#snap-toast').hidden === true`);
     });
     await t.test('the toast stays while focus is in it', async () => {
+      await b.waitFor(`!!document.getElementById('off-token-borderRadius')`); // (the previous test's undo hides the toast first; the panel redraws the off-token control a moment later)
       await b.eval(`(() => { const d = document.getElementById('off-token-borderRadius'); d.scrollIntoView(); d.focus(); })()`);
       await io.key('Enter'); await b.waitFor(`document.activeElement.id === 'snap-undo'`);
       await b.eval(`document.querySelector('#snap-undo').onclick = null`);

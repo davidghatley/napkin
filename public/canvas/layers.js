@@ -46,6 +46,7 @@ export function initLayers(ctx, el) {
         if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
       })(c.doc.root, 1);
     }
+    for (const k of ctx.docs?.skipped ?? []) rows.push(`<div class="lrow lskip" role="treeitem" aria-level="1" aria-disabled="true" title="${esc(k.note)}"><span class="lname">${esc(k.path)}</span><span class="lnote">no component exported</span></div>`); // (a file that exports no component has no frame)
     const html = rows.join('') || '<p class="empty">No layers yet.</p>';
     if (html === lastHtml && !focusKey) { if (reveal) { reveal = false; el.querySelector('.primary')?.scrollIntoView({ block: 'nearest' }); } return; } // an edit that moved no row leaves the tree alone (~200 rows at 200 components)
     lastHtml = html;

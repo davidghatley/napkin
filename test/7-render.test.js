@@ -146,21 +146,43 @@ test('the canvas follows the files: grid, live edits, broken edits, branch switc
       assert.equal(await q(`document.querySelectorAll('section.cmp').length`), 3);
     });
 
-    await t.test('a read-only file renders with its badge and refuses edits', async () => {
-      assert.match(await q(`${sec('Counter')}.querySelector('.badge').textContent`), /^read-only: .+/);
-      assert.equal(await q(`${sec('Counter')}.querySelector('[data-n="count"]').textContent`), 'count 3', 'it still renders');
+    // Rewritten for decision 0013 (lead ruling 2026-10-30): was a read-only dialect cell with a badge and a whole-file refusal, now a /view frame
+    // that renders the file and refuses one spot at a time ("line N: reason"); intent unchanged.
+    await t.test('a file outside the dialect renders, refuses the spot that is computed in code, and edits the rest', async () => {
+      const id = await q(`napkin.find('Counter').component`);
+      await browser.waitFor(`!!napkin.stage.sections.get(${JSON.stringify(id)})?.docFrame?.doc()?.querySelector('p')`);
+      assert.equal(await q(`napkin.stage.sections.get(${JSON.stringify(id)}).docFrame.doc().querySelector('[data-n="count"]').textContent`), 'count 3', 'it still renders');
+      const node = await q(`napkin.stage.sections.get(${JSON.stringify(id)}).docFrame.tree().tree[0].node`);
+      const before = readFileSync(join(compDir, 'Counter.tsx'), 'utf8');
+      // the HTTP path with a bearer token (what an agent uses), for both ways in: the component listing still says it is outside the dialect,
+      // the dialect's edit route still refuses with "read-only:", and the engine's edit route refuses the computed spot and accepts the rest
+      const token = await session(server.url, 'test');
       const list = await (await fetch(new URL('api/components', server.url))).json();
       const c = list.find((x) => x.name === 'Counter');
-      assert.match(c.readOnly, /./);
-      const before = readFileSync(join(compDir, 'Counter.tsx'), 'utf8');
-      const r = await (await fetch(new URL(`api/components/${c.id}/edits`, server.url), { method: 'POST', headers: { authorization: `Bearer ${await session(server.url, 'test')}` }, body: JSON.stringify({ baseRevision: 1, edits: [{ op: 'set', path: 'count.color', value: 'red' }] }) })).json();
+      assert.match(c.readOnly, /./, 'the listing says why it cannot be edited as a dialect file');
+      const old = await (await fetch(new URL(`api/components/${c.id}/edits`, server.url), { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ baseRevision: 1, edits: [{ op: 'set', path: 'count.color', value: 'red' }] }) })).json();
+      assert.equal(old.ok, false); assert.match(old.error, /^read-only:/);
+      const files = (await (await fetch(new URL('api/files', server.url))).json()).files;
+      assert.ok(files.find((f) => f.path === 'Counter.tsx')?.components.some((x) => x.id === id), 'the engine lists it as a component too');
+      const rev = (await (await fetch(new URL(`api/component/${encodeURIComponent(id)}`, server.url))).json()).revision;
+      const post = async (edits, auth = true) => { const r = await fetch(new URL('api/edit', server.url), { method: 'POST', headers: { 'content-type': 'application/json', ...(auth && { authorization: `Bearer ${token}` }) }, body: JSON.stringify({ component: id, baseRevision: rev, edits }) }); return { status: r.status, ...(await r.json()) }; };
+      const anon = await post([{ op: 'text', node, run: 0, value: 'nope' }], false);
+      assert.equal(anon.status, 401, 'no token: no write');
+      const r = await post([{ op: 'text', node, run: 1, value: 'z' }]); // the {n} run is computed in code
       assert.equal(r.ok, false);
-      assert.match(r.error, /^read-only:/);
-      assert.equal(readFileSync(join(compDir, 'Counter.tsx'), 'utf8'), before);
-      // clicking it selects, and the panel says why there is nothing to edit
-      await q(`${sec('Counter')}.querySelector('[data-n="count"]').click()`);
-      await browser.waitFor(`document.querySelector('#sel-readonly')`);
-      assert.equal(await q(`document.querySelector('#padding')`), null);
+      assert.match(r.error, /line \d+/); assert.match(r.error, /computed in code/);
+      assert.equal(readFileSync(join(compDir, 'Counter.tsx'), 'utf8'), before, 'a refused edit writes nothing');
+      // selecting it: the panel shows the computed run disabled, with the reason
+      await q(`napkin.select({ component: ${JSON.stringify(id)}, node: ${JSON.stringify(node)}, variant: {} })`);
+      await browser.waitFor(`document.querySelector('#panel .doc-run[disabled]')`);
+      assert.match(await q(`document.querySelector('#panel .doc-run[disabled]').title`), /Computed in code/);
+      assert.equal(await q(`document.querySelectorAll('#panel .doc-run:not([disabled])').length`), 1, 'the editable run stays editable');
+      // an editable spot in the same file works, and is a one-line diff
+      const ok = await post([{ op: 'text', node, run: 0, value: 'total' }]);
+      assert.ok(ok.ok !== false && ok.status === 200, JSON.stringify(ok));
+      const after = readFileSync(join(compDir, 'Counter.tsx'), 'utf8').split('\n'), was = before.split('\n');
+      assert.equal(after.filter((l, i) => l !== was[i]).length, 1, 'one line changed');
+      assert.match(after.join('\n'), /total \{n\}/);
     });
 
     assert.deepEqual(browser.consoleLines.filter((l) => /error/i.test(l)), [], 'no console errors');
