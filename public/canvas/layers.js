@@ -38,6 +38,7 @@ export function initLayers(ctx, el) {
       const open = expanded.has(c.component);
       const has = ctx.state.selections.some((s) => s.component === c.component);
       rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1" aria-expanded="${open}" aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0"><span class="twirl" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="licon">${ICON.component}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">⋯</button></div>`);
+      if (open && c.kind === 'html') { htmlRows(c, rows, sel, prim); continue; }
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
         const k = `${c.component}|${n.id}`, kids = n.children.length, isFolded = folded.has(k);
@@ -60,9 +61,29 @@ export function initLayers(ctx, el) {
     if (reveal) { reveal = false; el.querySelector('.primary')?.scrollIntoView({ block: 'nearest' }); } // only when the selection changed, never on an edit
   }
 
+  // An HTML component's elements (document engine): the <body> subtree of its file, labelled tag#id.class.
+  function htmlRows(c, rows, sel, prim) {
+    const t = ctx.stage?.sections.get(c.component)?.docFrame?.tree();
+    const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree);
+    for (const top of body ? body.children : t?.tree || []) (function walk(n, depth) {
+      if (['script', 'style', 'template', 'link', 'meta'].includes(n.tag)) return;
+      const k = `${c.component}|${n.node}`, kids = n.children.length, isFolded = folded.has(k);
+      const label = `${n.attrs?.id ? '#' + n.attrs.id : ''}${(n.attrs?.class || '').split(/\s+/).filter(Boolean).map((x) => '.' + x).join('')}` || n.text?.slice(0, 40) || n.tag;
+      rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}" title="${esc(n.tag)} · line ${n.line}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.node)}" data-kind="node" data-html="1" tabindex="-1" style="--nk-d:${depth}"><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${ICON.frame || ''}</span><span class="lname">${esc(label)}</span><span class="ltag">${esc(n.tag)}</span></div>`);
+      if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
+    })(top, 1);
+  }
+  ctx.on('render', ({ component }) => { if (ctx.state.components.get(component)?.kind === 'html' && expanded.has(component)) schedule(); });
+
   // ---- selection from the tree ----
   function pick(row, ev) {
     const c = ctx.state.components.get(row.dataset.component);
+    if (c?.kind === 'html') { // the document engine: a node of the file, or its first element for the component row
+      const t = ctx.stage?.sections.get(c.component)?.docFrame?.tree();
+      const node = row.dataset.node || (function first(l) { for (const n of l || []) { if (n.tag === 'body') return n.children[0]?.node; const f = first(n.children); if (f) return f; } return null; })(t?.tree);
+      if (node) ctx.select({ component: c.component, node, variant: {} });
+      return;
+    }
     if (!c?.doc) return;
     const node = row.dataset.node || c.doc.root.id;
     const cur = ctx.state.selection;
