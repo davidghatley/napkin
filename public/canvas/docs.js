@@ -14,7 +14,7 @@ export function initDocs(ctx) {
   const isDoc = (id) => ctx.state.components.get(id)?.kind === 'html';
 
   async function load() {
-    const [files, layout, styles] = await Promise.all([getJson('/api/files'), getJson('/api/layout'), getJson('/api/styles')]);
+    const [files, layout, styles] = await Promise.all([getJson('/api/files?kinds=html,css'), getJson('/api/layout'), getJson('/api/styles')]);
     api.files = files?.files || []; api.styles = styles;
     const seen = new Set();
     for (const f of api.files) {

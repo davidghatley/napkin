@@ -84,19 +84,22 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   function remember(path, buf, st) {
     const entry = { buf, s: L(buf), rev: hash(buf), mtimeMs: st?.mtimeMs, size: st?.size, ino: st?.ino };
     cache.set(path, entry);
-    if (!past.has(path)) past.set(path, new Map());
-    const m = past.get(path); m.set(entry.rev, entry.s); while (m.size > REVS) m.delete(m.keys().next().value);
+    if (past.has(path)) keep(path, entry);
     return entry;
   }
+  // Past texts are kept only for files whose node ids napkin has handed out (tree()), so an edit made against one of
+  // those revisions can be re-based; a file nobody reads through the engine costs no history.
+  const keep = (path, entry) => { if (!past.has(path)) past.set(path, new Map()); const m = past.get(path); m.set(entry.rev, entry.s); while (m.size > REVS) m.delete(m.keys().next().value); };
   const html = (path) => { const c = read(path); return (c.html ||= parseHtml(c.s)), c; };
   const jsx = (path) => { const c = read(path); return (c.jsx ||= parseJsx(c.s, extname(path))), c; };
   const css = (path) => { const c = read(path); return (c.css ||= parseCss(c.s)), c; };
   const kindOf = (path) => KINDS[extname(path).toLowerCase()];
 
   // ---------- components ----------
-  function filesList() {
+  // { kinds }: only files of those kinds (the canvas asks for html and css, so a big TSX folder is not parsed for it).
+  function filesList({ kinds } = {}) {
     if (!list) scan();
-    return list.map(({ path, kind }) => {
+    return list.filter((f) => !kinds || kinds.includes(f.kind)).map(({ path, kind }) => {
       const revision = (() => { try { return read(path).rev; } catch { return null; } })();
       if (kind === 'html') return { path, kind, revision, components: [{ id: path, name: htmlName(path) }] };
       if (kind === 'css') return { path, kind, revision, components: [] };
@@ -137,6 +140,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   function tree(id) {
     const comp = component(id);
     const { entry, roots } = nodesOf(comp);
+    keep(comp.path, entry);
     const s = entry.s;
     const out = (n) => ({
       node: n.id, tag: n.tag, start: n.start, end: n.end, openEnd: n.openEnd, closeStart: n.closeStart, line: lineOf(s, n.start),
@@ -238,7 +242,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   }
   function styles() {
     const missing = new Map(), unstyled = new Map(); // name -> count of components
-    const comps = filesList().filter((f) => f.kind === 'html').map((f) => ({ id: f.path, path: f.path, kind: 'html' }));
+    const comps = filesList({ kinds: ['html'] }).map((f) => ({ id: f.path, path: f.path, kind: 'html' }));
     for (const comp of comps) {
       let v; try { v = varsOf(comp); } catch { continue; }
       for (const [name, u] of v.used) if (!u.fallback && !v.defined.has(name)) missing.set(name, (missing.get(name) || 0) + 1);
@@ -248,7 +252,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     // that covers them (variables first, so the cascade reads tokens before the rules that use them).
     const suggest = [];
     if (missing.size) {
-      for (const f of filesList().filter((x) => x.kind === 'css')) {
+      for (const f of filesList({ kinds: ['css'] })) {
         if (applied.includes(f.path)) continue;
         let c; try { c = css(f.path); } catch { continue; }
         const defs = new Set(); for (const m of stripCommentsKeep(c.s).matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g)) defs.add(m[1]);
@@ -410,9 +414,14 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       if (now === a) { out.push({ path: f.path, before: now, after: b }); continue; }
       let p = 0; while (p < a.length && p < b.length && a[p] === b[p]) p++;
       let q = 0; while (q < a.length - p && q < b.length - p && a[a.length - 1 - q] === b[b.length - 1 - q]) q++;
-      const ctxA = a.slice(Math.max(0, p - 40), a.length - q + 40), ctxB = b.slice(Math.max(0, p - 40), b.length - q + 40);
-      const i = now.indexOf(ctxA);
-      if (i < 0 || now.indexOf(ctxA, i + 1) >= 0) throw new DocError(`${f.path} changed since that edit, around it; napkin will not overwrite those changes. Next: edit the value directly instead`, 409);
+      // the changed span with as much unchanged text around it as still identifies one place in the current file
+      let i = -1, ctxA = '', ctxB = '';
+      for (const c of [40, 16, 4]) {
+        ctxA = a.slice(Math.max(0, p - c), a.length - q + c); ctxB = b.slice(Math.max(0, p - c), b.length - q + c);
+        const at = now.indexOf(ctxA);
+        if (at >= 0 && now.indexOf(ctxA, at + 1) < 0) { i = at; break; }
+      }
+      if (i < 0) throw new DocError(`${f.path} changed since that edit, around it; napkin will not overwrite those changes. Next: edit the value directly instead`, 409);
       out.push({ path: f.path, before: now, after: now.slice(0, i) + ctxB + now.slice(i + ctxA.length) });
     }
     return out;
@@ -461,13 +470,15 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   }
 
   // ---------- views ----------
+  // Components whose rendering depends on `path`: the file's own, or (a stylesheet) the HTML components whose cascade
+  // includes it. A TSX file is parsed alone; nothing else is read.
   const componentsUsing = (path) => {
-    // components whose rendering depends on `path`: the file itself, or a stylesheet in their cascade
+    const kind = kindOf(path);
+    if (kind === 'html') return [path];
+    if (kind === 'tsx' || kind === 'jsx') { try { return jsx(path).jsx.components.map((x) => `${path}#${x.name}`); } catch { return []; } }
+    if (kind !== 'css') return [];
     const out = [];
-    for (const f of filesList()) for (const c of f.components) {
-      if (f.path === path) { out.push(c.id); continue; }
-      if (f.kind === 'html' && kindOf(path) === 'css') { try { if (sheetsOf({ id: c.id, path: f.path, kind: 'html' }).some((sh) => sh.file === path)) out.push(c.id); } catch { /* unreadable */ } }
-    }
+    for (const f of filesList({ kinds: ['html'] })) { try { if (sheetsOf({ id: f.path, path: f.path, kind: 'html' }).some((sh) => sh.file === path)) out.push(f.path); } catch { /* unreadable */ } }
     return out;
   };
 

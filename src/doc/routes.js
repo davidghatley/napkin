@@ -20,7 +20,8 @@ const TYPES = { '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css', '
 export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false, legacyNewest = () => null } = {}) {
   const tsx = createTsxViews(engine);
   // Doc frames never carry a `component` key: the canvas's dialect client treats that key as one of its own components.
-  engine.events.on('change', ({ component, ...c }) => broadcast({ type: 'doc-change', ...c, via: component ?? null, affects: safe(() => engine.componentsUsing(c.path), []) }));
+  // (A TSX file's frame names the file only: parsing it on every dialect save would slow the dialect canvas for nothing.)
+  engine.events.on('change', ({ component, ...c }) => broadcast({ type: 'doc-change', ...c, via: component ?? null, affects: /\.(html?|css)$/i.test(c.path) ? safe(() => engine.componentsUsing(c.path), []) : [] }));
   engine.events.on('files', () => broadcast({ type: 'doc-files' }));
   engine.events.on('styles', (s) => broadcast({ type: 'doc-styles', ...s }));
   const safe = (fn, d) => { try { return fn(); } catch { return d; } };
@@ -49,7 +50,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
   return async function handle(req, res, url) {
     const path = url.pathname, method = req.method;
     try {
-      if (method === 'GET' && path === '/api/files') return json(res, 200, { files: engine.files() }), true;
+      if (method === 'GET' && path === '/api/files') return json(res, 200, { files: engine.files(url.searchParams.get('kinds') ? { kinds: url.searchParams.get('kinds').split(',') } : {}) }), true;
       if (path === '/api/styles') {
         if (method === 'GET') return json(res, 200, engine.styles()), true;
         if (method === 'POST') { const m = await body(req); who(req); return json(res, 200, engine.setStyles(m?.applied)), true; }

@@ -20,7 +20,7 @@ function walk(node, visit, parent = null) {
   }
 }
 const jsxName = (n) => n.type === 'JSXIdentifier' ? n.name : n.type === 'JSXMemberExpression' ? `${jsxName(n.object)}.${jsxName(n.property)}` : n.type === 'JSXNamespacedName' ? `${n.namespace.name}:${n.name.name}` : '?';
-const isCap = (name) => /^[A-Z]/.test(name) && !/^[A-Z0-9_]+$/.test(name);
+const isCap = (name) => /^[A-Z]/.test(name); // (a capitalised constant like SIZES is not component-like, so it is still left out)
 const FN = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression', 'ClassDeclaration', 'ClassExpression']);
 // Looks like a component definition: a function, a class, or a call wrapping one (forwardRef, memo, styled(...)).
 function componentLike(init) {
