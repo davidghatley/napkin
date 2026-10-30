@@ -61,7 +61,7 @@ export function createTimeRoutes(engine, { tsx, who, json, body, fail }) {
       const plan = guard(() => film.restorePlan(comp.id, b.frame));
       const when = new Date(plan.frame.at).toLocaleString('en-GB', { hour12: false, month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       if (!plan.files.length) return json(res, 200, { ok: true, noop: true, changed: [], component: comp.id }), true;
-      return json(res, 200, engine.restore(comp.id, { files: plan.files, by, summary: plan.frame.short ? `Restored commit ${plan.frame.short}` : `Restored the version from ${when}` })), true;
+      return json(res, 200, { ...engine.restore(comp.id, { files: plan.files, by, summary: plan.frame.short ? `Restored commit ${plan.frame.short}` : `Restored the version from ${when}` }), ...(plan.kept.length && { kept: plan.kept }) }), true;
     }
     return fail(res, 404, 'not found: use /film, /film/<frame>/diff, /film/restore or /copy'), true;
   };

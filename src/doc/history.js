@@ -15,6 +15,7 @@ import { writeAtomic } from '../atomic.js';
 import { removeInState } from './state-rm.js';
 import { describe, cssTouched, touchKey, touchWords } from './film-diff.js';
 import { relevanceOf } from './film-relevance.js';
+import { parseCss } from './css.js';
 
 const KEEP = 200;               // napkin frames kept per component
 const MAX_BYTES = 2_000_000;    // a file bigger than this is not kept
@@ -348,7 +349,7 @@ export function createFilm(engine) {
   // anybody else, or by nobody napkin saw (git commits, an editor, napkin not running), is refused when another component uses it.
   // Where the sheets differ only in comments or white space, the current file is left as it is.
   function restorePlan(id, frameId) {
-    const { comp, frame, files } = snapshotOf(id, frameId), write = [];
+    const { comp, frame, files } = snapshotOf(id, frameId), write = [], kept = [];
     for (const [p, bytes] of files) {
       let now = null; try { now = engine.read(p).buf; } catch { /* gone: the version brings it back */ }
       if (now && now.equals(bytes)) continue;
@@ -372,6 +373,29 @@ export function createFilm(engine) {
           const rel = relevanceOf(engine, other), mine = foreign.filter((t) => rel.related(t));
           if (mine.length) { names.push(other.name); hit ??= mine; }
         }
+        // A rule nothing draws (no other component, nor this one): a restore would drop it and no frame would ever show it gone.
+        // A whole rule added since this version stays in the file, after what is put back. Anything else of that kind (a value
+        // changed in such a rule, a rule inside an at-rule) is refused by name: napkin never overwrites what it cannot show.
+        if (!hit && foreign.length) {
+          const self = relevanceOf(engine, comp), drawn = new Set();
+          for (const u of users) { let other; try { other = engine.component(u); } catch { continue; } const rel = relevanceOf(engine, other); for (const t of foreign) if (rel.related(t)) drawn.add(t); }
+          const unseen = foreign.filter((t) => !drawn.has(t) && !self.related(t));
+          const nowS = now.toString('latin1'), top = (text) => parseCss(text).rules.filter((r) => r.kind === 'style' && !r.context.length);
+          const norm = (r, text) => text.slice(r.selStart, r.selEnd).replace(/\s+/g, ' ').trim();
+          const inVersion = new Set(top(bytes.toString('latin1')).map((r) => norm(r, bytes.toString('latin1')))), nowRules = top(nowS);
+          const whole = (t) => !t.at && !t.prop && !inVersion.has(t.sel) && nowRules.some((r) => norm(r, nowS) === t.sel);
+          const gone = (t) => !t.at && !t.prop && inVersion.has(t.sel) && !nowRules.some((r) => norm(r, nowS) === t.sel); // it comes back: nothing is lost
+          const blocked = unseen.filter((t) => !whole(t) && !gone(t));
+          if (blocked.length) { const w = editor.get(touchKey(blocked[0])); throw new FilmError(`${p}: ${touchWords(blocked[0])}${blocked.length > 1 ? ` and ${blocked.length - 1} more` : ''} changed after this version${w ? ` while you worked on ${engine.has(w) ? engine.component(w).name : w}` : ' outside napkin or in git'}. No component draws it, so you would not see it go.. Next: restore a newer version, or change it in ${p} directly`, 409); }
+          const adds = unseen.filter(whole);
+          if (adds.length) {
+            const text = adds.map((t) => { const r = nowRules.find((x) => norm(x, nowS) === t.sel); return nowS.slice(r.selStart, r.close + 1); }).join('\n');
+            const head = bytes.toString('latin1');
+            kept.push(...adds.map((t) => t.sel));
+            write.push({ path: p, bytes: Buffer.from(`${head}${head.endsWith('\n') ? '' : '\n'}${text}\n`, 'latin1') });
+            continue;
+          }
+        }
         if (hit) {
           const who = editor.get(touchKey(hit[0]));
           const by = who ? ` while you worked on ${engine.has(who) ? engine.component(who).name : who}` : ' outside napkin or in git';
@@ -380,7 +404,7 @@ export function createFilm(engine) {
       }
       write.push({ path: p, bytes });
     }
-    return { comp, frame, files: write };
+    return { comp, frame, files: write, kept };
   }
   return { list, snapshotOf, diff, restorePlan, known, sweep: load };
 }

@@ -19,6 +19,8 @@ const parts = (selector) => { const out = []; let depth = 0, cur = ''; for (cons
 const STATES = /::?(before|after|first-line|first-letter|marker|placeholder|selection|backdrop|file-selector-button)\b(\([^)]*\))?|:(hover|focus|focus-visible|focus-within|active|visited|target)\b/gi;
 const hit = (el, selector) => { try { return el.matches(selector.replace(STATES, '').trim() || '*'); } catch { return false; } };
 const short = (s, n = 60) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
+// a React file is drawn by the same frames as an HTML one (kind 'html'); its source is told by fileKind
+const isReact = (c) => c.kind === 'tsx' || c.kind === 'jsx' || c.fileKind === 'tsx' || c.fileKind === 'jsx';
 const tagOf = (src) => /^<\s*([\w:-]+)/.exec(src)?.[1] ?? 'element';
 
 export function initCopyCode(ctx) {
@@ -55,7 +57,7 @@ export function initCopyCode(ctx) {
     const p = await fetch(`/api/component/${enc(s.component)}/copy?${q}`).then((r) => r.json());
     if (!p.ok) throw new Error(p.error || 'could not read the element');
     // text/html: the element's own markup; for React, the markup the browser made from it
-    p.html = c.kind === 'html' ? p.source : (el?.outerHTML ?? p.source);
+    p.html = isReact(c) ? (el?.outerHTML ?? p.source) : p.source;
     p.rulesCount = p.css.length;
     ready.clear(); ready.set(key, p);
     return p;
@@ -98,10 +100,10 @@ export function initCopyCode(ctx) {
   // ---------- paste ----------
   const find = (list, id, up = null) => { for (const n of list) { if (n.node === id) return { n, parent: up }; const f = find(n.children, id, n); if (f) return f; } return null; };
   // What a clipboard holds that can go into the file: napkin's own text (the code before the CSS comment), or markup.
-  function markup(plainText, html, kind) {
+  function markup(plainText, html, react) {
     const code = String(plainText || '').split(MARK)[0].trim();
     if (/^<[A-Za-z][\s\S]*>$/.test(code)) return code;
-    if (kind === 'html' && html) {
+    if (!react && html) {
       const body = new DOMParser().parseFromString(html, 'text/html').body;
       body.querySelectorAll('meta, style').forEach((n) => n.remove());
       const inner = body.innerHTML.replace(/<!--(Start|End)Fragment-->/g, '').trim();
@@ -112,7 +114,7 @@ export function initCopyCode(ctx) {
   async function paste(plainText, html) {
     const x = sel(); if (!x) return null;
     const { s, c } = x;
-    const code = markup(plainText, html, c.kind);
+    const code = markup(plainText, html, isReact(c));
     if (!code) return null;
     const fr = frameOf(s.component), tree = fr?.tree()?.tree;
     const at = tree && find(tree, s.node);
@@ -120,7 +122,7 @@ export function initCopyCode(ctx) {
     // onto a selected element: it becomes the last child. An element that cannot hold children takes it after itself.
     const into = VOID.has(String(at.n.tag).toLowerCase()) && at.parent ? at.parent : at.n;
     const index = into === at.n ? into.children.length : into.children.indexOf(at.n) + 1;
-    const edit = c.kind === 'html' ? { op: 'insert', parent: into.node, index, html: code } : { op: 'insert', parent: into.node, index, jsx: code };
+    const edit = isReact(c) ? { op: 'insert', parent: into.node, index, jsx: code } : { op: 'insert', parent: into.node, index, html: code };
     const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: s.component, baseRevision: c.revision, edits: [edit], summary: `Pasted <${tagOf(code)}>` }) });
     const j = await r.json().catch(() => ({ ok: false, error: `Paste failed (${r.status})` }));
     if (!j.ok) { ctx.hint(`Could not paste: ${plain(j.error)}`); return j; }
@@ -131,7 +133,7 @@ export function initCopyCode(ctx) {
     if (typing(ev.target) || document.body.dataset.play || !ev.clipboardData) return;
     const x = sel(); if (!x) return;
     const t = ev.clipboardData.getData('text/plain'), h = ev.clipboardData.getData('text/html');
-    if (!markup(t, h, x.c.kind)) return;       // images, plain words and the like keep going to the other paste handlers
+    if (!markup(t, h, isReact(x.c))) return;       // images, plain words and the like keep going to the other paste handlers
     ev.preventDefault(); ev.stopImmediatePropagation();
     paste(t, h).catch((e) => ctx.hint(`Could not paste: ${plain(e.message || e)}`));
   }, true);

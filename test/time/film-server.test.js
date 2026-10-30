@@ -572,3 +572,36 @@ test('film: a commit made in the same second as the edit it contains comes after
     assert.match(f.frames[0].what, /^Undid Added <span class="ss-pill">c5<\/span>$/, JSON.stringify(f.frames.map((x) => x.what)));
   } finally { t.stop(); }
 });
+
+test('restore: a rule no component draws, committed in a shared sheet, is never dropped silently', async () => {
+  const t = await folderOf({ 'pill.html': page('pill'), 'note.html': page('note'), 'shared.css': SHARED }, { git: true, commits: [
+    ['a rule for later', (d) => writeFileSync(join(d, 'shared.css'), `${SHARED}.hand { color: red }\n`)],
+    ['pill label', (d) => writeFileSync(join(d, 'pill.html'), page('pill', 'Shipped'))],
+    ['a colour for later', (d) => writeFileSync(join(d, 'shared.css'), `${SHARED}.hand { color: blue }\n`)],
+  ] });
+  try {
+    const f = await t.film('pill.html');
+    // the oldest version has no .hand: restoring it keeps the whole rule, after what it puts back
+    const r = await t.post('/api/component/pill.html/film/restore', { frame: f.frames.at(-1).id });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.deepEqual(r.kept, ['.hand']);
+    assert.equal(readFileSync(join(t.dir, 'shared.css'), 'utf8'), `${SHARED}.hand { color: blue }\n`, 'the rule is still there, with its own bytes');
+    assert.doesNotMatch(readFileSync(join(t.dir, 'pill.html'), 'utf8'), /Shipped/);
+  } finally { t.stop(); }
+});
+
+test('restore: a value changed in a rule no component draws is refused by name, and nothing is written', async () => {
+  const t = await folderOf({ 'pill.html': page('pill'), 'note.html': page('note'), 'shared.css': `${SHARED}.hand { color: red }\n` }, { git: true, commits: [
+    ['pill label', (d) => writeFileSync(join(d, 'pill.html'), page('pill', 'Shipped'))],
+    ['a new colour', (d) => writeFileSync(join(d, 'shared.css'), `${SHARED}.hand { color: blue }\n`)],
+  ] });
+  try {
+    const f = await t.film('pill.html');
+    const cssNow = readFileSync(join(t.dir, 'shared.css'), 'utf8');
+    const r = await t.post('/api/component/pill.html/film/restore', { frame: f.frames.at(-1).id });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /shared\.css: \.hand color changed after this version outside napkin or in git\. No component draws it, so you would not see it go\. Next:/);
+    assert.equal(readFileSync(join(t.dir, 'shared.css'), 'utf8'), cssNow);
+    assert.match(readFileSync(join(t.dir, 'pill.html'), 'utf8'), /Shipped/);
+  } finally { t.stop(); }
+});

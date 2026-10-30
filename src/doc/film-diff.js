@@ -113,7 +113,7 @@ function pairItems(r, d, pathName) {
     const xs = h.x, ys = h.y, tagX = xs.some(isTag), tagY = ys.some(isTag);
     if (!tagX && !tagY) {
       const [wa, wb] = wordDiff(xs.join(' ').trim(), ys.join(' ').trim());
-      items.push({ text: `${clip(wa || '(empty)')}${ARROW}${clip(wb || '(empty)')}`, where: pathName, key: `text:${nameOf(tokens(d).find(isTag)) ?? 'text'}` });
+      items.push({ text: !wa ? `Added ${clip(wb)}` : !wb ? `Removed ${clip(wa)}` : `${clip(wa)}${ARROW}${clip(wb)}`, where: pathName, key: `text:${nameOf(tokens(d).find(isTag)) ?? 'text'}` });
     } else if (!xs.length && wholeElements(ys)) { const w = wholeElements(ys); items.push({ text: `Added ${clip(w.join(''), 64)}`, where: pathName, key: `add:${nameOf(w[0])}` }); }
     else if (!ys.length && wholeElements(xs)) { const w = wholeElements(xs); items.push({ text: `Removed ${clip(w.join(''), 64)}`, where: pathName, key: `del:${nameOf(w[0])}` }); }
     else if (xs.length === 1 && ys.length === 1 && isTag(xs[0]) && isTag(ys[0]) && nameOf(xs[0]) === nameOf(ys[0])) {

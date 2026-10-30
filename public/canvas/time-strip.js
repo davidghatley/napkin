@@ -211,7 +211,7 @@ export function initTimeStrip(ctx) {
     const j = await r.json().catch(() => ({ ok: false, error: `Restore failed (${r.status})` }));
     if (!j.ok) { ctx.hint(`Could not restore: ${plain(j.error)}`); info.textContent = plain(j.error); return j; }
     clearPreview();
-    ctx.hint(`Restored the version from ${clock(t.at)}${j.changed?.length > 1 ? ` (${j.changed.length} files)` : ''}. Cmd-Z puts the newer text back.`);
+    ctx.hint(`Restored the version from ${clock(t.at)}${j.changed?.length > 1 ? ` (${j.changed.length} files)` : ''}.${j.kept?.length ? ` ${j.kept.slice(0, 2).join(', ')}${j.kept.length > 2 ? ` and ${j.kept.length - 2} more` : ''} stayed in the file: nothing draws ${j.kept.length === 1 ? 'it' : 'them'} yet.` : ''} Cmd-Z puts the newer text back.`);
     S.at = -1; await load();
     return j;
   }
