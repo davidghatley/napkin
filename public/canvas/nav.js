@@ -1,6 +1,6 @@
 // Focus a component (Enter) and come back (Esc) (CAN-08). The address bar carries the view: #Button focuses
 // Button, #Button/label also selects its node. A reload restores a free view from sessionStorage.
-const typing = (el) => !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+const typing = (el) => !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable || !!el.closest?.('#doc-dock')); // the inspector's staged edit keeps Escape for itself
 const KEY = 'napkin.view';
 
 export function initNav(ctx) {

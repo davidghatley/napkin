@@ -1,0 +1,175 @@
+/* The inspector for HTML components (moments 2, 6 and 8): where each value comes from, the scope of an edit and the
+   change it makes, the folder's variables as instruments, and the measuring overlays. Chrome only: nothing here
+   reaches inside a frame. */
+
+/* ---------- where each value comes from ---------- */
+/* the name sits above its value, so neither is cut short; every source line is one line with the whole text on hover */
+#panel .vrow { display: grid; gap: 1px; padding: 6px 0 5px; border-top: 1px dashed var(--nk-line); min-width: 0; }
+#panel .vrow:first-of-type { border-top: 0; }
+#panel .phead { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+#panel .phead label, #panel .phead .lbl { flex: none; font: 11.5px/18px var(--nk-mono); color: var(--nk-text-2); }
+#panel .phead .pstate { flex: none; font: 10.5px var(--nk-sans); color: var(--nk-text-3); padding: 0 6px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--nk-line); }
+#panel .phead .res { margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--nk-mono); color: var(--nk-text-3); }
+#panel .phead .imp { font: 10px var(--nk-mono); color: var(--nk-text-3); }
+#panel .pval { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#panel .pval input.val, #panel .pval .ro { flex: 1; min-width: 0; height: 22px; padding: 0 6px; border: 1px solid var(--nk-line); border-radius: 4px; background: var(--nk-chrome-2); color: var(--nk-text); font: 11.5px var(--nk-mono); box-sizing: border-box; }
+#panel .pval .ro { display: block; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: transparent; border-style: dashed; color: var(--nk-text-2); }
+#panel .pval input.val:hover { border-color: var(--nk-line-2); }
+#panel .pval input.val:focus { outline: 0; border-color: var(--nk-accent); background: var(--nk-chrome); }
+#panel .vrow.editing input.val { border-color: var(--nk-accent); box-shadow: 0 0 0 1px var(--nk-accent); }
+#panel .sw { flex: none; width: 14px; height: 14px; border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nk-text) 28%, transparent); }
+#panel .pfrom { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10.5px/16px var(--nk-mono); color: var(--nk-text-3); }
+#panel .pfrom code { font: 10.5px var(--nk-mono); color: var(--nk-text-2); }
+#panel .pfrom s { color: var(--nk-text-3); }
+#panel .pfrom.lost code { color: var(--nk-text); }
+#panel .plink { padding: 0; border: 0; background: none; color: var(--nk-accent-text); font: 10.5px var(--nk-mono); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+#panel .pflag { display: flex; align-items: center; gap: 6px; font: 10.5px/18px var(--nk-sans); color: var(--nk-text-3); }
+#panel .pbind { display: inline-flex; gap: 6px; align-items: center; height: 18px; padding: 0 6px; border: 0; border-radius: 4px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-accent-text); font: 500 10.5px var(--nk-mono); cursor: pointer; }
+#panel .pbind:hover, #panel .pbind:focus-visible { background: var(--nk-accent-soft); }
+#panel .decl.partial .prop { color: var(--nk-text-2); text-decoration: underline dotted; text-underline-offset: 3px; }
+
+/* ---------- the staged edit: scope, the change, Apply (compact, as in the mockup) ---------- */
+#panel #doc-dock { position: sticky; bottom: 0; z-index: 3; display: grid; background: var(--nk-chrome); box-shadow: 0 -1px 0 var(--nk-line), 0 -10px 24px rgba(20, 24, 36, .14); max-height: 70vh; overflow-y: auto; }
+#panel #doc-dock[hidden] { display: none; }
+#panel .vrow.editing { scroll-margin-bottom: var(--dock, 0px); }
+#panel .dsec.staged { background: color-mix(in srgb, var(--nk-accent) 5%, var(--nk-chrome)); border-top: 0; padding: 8px 14px 6px; gap: 5px; }
+#panel .dsec.staged h3 { font-size: 12px; }
+#panel .dsec.staged h3 code { font: 600 11.5px var(--nk-mono); }
+#panel .pnote { margin: 0; font: 11px/1.4 var(--nk-sans); color: var(--nk-text-2); }
+#panel .pnote code { font: 10.5px var(--nk-mono); color: var(--nk-accent-text); }
+#panel .linkish { padding: 0; border: 0; background: none; color: var(--nk-accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#panel kbd { display: inline-block; min-width: 14px; padding: 2px 4px; border-radius: 4px; background: var(--nk-chrome-3); border: 1px solid var(--nk-line); color: var(--nk-text-2); font: 500 10px/1 var(--nk-mono); text-align: center; }
+#panel .scope { display: grid; gap: 3px; }
+#panel .opt { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; gap: 8px; align-items: center; text-align: left; height: 26px; padding: 0 8px; border: 0; border-radius: 6px; background: var(--nk-chrome); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text); font: 12px var(--nk-sans); cursor: pointer; }
+#panel .opt b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .opt b code { font: 600 11px var(--nk-mono); color: var(--nk-accent-text); }
+#panel .opt .count { font: 11px var(--nk-sans); color: var(--nk-text-3); }
+#panel .opt:hover { box-shadow: inset 0 0 0 1px var(--nk-line-2); }
+#panel .opt.on { background: var(--nk-accent-soft); box-shadow: inset 0 0 0 1px var(--nk-accent); }
+#panel .opt.on .count { color: var(--nk-text-2); }
+#panel .opt.on kbd { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent, #fff); }
+#panel .opt[aria-disabled="true"] { opacity: .55; cursor: default; }
+#panel .scopenote { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10.5px/16px var(--nk-mono); color: var(--nk-text-3); }
+#panel .scopenote em { font-style: normal; color: var(--nk-text); }
+#panel .opt:focus-visible, #panel .linkish:focus-visible, #panel .pbind:focus-visible, #panel .plink:focus-visible, #panel .ivchip:focus-visible, #panel .mchip:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 1px; }
+#panel .diff { border: 1px solid var(--nk-line); border-radius: 6px; overflow: hidden; font: 10.5px/17px var(--nk-mono); }
+#panel .diff > div { display: grid; grid-template-columns: 28px 12px minmax(0, 1fr); padding-right: 8px; }
+#panel .diff > div > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .diff > .h { display: block; padding: 1px 8px; background: var(--nk-chrome-2); color: var(--nk-text-3); border-bottom: 1px solid var(--nk-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#panel .diff .d { background: color-mix(in srgb, #d92d20 14%, var(--nk-chrome)); color: var(--nk-text); }
+#panel .diff .a { background: color-mix(in srgb, #12b76a 16%, var(--nk-chrome)); color: var(--nk-text); }
+#panel .diff i { font-style: normal; text-align: right; padding-right: 4px; color: var(--nk-text-2); }
+#panel .diff u { font-style: normal; text-decoration: none; text-align: center; font-weight: 700; }
+#panel .diff .d u { color: color-mix(in srgb, #d92d20 85%, var(--nk-text)); }
+#panel .diff .a u { color: color-mix(in srgb, #12b76a 75%, var(--nk-text)); }
+#panel .doc-foot { display: flex; align-items: center; gap: 8px; padding: 6px 14px 8px; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); }
+#panel .doc-foot button { display: inline-flex; align-items: center; gap: 8px; height: 26px; padding: 0 10px; border: 1px solid var(--nk-line-2); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 500 12px var(--nk-sans); cursor: pointer; }
+#panel .doc-foot button.primary { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent, #fff); }
+#panel .doc-foot button.primary kbd { background: transparent; border-color: color-mix(in srgb, #fff 45%, transparent); color: inherit; }
+#panel .doc-foot .legend { margin-left: auto; display: flex; align-items: center; gap: 4px; font: 10.5px var(--nk-sans); color: var(--nk-text-3); white-space: nowrap; }
+#panel .doc-foot .legend kbd { margin-left: 4px; }
+
+/* ---------- the folder's variables as instruments ---------- */
+#panel .vfilter { width: 100%; box-sizing: border-box; height: 24px; padding: 0 8px; border: 1px solid var(--nk-line); border-radius: 5px; background: var(--nk-chrome-2); color: var(--nk-text); font: 11.5px var(--nk-sans); }
+#panel #doc-vars-body { display: grid; gap: 8px; }
+#panel .ivstrip h4 { margin: 0 0 4px; font: 600 11px var(--nk-sans); color: var(--nk-text-2); }
+#panel .ivstrip h4 small { font-weight: 400; color: var(--nk-text-3); margin-left: 4px; }
+#panel .ivchips { display: flex; flex-wrap: wrap; gap: 3px; min-width: 0; }
+#panel .ivchip { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 22px; max-width: 100%; min-width: 0; padding: 0 7px 0 5px; border: 0; border-radius: 5px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text); font: 11px var(--nk-mono); cursor: grab; touch-action: none; }
+#panel .ivchip:hover { background: var(--nk-chrome-3); }
+#panel .ivchip .ivname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .ivchip .ivval { color: var(--nk-text-3); font-size: 10px; }
+#panel .ivchip .ivbar { display: block; height: 8px; border-radius: 2px; background: var(--nk-accent); opacity: .75; }
+#panel .ivchip .ivtype { font-size: 15px; line-height: 1; min-width: 20px; }
+#panel .ivdot { position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--nk-accent); }
+.ivghost { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; padding: 3px 8px; border-radius: 5px; background: var(--nk-accent); color: var(--nk-on-accent, #fff); font: 11px var(--nk-mono); box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
+body[data-var-drag] { cursor: grabbing; }
+.ivdrop { position: absolute; z-index: 14; pointer-events: none; box-sizing: border-box; border: 2px solid var(--nk-accent); background: color-mix(in srgb, var(--nk-accent) 12%, transparent); border-radius: 2px; }
+dialog.ivask { padding: 14px 16px; border: 0; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: 0 0 0 1px var(--nk-line), 0 16px 40px rgba(20, 24, 36, .28); font: 13px/1.5 var(--nk-sans); max-width: 360px; }
+dialog.ivask::backdrop { background: rgba(20, 24, 36, .25); }
+dialog.ivask h2 { margin: 0 0 8px; font: 600 13px var(--nk-sans); }
+dialog.ivask code { font: 12px var(--nk-mono); }
+dialog.ivask .ivopts { display: grid; gap: 4px; }
+dialog.ivask button { display: flex; justify-content: space-between; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text); font: 12px var(--nk-mono); cursor: pointer; }
+dialog.ivask button:focus-visible, dialog.ivask button:hover { box-shadow: inset 0 0 0 2px var(--nk-accent); outline: 0; }
+dialog.ivask .ivset { font: 10.5px var(--nk-sans); color: var(--nk-text-3); }
+dialog.ivask .hint { margin: 8px 0 0; font-size: 11px; color: var(--nk-text-3); }
+
+/* ---------- checks and measuring ---------- */
+#panel .mrow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+#panel .mchip { height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text-2); font: 500 11.5px var(--nk-sans); cursor: pointer; }
+#panel .mchip[aria-pressed="true"] { background: var(--nk-accent-soft); color: var(--nk-accent-text); box-shadow: inset 0 0 0 1px var(--nk-accent); }
+#inspect-overlay { position: absolute; inset: 0; z-index: 13; pointer-events: none; overflow: hidden; font: 10px/1 var(--nk-mono); }
+#inspect-overlay .im-ring { position: absolute; box-sizing: border-box; border-style: solid; border-color: transparent; }
+#inspect-overlay .im-margin { border-color: rgba(246, 178, 107, .55); }
+#inspect-overlay .im-border { border-color: rgba(255, 229, 153, .7); }
+#inspect-overlay .im-padding { border-color: rgba(147, 196, 125, .55); }
+#inspect-overlay .im-content { position: absolute; background: rgba(111, 168, 220, .4); }
+#inspect-overlay .im-gap { position: absolute; background: repeating-linear-gradient(45deg, rgba(180, 95, 211, .42) 0 3px, rgba(180, 95, 211, .14) 3px 6px); }
+#inspect-overlay .im-box { position: absolute; box-sizing: border-box; border: 1px solid; pointer-events: none; }
+#inspect-overlay .im-box.ok { border-color: rgba(6, 118, 71, .75); }
+#inspect-overlay .im-box.bad { border-color: rgba(180, 35, 24, .9); border-style: dashed; }
+
+/* a panel section never grows wider than the panel: its content wraps or ends in an ellipsis */
+#panel .dsec { grid-template-columns: minmax(0, 1fr); }
+#panel .dsec > * { min-width: 0; }
+#panel .ivstrip { min-width: 0; }
+#panel .ivchip .ivtype { flex: none; }
+#panel #doc-dock { grid-template-columns: minmax(0, 1fr); }
+#panel .doc-foot { flex-wrap: wrap; row-gap: 4px; }
+#panel .doc-foot .legend { margin-left: 0; flex-basis: 100%; }
+
+/* strips start as one row; a strip opens when asked, or when the keyboard reaches a chip in its second row */
+#panel .ivchips[data-collapsed] { max-height: 22px; overflow: hidden; }
+#panel .ivmore { float: right; padding: 0; border: 0; background: none; color: var(--nk-accent-text); font: 10.5px var(--nk-sans); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#panel details.fold > summary { list-style: none; cursor: pointer; }
+#panel details.fold > summary::-webkit-details-marker { display: none; }
+#panel details.fold > summary h3::before { content: "▸"; color: var(--nk-text-3); font-size: 10px; width: 10px; }
+#panel details.fold[open] > summary h3::before { content: "▾"; }
+#panel details.fold > summary:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
+#panel .vrow.inh .pstate { margin-left: 0; }
+#panel .scopenote.bad { white-space: normal; color: var(--nk-text); }
+#panel .scopenote.bad em { font-style: normal; font-weight: 600; }
+/* source lines: the selector gives way, the file and line never */
+#panel .pfrom { display: flex; align-items: baseline; gap: 5px; }
+#panel .pfrom > * { flex: none; white-space: nowrap; }
+#panel .pfrom > .selp, #panel .plink .selp { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#panel .pfrom > :last-child:not(.loc) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#panel .pfrom .loc, #panel .plink .loc { flex: none; }
+#panel .plink { display: inline-flex; gap: 5px; min-width: 0; flex: 0 1 auto; }
+/* the dock: three scope buttons in a row, the note, the change, Apply */
+#panel .scope { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+#panel .opt { grid-template-columns: auto minmax(0, 1fr) auto; gap: 5px; padding: 0 6px; }
+#panel .doc-foot { padding: 5px 14px 6px; flex-wrap: nowrap; }
+#panel .doc-foot .legend { margin-left: auto; flex-basis: auto; }
+#panel .dsec.staged { padding: 6px 14px 4px; gap: 4px; }
+
+/* labels: boxes in free space, never on the text they measure; a leader line joins one that had to move away */
+#inspect-overlay .im-label { position: absolute; z-index: 3; white-space: nowrap; }
+#inspect-overlay .im-leaders { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#inspect-overlay .im-leaders line { stroke: var(--nk-text-2); stroke-width: 1; opacity: .55; }
+#inspect-overlay .im-dim { opacity: .3; }
+#inspect-overlay .im-badge { padding: 1px 4px; border-radius: 3px; font: 600 9px/11px var(--nk-mono); color: #fff; }
+#inspect-overlay .im-badge.ok { background: #067647; }
+#inspect-overlay .im-badge.bad { background: #b42318; }
+#inspect-overlay .im-badge.unsure { outline: 1px dashed rgba(255, 255, 255, .8); outline-offset: -2px; }
+#inspect-overlay .im-order { width: 16px; height: 16px; border-radius: 50%; background: var(--nk-accent); color: var(--nk-on-accent, #fff); font: 600 9px/16px var(--nk-mono); text-align: center; box-shadow: 0 0 0 2px var(--nk-chrome); }
+#inspect-overlay .im-num { padding: 1px 3px; border-radius: 3px; background: rgba(20, 24, 36, .85); color: #fff; font: 600 9.5px/11px var(--nk-mono); }
+#inspect-overlay .im-g { background: rgba(110, 50, 140, .92); }
+#inspect-overlay .im-read { padding: 3px 9px; border-radius: 4px; background: rgba(20, 24, 36, .92); color: #fff; font: 10.5px/13px var(--nk-mono); }
+
+#panel .opt { grid-template-columns: auto minmax(0, 1fr); height: 34px; align-items: center; }
+#panel .opt .otxt { display: grid; min-width: 0; text-align: left; line-height: 1.25; }
+#panel .opt .otxt b { font-size: 11.5px; }
+#panel .opt .osub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--nk-mono); color: var(--nk-text-3); }
+#panel .opt.on .osub { color: var(--nk-text-2); }
+
+#panel .dsec.staged h3 { white-space: nowrap; min-width: 0; }
+#panel .dsec.staged h3 .where { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#panel .opt { height: 32px; }
+#panel .diff { font-size: 10.5px; line-height: 16px; }
+#panel .doc-foot { padding: 4px 14px 5px; }
+#panel .doc-foot button { height: 24px; }
+#panel .opt { height: 30px; }
+#panel .dsec.staged { gap: 3px; padding: 5px 14px 3px; }
+#panel .doc-foot { padding: 3px 14px 4px; }

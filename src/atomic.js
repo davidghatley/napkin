@@ -103,7 +103,23 @@ export function cleanStaleTmp(file) {
   for (const n of names) {
     const prefix = prefixes.find((x) => n.startsWith(x));
     if (!prefix) continue;
-    const pid = Number(n.slice(prefix.length).split('-')[0]);
+    const rest = n.slice(prefix.length);
+    if (!/^\d+-\d+$/.test(rest)) continue; // only napkin's own names: .<file>.tmp-<pid>-<n>
+    const pid = Number(rest.split('-')[0]);
     if (pid !== process.pid && !alive(pid)) { try { unlinkSync(join(dirname(file), n)); } catch { /* raced with another cleaner */ } }
   }
+}
+
+// The same for a whole directory at once: the leftovers (.<name>.tmp-<pid>-<n>, .<name>.guard-<pid>-<n>) of a dead writer
+// beside each of `names` (the files napkin maps). Anything else in the folder, and the leftovers of a live process, stay.
+export function sweepDir(dir, names) {
+  let found; try { found = readdirSync(dir); } catch { return 0; }
+  let n = 0;
+  for (const f of found) {
+    const m = /^\.(.+)\.(?:tmp|guard)-(\d+)-\d+$/.exec(f);
+    if (!m || !names.has(m[1])) continue;
+    const pid = Number(m[2]);
+    if (pid !== process.pid && !alive(pid)) { try { unlinkSync(join(dir, f)); n++; } catch { /* raced with another cleaner */ } }
+  }
+  return n;
 }
