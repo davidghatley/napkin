@@ -23,6 +23,11 @@ try {
     const r = await b.eval(`JSON.stringify(napkin.stage.highlight({ selector: '.ss-label', file: 'components.css' }))`);
     console.log(scheme, 'highlight .ss-label', r);
     await sleep(500); await shot(`m3-${scheme}`);
+    // the change: edit the rule; "The change" shows the one-line diff with Keep and Revert (Revert is undo)
+    const lab = await b.eval(`napkin.find('Plate').component`);
+    await b.eval(`napkin.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: ${JSON.stringify(lab)}, baseRevision: napkin.find('Plate').revision, edits: [{ op: 'rule', file: 'components.css', selector: '.ss-label', prop: 'letter-spacing', value: '.12em' }] }) }).then((r) => r.text())`);
+    await b.waitFor(`!!document.querySelector('#hl-side .hl-change .add')`, 20000); await sleep(1200); await shot(`m3-change-${scheme}`);
+    await b.eval(`document.querySelector('#hl-revert').click()`); await sleep(1500);
     await b.eval(`napkin.stage.clearHighlight()`);
     const v = await b.eval(`JSON.stringify(napkin.stage.highlight({ variable: '--ink-muted' }))`);
     console.log(scheme, 'highlight --ink-muted', v);
@@ -33,7 +38,11 @@ try {
     await b.eval(`napkin.select({ component: ${JSON.stringify(plate)}, node: napkin.stage.sections.get(${JSON.stringify(plate)}).docFrame.tree().tree[0].children[0].children[0].node, variant: {} })`);
     console.log(scheme, 'Plate ticks', await b.eval(`JSON.stringify([...napkin.stage.sections.get(${JSON.stringify(plate)}).docFrame.cell.querySelectorAll('.rt')].map((x) => x.dataset.px))`));
     await b.eval(`napkin.stage.sections.get(${JSON.stringify(plate)}).docFrame.setWidth(480, true)`); await sleep(900);
+    await b.eval(`napkin.breakpoints.open()`); await sleep(1800);
+    await b.eval(`napkin.breakpoints.open()`); await sleep(1800);
     await shot(`m4-${scheme}`);
+    await b.eval(`napkin.breakpoints.close()`);
+    await b.eval(`napkin.breakpoints.close()`);
     await b.eval(`napkin.stage.sections.get(${JSON.stringify(plate)}).docFrame.setWidth(640)`);
     await b.eval(`napkin.nav.unfocus({ animate: false }); napkin.select(null); napkin.view.set({ x: 30, y: 70, z: 0.62 }, { animate: false })`); await sleep(800);
     // M5

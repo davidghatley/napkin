@@ -16,6 +16,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const href = (path) => '/raw/' + path.split('/').map(encodeURIComponent).join('/');
 const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
+// A component that draws nothing with no props (a Badge or Button with no children) would be an empty box: say so, quietly, in its frame.
+const EMPTY_NOTE = `setTimeout(function(){var r=document.getElementById('root');if(!r||document.querySelector('[data-napkin-error]'))return;var b=r.getBoundingClientRect();if(b.height>=1||r.textContent.trim())return;var p=document.createElement('p');p.setAttribute('data-napkin','');p.setAttribute('data-napkin-empty','');p.style.cssText='margin:0;padding:10px 12px;font:12px/1.4 ui-sans-serif,system-ui,sans-serif;color:#5b6270;background:#f3f4f6';p.textContent='Renders nothing without props.';document.body.append(p)},200);`;
+
 export function htmlView(engine, comp) {
   const entry = engine.read(comp.path);
   const s = entry.s;
@@ -83,7 +86,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
     const code = b.code.replace(/<\/script/gi, '<\\/script');
     // a throw while the module loads (nothing to catch it): say so in the frame too
     const onerr = `addEventListener('error',function(e){var p=document.createElement('pre');p.setAttribute('data-napkin-error','');p.style.cssText='white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;background:#fff;margin:0;padding:12px;overflow-wrap:anywhere';p.textContent='napkin could not run '+${JSON.stringify(comp.path)}+': '+(e.message||e);document.body.append(p)});`.replace(/<\//g, '<\\/');
-    return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${onerr}</script><script>${code}</script></body></html>`) };
+    return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${onerr}</script><script>${code}</script><script>${EMPTY_NOTE}</script></body></html>`) };
   }
   return { view, bundle };
 }

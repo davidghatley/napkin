@@ -64,21 +64,23 @@ export function createRuler(frame) {
   el.className = 'cell-ruler'; el.dataset.nodrag = '1'; el.hidden = true;
   let bps = [];
   const paint = () => {
-    const w = frame.width, far = bps.length ? bps[bps.length - 1].px : 0;
+    // true scale; only the ticks that fit inside the frame and the gap beside it are drawn (the rest are in the breakpoints panel and the widths strip)
+    const w = frame.width, reach = w + 90, shown = bps, beyond = bps.filter((b) => b.px > reach);
     el.hidden = !bps.length;
     if (!bps.length) { el.replaceChildren(); return; }
-    el.style.width = `${Math.min(2400, Math.max(w, far + 60))}px`;
-    const ticks = bps.map((b) => {
+    el.style.width = `${reach}px`;
+    const ticks = shown.map((b) => {
       const kind = [...b.kinds].map((k) => (k === 'max' ? 'and under' : 'and up')).join(' · ');
-      return `<button type="button" class="rt" tabindex="-1" data-px="${Math.round(b.px)}" style="left:${b.px}px" title="${Math.round(b.px)} px: ${b.rules} @media rule${b.rules === 1 ? '' : 's'} (${kind}). Click to jump here."><i></i><span>${Math.round(b.px)}</span></button>`;
+      return `<button type="button" class="rt${b.px > reach ? ' far' : ''}" tabindex="-1"${b.px > reach ? ' hidden' : ''} data-px="${Math.round(b.px)}" style="left:${b.px}px" title="${Math.round(b.px)} px: ${b.rules} @media rule${b.rules === 1 ? '' : 's'} (${kind}). Click to jump here."><i></i><span>${Math.round(b.px)}</span></button>`;
     }).join('');
-    el.innerHTML = `${ticks}<b class="now" style="left:${w}px"></b>`;
+    const more = beyond.length ? `<button type="button" class="rt-more" tabindex="-1" data-px="${Math.round(beyond[0].px)}" style="left:${reach}px" title="${beyond.map((b) => Math.round(b.px)).join(', ')} px: wider than this frame. Click to jump to ${Math.round(beyond[0].px)}.">${Math.round(beyond[0].px)} →</button>` : '';
+    el.innerHTML = `${ticks}${more}<b class="now" style="left:${w}px"></b>`;
     for (const t of el.querySelectorAll('.rt')) t.classList.toggle('on', Math.abs(Number(t.dataset.px) - w) < 0.5);
   };
   el.addEventListener('pointerdown', (ev) => ev.stopPropagation());
   el.addEventListener('click', (ev) => {
     ev.stopPropagation();
-    const t = ev.target.closest('.rt');
+    const t = ev.target.closest('.rt, .rt-more');
     if (t) frame.commitWidth(Number(t.dataset.px));
   });
   return {

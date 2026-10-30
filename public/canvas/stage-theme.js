@@ -88,6 +88,9 @@ export function themesOf(docs) {
   return list;
 }
 
+// What the canvas and a frame's card look like in a theme: the card is the frame's own background (white by day, the dark chrome by night), the stage is the canvas.
+const CANVAS = { light: { stage: '#e8eaee', card: '#ffffff' }, dark: { stage: '#14161b', card: '#1b1d23' } };
+
 export function initTheme(ctx) {
   const stageEl = document.querySelector('#stage');
   const bar = document.createElement('div');
@@ -103,6 +106,16 @@ export function initTheme(ctx) {
   const left = bar.querySelector('#tw-left'), right = bar.querySelector('#tw-right'), range = bar.querySelector('#tw-range');
   const S = { on: false, left: 'light', right: 'dark', at: 50, themes: [] };
   const clones = new Map(); // component id -> the second iframe
+  const cards = new Map();  // component id -> the card layer under the frame (the left theme's card colour), clipped like the copy
+  const stageBg = document.createElement('div'); stageBg.id = 'wipe-stage'; stageBg.hidden = true; stageBg.setAttribute('aria-hidden', 'true');
+  stageEl.prepend(stageBg);
+  const ownStage = stageEl.style.backgroundColor;
+  // a theme with no scheme of its own (sepia) takes the colour its pages paint on <body>
+  const paintOf = (t, which) => {
+    if (t.scheme) return CANVAS[t.scheme][which];
+    for (const [, f] of frames()) { const d = clones.get(f.cell?.closest?.('.cmp')?.dataset.component)?.contentDocument || f.doc(); const c = d?.body && getComputedStyle(d.body).backgroundColor; if (c && c !== 'rgba(0, 0, 0, 0)') return c; }
+    return CANVAS.light[which];
+  };
   const frames = () => [...ctx.stage.sections].filter(([, sec]) => sec.docFrame).map(([id, sec]) => [id, sec.docFrame]);
   const themeById = (id) => S.themes.find((t) => t.id === id) || S.themes[0];
 
@@ -117,7 +130,8 @@ export function initTheme(ctx) {
   function clip() {
     if (!S.on) return;
     const box = stageEl.getBoundingClientRect(), lineX = box.left + (S.at / 100) * box.width;
-    line.style.left = `${(S.at / 100) * box.width}px`;
+    line.style.left = `${(S.at / 100) * box.width}px`; stageBg.style.width = `${(S.at / 100) * box.width}px`;
+    for (const [id, c] of cards) { const fr = ctx.stage.sections.get(id)?.frame; if (!fr) continue; const r = fr.getBoundingClientRect(), z = fr.offsetWidth ? r.width / fr.offsetWidth : 1, w = fr.offsetWidth, x = Math.max(0, Math.min(w, (lineX - r.left) / z)); c.style.clipPath = `inset(0 ${w - x}px 0 0)`; }
     for (const [id, f] of frames()) {
       const b = clones.get(id), a = f.iframe();
       if (!b || !a) continue;
@@ -143,16 +157,27 @@ export function initTheme(ctx) {
     applyTheme(b.contentDocument, themeById(S.left));
     queueClip();
   }
+  function colours() {
+    const L = themeById(S.left), R = themeById(S.right);
+    stageBg.style.background = paintOf(L, 'stage'); stageEl.style.backgroundColor = paintOf(R, 'stage');
+    for (const [id, sec] of ctx.stage.sections) {
+      if (!sec.docFrame) continue;
+      sec.frame.style.background = paintOf(R, 'card');
+      let c = cards.get(id);
+      if (!c) { c = document.createElement('div'); c.className = 'wipe-card'; c.setAttribute('aria-hidden', 'true'); sec.frame.prepend(c); cards.set(id, c); }
+      c.style.background = paintOf(L, 'card');
+    }
+  }
   function paintFrame(id, f) {
     if (!S.on || !f.iframe()) return;
     applyTheme(f.doc(), themeById(S.right));
     return second(id, f);
   }
-  async function paintAll() { fillSelects(); await Promise.all(frames().map(([id, f]) => paintFrame(id, f))); queueClip(); }
+  async function paintAll() { fillSelects(); await Promise.all(frames().map(([id, f]) => paintFrame(id, f))); colours(); queueClip(); }
 
   function open() {
     if (S.on) { range.focus(); return; }
-    S.on = true; document.body.dataset.wipe = '1'; bar.hidden = false; line.hidden = false;
+    S.on = true; document.body.dataset.wipe = '1'; bar.hidden = false; line.hidden = false; stageBg.hidden = false;
     fillSelects(); range.value = String(S.at);
     paintAll().then(() => ctx.emit('wipe', { on: true }));
     range.focus({ preventScroll: true });
@@ -161,6 +186,9 @@ export function initTheme(ctx) {
     if (!S.on) return;
     S.on = false; delete document.body.dataset.wipe; bar.hidden = true; line.hidden = true;
     for (const b of clones.values()) b.remove(); clones.clear();
+    for (const c of cards.values()) c.remove(); cards.clear();
+    for (const sec of ctx.stage.sections.values()) sec.frame.style.background = '';
+    stageBg.hidden = true; stageEl.style.backgroundColor = ownStage;
     for (const [id] of frames()) ctx.stage.render(id).catch(console.error); // load them again: the frames leave in their own theme
     ctx.emit('wipe', { on: false });
     stageEl.focus({ preventScroll: true });

@@ -76,6 +76,10 @@ test('OPN-02: build errors stay within measured frames; duplicate names include 
     for (const r of result) { assert.equal(r.bounded, true); assert.match(r.title, /Accordion · [abcd]\/accordion.tsx/); assert.ok(!r.text.includes(dir)); assert.match(r.text, /could not build [abcd]\/accordion\.tsx.*line \d+/); }
     for (let i = 0; i < result.length; i++) for (let j = i + 1; j < result.length; j++) { const a = result[i], c = result[j]; assert.ok(a.r <= c.x || c.r <= a.x || a.b <= c.y || c.b <= a.y); }
     assert.match(await b.eval('document.querySelector("#layers").textContent'), /Accordion · a\/accordion.tsx/);
+    // (was: click the card's <summary> and it opens) now: focus a broken frame and its whole reason is there, whole, readable and inside the stage
+    await b.eval(`napkin.nav.focus(napkin.find('Accordion').component, null, { animate: false }); true`);
+    await b.waitFor(`(() => { const df = napkin.stage.sections.get(napkin.find('Accordion').component).docFrame, e = df.doc().querySelector('[data-napkin-error]'); const r = df.iframe().getBoundingClientRect(), z = r.width / df.iframe().offsetWidth, s = document.querySelector('#stage').getBoundingClientRect(); return e.scrollWidth <= e.clientWidth + 1 && parseFloat(getComputedStyle(e).fontSize) * z >= 6 && r.left >= s.left - 1 && r.right <= s.right + 1; })()`);
+    assert.match(await b.eval(`napkin.stage.sections.get(napkin.find('Accordion').component).docFrame.doc().querySelector('[data-napkin-error]').textContent`), /Could not resolve "\.\/missing"/);
   } finally { await b.close(); await s.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
 test('OPN big repo: address precedes scan and arrives within two seconds; progress streams', async () => {

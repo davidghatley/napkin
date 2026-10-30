@@ -37,6 +37,17 @@ function attrSlot(s, node) {
   const nameEnd = node.start + 1 + String(node.tag).length;
   return Math.max(wsBack(s, close), nameEnd);
 }
+// Where and how a new attribute goes: at the end of the tag (so after a {...props} spread, where it wins). When the tag's attributes each sit on their
+// own line, the new one gets its own line with the same indent; otherwise it follows the last one on the line.
+function newAttr(s, node, text) {
+  const last = node.attrs?.[node.attrs.length - 1];
+  if (last) {
+    const gap = s.slice(wsBack(s, last.start), last.start);
+    if (gap.includes('\n')) return [{ from: last.end, to: last.end, text: `\n${gap.slice(gap.lastIndexOf('\n') + 1)}${text}` }];
+  }
+  const at = attrSlot(s, node);
+  return [{ from: at, to: at, text: ` ${text}` }];
+}
 function setAttr(s, node, name, value) {
   const a = attrOf(node, name);
   if (node.jsx) {
@@ -44,14 +55,12 @@ function setAttr(s, node, name, value) {
     const lit = !value.includes('"') ? `"${value}"` : `{${jsonL(value)}}`;
     if (a && a.valStart !== null) return [{ from: a.valStart - (a.quote ? 1 : 0), to: a.valEnd + (a.quote ? 1 : 0), text: lit }];
     if (a) return [{ from: a.end, to: a.end, text: '=' + lit }];
-    const at = attrSlot(s, node);
-    return [{ from: at, to: at, text: ` ${name}=${lit}` }];
+    return newAttr(s, node, `${name}=${lit}`);
   }
   if (a && a.quote) return [{ from: a.valStart, to: a.valEnd, text: escAttr(value, a.quote) }];
   if (a && a.valStart !== null) return [{ from: a.valStart, to: a.valEnd, text: UNQUOTED.test(value) ? value : `"${escAttr(value, '"')}"` }];
   if (a) return [{ from: a.end, to: a.end, text: `="${escAttr(value, '"')}"` }];
-  const slot = attrSlot(s, node);
-  return [{ from: slot, to: slot, text: ` ${name}="${escAttr(value, '"')}"` }];
+  return newAttr(s, node, `${name}="${escAttr(value, '"')}"`);
 }
 function removeAttr(s, node, name) {
   const a = attrOf(node, name);
@@ -119,6 +128,7 @@ function textSplices(s, node, value, run) {
 }
 
 // ---------- class ----------
+const CLASS_FNS = new Set(['cn', 'clsx', 'classNames', 'classnames', 'cx', 'twMerge', 'cva']);
 function classSplices(s, node, add = [], remove = []) {
   const name = node.jsx ? 'className' : 'class';
   const a = attrOf(node, name);
@@ -131,7 +141,12 @@ function classSplices(s, node, add = [], remove = []) {
   let vs = a.valStart, ve = a.valEnd, quoted = !!a.quote;
   if (node.jsx && !a.quote) {
     const e = a.expr;
-    if (e && (e.type === 'StringLiteral' || (e.type === 'TemplateLiteral' && !e.expressions.length))) { vs = e.start + 1; ve = e.end - 1; quoted = true; }
+    const plain = (x) => x && (x.type === 'StringLiteral' || (x.type === 'TemplateLiteral' && !x.expressions.length));
+    const fn = e && e.type === 'CallExpression' && e.callee.type === 'Identifier' && CLASS_FNS.has(e.callee.name) ? e : null;
+    const lit = fn ? fn.arguments.find(plain) : null; // className={cn("a b", cond && "c", props.className)}: the first plain string is the list napkin edits
+    if (plain(e)) { vs = e.start + 1; ve = e.end - 1; quoted = true; }
+    else if (lit) { vs = lit.start + 1; ve = lit.end - 1; quoted = true; }
+    else if (fn) refuse(`${name} on <${node.tag}> (${at(s, node.start)}) is computed in code: ${fn.callee.name}() has no plain class string in it; add a string such as "a b" to ${fn.callee.name}(…), or edit a rule instead`);
     else refuse(`${name} on <${node.tag}> (${at(s, node.start)}) is computed in code (${s.slice(a.valStart, Math.min(a.valEnd, a.valStart + 40))}); change it in the code, or edit a rule instead`);
   }
   const val = s.slice(vs, ve);

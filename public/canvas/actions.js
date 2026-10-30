@@ -50,6 +50,8 @@ export const ACTIONS = [
   action('frame-wider', 'Frame: next wider breakpoint of the selected component', 'Cmd-K "wider"', [], [], (c) => c.widths.step(1), 'view'),
   action('frame-narrower', 'Frame: next narrower breakpoint of the selected component', 'Cmd-K "narrower"', [], [], (c) => c.widths.step(-1), 'view'),
   action('frame-reset-width', 'Frame: back to 640 px', 'Double-click the frame grip · Cmd-K "640"', [], [], (c) => c.widths.reset(), 'view'),
+  action('breakpoints', 'Breakpoints of the selected frame: the file\'s @media rules, and the frame at other widths', 'B · Cmd-K "breakpoints"', ['KeyB'], refs('stage-breakpoints', 'keydown'), (c) => c.breakpoints.toggle(), 'view'),
+  action('frame-grip', 'Frame width grip (selected frame): move it with the keyboard', 'Tab to the grip · ← → 1 px · Shift 10 px · Page Up / Page Down next breakpoint · Home 640 px', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home'], refs('doc-frames', 'keydown'), (c) => { const f = c.widths.target(); if (f) f.grip.focus(); else c.hint('Select an HTML or JSX component first'); }, 'view'),
   action('theme-wipe', 'Theme wipe: a slider wipes one theme into another across the canvas', 'W · Escape closes', ['KeyW', 'Escape'], refs('stage-theme', 'keydown'), (c) => c.theme.toggle(), 'view'),
   action('zero-chrome', 'Hide or show all chrome', 'Tab on the canvas · Cmd-K "chrome"', ['Tab'], refs('stage-chrome', 'keydown'), (c) => c.chrome.toggle(), 'view'),
   action('duplicate', 'Duplicate selection', 'Ctrl/Cmd+D', ['d'], refs('edit-ops', 'keydown'), (c) => c.ops.duplicate(), 'edit'),
@@ -80,7 +82,7 @@ export const ACTIONS = [
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
   'colorpop.js:keydown': 2, 'component-ops.js:keydown': 1, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'matrix.js:keydown': 1, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
-  'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 2, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1,
+  'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1, 'stage-chrome.js:keydown': 1, 'stage-breakpoints.js:keydown': 1, 'doc-frames.js:keydown': 1, 'stage-highlight.js:keydown': 2, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1,
   'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run).map((a) => ({ ...a, run: () => a.run(ctx) }));

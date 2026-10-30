@@ -113,9 +113,9 @@ test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style 
     // the same must hold in dark chrome, in play mode, and inside a ghost/preview layer (proposals, history preview)
     const RE = (c) => c.eval(inFrame(COLLECT(sel)));
     const same = async (what) => { const x = JSON.parse(await RE(canvas)); const bad = []; for (let i = 0; i < x.length; i++) for (const p in x[i][1]) if (x[i][1][p] !== b[i][1][p]) bad.push(`${x[i][0]} ${p}: ${x[i][1][p]} vs ${b[i][1][p]}`); assert.deepEqual(bad, [], what); };
-    await canvas.eval(`document.documentElement.dataset.theme = 'dark'`); await same('dark chrome');
+    await canvas.eval(`document.documentElement.dataset.theme = 'dark'`); await same('dark chrome (the frame\'s own document)');
     await canvas.eval(`document.documentElement.dataset.theme = 'light'`); await same('light chrome');
-    await canvas.eval(`document.body.dataset.play = '1'`); await same('play mode'); await canvas.eval(`delete document.body.dataset.play`);
+    await canvas.eval(`napkin.play.set(true)`); await same('play mode (the frame\'s own document, with the real play mode on)'); await canvas.eval(`napkin.play.set(false)`);
     const ghost = (c, host) => c.eval(`(() => { const h = ${host}; const box = document.createElement('div'); box.className = 'preview-layer'; box.innerHTML = '<div class="preview-inner"><div id="gprobe"><p>x</p><button>b</button><code>c</code><input></div></div>'; h.append(box); return true; })()`);
     await ghost(canvas, `document.querySelector('section[data-name="Plain"] .cell')`); // (a dialect cell: the ghost layers live in cells)
     await app.eval(`document.body.insertAdjacentHTML('beforeend', '<div id="gprobe2"><p>x</p><button>b</button><code>c</code><input></div>')`);

@@ -10,7 +10,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const getJson = async (path) => { const r = await fetch(path); return r.ok ? r.json() : null; };
 
 export function initDocs(ctx) {
-  const api = { styles: null, files: [] };
+  const api = { styles: null, files: [], skipped: [] };
   ctx.docs = api;
   // A file is drawn once. The TSX dialect (variants, settings) keeps the files it can read and edit; every other .tsx/.jsx
   // file (className or inline styles, a default export, a syntax error, an import that does not build) is drawn by the
@@ -42,6 +42,7 @@ export function initDocs(ctx) {
   async function load() {
     const [files, layout, styles] = await Promise.all([getJson('/api/files?kinds=html,css,tsx,jsx'), getJson('/api/layout'), getJson('/api/styles')]);
     api.files = files?.files || []; api.styles = styles;
+    api.skipped = api.files.filter((f) => f.noComponent).map((f) => ({ path: f.path, note: f.noComponent })); // files that export no component: no frame, but the layers list them
     api.enginePaths = new Set(api.files.filter((f) => f.kind === 'tsx' || f.kind === 'jsx').map((f) => f.path));
     learn();
     for (const [id, c] of [...ctx.state.components]) if (api.claims(c)) { ctx.state.components.delete(id); ctx.stage?.remove(id); } // a file never appears twice

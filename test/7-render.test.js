@@ -154,8 +154,21 @@ test('the canvas follows the files: grid, live edits, broken edits, branch switc
       assert.equal(await q(`napkin.stage.sections.get(${JSON.stringify(id)}).docFrame.doc().querySelector('[data-n="count"]').textContent`), 'count 3', 'it still renders');
       const node = await q(`napkin.stage.sections.get(${JSON.stringify(id)}).docFrame.tree().tree[0].node`);
       const before = readFileSync(join(compDir, 'Counter.tsx'), 'utf8');
-      const edit = (edits) => q(`napkin.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: ${JSON.stringify(id)}, baseRevision: napkin.find('Counter').revision, edits: ${JSON.stringify(edits)} }) }).then((r) => r.json()).then(JSON.stringify)`).then(JSON.parse);
-      const r = await edit([{ op: 'text', node, run: 1, value: 'z' }]); // the {n} run is computed in code
+      // the HTTP path with a bearer token (what an agent uses), for both ways in: the component listing still says it is outside the dialect,
+      // the dialect's edit route still refuses with "read-only:", and the engine's edit route refuses the computed spot and accepts the rest
+      const token = await session(server.url, 'test');
+      const list = await (await fetch(new URL('api/components', server.url))).json();
+      const c = list.find((x) => x.name === 'Counter');
+      assert.match(c.readOnly, /./, 'the listing says why it cannot be edited as a dialect file');
+      const old = await (await fetch(new URL(`api/components/${c.id}/edits`, server.url), { method: 'POST', headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ baseRevision: 1, edits: [{ op: 'set', path: 'count.color', value: 'red' }] }) })).json();
+      assert.equal(old.ok, false); assert.match(old.error, /^read-only:/);
+      const files = (await (await fetch(new URL('api/files', server.url))).json()).files;
+      assert.ok(files.find((f) => f.path === 'Counter.tsx')?.components.some((x) => x.id === id), 'the engine lists it as a component too');
+      const rev = (await (await fetch(new URL(`api/component/${encodeURIComponent(id)}`, server.url))).json()).revision;
+      const post = async (edits, auth = true) => { const r = await fetch(new URL('api/edit', server.url), { method: 'POST', headers: { 'content-type': 'application/json', ...(auth && { authorization: `Bearer ${token}` }) }, body: JSON.stringify({ component: id, baseRevision: rev, edits }) }); return { status: r.status, ...(await r.json()) }; };
+      const anon = await post([{ op: 'text', node, run: 0, value: 'nope' }], false);
+      assert.equal(anon.status, 401, 'no token: no write');
+      const r = await post([{ op: 'text', node, run: 1, value: 'z' }]); // the {n} run is computed in code
       assert.equal(r.ok, false);
       assert.match(r.error, /line \d+/); assert.match(r.error, /computed in code/);
       assert.equal(readFileSync(join(compDir, 'Counter.tsx'), 'utf8'), before, 'a refused edit writes nothing');
@@ -165,8 +178,8 @@ test('the canvas follows the files: grid, live edits, broken edits, branch switc
       assert.match(await q(`document.querySelector('#panel .doc-run[disabled]').title`), /Computed in code/);
       assert.equal(await q(`document.querySelectorAll('#panel .doc-run:not([disabled])').length`), 1, 'the editable run stays editable');
       // an editable spot in the same file works, and is a one-line diff
-      const ok = await edit([{ op: 'text', node, run: 0, value: 'total' }]);
-      assert.ok(ok.ok !== false, JSON.stringify(ok));
+      const ok = await post([{ op: 'text', node, run: 0, value: 'total' }]);
+      assert.ok(ok.ok !== false && ok.status === 200, JSON.stringify(ok));
       const after = readFileSync(join(compDir, 'Counter.tsx'), 'utf8').split('\n'), was = before.split('\n');
       assert.equal(after.filter((l, i) => l !== was[i]).length, 1, 'one line changed');
       assert.match(after.join('\n'), /total \{n\}/);

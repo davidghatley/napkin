@@ -52,6 +52,7 @@ import { initHighlight } from './stage-highlight.js';
 import { initWidths } from './stage-ruler.js';
 import { initTheme } from './stage-theme.js';
 import { initChrome } from './stage-chrome.js';
+import { initBreakpoints } from './stage-breakpoints.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -116,6 +117,7 @@ Object.assign(ctx, { view, stage });
 initLive(ctx); // M1: Space-P holds play mode (registered before play.js so it sees P first)
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
+ctx.live.mountButton(); // the Play control, after the tools have built the toolbar
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));
@@ -126,6 +128,7 @@ const nav = initNav(ctx);
 initHandles(ctx);
 initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
 initPlay(ctx); // CMP-09: P makes the cells live
+initBreakpoints(ctx); // M4: the breakpoints panel and the widths strip
 initWidths(ctx); // M4: next / previous breakpoint, back to 640 px
 initTheme(ctx); // M5: the theme wipe
 initChrome(ctx); // M11: Tab hides every bit of chrome

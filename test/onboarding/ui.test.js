@@ -40,7 +40,7 @@ test('ONB-02/03: empty canvas teaches five actions; ? opens the registry sheet, 
 });
 // Rewritten for decision 0013 (lead ruling 2026-10-30): was dialect cells (`.mount`, `.build-error`), now each file's /view frame; every file still draws in its own
 // frame, a file that cannot build or run says why inside its frame, and the others still render. A file that exports no component has no frame (it is not one),
-// so "no component exported" is no longer asserted; the rest of the intent is unchanged.
+// so it is listed by the file list and the layers with "no component exported" instead; the rest of the intent is unchanged.
 test('OPN-02: read-only default render, missing import, CSS and missing context errors are isolated', async () => {
   const dir = corpus();
   writeFileSync(join(dir, 'Default.tsx'), `export default function Default({ label = 'Default props work' }) { return <div style={{ padding: 24, background: '#eef', color: '#124' }}>{label}</div>; }`);
@@ -58,6 +58,11 @@ test('OPN-02: read-only default render, missing import, CSS and missing context 
     // isolated: each file has its own frame and its own document; the broken ones do not stop the rest
     assert.ok(await b.eval(`napkin.stage.sections.get(napkin.find('Default').component).docFrame.doc().body.innerText.includes('Default props work')`));
     assert.equal(await b.eval(`document.querySelectorAll('.build-error').length`), 0, 'no raw build text in a cell');
+    // a file that exports no component has no frame; the file list and the layers say so
+    const listed = (await (await fetch(new URL('api/files', s.url))).json()).files.find((f) => f.path === 'NoExport.tsx');
+    assert.deepEqual(listed.components, []); assert.match(listed.noComponent, /no component exported/);
+    await b.waitFor(`/NoExport\.tsx/.test(document.querySelector('#layers').textContent) && /no component exported/.test(document.querySelector('#layers').textContent)`);
+    assert.equal(await b.eval(`[...napkin.state.components.values()].some((c) => /NoExport/.test(c.path))`), false, 'and no frame');
     await shot(b, 'OPN-02-read-only');
     for (const name of ['Default', 'Context', 'Missing', 'Css']) {
       await b.eval(`napkin.nav.focus('${name}', null, { animate: false }); true`);

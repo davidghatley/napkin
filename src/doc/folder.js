@@ -108,7 +108,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       if (kind === 'css') return { path, kind, revision, components: [] };
       let comps = [];
       try { const c = jsx(path); comps = c.jsx.error ? [{ id: `${path}#${fileComponentName(path)}`, name: fileComponentName(path), broken: true }] : c.jsx.components.map((x) => ({ id: `${path}#${x.name}`, name: x.name })); } catch { /* unreadable: listed with none */ }
-      return { path, kind, revision, components: comps, ...(cache.get(path)?.jsx?.error && { error: explainError(cache.get(path).jsx.error, { file: path }) }) };
+      const parseError = cache.get(path)?.jsx?.error;
+      // a file that parses and exports no component has no frame; it is listed, with the reason
+      return { path, kind, revision, components: comps, ...(parseError ? { error: explainError(parseError, { file: path }) } : !comps.length && cache.get(path)?.jsx ? { noComponent: `no component exported: ${path} exports no function that returns elements` } : {}) };
     });
   }
   function component(id) {

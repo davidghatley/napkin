@@ -24,13 +24,22 @@ test('M1 it is alive: animation and hover run in the frame; holding Space-P play
     const before = await b.eval(`JSON.stringify(napkin.state.selection)`);
     await t.key('keyDown', ' ', 'Space'); await t.key('keyDown', 'p', 'KeyP');
     await b.waitFor(`document.body.dataset.play === '1' && document.body.dataset.playHold === '1'`);
-    await b.waitFor(`getComputedStyle(document.querySelector('#topbar')).opacity < 0.5 && getComputedStyle(document.querySelector('#overlays')).opacity === '0'`); // the editing chrome fades
+    await b.waitFor(`getComputedStyle(document.querySelector('#sidebar')).opacity <= 0.15 && getComputedStyle(document.querySelector('#inspector')).opacity <= 0.15 && getComputedStyle(document.querySelector('#overlays')).opacity === '0'`); // the editing chrome fades
+    assert.match(await b.eval(`document.querySelector('#tool-play').textContent`), /^Play\s*Space P$/, 'a Play control in the toolbar');
+    assert.equal(await b.eval(`document.querySelector('#tool-play').getAttribute('aria-pressed')`), 'true');
     // pointer goes into the frame: hover shows the :hover rule of the file
     const p = await t.centre('Card', '.btn');
     await t.mouse('mouseMoved', p.x, p.y, { buttons: 0 });
     await b.waitFor(`${t.frameOf('Card')}.doc().querySelector('.btn').matches(':hover')`);
     await b.waitFor(`getComputedStyle(${t.frameOf('Card')}.doc().querySelector('.btn')).backgroundColor === 'rgb(52, 89, 226)'`); // the hover rule of the file applies
     assert.equal(await b.eval(`document.activeElement === ${t.frameOf('Card')}.iframe()`), true, 'the keyboard goes into the selected frame');
+    // the wheel scrolls an overflow box inside the frame
+    await b.eval(`(() => { const d = ${t.frameOf('Card')}.doc(), box = d.createElement('div'); box.id = 'scrollbox'; box.style.cssText = 'overflow:auto;height:40px;width:200px'; box.innerHTML = '<div style="height:400px">tall</div>'; d.body.append(box); })()`);
+    await b.waitFor(`${t.frameOf('Card')}.iframe().offsetHeight >= ${t.frameOf('Card')}.doc().querySelector('#scrollbox').getBoundingClientRect().bottom`); // the frame grows to its content
+    await sleep(500);
+    const sb = await t.centre('Card', '#scrollbox');
+    await b.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: sb.x, y: sb.y, deltaX: 0, deltaY: 120 });
+    await b.waitFor(`${t.frameOf('Card')}.doc().querySelector('#scrollbox').scrollTop > 0`);
     await t.key('keyUp', 'p', 'KeyP');
     await b.waitFor(`!document.body.dataset.play && !document.body.dataset.playHold`);
     await t.key('keyUp', ' ', 'Space');
@@ -48,14 +57,26 @@ test('M3 one rule lights up everywhere: highlight by rule, by variable, count, l
     const total = await b.eval(`[...napkin.stage.sections.values()].reduce((n, s) => n + (s.docFrame?.doc().querySelectorAll('.label').length ?? 0), 0)`);
     assert.equal(total, 4, 'the folder uses .label in four places');
     const r = await b.eval(`JSON.stringify(napkin.stage.highlight({ selector: '.label', file: 'components.css' }))`);
-    assert.deepEqual(JSON.parse(r), { places: 4, frames: 3 });
+    assert.deepEqual({ places: JSON.parse(r).places, frames: JSON.parse(r).frames }, { places: 4, frames: 3 });
     assert.equal(await b.eval(`document.querySelectorAll('.hl-box').length`), 4);
     assert.match(await b.eval(`document.querySelector('#hl-bar').textContent`), /lights 4 places in 3 components/);
+    // the "Lights up" list: every place, grouped by component; a click selects it
+    assert.equal(await b.eval(`document.querySelectorAll('#hl-side .hl-row').length`), 4);
+    assert.equal(await b.eval(`document.querySelectorAll('#hl-side .hl-group').length`), 3);
+    await b.eval(`document.querySelector('#hl-side .hl-row').click()`);
+    const sel = JSON.parse(await b.eval(`JSON.stringify(napkin.state.selection)`));
+    assert.ok(sel?.node && sel.component, 'clicking a place selects it');
+    assert.equal(await b.eval(`napkin.stage.sections.get(napkin.state.selection.component).docFrame.element(napkin.state.selection.node).el.classList.contains('label')`), true);
     // a rule from a file the frames do not load lights nothing
     assert.equal(JSON.parse(await b.eval(`JSON.stringify(napkin.stage.highlight({ selector: '.label', file: 'other.css' }))`)).places, 0);
     // the variable: every element whose rules use --ink
     const v = JSON.parse(await b.eval(`JSON.stringify(napkin.stage.highlight({ variable: '--ink' }))`));
     assert.ok(v.places >= 6, `--ink is used in many places (${v.places})`);
+    assert.equal(v.direct + v.indirect, v.places);
+    assert.match(await b.eval(`document.querySelector('#hl-side .hl-explain').textContent`), /places in \d+ components/);
+    // through other variables: --track is used by nothing directly here, a variable defined from another is counted as indirect
+    const w = JSON.parse(await b.eval(`JSON.stringify(napkin.stage.highlight({ variable: '--paper' }))`));
+    assert.ok(w.places > 0);
     // edit the rule: every frame updates live and the outlines stay
     napkinHighlight: {
       await b.eval(`napkin.stage.highlight({ selector: '.label', file: 'components.css' })`);
@@ -71,6 +92,15 @@ test('M3 one rule lights up everywhere: highlight by rule, by variable, count, l
       const lines = readFileSync(join(t.dir, 'components.css'), 'utf8').split('\n');
       assert.equal(lines.filter((l, i) => l !== FILES['components.css'].split('\n')[i]).length, 1, 'the diff is one line');
       assert.match(await b.eval(`document.querySelector('#hl-bar').textContent`), /lights 4 places/);
+      // "The change": the one-line diff, with Keep and Revert (Revert is undo)
+      await b.waitFor(`!!document.querySelector('#hl-side .hl-change .hl-diff .add')`);
+      assert.match(await b.eval(`document.querySelector('#hl-side .hl-diff .del').textContent`), /letter-spacing: \.14em/);
+      assert.match(await b.eval(`document.querySelector('#hl-side .hl-diff .add').textContent`), /letter-spacing: \.2em/);
+      assert.equal(await b.eval(`document.querySelectorAll('#hl-side .hl-diff div').length`), 2, 'one line removed, one added');
+      await b.eval(`document.querySelector('#hl-revert').click()`);
+      await b.waitFor(`!document.querySelector('#hl-side .hl-change')`);
+      assert.deepEqual(hashes(t.dir), before, 'Revert put the file back');
+      await b.waitFor(`document.querySelectorAll('.hl-box').length === 4`);
     }
     // the way a person gets there: Cmd-K, Alt+H, pick the rule, Enter
     await b.eval(`napkin.stage.clearHighlight()`);
@@ -78,6 +108,7 @@ test('M3 one rule lights up everywhere: highlight by rule, by variable, count, l
     await t.key('keyDown', 'h', 'KeyH', { modifiers: 1 }); await t.key('keyUp', 'h', 'KeyH', { modifiers: 1 });
     await b.waitFor(`!document.querySelector('#hl-pick').hidden && document.querySelectorAll('#hl-list li[data-i]').length > 3`);
     await b.eval(`(() => { const i = document.querySelector('#hl-input'); i.value = '.label'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+    // (an exact name picks that rule even when other matches come first)
     await t.key('keyDown', 'Enter', 'Enter', { vk: 13 });
     await b.waitFor(`document.querySelectorAll('.hl-box').length >= 4`);
     assert.equal(await b.eval(`napkin.highlight.active().selector`), '.label');
@@ -114,6 +145,30 @@ test('M4 real responsiveness: the file\'s breakpoints are ticks on the ruler, dr
     await b.eval(`napkin.select({ component: ${JSON.stringify(card)}, node: ${f}.tree().tree[0].node, variant: {} })`);
     assert.equal(await b.eval(`napkin.widths.step(-1)`), true); assert.equal(await b.eval(`${f}.width`), 480);
     assert.equal(await b.eval(`napkin.widths.step(1)`), true); assert.equal(await b.eval(`${f}.width`), 800);
+    // the breakpoints panel: the file's own @media conditions, which apply now, and the frame at other widths
+    await t.key('keyDown', 'b', 'KeyB'); await t.key('keyUp', 'b', 'KeyB');
+    await b.waitFor(`!document.querySelector('#bp-panel').hidden && document.querySelectorAll('#bp-panel .bp-rows li button').length === 2`);
+    assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#bp-panel .bp-rows li')].map((li) => [li.querySelector('.bp-px').textContent, li.querySelector('.bp-state').textContent]))`)), [['480', 'not in frame'], ['800', 'applies now']], 'at 800 px only the min-width rule applies');
+    assert.match(await b.eval(`document.querySelector('#bp-panel .bp-diff .on').textContent`), /\.card/);
+    await b.eval(`document.querySelector('#bp-panel button[data-px="480"]').click()`);
+    await b.waitFor(`${f}.width === 480 && document.querySelector('#bp-panel .bp-rows li.on .bp-px')?.textContent === '480'`);
+    assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#bp-strip button')].map((x) => x.dataset.px))`)), ['480', '800'], 'the same frame at the file\'s own widths');
+    await b.waitFor(`[...document.querySelectorAll('#bp-strip iframe')].every((i) => i.src)`);
+    await b.eval(`document.querySelector('#bp-strip button[data-px="800"]').click()`);
+    await b.waitFor(`${f}.width === 800`);
+    // the grip by keyboard: arrows 1 px, Shift 10 px, Page Down / Page Up the breakpoints
+    await b.eval(`${f}.grip.focus()`);
+    assert.equal(await b.eval(`document.activeElement === ${f}.grip && ${f}.grip.getAttribute('role')`), 'slider');
+    await t.key('keyDown', 'ArrowLeft', 'ArrowLeft', { vk: 37 }); await t.key('keyUp', 'ArrowLeft', 'ArrowLeft', { vk: 37 });
+    assert.equal(await b.eval(`${f}.width`), 799);
+    await t.key('keyDown', 'ArrowLeft', 'ArrowLeft', { vk: 37, modifiers: 8 });
+    assert.equal(await b.eval(`${f}.width`), 789);
+    await t.key('keyDown', 'PageDown', 'PageDown', { vk: 34 });
+    assert.equal(await b.eval(`${f}.width`), 480);
+    await t.key('keyDown', 'PageUp', 'PageUp', { vk: 33 });
+    assert.equal(await b.eval(`${f}.width`), 800);
+    assert.equal(await b.eval(`${f}.grip.getAttribute('aria-valuenow')`), '800');
+    await t.key('keyDown', 'b', 'KeyB'); await b.waitFor(`document.querySelector('#bp-panel').hidden`);
     // the width is the frame's and survives a reload; nothing was written to the folder
     await b.waitFor(`fetch('/api/layout').then((r) => r.json()).then((l) => l.frames[${JSON.stringify(card)}]?.width === 800)`);
     assert.equal(await b.eval(`napkin.widths.reset()`), true); assert.equal(await b.eval(`${f}.width`), 640);
@@ -146,6 +201,12 @@ test('M5 theme wipe: a slider wipes light into dark (and the files\' own themes)
     // slide it all the way: the whole canvas is light, then dark
     await b.eval(`napkin.theme.set({ at: 100 })`); await sleep(100);
     assert.equal(await b.eval(`[...napkin.theme.clones().values()].every((c) => /inset\\(0px 0px 0px 0px\\)|inset\\(0px 0(px)? 0px 0px\\)/.test(c.style.clipPath) || true)`), true);
+    // the stage and each frame's card wipe too: dark content does not sit in a white card
+    const cardBg = (name, side) => b.eval(`(() => { const sec = napkin.stage.sections.get(napkin.find(${JSON.stringify(name)}).component); return ${side === 'left' ? `getComputedStyle(sec.frame.querySelector('.wipe-card')).backgroundColor` : `getComputedStyle(sec.frame).backgroundColor`}; })()`);
+    assert.equal(await cardBg('Card', 'right'), 'rgb(27, 29, 35)', 'right of the line the card is the dark card');
+    assert.equal(await cardBg('Card', 'left'), 'rgb(255, 255, 255)', 'left of the line it is the light card');
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('#stage')).backgroundColor`), 'rgb(20, 22, 27)', 'the stage right of the line is the dark canvas');
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('#wipe-stage')).backgroundColor`), 'rgb(232, 234, 238)', 'and left of it the light canvas');
     // another theme the files define: [data-theme="sepia"]
     await b.eval(`napkin.theme.set({ left: 'sepia', right: 'dark', at: 50 })`);
     await b.waitFor(`[...napkin.theme.clones().values()].every((c) => c.contentDocument?.documentElement.getAttribute('data-theme') === 'sepia')`);
@@ -154,6 +215,7 @@ test('M5 theme wipe: a slider wipes light into dark (and the files\' own themes)
     assert.deepEqual(hashes(t.dir), before);
     await t.key('keyDown', 'Escape', 'Escape', { vk: 27 });
     await b.waitFor(`!document.body.dataset.wipe && napkin.theme.clones().size === 0`);
+    assert.equal(await b.eval(`document.querySelectorAll('.wipe-card').length + document.querySelector('#stage').style.backgroundColor.length`), 0, 'closing puts the stage and the cards back');
     await b.waitFor(`[...napkin.stage.sections.values()].every((s) => !s.docFrame || s.docFrame.doc()?.body && getComputedStyle(s.docFrame.doc().body).backgroundColor === 'rgb(251, 250, 246)')`);
     assert.deepEqual(hashes(t.dir), before);
   } finally { await t.close(); }
@@ -270,6 +332,62 @@ test('the new chrome (highlight bar and list, ruler, wipe bar and line) passes a
       await run(`${theme}: the theme wipe`);
       await b.eval(`napkin.theme.close()`);
       await b.waitFor(`!document.body.dataset.wipe`);
+      // a focused frame (its ruler and caption), play mode, the ruler while the grip is dragged, the breakpoints panel and strip
+      const card = await t.id('Card');
+      await b.eval(`napkin.nav.focus(${JSON.stringify(card)}, null, { animate: false }); napkin.select({ component: ${JSON.stringify(card)}, node: napkin.stage.sections.get(${JSON.stringify(card)}).docFrame.tree().tree[0].node, variant: {} })`);
+      await sleep(400);
+      await run(`${theme}: a focused frame with its ruler`);
+      await b.eval(`napkin.breakpoints.open()`); await b.waitFor(`!document.querySelector('#bp-panel').hidden`); await sleep(300);
+      await run(`${theme}: the breakpoints panel and the widths strip`);
+      await b.eval(`napkin.breakpoints.close(); napkin.stage.sections.get(${JSON.stringify(card)}).docFrame.cell.dataset.resizing = '1'`);
+      await run(`${theme}: the ruler while dragging`);
+      await b.eval(`delete napkin.stage.sections.get(${JSON.stringify(card)}).docFrame.cell.dataset.resizing; napkin.play.set(true)`);
+      await sleep(300);
+      await run(`${theme}: play mode`);
+      await b.eval(`napkin.play.set(false); napkin.nav.unfocus({ animate: false })`);
+      await b.eval(`napkin.stage.highlight({ variable: '--ink' })`);
+      await run(`${theme}: the Lights up panel`);
+      await b.eval(`napkin.stage.clearHighlight()`);
     }
+  } finally { await t.close(); }
+});
+
+test('fit-all with 60 frames: the frames in view load progressively under a budget (never all 60 live), the rest are named, and zooming to one loads it', { timeout: 120000 }, async () => {
+  const files = {};
+  for (let i = 0; i < 60; i++) files[`P${String(i).padStart(2, '0')}/index.html`] = `<!doctype html><meta charset="utf-8"><body style="margin:0"><p style="padding:8px;font:14px sans-serif">Frame ${i}</p>`;
+  const t = await open(files, { scheme: 'light' });
+  try {
+    const { b } = t;
+    await b.eval(`napkin.view.fitAll({ animate: false })`);
+    const live = () => b.eval(`[...napkin.stage.sections.values()].filter((s) => s.docFrame?.iframe()).length`);
+    let max = 0;
+    const t0 = Date.now();
+    await b.waitFor(`[...napkin.stage.sections.values()].filter((s) => s.docFrame?.doc()?.body?.textContent.includes('Frame')).length >= 40`, 20000);
+    max = Math.max(max, await live());
+    assert.ok(Date.now() - t0 < 15000, 'loaded within seconds');
+    await sleep(1500);
+    assert.ok(max <= 40 && (await live()) <= 40, `never all 60 live (${await live()})`);
+    const waiting = JSON.parse(await b.eval(`JSON.stringify([...napkin.stage.sections.entries()].filter(([, s]) => s.pending).map(([id, s]) => [id, s.frame.textContent]))`));
+    assert.ok(waiting.length >= 15, `${waiting.length} frames wait`);
+    for (const [id, text] of waiting) assert.match(text, /loads when you scroll to it/, `${id} says what it is`);
+    // zoom to a waiting frame: it loads, and a far one gives its place back
+    const [id] = waiting[0];
+    await b.eval(`napkin.nav.focus(${JSON.stringify(id)}, null, { animate: false })`);
+    await b.waitFor(`!!napkin.stage.sections.get(${JSON.stringify(id)}).docFrame?.doc()?.body?.textContent.includes('Frame')`, 20000);
+    assert.ok((await live()) <= 41);
+  } finally { await t.close(); }
+});
+
+test('a component that draws nothing without props says so in its frame; one that draws something does not', { timeout: 90000 }, async () => {
+  const t = await open({
+    'Empty.tsx': `export function Empty({ children }) { return <span className="badge">{children}</span>; }\n`,
+    'Full.tsx': `export function Full() { return <button style={{ padding: 8 }}>Go</button>; }\n`,
+  });
+  try {
+    const { b } = t;
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('Empty')?.component)?.docFrame?.doc()?.querySelector('[data-napkin-empty]')`, 10000);
+    assert.match(await b.eval(`napkin.stage.sections.get(napkin.find('Empty').component).docFrame.doc().querySelector('[data-napkin-empty]').textContent`), /Renders nothing without props/);
+    await sleep(500);
+    assert.equal(await b.eval(`!!napkin.stage.sections.get(napkin.find('Full').component).docFrame.doc().querySelector('[data-napkin-empty]')`), false);
   } finally { await t.close(); }
 });

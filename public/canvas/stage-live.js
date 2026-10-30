@@ -39,6 +39,16 @@ export function initLive(ctx) {
     begin();
   }, true);
   document.addEventListener('visibilitychange', () => { if (document.hidden) end(); });
-  ctx.live = { held: () => !!held, frames: frameWindows };
+  // a Play control in the toolbar, as in the mockups: it toggles play mode (P), and shows the hold chord
+  const mountButton = () => {
+  const bar = document.querySelector('#toolbar');
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.id = 'tool-play'; btn.setAttribute('aria-pressed', 'false'); btn.title = 'Play: the components run (P toggles; hold Space then P to play while held)';
+  btn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg><span>Play</span><kbd>Space P</kbd>';
+  bar?.append(btn);
+  btn.addEventListener('click', () => ctx.play.toggle());
+  ctx.on('play', ({ on }) => btn.setAttribute('aria-pressed', String(on)));
+  };
+  ctx.live = { mountButton, held: () => !!held, frames: frameWindows };
   return ctx.live;
 }

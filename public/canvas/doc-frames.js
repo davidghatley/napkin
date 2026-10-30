@@ -33,12 +33,13 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   cell.className = 'cell doc-cell'; cell.dataset.variant = '{}';
   const cap = document.createElement('figcaption');
   // The frame's width is the document's viewport: drag the grip and the component reflows for real (its own @media).
-  const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.dataset.nodrag = '1'; grip.title = 'Drag to change the frame width. Double-click for 640 px.';
+  const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.dataset.nodrag = '1'; grip.title = 'Drag to change the frame width. Double-click for 640 px. With the keyboard: arrows 1 px, Shift 10 px, Page Up and Page Down the next breakpoint.';
+  grip.tabIndex = -1; grip.setAttribute('role', 'slider'); grip.setAttribute('aria-label', 'Frame width'); grip.setAttribute('aria-valuemin', '120'); grip.setAttribute('aria-valuemax', '2400');
   const ruler = createRuler({ doc: () => iframe?.contentDocument || null, commitWidth: (w) => { api.setWidth(w); saveWidth(); }, get width() { return width; } });
   cell.append(cap, ruler.el, grip);
   let iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
   const proxies = new WeakMap();
-  const say = (w, snapped) => { cap.textContent = ruler.say(w, snapped); };
+  const say = (w, snapped) => { cap.textContent = ruler.say(w, snapped); grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuetext', `${w} px`); };
   say(width);
   const saveWidth = () => ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: id, width }) }).catch(() => {});
   grip.addEventListener('pointerdown', (ev) => {
@@ -54,6 +55,21 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     cell.dataset.resizing = '1';
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up, { once: true });
+  });
+  // the grip of the selected frame can be reached by keyboard: arrows move 1 px (Shift 10), Page Up and Page Down jump to the next breakpoint
+  grip.addEventListener('keydown', (ev) => {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    const step = ev.shiftKey ? 10 : 1;
+    let to = null;
+    if (ev.code === 'ArrowRight' || ev.code === 'ArrowUp') to = width + step;
+    else if (ev.code === 'ArrowLeft' || ev.code === 'ArrowDown') to = width - step;
+    else if (ev.code === 'PageUp' || ev.code === 'PageDown') { const pts = ruler.points().map((b) => Math.round(b.px)); to = ev.code === 'PageUp' ? pts.find((p) => p > width) : [...pts].reverse().find((p) => p < width); if (to === undefined) { ctx.hint(`No ${ev.code === 'PageUp' ? 'wider' : 'narrower'} breakpoint`); to = null; } }
+    else if (ev.code === 'Home') to = DOC_WIDTH;
+    if (to === null) { if (['PageUp', 'PageDown'].includes(ev.code)) { ev.preventDefault(); ev.stopPropagation(); } return; }
+    ev.preventDefault(); ev.stopPropagation();
+    const s = ruler.snap(to, 0.5);
+    api.setWidth(s.px, s.snapped);
+    clearTimeout(grip._save); grip._save = setTimeout(saveWidth, 250);
   });
   grip.addEventListener('dblclick', (ev) => { ev.stopPropagation(); api.setWidth(DOC_WIDTH); saveWidth(); });
 
@@ -130,12 +146,13 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   const api = {
     cell, load, pick,
     element: (node) => proxy(map.byNode.get(node)),
+    nodeOf: (el) => map.byEl.get(el) ?? null,
     has: (node) => map.byNode.has(node) || nodes.has(node),
     node: (node) => nodes.get(node) || null,
     iframe: () => iframe, doc: () => iframe?.contentDocument || null, tree: () => tree,
     get width() { return width; },
-    ruler, commitWidth: (w) => { api.setWidth(w); saveWidth(); },
-    setWidth(w, snapped = false) { width = Math.max(120, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(); ctx.emit('framewidth', { component: id, width }); },
+    grip, ruler, commitWidth: (w) => { api.setWidth(w); saveWidth(); },
+    setWidth(w, snapped = false) { width = Math.max(120, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(); grip.setAttribute('aria-valuenow', String(width)); grip.setAttribute('aria-valuetext', `${width} px`); ctx.emit('framewidth', { component: id, width }); },
     destroy() { gen++; ro?.disconnect(); iframe?.remove(); },
   };
   const w = ctx.state.components.get(id)?.width;
