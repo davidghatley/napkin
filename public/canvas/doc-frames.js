@@ -5,6 +5,7 @@
 // (GET /api/component/<id>); an element the browser made up (an implied <tbody>) passes its children through.
 //   createDocFrame(ctx, id, { onResize }) -> { cell, load(revision), pick(clientX, clientY), element(node), has(node),
 //                                              iframe(), doc(), tree(), node(id), width, setWidth(w) }
+import { createRuler } from './stage-ruler.js';
 const enc = encodeURIComponent;
 export const DOC_WIDTH = 640;
 
@@ -32,17 +33,24 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   const cap = document.createElement('figcaption');
   // The frame's width is the document's viewport: drag the grip and the component reflows for real (its own @media).
   const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.dataset.nodrag = '1'; grip.title = 'Drag to change the frame width. Double-click for 640 px.';
-  cell.append(cap, grip);
+  const ruler = createRuler({ doc: () => iframe?.contentDocument || null, commitWidth: (w) => { api.setWidth(w); saveWidth(); }, get width() { return width; } });
+  cell.append(cap, ruler.el, grip);
   let iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
   const proxies = new WeakMap();
-  cap.textContent = `${width} px`;
+  const say = (w, snapped) => { cap.textContent = ruler.say(w, snapped); };
+  say(width);
   const saveWidth = () => ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: id, width }) }).catch(() => {});
   grip.addEventListener('pointerdown', (ev) => {
     if (ev.button !== 0) return;
     ev.preventDefault(); ev.stopPropagation(); grip.setPointerCapture(ev.pointerId);
     const x0 = ev.clientX, w0 = width, z = ctx.view?.get().z || 1;
-    const move = (e) => api.setWidth(w0 + (e.clientX - x0) / z);
-    const up = () => { grip.removeEventListener('pointermove', move); saveWidth(); };
+    // the file's own breakpoints pull the width in (within 8 screen pixels); Alt drags freely
+    const move = (e) => {
+      const raw = w0 + (e.clientX - x0) / z, s = e.altKey ? { px: raw, snapped: false } : ruler.snap(raw, 8 / z);
+      api.setWidth(s.px, s.snapped);
+    };
+    const up = () => { grip.removeEventListener('pointermove', move); delete cell.dataset.resizing; say(width); saveWidth(); };
+    cell.dataset.resizing = '1';
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up, { once: true });
   });
@@ -104,6 +112,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     // keyboard focus never stays inside a frame while editing: the canvas's keys keep working
     next.contentWindow.addEventListener('focus', () => { if (!document.body.dataset.play) next.blur(); });
     size();
+    ruler.update(); say(width);
     return true;
   }
   // The element under a page point (nearest one with a source node), or null.
@@ -123,7 +132,8 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     node: (node) => nodes.get(node) || null,
     iframe: () => iframe, doc: () => iframe?.contentDocument || null, tree: () => tree,
     get width() { return width; },
-    setWidth(w) { width = Math.max(120, Math.min(2400, Math.round(w))); cap.textContent = `${width} px`; if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(); },
+    ruler, commitWidth: (w) => { api.setWidth(w); saveWidth(); },
+    setWidth(w, snapped = false) { width = Math.max(120, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(); ctx.emit('framewidth', { component: id, width }); },
     destroy() { gen++; ro?.disconnect(); iframe?.remove(); },
   };
   const w = ctx.state.components.get(id)?.width;

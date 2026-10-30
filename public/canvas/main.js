@@ -47,6 +47,11 @@ import { initInstances } from './instances.js';
 import { initSlots } from './slots.js';
 import { initAgentsLane } from './agents-lane.js';
 import { initDocs } from './docs.js';
+import { initLive } from './stage-live.js';
+import { initHighlight } from './stage-highlight.js';
+import { initWidths } from './stage-ruler.js';
+import { initTheme } from './stage-theme.js';
+import { initChrome } from './stage-chrome.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -107,6 +112,8 @@ window.napkin = ctx; // for tests and the console
 const view = createView(ctx, $('#stage'), $('#world'));
 const stage = createStage(ctx, $('#stage'), $('#world'), view);
 Object.assign(ctx, { view, stage });
+initLive(ctx); // M1: Space-P holds play mode (registered before play.js so it sees P first)
+initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
@@ -118,6 +125,9 @@ const nav = initNav(ctx);
 initHandles(ctx);
 initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
 initPlay(ctx); // CMP-09: P makes the cells live
+initWidths(ctx); // M4: next / previous breakpoint, back to 640 px
+initTheme(ctx); // M5: the theme wipe
+initChrome(ctx); // M11: Tab hides every bit of chrome
 initTabs(ctx); // WPC-07: cell content stays out of the Tab order outside play mode
 initInstances(ctx); // CMP-04, 06..08: composition
 initSlots(ctx); // CMP-05: slot drop zones
@@ -129,6 +139,7 @@ ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.select
 // #revision shows 8 characters (the frame title shows 7); the full revision is its tooltip
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = String(revision).slice(0, 8); $('#revision').title = `revision ${revision}`; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
 
+const claimedIds = new Set(), seenIds = new Set();
 const sync = id => {
   if (!id) return;
   const s = client.state(id), old = nameById.get(id);
@@ -136,7 +147,11 @@ const sync = id => {
     if (old) { nameCounts.set(old, nameCounts.get(old) - 1); idsByName.get(old)?.delete(id); nameById.delete(id); }
     if (s) { nameCounts.set(s.name, (nameCounts.get(s.name) || 0) + 1); nameById.set(id, s.name); if (!idsByName.has(s.name)) idsByName.set(s.name, new Set()); idsByName.get(s.name).add(id); }
   }
-  s ? ctx.state.components.set(id, s) : ctx.state.components.delete(id);
+  // A file is drawn once: the engine's frame takes over a dialect file it claims (read-only, or a build that failed). docs.js decides.
+  const claimed = !!ctx.docs?.claims(s);
+  if (s && !claimed) ctx.state.components.set(id, s); else { ctx.state.components.delete(id); if (claimed) ctx.stage?.remove(id); }
+  if (ctx.docs && (claimed !== claimedIds.has(id) || (s && !claimed && !seenIds.has(id)))) { claimed ? claimedIds.add(id) : claimedIds.delete(id); ctx.docs.reconcileSoon(); }
+  s ? seenIds.add(id) : seenIds.delete(id);
 };
 
 function counts() {

@@ -66,7 +66,9 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
         define: { 'process.env.NODE_ENV': '"production"' }, loader: { '.svg': 'dataurl', '.png': 'dataurl' },
       });
       out = { code: r.outputFiles[0].text };
-    } catch (e) { out = { error: explainError((e.errors?.[0]?.text || e.message).slice(0, 400), { next: 'fix the import or the code it names, then save; napkin builds it again.' }), file: e.errors?.[0]?.location?.file }; }
+    } catch (e) {
+      const loc = e.errors?.[0]?.location; // say where, as the parse error of a broken file does: "line 3: ..."
+      out = { error: explainError(`${loc?.file && loc.file !== 'napkin-view.jsx' ? `${loc.file}: ` : ''}${loc ? `line ${loc.line}: ` : ''}${(e.errors?.[0]?.text || e.message).slice(0, 400)}`, { next: 'fix the import or the code it names, then save; napkin builds it again.' }), file: e.errors?.[0]?.location?.file }; }
     cache.set(key, out);
     return out;
   }
@@ -75,7 +77,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
     const b = comp.broken ? { error: explainError(comp.broken, { next: 'fix the syntax error, then save; napkin reads it again.' }) } : await bundle(comp);
     if (b.error) {
       // The frame still draws: it says why the component could not be built (the canvas shows the same page).
-      return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><pre data-napkin-error style="white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;margin:8px">napkin could not build ${escHtml(comp.id)}: ${escHtml(b.error)}</pre></body></html>`) };
+      return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><pre data-napkin-error style="white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;background:#fff;margin:0;padding:12px;min-width:0;overflow-wrap:anywhere">napkin could not build ${escHtml(comp.id)}: ${escHtml(b.error)}</pre></body></html>`) };
     }
     const code = b.code.replace(/<\/script/gi, '<\\/script');
     return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${code}</script></body></html>`) };

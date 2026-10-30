@@ -12,29 +12,68 @@ const getJson = async (path) => { const r = await fetch(path); return r.ok ? r.j
 export function initDocs(ctx) {
   const api = { styles: null, files: [] };
   ctx.docs = api;
-  const isDoc = (id) => ctx.state.components.get(id)?.kind === 'html';
+  // A file is drawn once. The TSX dialect (variants, settings) keeps the files it can read and edit; every other .tsx/.jsx
+  // file (className or inline styles, a default export, a syntax error, an import that does not build) is drawn by the
+  // engine as its /view page, like an HTML file. `forced` holds dialect files whose bundle failed: they move over too.
+  api.forced = new Set();
+  api.enginePaths = new Set(); // .tsx/.jsx files the engine can draw (from the last load)
+  const isDialect = (c) => c && c.kind !== 'html';
+  // The dialect's paths are relative to the folder it opened (often a components/ folder inside the one the engine opened):
+  // a dialect file is the engine file whose path ends with its own. The shared prefix is learned from the unambiguous ones.
+  const prefixes = new Set();
+  const candidates = (c) => [...api.enginePaths].filter((p) => p === c.path || p.endsWith('/' + c.path));
+  const learn = () => { for (const c of ctx.state.components.values()) if (isDialect(c) && c.path) { const m = candidates(c); if (m.length === 1) prefixes.add(m[0].slice(0, m[0].length - c.path.length)); } };
+  const engineOf = (c) => { if (!c?.path) return null; const m = candidates(c); return m.length === 1 ? m[0] : m.find((p) => prefixes.has(p.slice(0, p.length - c.path.length))) ?? null; };
+  api.claims = (s) => { if (!s || !isDialect(s)) return false; const p = engineOf(s); return !!p && (!!s.readOnly || api.forced.has(p)); };
+  api.takeOver = (id) => {
+    const s = ctx.state.components.get(id), p = isDialect(s) && engineOf(s);
+    if (!p) return false;
+    api.forced.add(p);
+    api.reconcile().catch(console.error);
+    return true;
+  };
 
   async function load() {
-    const [files, layout, styles] = await Promise.all([getJson('/api/files?kinds=html,css'), getJson('/api/layout'), getJson('/api/styles')]);
+    const [files, layout, styles] = await Promise.all([getJson('/api/files?kinds=html,css,tsx,jsx'), getJson('/api/layout'), getJson('/api/styles')]);
     api.files = files?.files || []; api.styles = styles;
+    api.enginePaths = new Set(api.files.filter((f) => f.kind === 'tsx' || f.kind === 'jsx').map((f) => f.path));
+    learn();
+    for (const [id, c] of [...ctx.state.components]) if (api.claims(c)) { ctx.state.components.delete(id); ctx.stage?.remove(id); } // a file never appears twice
+    const mine = new Set([...ctx.state.components.values()].filter((c) => isDialect(c)).map(engineOf).filter(Boolean));
+    const scanning = !!ctx.state.progress && !ctx.state.progress.done; // the dialect is still reading the folder: wait to see which files are its
     const seen = new Set();
     for (const f of api.files) {
-      if (f.kind !== 'html') continue;
+      if (f.kind === 'css' || (f.kind !== 'html' && (mine.has(f.path) || scanning))) continue; // a dialect file the dialect draws (or may be about to)
       for (const c of f.components) {
         seen.add(c.id);
         const prev = ctx.state.components.get(c.id);
         const saved = layout?.frames?.[c.id];
-        ctx.state.components.set(c.id, { ...(prev || {}), component: c.id, name: c.name, path: f.path, kind: 'html', revision: f.revision, doc: null, canvas: prev?.canvas || (saved && saved.x !== undefined ? { x: saved.x, y: saved.y } : { x: 0, y: 0 }), width: prev?.width ?? saved?.width });
+        ctx.state.components.set(c.id, { ...(prev || {}), component: c.id, name: c.name, path: f.path, kind: 'html', fileKind: f.kind, revision: f.revision, doc: null, canvas: prev?.canvas || (saved && saved.x !== undefined ? { x: saved.x, y: saved.y } : { x: 0, y: 0 }), width: prev?.width ?? saved?.width });
       }
     }
     return seen;
   }
   api.load = load;
+  // The folder's files changed (or a dialect file moved between the two ways of drawing): draw what is new, drop what is gone.
+  async function reconcile() {
+    const before = new Set([...ctx.state.components.values()].filter((c) => c.kind === 'html').map((c) => c.component));
+    const seen = await load();
+    for (const id of seen) if (!before.has(id)) { ctx.stage.render(id).catch(console.error); ctx.emit('added', { component: id }); }
+    for (const id of before) if (!seen.has(id)) { ctx.stage.remove(id); ctx.state.components.delete(id); ctx.emit('removed', { component: id }); }
+    for (const id of ctx.state.components.keys()) if (!ctx.stage.sections.has(id)) ctx.stage.render(id).catch(console.error); // a dialect file the engine gave back
+  }
+  api.reconcile = reconcile;
+  let soon = 0; // many files can arrive at once (a branch switch): look once, after the dialect has said which are its own
+  api.reconcileSoon = () => { clearTimeout(soon); soon = setTimeout(() => reconcile().catch(console.error), 200); };
+  ctx.on('progress', (p) => { if (p.done) api.reconcileSoon(); });
 
   // A file changed (an edit by anyone, or a save in an editor): redraw every frame it reaches.
   ctx.on('doc-change', (f) => {
     docsChanged();
-    for (const id of f.affects || []) {
+    // (the server names the components an HTML or CSS file reaches; a JSX file reaches the components it holds)
+    const hit = new Set(f.affects || []);
+    for (const c of ctx.state.components.values()) if (c.kind === 'html' && c.path === f.path) hit.add(c.component);
+    for (const id of hit) {
       const c = ctx.state.components.get(id);
       if (!c || c.kind !== 'html') continue;
       if (c.path === f.path) c.revision = f.revision;
@@ -42,12 +81,7 @@ export function initDocs(ctx) {
     }
     if (f.path?.endsWith('.css')) refreshStyles();
   });
-  ctx.on('doc-files', async () => {
-    const before = new Set([...ctx.state.components.values()].filter((c) => c.kind === 'html').map((c) => c.component));
-    const seen = await load();
-    for (const id of seen) if (!before.has(id)) { ctx.stage.render(id).catch(console.error); ctx.emit('added', { component: id }); }
-    for (const id of before) if (!seen.has(id)) { ctx.stage.remove(id); ctx.state.components.delete(id); ctx.emit('removed', { component: id }); }
-  });
+  ctx.on('doc-files', () => api.reconcileSoon());
   ctx.on('doc-styles', async () => {
     docsChanged();
     await refreshStyles();

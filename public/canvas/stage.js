@@ -158,6 +158,7 @@ export function createStage(ctx, root, world, view) {
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
+      if (ctx.docs?.takeOver(id)) return; // the dialect could not build it: the engine draws the file as /view (which says why)
       sec.unmounts.forEach(u => u()); sec.unmounts = [];
       sec.frame.replaceChildren(errorCard(`build failed: ${(await res.json().catch(() => ({}))).error || res.status}`));
       finish(sec, id, c.revision);
