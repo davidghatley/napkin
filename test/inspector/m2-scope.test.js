@@ -44,16 +44,16 @@ test('M2: type a value, pick the scope with a key, see the one line, apply: clas
     // 16 for the sides: on the scale (--space-4), so napkin writes the variable; default scope is the class
     await a.typeIn('#pv-padding', 'var(--space-1) 16');
     await a.browser.waitFor(`!!document.querySelector('#doc-staged .scope')`);
-    const staged = await a.q(`JSON.stringify({ scope: napkin.inspector.state().scope, opts: [...document.querySelectorAll('#doc-staged .opt')].map((o) => ({ id: o.dataset.scope, on: o.classList.contains('on'), text: o.innerText.replace(/\\s+/g, ' ') })), note: document.querySelector('#doc-staged .pnote')?.innerText, diff: [...document.querySelectorAll('#doc-diff > div')].map((d) => (d.querySelector('i') ? [d.querySelector('i').textContent, d.querySelector('u').textContent, d.title].join(' ') : d.innerText.replace(/\\s+/g, ' '))) })`).then(JSON.parse);
+    const staged = await a.q(`JSON.stringify({ scope: napkin.inspector.state().scope, opts: [...document.querySelectorAll('#doc-staged .opt')].map((o) => ({ id: o.dataset.scope, on: o.classList.contains('on'), text: o.innerText.replace(/\\s+/g, ' ') })), note: document.querySelector('#doc-staged h3 .where')?.innerText, diff: [...document.querySelectorAll('#doc-diff > div')].map((d) => (d.querySelector('i') ? [d.querySelector('i').textContent, d.querySelector('u').textContent, d.title].join(' ') : d.innerText.replace(/\\s+/g, ' '))) })`).then(JSON.parse);
     assert.equal(staged.scope, 'class');
-    assert.match(staged.note, /16px is on your scale: writing var\(--space-4\)/);
+    assert.match(staged.note, /on your scale: 16px → var\(--space-4\)/);
     const [el, cls, vr] = staged.opts;
-    assert.match(el.text, /This element/); assert.match(cls.text, /Class \.ss-note__tag/); assert.match(vr.text, /Variable --space-3/);
+    assert.match(el.text, /Element/); assert.match(cls.text, /Class \.ss-note__tag/); assert.match(vr.text, /Variable --space-3/);
     assert.match(await a.q(`document.querySelector('#doc-staged [data-scope=class]').title`), /components\.css:3/);
     await a.browser.waitFor(`/3 uses/.test(document.querySelector('#doc-staged [data-scope=class]').innerText)`, 5000);
     assert.match(await a.q(`document.querySelector('#doc-staged [data-scope=class]').innerText.replace(/\\s+/g, ' ')`), /3 uses/);
     assert.match(await a.q(`document.querySelector('#doc-staged .scopenote').textContent`), /components\.css:3 · all three in Note/);
-    assert.deepEqual(staged.diff.slice(1), ['3 − padding: var(--space-1) var(--space-3);', '3 + padding: var(--space-1) var(--space-4);']);
+    assert.deepEqual(staged.diff, ['3 − padding: var(--space-1) var(--space-3);', '3 + padding: var(--space-1) var(--space-4);']);
     // before anything is written, the canvas shows the change on all three tags
     assert.equal(await a.q(`(() => { const f = napkin.stage.sections.get(${JSON.stringify(NOTE)}).docFrame.doc(); return [...f.querySelectorAll('.ss-note__tag')].map((t) => getComputedStyle(t).paddingLeft).join() })()`), '16px,16px,16px');
     assert.deepEqual(readAll(a.dir), before, 'nothing is written until Apply');
@@ -65,7 +65,7 @@ test('M2: type a value, pick the scope with a key, see the one line, apply: clas
     // V: this variable (the whole system)
     await a.io.key('v', { alt: true, code: 'KeyV' });
     assert.equal(await a.q(`napkin.inspector.state().scope`), 'variable');
-    assert.deepEqual(await a.q(`[...document.querySelectorAll('#doc-diff > div')].slice(1).map((d) => d.innerText.replace(/\\s+/g, ' '))`), ['9 − --space-3: 12px;', '9 + --space-3: 16px;']);
+    assert.deepEqual(await a.q(`[...document.querySelectorAll('#doc-diff > div')].map((d) => d.innerText.replace(/\\s+/g, ' '))`), ['9 − --space-3: 12px;', '9 + --space-3: 16px;']);
     await a.io.key('c', { alt: true, code: 'KeyC' });
     assert.equal(await a.q(`napkin.inspector.state().scope`), 'class');
 

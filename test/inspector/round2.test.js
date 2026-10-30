@@ -22,7 +22,7 @@ test('round 2: the preview shows what Apply will make, a longhand that still win
     await a.browser.waitFor(`!!document.querySelector('#doc-staged .scope')`);
     assert.equal(await a.q(`napkin.inspector.state().scope`), 'class');
     const note = await a.q(`document.querySelector('#doc-staged .scopenote').textContent`);
-    assert.match(note, /padding-left still wins from \.card\.big/, 'said plainly');
+    assert.match(note, /padding-left won’t show: \.card\.big c\.css:2 wins \(more specific\)/, 'said plainly');
     const preview = await sides(a, 'p.html', '#x');
     assert.deepEqual(preview, ['10px', '10px', '10px', '20px'], 'the longhand still wins in the preview');
     await a.io.key('Enter');
@@ -43,7 +43,7 @@ test('round 2: inherited values are listed with a link that selects the ancestor
   try {
     const span = await a.node('p.html', (x) => x.attrs.id === 's'), card = await a.node('p.html', (x) => x.attrs.id === 'c');
     await a.select('p.html', span.node);
-    const inh = JSON.parse(await a.q(`JSON.stringify([...document.querySelectorAll('#doc-inherited .vrow')].map((r) => ({ label: r.querySelector('.lbl').textContent, link: r.querySelector('.plink')?.textContent.trim(), value: r.querySelector('.ro').textContent })))`));
+    const inh = JSON.parse(await a.q(`JSON.stringify([...document.querySelectorAll('#doc-inherited .vrow')].map((r) => ({ label: r.querySelector('label').textContent, link: r.querySelector('.plink')?.textContent.replace(/\\s+/g, ' ').trim(), value: r.querySelector('input').value })))`));
     assert.ok(inh.some((r) => r.label === 'color' && /\.card\.dark c\.css:1/.test(r.link) && r.value === 'var(--fg)'), JSON.stringify(inh));
     assert.ok(inh.some((r) => r.label === 'font' && /\.card\.dark/.test(r.link) && /14px\/20px/.test(r.value)), 'the font shorthand on the ancestor is one row');
     assert.equal(await a.q(`/Nothing styles/.test(document.querySelector('#doc-values').innerText)`), false);

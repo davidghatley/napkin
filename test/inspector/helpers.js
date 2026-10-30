@@ -33,7 +33,7 @@ export const FILES = {
 .ss-note { border: 1px solid var(--ink); background: var(--paper); margin-bottom: var(--space-3); }
 .ss-note__tag { display: block; padding: var(--space-1) var(--space-3); background: var(--ink); color: var(--paper); font: 600 11px/16px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; }
 .ss-note--rule .ss-note__tag { background: var(--vermilion); color: var(--on-vermilion); }
-.ss-note__body { padding: 11px; font-size: 16px; line-height: 24px; }
+.ss-note__body { padding: 13px; font-size: 16px; line-height: 24px; }
 .ss-pill { display: inline-block; padding: 2px 6px; border: 1px solid var(--cobalt); color: var(--cobalt); }
 .ss-row { display: flex; gap: var(--space-3); align-items: center; padding: var(--space-2); margin: var(--space-4) 0; }
 .ss-faint { margin: 0; color: #aaaaaa; }

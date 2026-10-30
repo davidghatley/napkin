@@ -7,6 +7,7 @@
 //   GET  /view/<id>?width=W&theme=T      the component as its own document (src/doc/view.js)
 //   GET  /raw/<path>                     a file of the folder, as it is (what /view's relative URLs load)
 //   POST /api/edit  { component, baseRevision, edits }      -> { ok, revision } | { ok: false, error }
+//                   + dryRun: true                          -> { ok, files: [{ path, text }] }: what the files would hold; nothing is written
 //   POST /api/undo | /api/redo  { component }               your last edit to that component
 //   GET  /api/styles  -> { undefinedVars, applied, ... }    POST /api/styles { applied }  (kept outside the folder)
 // Writes need an identity (POST /api/session), as every write in napkin does.
@@ -79,7 +80,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         const m = await body(req);
         const by = who(req);
         if (!m || typeof m.component !== 'string') throw new DocError('send { component, baseRevision, edits }', 400);
-        return json(res, 200, engine.edit(m.component, { baseRevision: m.baseRevision, edits: m.edits, by, summary: m.summary })), true;
+        return json(res, 200, engine.edit(m.component, { baseRevision: m.baseRevision, edits: m.edits, by, summary: m.summary, dryRun: m.dryRun === true })), true;
       }
       const step = /^\/api\/(undo|redo)$/.exec(path) || /^\/api\/components\/([^/]+)\/(undo|redo)$/.exec(path);
       if (method === 'POST' && step) {

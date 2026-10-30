@@ -25,7 +25,7 @@ test('M6: the strips show the folder’s variables; an off-scale value is flagge
 
     // padding: 11px is not on the scale; the flag is quiet and offers --space-3 (12px)
     const flag = await a.q(`document.querySelector('.vrow[data-prop="padding"] .pflag')?.innerText.replace(/\\s+/g, ' ')`);
-    assert.match(flag, /close to --space-3 12px/);
+    assert.match(flag, /13px is close to --space-3 12px/);
     assert.equal(await a.q(`document.querySelectorAll('.vrow.off').length`), 1, 'only the off-scale value is flagged (font-size 16px has no size variable)');
     const before = readAll(a.dir);
     await a.q(`document.querySelector('.vrow[data-prop="padding"] .pbind').click()`);
@@ -33,7 +33,7 @@ test('M6: the strips show the folder’s variables; an off-scale value is flagge
     assert.equal(await a.q(`napkin.inspector.state().scope`), 'class');
     await a.io.key('Enter');
     await applied(a);
-    assert.deepEqual(diffOf(a, before), { 'components.css': [['.ss-note__body { padding: 11px; font-size: 16px; line-height: 24px; }', '.ss-note__body { padding: var(--space-3); font-size: 16px; line-height: 24px; }']] });
+    assert.deepEqual(diffOf(a, before), { 'components.css': [['.ss-note__body { padding: 13px; font-size: 16px; line-height: 24px; }', '.ss-note__body { padding: var(--space-3); font-size: 16px; line-height: 24px; }']] });
     await a.browser.waitFor(`document.querySelectorAll('.vrow.off').length === 0`, 8000);
   } finally { await a.close(); }
 });
@@ -71,11 +71,12 @@ test('M6: drag a variable onto an element; a list asks which property; the edit 
     await a.browser.waitFor(`!!document.querySelector('dialog.ivask[open]')`);
     assert.match(await a.q(`document.querySelector('dialog.ivask h2').innerText`), /Use --cobalt on/);
     assert.deepEqual(await a.q(`[...document.querySelectorAll('dialog.ivask button')].slice(0, 3).map((b) => b.value)`), ['color', 'background-color', 'border-color']);
+    assert.match(await a.q(`document.querySelector('dialog.ivask .hint').innerText`), /\.ss-note__body is on 3 elements on the canvas.*unless you choose the class/);
     await a.q(`document.querySelector('dialog.ivask button[value="background-color"]').click()`);
     await a.browser.waitFor(`!!document.querySelector('#doc-staged .scope') && document.querySelector('#sel-node').textContent.includes('ss-note__body')`);
     assert.equal(await a.q(`document.querySelector('#pv-background-color, .vrow[data-prop="background-color"] input')?.value ?? napkin.inspector.state().prop`), 'background-color');
     assert.deepEqual(readAll(a.dir), before, 'nothing is written until Apply');
-    await a.q(`napkin.inspector.scope('element')`);
+    assert.equal(await a.q(`napkin.inspector.state().scope`), 'element', 'a drop onto one element is that element');
     assert.match(await a.q(`document.querySelector('#doc-diff').innerText.replace(/\\s+/g, ' ')`), /\+ style="background-color: var\(--cobalt\)"/);
     await a.io.key('Enter');
     await applied(a);

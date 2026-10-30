@@ -125,6 +125,7 @@ const INHERITED = ['color', 'font-family', 'font-size', 'font-style', 'font-vari
 
 const sameProp = (a, b) => (a.startsWith('--') || b.startsWith('--') ? a === b : a.toLowerCase() === b.toLowerCase());
 
+export const longhandsOf = (prop) => cover(prop);
 export function createCascade(rules, ad, opts = {}) {
   const env = { width: 1280, height: 800, dark: false, ...opts };
   const media = ad.media || ((p) => mediaMatches(p, env));
@@ -235,15 +236,6 @@ export function createCascade(rules, ad, opts = {}) {
     };
     const rulesOut = matched(el).map((m) => ({ ...sourceOf({ kind: 'rule', m, d: { line: m.rule.line } }), decls: m.rule.decls.map((d, k) => shape({ kind: 'rule', m, d, k })) }));
     const inline = inlineOf(el).map((d, k) => shape({ kind: 'inline', d, k }));
-    // custom properties in play: those used, those defined on the way, and what they use in turn
-    const vars = {}; const queue = [...usedVars];
-    while (queue.length) {
-      const n = queue.shift();
-      if (vars[n] !== undefined) continue;
-      const v = customValue(el, n);
-      vars[n] = v ? { value: v.value, raw: v.raw, source: v.source, at: v.at, inherited: v.at !== ad.id(el) } : null;
-      if (v) for (const u of substitute(el, v.raw).uses) if (vars[u] === undefined) queue.push(u);
-    }
     // the strongest declaration of each property name that wins something (a shorthand that lost everything has no row)
     const best = new Map();
     for (const c of all) {
@@ -264,23 +256,34 @@ export function createCascade(rules, ad, opts = {}) {
         const w = candidates(p, key).at(-1);
         if (!w) continue;
         let e = seen.get(w.d);
-        if (!e) { const s = /var\(/.test(w.d.value) ? substitute(p, w.d.value) : null; e = { prop: w.d.prop, value: w.d.value, ...(s && { resolved: s.ok ? s.text : null }), source: sourceOf(w), from: ad.id(p), sets: [] }; seen.set(w.d, e); inherited.push(e); }
+        if (!e) { const s = /var\(/.test(w.d.value) ? substitute(p, w.d.value) : null; e = { prop: w.d.prop, value: w.d.value, ...(s && { resolved: s.ok ? s.text : null }), source: sourceOf(w), from: ad.id(p), sets: [] }; seen.set(w.d, e); inherited.push(e); if (s) for (const n of s.uses) usedVars.add(n); }
         e.sets.push(key);
         break;
       }
     }
+    // custom properties in play: those used, those defined on the way, and what they use in turn
+    const vars = {}; const queue = [...usedVars];
+    while (queue.length) {
+      const n = queue.shift();
+      if (vars[n] !== undefined) continue;
+      const v = customValue(el, n);
+      vars[n] = v ? { value: v.value, raw: v.raw, source: v.source, at: v.at, inherited: v.at !== ad.id(el) } : null;
+      if (v) for (const u of substitute(el, v.raw).uses) if (vars[u] === undefined) queue.push(u);
+    }
     return { rules: rulesOut, inline, props: winners, vars, inherited };
   }
-  // What would still beat a value written for `prop` in the rule `m` (an entry of matched(el)): the longhands (or the
-  // same property) that another declaration wins from it. [{ props, by }]; empty when the new value would show.
+  // What would still beat a value written for `prop` in the rule `m` (an entry of matched(el)), or inline when m is null:
+  // [{ props, by, why }]; empty when the new value would show. `why` says how it loses: !important, more specific, later.
   function wouldLose(el, m, prop, important = false) {
-    const at = m.rule.decls.findIndex((d) => sameProp(d.prop, prop)); // edited where it is, or added at the end of the rule
-    const mine = { rank: important ? 2 : 0, spec: m.spec, order: m.rule.order, k: at < 0 ? 1e9 : at }, lost = new Map();
+    const at = m ? m.rule.decls.findIndex((d) => sameProp(d.prop, prop)) : inlineOf(el).findIndex((d) => sameProp(d.prop, prop)); // edited where it is, or added at the end
+    const mine = m ? { rank: important ? 2 : 0, spec: m.spec, order: m.rule.order, k: at < 0 ? 1e9 : at } : { rank: important ? 3 : 1, spec: [0, 0, 0], order: Infinity, k: at < 0 ? 1e9 : at };
+    const lost = new Map();
     for (const key of cover(prop)) {
-      const w = candidates(el, key).filter((c) => !(c.kind === 'rule' && c.m.rule === m.rule && sameProp(c.d.prop, prop))).at(-1);
+      const w = candidates(el, key).filter((c) => !(m ? c.kind === 'rule' && c.m.rule === m.rule && sameProp(c.d.prop, prop) : c.kind === 'inline' && sameProp(c.d.prop, prop))).at(-1);
       if (w && rankOf(mine, w) < 0) { const sk = w.kind === 'inline' ? 'inline' : `r${w.m.rule.order}`; if (!lost.has(sk)) lost.set(sk, { keys: [], w }); lost.get(sk).keys.push(key); }
     }
-    return [...lost.values()].map((x) => ({ props: sayLost(x.keys, prop), by: sourceOf(x.w) }));
+    const why = (w) => (w.rank > mine.rank ? '!important' : cmp(w.spec, mine.spec) > 0 ? 'more specific' : 'later in the stylesheet');
+    return [...lost.values()].map((x) => ({ props: sayLost(x.keys, prop), by: sourceOf(x.w), why: why(x.w) }));
   }
-  return { matched, candidates, wouldLose, explain, customValue, resolve, sourceOf };
+  return { matched, candidates, wouldLose, cover, explain, customValue, resolve, sourceOf };
 }

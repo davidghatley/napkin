@@ -106,21 +106,9 @@ dialog.ivask .hint { margin: 8px 0 0; font-size: 11px; color: var(--nk-text-3); 
 #inspect-overlay .im-padding { border-color: rgba(147, 196, 125, .55); }
 #inspect-overlay .im-content { position: absolute; background: rgba(111, 168, 220, .4); }
 #inspect-overlay .im-gap { position: absolute; background: repeating-linear-gradient(45deg, rgba(180, 95, 211, .42) 0 3px, rgba(180, 95, 211, .14) 3px 6px); }
-#inspect-overlay .im-sel { opacity: .45; }
-#inspect-overlay .im-num { position: absolute; transform: translate(-50%, -50%); padding: 1px 3px; border-radius: 3px; background: rgba(20, 24, 36, .82); color: #fff; font: 600 9.5px/1 var(--nk-mono); white-space: nowrap; }
-#inspect-overlay .im-g { background: rgba(110, 50, 140, .92); }
-#inspect-overlay .im-read { position: absolute; z-index: 2; left: 50% !important; top: 10px !important; transform: translateX(-50%); max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; padding: 3px 9px; border-radius: 4px; background: rgba(20, 24, 36, .92); color: #fff; font: 10.5px/1.2 var(--nk-mono); white-space: nowrap; }
-#inspect-overlay .im-read b { color: #9fb0ff; font-weight: 600; margin-right: 4px; }
-#inspect-overlay .im-badge { position: absolute; transform: translateY(-100%); padding: 1px 4px; border-radius: 3px 3px 0 0; font: 600 9px/11px var(--nk-mono); color: #fff; }
 #inspect-overlay .im-box { position: absolute; box-sizing: border-box; border: 1px solid; pointer-events: none; }
 #inspect-overlay .im-box.ok { border-color: rgba(6, 118, 71, .75); }
 #inspect-overlay .im-box.bad { border-color: rgba(180, 35, 24, .9); border-style: dashed; }
-#inspect-overlay .im-badge.ok { background: #067647; }
-#inspect-overlay .im-badge.bad { background: #b42318; }
-#inspect-overlay .im-badge.unsure { outline: 1px dashed rgba(255, 255, 255, .8); outline-offset: -2px; }
-#inspect-overlay .im-order { position: absolute; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 50%; background: var(--nk-accent); color: var(--nk-on-accent, #fff); font: 600 10px/18px var(--nk-mono); text-align: center; box-shadow: 0 0 0 2px var(--nk-chrome); }
-#inspect-overlay .im-orderline { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-#inspect-overlay .im-orderline polyline { fill: none; stroke: var(--nk-accent); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .7; }
 
 /* a panel section never grows wider than the panel: its content wraps or ends in an ellipsis */
 #panel .dsec { grid-template-columns: minmax(0, 1fr); }
@@ -130,3 +118,58 @@ dialog.ivask .hint { margin: 8px 0 0; font-size: 11px; color: var(--nk-text-3); 
 #panel #doc-dock { grid-template-columns: minmax(0, 1fr); }
 #panel .doc-foot { flex-wrap: wrap; row-gap: 4px; }
 #panel .doc-foot .legend { margin-left: 0; flex-basis: 100%; }
+
+/* strips start as one row; a strip opens when asked, or when the keyboard reaches a chip in its second row */
+#panel .ivchips[data-collapsed] { max-height: 22px; overflow: hidden; }
+#panel .ivmore { float: right; padding: 0; border: 0; background: none; color: var(--nk-accent-text); font: 10.5px var(--nk-sans); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#panel details.fold > summary { list-style: none; cursor: pointer; }
+#panel details.fold > summary::-webkit-details-marker { display: none; }
+#panel details.fold > summary h3::before { content: "▸"; color: var(--nk-text-3); font-size: 10px; width: 10px; }
+#panel details.fold[open] > summary h3::before { content: "▾"; }
+#panel details.fold > summary:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
+#panel .vrow.inh .pstate { margin-left: 0; }
+#panel .scopenote.bad { white-space: normal; color: var(--nk-text); }
+#panel .scopenote.bad em { font-style: normal; font-weight: 600; }
+/* source lines: the selector gives way, the file and line never */
+#panel .pfrom { display: flex; align-items: baseline; gap: 5px; }
+#panel .pfrom > * { flex: none; white-space: nowrap; }
+#panel .pfrom > .selp, #panel .plink .selp { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#panel .pfrom > :last-child:not(.loc) { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#panel .pfrom .loc, #panel .plink .loc { flex: none; }
+#panel .plink { display: inline-flex; gap: 5px; min-width: 0; flex: 0 1 auto; }
+/* the dock: three scope buttons in a row, the note, the change, Apply */
+#panel .scope { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+#panel .opt { grid-template-columns: auto minmax(0, 1fr) auto; gap: 5px; padding: 0 6px; }
+#panel .doc-foot { padding: 5px 14px 6px; flex-wrap: nowrap; }
+#panel .doc-foot .legend { margin-left: auto; flex-basis: auto; }
+#panel .dsec.staged { padding: 6px 14px 4px; gap: 4px; }
+
+/* labels: boxes in free space, never on the text they measure; a leader line joins one that had to move away */
+#inspect-overlay .im-label { position: absolute; z-index: 3; white-space: nowrap; }
+#inspect-overlay .im-leaders { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#inspect-overlay .im-leaders line { stroke: var(--nk-text-2); stroke-width: 1; opacity: .55; }
+#inspect-overlay .im-dim { opacity: .3; }
+#inspect-overlay .im-badge { padding: 1px 4px; border-radius: 3px; font: 600 9px/11px var(--nk-mono); color: #fff; }
+#inspect-overlay .im-badge.ok { background: #067647; }
+#inspect-overlay .im-badge.bad { background: #b42318; }
+#inspect-overlay .im-badge.unsure { outline: 1px dashed rgba(255, 255, 255, .8); outline-offset: -2px; }
+#inspect-overlay .im-order { width: 16px; height: 16px; border-radius: 50%; background: var(--nk-accent); color: var(--nk-on-accent, #fff); font: 600 9px/16px var(--nk-mono); text-align: center; box-shadow: 0 0 0 2px var(--nk-chrome); }
+#inspect-overlay .im-num { padding: 1px 3px; border-radius: 3px; background: rgba(20, 24, 36, .85); color: #fff; font: 600 9.5px/11px var(--nk-mono); }
+#inspect-overlay .im-g { background: rgba(110, 50, 140, .92); }
+#inspect-overlay .im-read { padding: 3px 9px; border-radius: 4px; background: rgba(20, 24, 36, .92); color: #fff; font: 10.5px/13px var(--nk-mono); }
+
+#panel .opt { grid-template-columns: auto minmax(0, 1fr); height: 34px; align-items: center; }
+#panel .opt .otxt { display: grid; min-width: 0; text-align: left; line-height: 1.25; }
+#panel .opt .otxt b { font-size: 11.5px; }
+#panel .opt .osub { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--nk-mono); color: var(--nk-text-3); }
+#panel .opt.on .osub { color: var(--nk-text-2); }
+
+#panel .dsec.staged h3 { white-space: nowrap; min-width: 0; }
+#panel .dsec.staged h3 .where { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#panel .opt { height: 32px; }
+#panel .diff { font-size: 10.5px; line-height: 16px; }
+#panel .doc-foot { padding: 4px 14px 5px; }
+#panel .doc-foot button { height: 24px; }
+#panel .opt { height: 30px; }
+#panel .dsec.staged { gap: 3px; padding: 5px 14px 3px; }
+#panel .doc-foot { padding: 3px 14px 4px; }

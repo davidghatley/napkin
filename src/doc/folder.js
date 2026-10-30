@@ -361,7 +361,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return flat.find((n) => n.start === start) || null;
   }
   // Apply a batch: { baseRevision, edits, by } -> { ok, revision, changed } (throws DocError/EditRefused).
-  function edit(id, { baseRevision, edits, by = 'unknown', summary } = {}) {
+  // { dryRun }: plan the edit and say what the files would hold, writing nothing (the canvas previews with exactly these bytes).
+  function edit(id, { baseRevision, edits, by = 'unknown', summary, dryRun = false } = {}) {
     const comp = component(id);
     if (!Array.isArray(edits) || !edits.length) throw new DocError('send { edits: [...] }', 400);
     const base = read(comp.path);
@@ -429,8 +430,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       }
     });
     const changed = [...texts].filter(([path, s]) => s !== read(path).s);
-    if (!changed.length) return { ok: true, revision: read(comp.path).rev, changed: [], component: comp.id, noop: true };
+    if (!changed.length) return { ok: true, ...(dryRun && { dryRun: true, files: [] }), revision: read(comp.path).rev, changed: [], component: comp.id, noop: true };
     const files = changed.map(([path, s]) => ({ path, before: read(path).s, after: s }));
+    if (dryRun) return { ok: true, dryRun: true, component: comp.id, changed: files.map((f) => f.path), files: files.map((f) => ({ path: f.path, text: fromL(f.after) })) };
     write(files);
     const step = { by, at: Date.now(), files, edits, summary: summary || summarize(edits) };
     push(undo, comp.id, step); redo.set(comp.id, (redo.get(comp.id) || []).filter((x) => x.by !== by));

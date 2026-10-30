@@ -102,7 +102,7 @@ export function nearest(prop, token, groups) {
   }
   if (kind === 'space' || kind === 'radius' || kind === 'size' || kind === 'leading') {
     const px = parseLength(token); if (px === null || !/(px|rem)$/i.test(token)) return null;
-    const best = groups[kind].map((v) => ({ v, d: Math.abs(v.px - px) })).filter((x) => x.d <= Math.max(1, px * 0.1)).sort((a, b) => a.d - b.d || a.v.name.localeCompare(b.v.name))[0];
+    const best = groups[kind].map((v) => ({ v, d: Math.abs(v.px - px) })).filter((x) => x.d <= (px < 12 ? 0.5 : Math.max(1, px * 0.1))).sort((a, b) => a.d - b.d || a.v.name.localeCompare(b.v.name))[0];
     return best ? { name: best.v.name, value: best.v.value, exact: best.d < 0.01 } : null;
   }
   return null;

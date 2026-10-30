@@ -30,7 +30,9 @@ test('the strips: swatch, scale and type', () => {
 
 test('off scale: raw colours and lengths are flagged with the nearest variable; variables, 0, em and unknowns are not', () => {
   assert.equal(kindOfProp('padding-left'), 'space'); assert.equal(kindOfProp('border-top-left-radius'), 'radius'); assert.equal(kindOfProp('display'), null);
-  assert.deepEqual(offScale('padding', '11px', g).map((o) => [o.token, o.name, o.exact]), [['11px', '--space-3', false]]);
+  assert.deepEqual(offScale('padding', '13px', g).map((o) => [o.token, o.name, o.exact]), [['13px', '--space-3', false]]);
+  assert.deepEqual(offScale('padding', '1px 7px', g), [], 'under 12px a near miss is not flagged: a border or a hairline can account for the pixel');
+  assert.deepEqual(offScale('padding', '5px', g), [], '5px is a pixel off --space-1 (4px), and under 12px');
   assert.deepEqual(offScale('padding', '4px 12px', g).map((o) => [o.token, o.name, o.exact]), [['4px', '--space-1', true], ['12px', '--space-3', true]]);
   assert.deepEqual(offScale('padding', 'var(--space-1) 0', g), []);
   assert.deepEqual(offScale('padding', '0.5em', g), [], 'em is relative to the text');
@@ -44,7 +46,8 @@ test('off scale: raw colours and lengths are flagged with the nearest variable; 
   assert.deepEqual(offScale('line-height', '25px', g).map((o) => o.name), ['--leading-body']);
   assert.deepEqual(offScale('color', 'red', g), [], 'red is nowhere near the folder’s colours');
   assert.deepEqual(offScale('border', '1px solid #16181d', g).map((o) => [o.token, o.name]), [['#16181d', '--ink']], 'the hairline is a border width, not a space');
-  assert.equal(nearest('border-radius', '3px', g).name, '--radius-1');
+  assert.equal(nearest('border-radius', '2px', g).exact, true);
+  assert.equal(nearest('border-radius', '3px', g), null, 'a pixel off, under 12px: not near');
   assert.equal(nearest('margin', '10px', { ...g, space: [] }), null, 'no space variables, nothing to offer');
 });
 

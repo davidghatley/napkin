@@ -4,6 +4,7 @@
 import { kindOfProp } from './inspector-model.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const expanded = new Set(); // strips the person opened (each starts as one row)
 const TITLES = { color: 'Colour', space: 'Space', radius: 'Radius', size: 'Size', type: 'Type' };
 // the properties a variable of each kind can go into, in the order a designer reaches for them
 const PROPS = { color: ['color', 'background-color', 'border-color', 'fill', 'outline-color'], space: ['padding', 'margin', 'gap', 'padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'row-gap', 'column-gap'], radius: ['border-radius'], size: ['font-size', 'line-height'], type: ['font-family', 'font'] };
@@ -23,7 +24,8 @@ export function stripsHtml(groups, used = new Set(), filter = '') {
         : `<span class="ivbar" style="width:${Math.max(2, Math.min(44, v.px * 1.1))}px"></span>`;
       return `<button type="button" class="ivchip vc-${g}" tabindex="${i === 0 ? 0 : -1}" data-var="${esc(v.name)}" data-group="${g}" data-value="${esc(v.value)}" title="${esc(v.name)}: ${esc(v.value)}. Click to use it on the value you are on, or drag it onto an element." aria-label="${esc(v.name)} ${esc(v.value)}">${sample}${dot}<span class="ivname">${esc(v.name.replace(/^--/, ''))}</span>${g === 'color' ? '' : `<span class="ivval">${esc(String(v.value).slice(0, 14))}</span>`}</button>`;
     };
-    return `<div class="ivstrip vs-${g}" role="group" aria-label="${TITLES[g]} variables"><h4>${TITLES[g]} <small>${items.length}</small></h4><div class="ivchips">${items.map((v, i) => chip(v, i)).join('')}</div></div>`;
+    const open = expanded.has(g) || !!f || items.length < 7;
+    return `<div class="ivstrip vs-${g}" role="group" aria-label="${TITLES[g]} variables"><h4>${TITLES[g]} <small>${items.length}</small>${items.length < 7 || f ? '' : `<button type="button" class="ivmore" data-strip="${g}" aria-expanded="${open}">${open ? 'show fewer' : 'show all'}</button>`}</h4><div class="ivchips"${open ? '' : ' data-collapsed="1"'}>${items.map((v, i) => chip(v, i)).join('')}</div></div>`;
   }).join('');
   return sec || '<p class="hint">No variables match.</p>';
 }
@@ -37,6 +39,8 @@ export function wireStrips(env) {
   const body = root.querySelector('#doc-vars-body');
   filter?.addEventListener('input', () => { body.innerHTML = env.render(filter.value); });
   root.addEventListener('click', (ev) => {
+    const more = ev.target.closest?.('.ivmore');
+    if (more) { const g = more.dataset.strip; if (expanded.has(g)) expanded.delete(g); else expanded.add(g); body.innerHTML = env.render(filter.value); body.querySelector(`.ivmore[data-strip="${g}"]`)?.focus(); return; }
     const chip = ev.target.closest?.('.ivchip'); if (!chip || chip.dataset.dragged) { if (chip) delete chip.dataset.dragged; return; }
     env.bind(chip.dataset.var, chip.dataset.group, chip.dataset.value);
   });
@@ -52,7 +56,12 @@ export function wireStrips(env) {
   const lit = (name) => { try { name ? ctx.stage?.highlight?.({ variable: name }) : ctx.stage?.clearHighlight?.(); } catch { /* the stage may not know */ } };
   root.addEventListener('pointerover', (ev) => { const c = ev.target.closest?.('.ivchip'); if (c) lit(c.dataset.var); });
   root.addEventListener('pointerout', (ev) => { if (ev.target.closest?.('.ivchip')) lit(null); });
-  root.addEventListener('focusin', (ev) => { const c = ev.target.closest?.('.ivchip'); if (c) lit(c.dataset.var); });
+  root.addEventListener('focusin', (ev) => {
+    const c = ev.target.closest?.('.ivchip'); if (!c) return;
+    lit(c.dataset.var);
+    const chips = c.closest('.ivchips');
+    if (chips?.dataset.collapsed && c.offsetTop > 4) { expanded.add(c.dataset.group); const v = c.dataset.var; body.innerHTML = env.render(filter.value); body.querySelector(`.ivchip[data-var="${CSS.escape(v)}"]`)?.focus(); }
+  });
   root.addEventListener('focusout', (ev) => { if (ev.target.closest?.('.ivchip')) lit(null); });
 
   // ---- drag a variable onto an element (pointer events, so the same code serves a mouse, a pen and a test) ----
@@ -93,14 +102,14 @@ export function wireStrips(env) {
 }
 
 // "Which property?": a small modal list, native <dialog> so Tab, Escape and focus return are the browser's.
-export function askProp({ name, group, value, setHere, target }) {
+export function askProp({ name, group, value, setHere, target, hint = '' }) {
   return new Promise((resolve) => {
     const props = [...new Set([...setHere, ...propsFor(group, value)])];
     const d = document.createElement('dialog');
     d.className = 'ivask'; d.setAttribute('aria-label', `Use ${name} on`);
     d.innerHTML = `<form method="dialog"><h2>Use <code>${esc(name)}</code> on <code>${esc(target)}</code></h2>
       <div class="ivopts">${props.map((p, i) => `<button type="submit" value="${esc(p)}"${i === 0 ? ' autofocus' : ''}>${esc(p)}${setHere.includes(p) ? '<span class="ivset">set here</span>' : ''}</button>`).join('')}</div>
-      <p class="hint">Esc to cancel</p></form>`;
+      <p class="hint">${esc(hint)}</p><p class="hint">Esc to cancel</p></form>`;
     d.addEventListener('close', () => { const v = d.returnValue || null; d.remove(); resolve(v); });
     document.body.append(d); d.showModal();
   });

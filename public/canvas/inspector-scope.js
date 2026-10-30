@@ -25,6 +25,8 @@ export function varChange(oldValue, typed) {
   return a.length === 1 && v && b.length === 1 && !/var\(/.test(typed) ? { name: v, value: typed.trim() } : null;
 }
 
+// "padding-left still wins from .card.big" (and why), the first thing that would keep a new value from showing
+const loseText = (lost) => (lost.length ? `${lost[0].props.join(', ')} still ${lost[0].by.kind === 'inline' ? 'comes from the inline style' : `wins from ${lost[0].by.selector}`} (${lost[0].why})` : null);
 const cmp3 = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 const styleAfter = (before, prop, value) => {
   const list = parseInline(before || '');
@@ -36,7 +38,7 @@ const styleAfter = (before, prop, value) => {
 
 // in: { prop, typed, comp: { path }, node: { node, line, attrs }, classes, matched, winner, vars, data, uses }
 //   typed:   what the person typed (already normalised); bound: the same with exact scale values as var()
-export function scopeOptions({ prop, typed, bound, comp, node, classes, matched, winner: w0, vars, data, uses = {}, wouldLose = () => [] }) {
+export function scopeOptions({ prop, typed, bound, comp, node, classes, matched, winner: w0, vars, data, uses = {}, wouldLose = () => [], forceRule = null }) {
   const winner = w0?.source?.kind === 'none' ? null : w0; // a property nothing sets yet has no winner
   const value = bound ?? typed;
   const out = [];
@@ -45,28 +47,31 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
   // E: this element (an inline style)
   const before = node.attrs?.style;
   const had = parseInline(before || '').find((d) => d.prop.toLowerCase() === prop.toLowerCase());
+  const elLost = wouldLose(null, prop, false);
   out.push({
-    id: 'element', key: 'E', title: 'This element', code: null, count: 1, countText: '1',
+    id: 'element', key: 'E', title: 'Element', code: null, count: 1, countText: '1',
     sub: `inline style · ${comp.path}:${node.line}`,
     edit: { op: 'style', node: node.node, prop, value },
     preview: { selector: null, media: null },
+    warn: loseText(elLost), losers: elLost,
     diff: { head: `${comp.path} · this element`, lines: [...(before !== undefined && had ? [{ kind: 'del', line: node.line, text: `style="${before}"` }] : []), { kind: 'add', line: node.line, text: `style="${styleAfter(before, prop, value)}"` }] },
   });
 
   // C: this class (or the rule the value lives in)
   const hit = classTarget(matched, prop, classes);
   const wRule = winner?.source?.kind === 'rule' ? data.rules[winner.source.order] : null;
-  const rule = hit?.rule ?? wRule;
+  // a value the element inherits is edited in the rule of the ancestor it comes from; a rule can also be named (to fix a value that does not show)
+  const rule = (forceRule !== null && data.rules[forceRule]) || (winner?.state === 'inherited' ? wRule : hit?.rule ?? wRule);
   if (rule) {
-    const single = /^\.[\w-]+$/.test(hit?.part ?? rule.selector.trim());
+    const single = /^\.[\w-]+$/.test(rule === hit?.rule ? hit.part : rule.selector.trim());
     const d = rule.decls.find((x) => x.prop.toLowerCase() === prop.toLowerCase());
     const u = uses.rule?.(rule) ?? null;
-    const m = hit ?? matched.find((x) => x.rule === rule);
+    const m = matched.find((x) => x.rule === rule);
     const lost = m ? wouldLose(m, prop, !!d?.important) : []; // what would still beat the new value, so the preview and the file agree
     out.push({
-      id: 'class', key: 'C', title: single ? 'Class' : 'Rule', code: single ? (hit?.part ?? rule.selector) : rule.selector, count: u?.count ?? null, countText: u ? `${u.count} use${u.count === 1 ? '' : 's'}` : '',
+      id: 'class', key: 'C', title: single ? 'Class' : 'Rule', code: single ? rule.selector.trim() : rule.selector, count: u?.count ?? null, countText: u ? `${u.count} use${u.count === 1 ? '' : 's'}` : '',
       sub: `${rule.file.split('/').pop()}:${rule.line}${u?.where ? ` · ${u.where}` : ''}`,
-      warn: lost.length ? `${lost[0].props.join(', ')} still ${lost[0].by.kind === 'inline' ? 'comes from the inline style' : `wins from ${lost[0].by.selector}`}` : null,
+      warn: loseText(lost), losers: lost,
       preview: { selector: rule.selector, media: rule.media.at(-1) ?? null },
       edit: { op: 'rule', file: rule.file, selector: rule.selector, media: rule.media.at(-1) ?? '', index: index(rule), prop, value },
       diff: { head: `${rule.file} · ${rule.selector}${rule.media.length ? ` @media ${rule.media.at(-1)}` : ''}`, lines: [...(d ? [{ kind: 'del', line: d.line, text: declLine(prop, d.value, d.important) }] : []), { kind: 'add', line: d ? d.line : (rule.decls.at(-1)?.line ?? rule.line) + 1, text: declLine(prop, value, d?.important) }] },
