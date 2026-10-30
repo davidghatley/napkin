@@ -50,7 +50,8 @@ test('round 4: a rule in an @imported sheet is previewed, and Apply equals it', 
     await a.typeIn('#pv-padding', '20px');
     await previewing(a);
     await a.io.key('c', { alt: true, code: 'KeyC' });
-    await sleep(900);
+    await a.browser.waitFor(`getComputedStyle(napkin.stage.sections.get('p.html').docFrame.element(${JSON.stringify(n.node)}).el)['padding-top'] === '20px'`, 10000);
+    await sleep(600);
     assert.doesNotMatch(await a.q(`document.querySelector('#doc-staged .scopenote').textContent`), /won’t show|something else|can’t show/);
     const previewed = await snapshot(a, 'p.html', n.node);
     assert.equal(previewed['padding-top'], '20px', 'the imported rule shows the change');

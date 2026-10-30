@@ -55,3 +55,16 @@ test('shorthand: expansion basics on a small file', () => {
   assert.equal(c.props.font.state, 'partial'); assert.deepEqual(c.props.font.lost[0].props, ['font-size']);
   assert.equal(c.props['font-size'].value, '20px');
 });
+
+test('shorthand: font then font-variant-numeric in one rule: the font row is partly overridden, on the server and in the canvas cascade', { skip: !ss }, () => {
+  const e = eng(), id = 'components/Table/preview.html';
+  const n = find(e, id, (x) => /\bnum\b/.test(x.attrs.class || '')) || find(e, id, (x) => x.tag === 'td');
+  const at = e.rulesAt(id, n.node, { width: 800 }).node;
+  // .ss-label (components.css:50): font: 500 11px/16px …; font-variant-numeric: tabular-nums in the same rule
+  const lab = find(e, 'components/Callout/preview.html', (x) => /\bss-label\b/.test(x.attrs.class || ''));
+  const l = e.rulesAt('components/Callout/preview.html', lab.node, { width: 800 }).node;
+  assert.equal(l.props.font.state, 'partial', 'font loses font-variant-numeric to the declaration after it');
+  assert.deepEqual(l.props.font.lost[0].props, ['font-variant-numeric']);
+  assert.equal(l.props['font-variant-numeric'].state, 'applied');
+  void at;
+});

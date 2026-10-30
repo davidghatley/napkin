@@ -38,9 +38,10 @@ const styleAfter = (before, prop, value) => {
 
 // in: { prop, typed, comp: { path }, node: { node, line, attrs }, classes, matched, winner, vars, data, uses }
 //   typed:   what the person typed (already normalised); bound: the same with exact scale values as var()
-export function scopeOptions({ prop, typed, bound, comp, node, classes, matched, winner: w0, vars, data, uses = {}, wouldLose = () => [], forceRule = null }) {
+export function scopeOptions({ prop, typed, bound, comp, node, classes, matched, winner: w0, vars, data, uses = {}, wouldLose = () => [], forceRule = null, important = false }) {
   const winner = w0?.source?.kind === 'none' ? null : w0; // a property nothing sets yet has no winner
   const value = bound ?? typed;
+  const flagged = (v) => (important ? `${v} !important` : v); // a typed !important is written, not typed into the value
   const out = [];
   const index = (r) => data.rules.filter((x) => x.file === r.file && x.kind === 'style' && normSel(x.selector) === normSel(r.selector) && normMedia(x.media.at(-1)) === normMedia(r.media.at(-1))).indexOf(r);
 
@@ -51,10 +52,10 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
   out.push({
     id: 'element', key: 'E', title: 'Element', code: null, count: 1, countText: '1',
     sub: `inline style · ${comp.path}:${node.line}`,
-    edit: { op: 'style', node: node.node, prop, value },
+    edit: { op: 'style', node: node.node, prop, value: flagged(value) },
     preview: { selector: null, media: null },
     warn: loseText(elLost), losers: elLost,
-    diff: { head: `${comp.path} · this element`, lines: [...(before !== undefined && had ? [{ kind: 'del', line: node.line, text: `style="${before}"` }] : []), { kind: 'add', line: node.line, text: `style="${styleAfter(before, prop, value)}"` }] },
+    diff: { head: `${comp.path} · this element`, lines: [...(before !== undefined && had ? [{ kind: 'del', line: node.line, text: `style="${before}"` }] : []), { kind: 'add', line: node.line, text: `style="${styleAfter(before, prop, flagged(value))}"` }] },
   });
 
   // C: this class (or the rule the value lives in)
@@ -73,8 +74,8 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
       sub: `${rule.file.split('/').pop()}:${rule.line}${rule.media.length ? ` · in @media ${rule.media.at(-1)}` : ''}${u?.where ? ` · ${u.where}` : ''}`,
       warn: loseText(lost), losers: lost,
       preview: { selector: rule.selector, media: rule.media.at(-1) ?? null },
-      edit: { op: 'rule', file: rule.file, selector: rule.selector, media: rule.media.at(-1) ?? '', index: index(rule), prop, value },
-      diff: { head: `${rule.file} · ${rule.selector}${rule.media.length ? ` @media ${rule.media.at(-1)}` : ''}`, lines: [...(d ? [{ kind: 'del', line: d.line, text: declLine(prop, d.value, d.important) }] : []), { kind: 'add', line: d ? d.line : (rule.decls.at(-1)?.line ?? rule.line) + 1, text: declLine(prop, value, d?.important) }] },
+      edit: { op: 'rule', file: rule.file, selector: rule.selector, media: rule.media.at(-1) ?? '', index: index(rule), prop, value: important && !d?.important ? flagged(value) : value },
+      diff: { head: `${rule.file} · ${rule.selector}${rule.media.length ? ` @media ${rule.media.at(-1)}` : ''}`, lines: [...(d ? [{ kind: 'del', line: d.line, text: declLine(prop, d.value, d.important) }] : []), { kind: 'add', line: d ? d.line : (rule.decls.at(-1)?.line ?? rule.line) + 1, text: declLine(prop, value, important || d?.important) }] },
     });
   } else out.push({ id: 'class', key: 'C', title: 'Class', code: null, disabled: true, why: classes.length ? 'No rule for this class yet in the folder’s stylesheets' : 'This element has no class', sub: classes.length ? 'add the property in a class by hand first' : 'add a class above to use this scope' });
 
@@ -82,7 +83,7 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
   const change = varChange(winner?.value ?? '', typed);
   const info = change && vars[change.name];
   const src = info?.source;
-  if (change && src?.kind === 'rule') {
+  if (change && src?.kind === 'rule' && !important) {
     const defs = (data.vars?.[change.name] || []).filter((x) => !x.inline);
     const bucket = defs.filter((x) => x.file === src.file && normMedia(x.media.at(-1)) === normMedia(src.media.at(-1)));
     const k = Math.max(0, bucket.findIndex((x) => x.line === src.declLine && normSel(x.selector) === normSel(src.selector)));
@@ -97,7 +98,7 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
     });
   } else out.push({
     id: 'variable', key: 'V', title: 'Variable', code: null, disabled: true,
-    why: !/var\(/.test(winner?.value ?? '') ? 'This value is not a variable yet' : /var\(/.test(typed) && !tokens(winner?.value ?? '').some((t) => /^var\(/.test(t) && !tokens(typed).includes(t)) ? 'Nothing here replaces a variable with a plain value' : info && src?.kind === 'inline' ? 'The variable is set inline on an ancestor' : 'Change one variable’s part of the value to a plain value to edit it',
+    why: important ? '!important cannot go on a variable’s value' : !/var\(/.test(winner?.value ?? '') ? 'This value is not a variable yet' : /var\(/.test(typed) && !tokens(winner?.value ?? '').some((t) => /^var\(/.test(t) && !tokens(typed).includes(t)) ? 'Nothing here replaces a variable with a plain value' : info && src?.kind === 'inline' ? `The variable is set inline on ${info.inherited ? 'an ancestor' : 'this element'}` : 'Change one variable’s part of the value to a plain value to edit it',
     sub: !/var\(/.test(winner?.value ?? '') ? 'bind one from the strips below, or type var(--name)' : 'edit one part of the value',
   });
   return out;

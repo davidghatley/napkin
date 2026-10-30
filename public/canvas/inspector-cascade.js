@@ -107,7 +107,9 @@ const SH = {
   gap: ['row-gap', 'column-gap'], 'grid-gap': ['row-gap', 'column-gap'], overflow: ['overflow-x', 'overflow-y'],
   outline: ['outline-width', 'outline-style', 'outline-color'],
   background: ['background-color', 'background-image', 'background-position', 'background-size', 'background-repeat', 'background-attachment', 'background-origin', 'background-clip'],
-  font: ['font-style', 'font-variant', 'font-weight', 'font-stretch', 'font-size', 'line-height', 'font-family'],
+  // `font` also resets the parts of font-variant and the other font properties it does not name
+  font: ['font-style', 'font-variant-caps', 'font-variant-numeric', 'font-variant-ligatures', 'font-variant-east-asian', 'font-variant-alternates', 'font-variant-position', 'font-weight', 'font-stretch', 'font-size', 'line-height', 'font-family', 'font-size-adjust', 'font-kerning', 'font-feature-settings', 'font-variation-settings', 'font-language-override', 'font-optical-sizing'],
+  'font-variant': ['font-variant-caps', 'font-variant-numeric', 'font-variant-ligatures', 'font-variant-east-asian', 'font-variant-alternates', 'font-variant-position'],
   'text-decoration': ['text-decoration-line', 'text-decoration-style', 'text-decoration-color', 'text-decoration-thickness'],
   'list-style': ['list-style-type', 'list-style-position', 'list-style-image'], flex: ['flex-grow', 'flex-shrink', 'flex-basis'],
 };
@@ -121,7 +123,7 @@ const sayLost = (lost, own) => {
   return [...out, ...left];
 };
 // properties a child takes from its parent when nothing sets them on it
-const INHERITED = ['color', 'font-family', 'font-size', 'font-style', 'font-variant', 'font-weight', 'font-stretch', 'line-height', 'letter-spacing', 'word-spacing', 'text-align', 'text-indent', 'text-transform', 'white-space', 'cursor', 'visibility', 'direction', 'list-style-type', 'list-style-position', 'quotes', 'caret-color', 'text-shadow', 'tab-size', 'word-break', 'overflow-wrap', 'hyphens', 'fill', 'stroke'];
+const INHERITED = ['color', 'font-family', 'font-size', 'font-style', 'font-variant-caps', 'font-variant-numeric', 'font-weight', 'font-stretch', 'line-height', 'letter-spacing', 'word-spacing', 'text-align', 'text-indent', 'text-transform', 'white-space', 'cursor', 'visibility', 'direction', 'list-style-type', 'list-style-position', 'quotes', 'caret-color', 'text-shadow', 'tab-size', 'word-break', 'overflow-wrap', 'hyphens', 'fill', 'stroke'];
 
 const sameProp = (a, b) => (a.startsWith('--') || b.startsWith('--') ? a === b : a.toLowerCase() === b.toLowerCase());
 

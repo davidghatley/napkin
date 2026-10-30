@@ -230,7 +230,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const v = explain.vars[name];
     if (!v) return `<div class="decl ro"><code class="prop">${esc(name)}</code><span class="val">${esc(cs?.getPropertyValue(name).trim() || 'not defined')}</span><span class="src">not defined</span></div>`;
     const s = v.source;
-    if (s.kind !== 'rule') return `<div class="decl ro"><code class="prop">${esc(name)}</code><span class="val">${esc(v.value)}</span><span class="src">set inline</span></div>`;
+    if (s.kind !== 'rule') return `<div class="decl ro" data-ro="${esc(name)}"><code class="prop">${esc(name)}</code><span class="val">${esc(v.value)}</span><span class="src">set inline on ${v.inherited ? 'an ancestor' : 'this element'}</span></div>`;
     const defs = (data.vars?.[name] || []).filter((x) => !x.inline);
     const bucket = defs.filter((x) => x.file === s.file && normMedia(x.media.at(-1)) === normMedia(s.media.at(-1)));
     const k = Math.max(0, bucket.findIndex((x) => x.line === s.declLine && normSel(x.selector) === normSel(s.selector)));
@@ -348,14 +348,23 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   };
   const optionsFor = () => scopeOptions({
     prop: staged.prop, typed: staged.typed, bound: staged.raw ? null : bindExact(staged.prop, staged.typed, groups), comp, node: { ...node, node: sel.node }, classes,
-    matched: cas ? cas.matched(target) : [], winner: winners[staged.prop], vars: explain.vars, data, uses,
+    matched: cas ? cas.matched(target) : [], winner: winners[staged.prop], vars: explain.vars, data, uses, important: !!staged.important,
     wouldLose: (m, prop, imp) => cas.wouldLose(target, m, prop, imp), forceRule: staged.forceRule ?? null,
   });
   const chosenOf = (opts) => opts.find((o) => o.id === staged.scope && !o.disabled) || opts.find((o) => !o.disabled);
   // The staged change shows on the canvas before it is written, and it is the change itself: the engine plans the edit
   // without writing it (dryRun) and those exact bytes replace the file in every frame (inspector-preview.js). Then the
   // value is read back from the frame: if it did not take, the person is told why and what would work.
-  let pvTok = 0, pvKey = null;
+  let pvTok = 0, pvKey = null, animName = null;
+  // a running animation that sets this property wins over every rule, so a value typed here will not show
+  function animatedBy(prop) {
+    if (!prop || !target?.getAnimations) return null;
+    try {
+      const camel = (p) => p.replace(/-([a-z])/g, (m, c) => c.toUpperCase()), keys = new Set(longhandsOf(prop).map(camel));
+      for (const an of target.getAnimations()) { if (!an.animationName) continue; for (const kf of an.effect.getKeyframes()) for (const k of Object.keys(kf)) if (keys.has(k)) return an.animationName; }
+    } catch { /* no animations to read */ }
+    return null;
+  }
   async function preview(opt) {
     const tok = ++pvTok;
     if (!opt || !target || staged?.invalid) { pvKey = null; pv.clear(); return; }
@@ -366,13 +375,33 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (tok !== pvTok || !staged) return;
     if (!j.ok) { pvKey = null; pv.clear(); showError(plain(j.error)); return; }
     showError(''); pvKey = key;
+    pv.clear(); animName = animatedBy(opt.edit.prop); // read with the page as it runs, before the preview holds animations still
     const shown = await pv.apply(j.files || []);
     await new Promise((res) => requestAnimationFrame(res));
     if (tok !== pvTok || !staged) return;
     // a change the frames cannot show is said so; it is never reported as a rule that loses
     const unseen = (j.files || []).find((f) => !shown.has(f.path));
-    const fx = unseen ? { unseen: unseen.path } : effectOf(opt);
+    const fx = animName ? { animation: animName } : unseen ? { unseen: unseen.path } : effectOf(opt);
     if (JSON.stringify(fx) !== JSON.stringify(staged.fx?.[key])) { staged.fx = { [key]: fx }; renderStaged(); }
+  }
+  // The computed longhands of `prop: value` on a bare copy of this element (null when the browser would not take it).
+  function computedOf(prop, value) {
+    if (!target?.isConnected || prop.startsWith('--') || !validValue(prop, value)) return null;
+    const tcs = win.getComputedStyle(target), probe = target.cloneNode(false);
+    for (const a of ['id', 'class', 'style', 'data-napkin-prev']) probe.removeAttribute(a);
+    const keep = Object.keys(explain.vars).map((n) => `${n}:${tcs.getPropertyValue(n)}`).join(';');
+    probe.style.cssText = `position:absolute;visibility:hidden;pointer-events:none;font-size:${tcs.fontSize};color:${tcs.color};${keep};${prop}:${value}`;
+    if (probe.style.getPropertyValue(prop) === '') return null;
+    target.after(probe);
+    const pcs = win.getComputedStyle(probe), out = longhandsOf(prop).map((l) => pcs.getPropertyValue(l)).join('|');
+    probe.remove();
+    return out;
+  }
+  // `#f00` over `red`, `0px` over `0`: the same value said differently is no change (a variable binding is a change)
+  function sameMeaning(prop, typed, current) {
+    if (/var\(/.test(typed) || /var\(/.test(current)) return false;
+    const a = computedOf(prop, typed), b = computedOf(prop, current);
+    return a !== null && a === b;
   }
   // Does the typed value show on this element now? The same value on a bare copy of it (nothing else styling it) is what
   // the browser would paint with no competition; any longhand that differs lost to something else.
@@ -400,6 +429,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   function whyNot(opt, fx) {
     if (!fx) return null;
     if (fx.invalid) return { text: `not a value ${staged.prop} accepts` };
+    if (fx.animation) return { text: `won’t show: animation ${fx.animation} controls ${staged.prop}` };
     if (fx.unseen) return { text: /\.css$/i.test(fx.unseen) ? `this rule is in an @imported sheet (${base(fx.unseen)}); the preview can’t show it` : `this change is in ${base(fx.unseen)}; the preview can’t show it` };
     const l = opt.losers?.[0];
     if (!l) return { text: `won’t show: something else on the page wins ${fx.bad.slice(0, 2).join(', ')}` };
@@ -451,14 +481,15 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   function stage(prop, text) {
     const w = winners[prop];
     if (!w) return false;
-    const t = text.trim();
-    if (!t) { staged = null; renderStaged(); return false; }
-    if (t === w.value || normalizeTyped(prop, t) === w.value) { staged = null; renderStaged(); ctx.hint(`No change: ${prop} is already ${w.value}`); return false; }
+    const raw = text.trim();
+    if (!raw) { staged = null; renderStaged(); return false; }
+    const important = /\s*!\s*important\s*$/i.test(raw), t = raw.replace(/\s*!\s*important\s*$/i, '').trim(); // !important is written as the flag it is
+    if (!important && (t === w.value || normalizeTyped(prop, t) === w.value || sameMeaning(prop, normalizeTyped(prop, t), w.value))) { staged = null; renderStaged(); ctx.hint(`No change: ${prop} is already ${w.value}`); return false; }
     const prev = staged?.prop === prop ? staged : null;
     const field = el.querySelector(`.vrow input[data-prop="${CSS.escape(prop)}"]`); // a variable bound from the strips shows in the field
     if (field && field.value !== text) field.value = text;
     const typed0 = normalizeTyped(prop, t);
-    staged = { key: selKey, prop, text, typed: typed0, invalid: !validValue(prop, typed0), raw: prev?.raw ?? false, scope: prev?.scope ?? null, forceRule: prev?.forceRule ?? null };
+    staged = { key: selKey, prop, text, typed: typed0, important, invalid: !validValue(prop, typed0), raw: prev?.raw ?? false, scope: prev?.scope ?? null, forceRule: prev?.forceRule ?? null };
     const opts = optionsFor();
     if (!staged.scope || !opts.find((o) => o.id === staged.scope && !o.disabled)) staged.scope = defaultScope(opts, w);
     renderStaged();
