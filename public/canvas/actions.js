@@ -65,7 +65,7 @@ export const ACTIONS = [
   action('proposals-keys', 'Proposals tray: move / show ghost / accept / reject / fold', '↑ ↓ · Enter · A · R · Escape', ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'a', 'A', 'r', 'R'], refs('proposals', 'keydown')),
   action('clash', 'Clash chip: use mine or keep theirs', 'Tab to the chip, then Enter', [], []),
   action('versions', 'Versions: open the film strip of the selected component', 'H', ['h', 'H'], refs('time-strip', 'keydown'), (c) => c.time?.toggle(), 'view'),
-  action('versions-scrub', 'Versions: older / newer · first / now · restore · close', '← → · Home · End · Enter · Escape', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', 'Escape'], refs('time-strip', 'keydown')),
+  action('versions-scrub', 'Versions: older / newer · first / now · before / after · restore · close', '← → · Home · End · B · Enter · Escape', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', 'Escape', 'b', 'B'], refs('time-strip', 'keydown')),
   action('versions-restore', 'Film strip: restore the picked frame', 'Enter in the strip', [], [], (c) => c.time?.restore(), 'edit'),
   action('copy-code', 'Copy the element as code (its HTML or JSX and the CSS that applies)', 'Ctrl/Cmd+C', [], [], (c) => c.copyCode?.copy(), 'edit'),
   action('paste-code', 'Paste copied code into the selected element', 'Ctrl/Cmd+V', [], [], (c) => c.copyCode?.pasteFromClipboard(), 'edit'),

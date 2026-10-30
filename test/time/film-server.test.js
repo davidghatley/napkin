@@ -2,7 +2,7 @@
 // one undo step through the engine, a version drawn by /view, and the copy payload (exact bytes, exact rule text).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -38,52 +38,124 @@ async function boot({ git = false } = {}) {
 }
 const find = (list, tag) => { for (const n of list) { if (n.tag === tag) return n; const f = find(n.children, tag); if (f) return f; } return null; };
 
-test('film: napkin keeps its edits outside the folder, lists them, previews and restores one as a single undo step', async () => {
+test('film: napkin keeps its edits outside the folder, merges a run of one thing, previews and restores one as a single undo step', async () => {
   const t = await boot();
   try {
     const before = tree(t.dir);
     const first = readFileSync(join(t.dir, 'card.html'));
-    const tr = await t.get('/api/component/card.html');
-    const h2 = find(tr.tree, 'h2');
-    let r = await t.post('/api/edit', { component: 'card.html', baseRevision: tr.revision, edits: [{ op: 'text', node: h2.node, value: 'Two' }] });
-    assert.equal(r.ok, true);
-    const tr2 = await t.get('/api/component/card.html');
-    r = await t.post('/api/edit', { component: 'card.html', baseRevision: tr2.revision, edits: [{ op: 'text', node: find(tr2.tree, 'h2').node, value: 'Three' }] });
-    assert.equal(r.ok, true);
-
+    for (const v of ['Two', 'Three']) {
+      const tr = await t.get('/api/component/card.html');
+      const r = await t.post('/api/edit', { component: 'card.html', baseRevision: tr.revision, edits: [{ op: 'text', node: find(tr.tree, 'h2').node, value: v }] });
+      assert.equal(r.ok, true);
+    }
     const film = await t.get('/api/component/card.html/film');
     assert.equal(film.git, false);
-    assert.equal(film.frames.length, 3, 'as first seen, then two edits');
-    assert.deepEqual(film.frames.map((f) => f.by), ['you', 'you', 'file']);
-    assert.equal(film.frames[0].same, true, 'the newest frame is the file now');
-    const old = film.frames[2];
+    assert.equal(film.frames.length, 2, 'the file as first seen, and one run of two text edits');
+    assert.deepEqual(film.frames.map((f) => f.by), ['you', 'file']);
+    assert.equal(film.frames[0].count, 2); assert.equal(film.frames[0].what, 'One \u2192 Three', 'the run says what changed over all of it');
+    assert.equal(film.frames[0].same, true, 'the newest frame is the files now');
+    const old = film.frames[1];
     assert.match(old.summary, /first saw/);
+    assert.equal(film.frames[0].beforeId, old.id);
 
-    // a version is drawn by /view as that version of the file (the applied stylesheets and <base> are the only additions)
     const v = await t.text(`/view/card.html?version=${old.id}`);
     assert.match(v, /<h2>One<\/h2>/); assert.doesNotMatch(v, /Three/);
+    assert.match(v, /<base href="\/vraw\/card\.html\/[^/]+\/"/, 'a version draws from its own stylesheets');
     assert.match((await t.text('/view/card.html')), /<h2>Three<\/h2>/, 'the live view is untouched');
     const d = await t.get(`/api/component/card.html/film/${old.id}/diff`);
     assert.deepEqual([d.removed, d.added], [1, 1]);
 
-    // restore = one new edit: the file's bytes equal that version, one undo gives back the newest text exactly
     const res = await t.post('/api/component/card.html/film/restore', { frame: old.id });
     assert.equal(res.ok, true);
     assert.deepEqual(readFileSync(join(t.dir, 'card.html')), first, 'byte for byte the first version');
     const after = await t.get('/api/component/card.html/film');
-    assert.equal(after.frames.length, 4); assert.match(after.frames[0].summary, /^Restored the version from/);
+    assert.match(after.frames[0].summary, /^Restored the version from/);
     assert.equal((await t.get('/api/component/card.html/history')).history[0].summary.startsWith('Restored'), true);
-    const u = await t.post('/api/undo', { component: 'card.html' });
-    assert.equal(u.ok, true);
+    assert.equal((await t.post('/api/undo', { component: 'card.html' })).ok, true);
     assert.match(readFileSync(join(t.dir, 'card.html'), 'utf8'), /<h2>Three<\/h2>/, 'one undo undoes the whole restore');
-    assert.deepEqual(tree(t.dir).filter((x) => !x.startsWith('/card.html')), before.filter((x) => !x.startsWith('/card.html')), 'nothing else in the folder changed');
     assert.equal(tree(t.dir).length, before.length, 'no file was added to the folder');
-    // the history survives a restart: a new engine on the same state dir lists the same frames
+    // the history survives a restart
     t.eng.close();
     const eng2 = openFolder(t.dir, { stateDir: t.stateDir });
     const h = createDocRoutes(eng2, { identify: () => 'you' });
-    const out = await new Promise((resolve) => { const chunks = []; const res2 = { writeHead() {}, end: (b) => resolve(JSON.parse(b)) }; h({ method: 'GET', headers: {} }, res2, new URL('http://x/api/component/card.html/film')); void chunks; });
-    assert.ok(out.frames.length >= 5, `kept across a restart (${out.frames.length})`);
+    const out = await new Promise((resolve) => { h({ method: 'GET', headers: {} }, { writeHead() {}, end: (b) => resolve(JSON.parse(b)) }, new URL('http://x/api/component/card.html/film')); });
+    assert.ok(out.frames.length >= 2, `kept across a restart (${out.frames.length})`);
+    eng2.close();
+  } finally { t.stop(); }
+});
+
+test('film: a CSS edit is a frame of every component that uses the stylesheet; a version and a restore cover every file', async () => {
+  const t = await boot();
+  try {
+    writeFileSync(join(t.dir, 'pill.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="card.css"></head><body><span class="card">Pill</span></body></html>\n');
+    t.eng.rescan();
+    const cssBefore = readFileSync(join(t.dir, 'card.css'), 'utf8');
+    for (const id of ['card.html', 'pill.html']) await t.get(`/api/component/${id}/film`); // each is looked at once
+    const rules = (await t.get('/api/component/card.html/rules')).rules.find((r) => r.kind === 'style' && r.selector === '.card');
+    const r = await t.post('/api/edit', { component: 'pill.html', edits: [{ op: 'rule', file: 'card.css', selector: '.card', index: 0, prop: 'padding', value: '40px' }] });
+    assert.equal(r.ok, true, JSON.stringify(r)); void rules;
+    for (const id of ['card.html', 'pill.html']) {
+      const f = await t.get(`/api/component/${id}/film`);
+      assert.equal(f.frames.length, 2, `${id}: the stylesheet edit is a frame`);
+      assert.match(f.frames[0].what, /^padding 24px \u2192 40px/); assert.match(f.frames[0].where, /\.card/);
+    }
+    const f = await t.get('/api/component/pill.html/film');
+    const old = f.frames[1];
+    const v = await t.text(`/vraw/pill.html/${old.id}/card.css`);
+    assert.equal(v, cssBefore, 'the old stylesheet is served for the old version');
+    // restoring Pill's old version puts the stylesheet back (nobody else changed it since)
+    const res = await t.post('/api/component/pill.html/film/restore', { frame: old.id });
+    assert.equal(res.ok, true, JSON.stringify(res));
+    assert.equal(readFileSync(join(t.dir, 'card.css'), 'utf8'), cssBefore);
+    assert.deepEqual(res.changed, ['card.css'], 'one write, one step');
+    assert.equal((await t.post('/api/undo', { component: 'pill.html' })).ok, true);
+    assert.match(readFileSync(join(t.dir, 'card.css'), 'utf8'), /padding: 40px|padding:\s+40px/);
+    // now somebody works on Card's stylesheet rule: restoring Pill's older version would undo that, so it is refused with the reason
+    const f2 = await t.get('/api/component/pill.html/film');
+    const oldest = f2.frames.at(-1);
+    const r2 = await t.post('/api/edit', { component: 'card.html', edits: [{ op: 'rule', file: 'card.css', selector: '.card', index: 0, prop: 'border', value: '2px solid red' }] });
+    assert.equal(r2.ok, true);
+    const refused = await t.post('/api/component/pill.html/film/restore', { frame: oldest.id });
+    assert.equal(refused.ok, false); assert.match(refused.error, /card\.css is shared, and it changed at \d\d:\d\d while you worked on card\.html after this version/);
+    assert.match(readFileSync(join(t.dir, 'card.css'), 'utf8'), /2px solid red/, 'nothing was written');
+  } finally { t.stop(); }
+});
+
+test('film: identical bytes are one frame whichever source has them', async () => {
+  const t = await boot({ git: true });
+  try {
+    const f = await t.get('/api/component/card.html/film');
+    // the file as napkin first saw it is HEAD: one frame, not two
+    assert.equal(f.frames.filter((x) => x.same).length, 1);
+    assert.equal(f.frames.length, 2, 'two commits; "first saw it" is the second commit');
+    assert.deepEqual(f.frames.map((x) => x.source), ['git', 'git']);
+  } finally { t.stop(); }
+});
+
+test('film: 230 edits leave 200 frames and as many blobs; frames of a removed component are cleaned', async () => {
+  const t = await boot();
+  try {
+    writeFileSync(join(t.dir, 'solo.html'), '<!doctype html><html><body><h1>v0</h1></body></html>\n');
+    t.eng.rescan();
+    for (let i = 1; i <= 230; i++) {
+      const tr = await t.get('/api/component/solo.html');
+      const r = await t.post('/api/edit', { component: 'solo.html', baseRevision: tr.revision, edits: [{ op: 'text', node: find(tr.tree, 'h1').node, value: `v${i}` }] });
+      assert.equal(r.ok, true);
+    }
+    const blobs = readdirSync(join(t.eng.state, 'film', 'blobs'));
+    const slots = readdirSync(join(t.eng.state, 'film')).filter((n) => n !== 'blobs' && n !== 'ledger.json');
+    const frames = slots.map((n) => JSON.parse(readFileSync(join(t.eng.state, 'film', n, 'frames.json'), 'utf8'))).find((j) => j.comp === 'solo.html').frames;
+    assert.equal(frames.length, 200);
+    const mine = new Set(frames.map((f) => f.files['solo.html']));
+    assert.equal(mine.size, 200); assert.equal(blobs.filter((b) => mine.has(b)).length, 200);
+    assert.ok(blobs.length <= 200 + 4, `no orphan blobs (${blobs.length} for 200 frames of solo.html plus the card's own few)`);
+    // the file goes away: a new engine on the same state forgets its frames and blobs
+    t.eng.close();
+    rmSync(join(t.dir, 'solo.html'));
+    const eng2 = openFolder(t.dir, { stateDir: t.stateDir });
+    const h = createDocRoutes(eng2, { identify: () => 'you' });
+    await new Promise((resolve) => { h({ method: 'GET', headers: {} }, { writeHead() {}, end: () => resolve() }, new URL('http://x/api/component/card.html/film')); });
+    assert.ok(readdirSync(join(eng2.state, 'film', 'blobs')).length <= 6, 'the removed file\'s blobs went with it');
     eng2.close();
   } finally { t.stop(); }
 });

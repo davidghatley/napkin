@@ -4,7 +4,9 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, statSync, existsSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 
-const run = (cwd, args, opts = {}) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 32 * 1024 * 1024, ...opts });
+// GIT_OPTIONAL_LOCKS=0 / --no-optional-locks: `git status` and friends never refresh (write) the index of a repository napkin only reads.
+const GIT_ENV = { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' };
+const run = (cwd, args, opts = {}) => execFileSync('git', ['--no-optional-locks', ...args], { cwd, env: GIT_ENV, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 32 * 1024 * 1024, ...opts });
 const tryRun = (cwd, args) => { try { return run(cwd, args); } catch { return null; } };
 
 // The git directory that holds HEAD, index and logs/HEAD for a folder (a linked worktree has its own); null outside a repo.

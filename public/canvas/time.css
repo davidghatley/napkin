@@ -1,12 +1,15 @@
 /* The film strip (moment 9, time-strip.js) and the quiet pieces around Copy gives real code. Canvas tokens only (canvas.css). */
-#time { position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px/1.4 var(--nk-sans); }
+#time { container-type: inline-size; position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; padding: 6px 12px 8px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px/1.4 var(--nk-sans); }
 #time[hidden] { display: none; }
-body[data-time-open] #hint { bottom: 168px; }
+body[data-time-open] #hint { bottom: 184px; }
 .tm-head { display: flex; align-items: center; gap: 12px; min-height: 28px; }
 .tm-title { margin: 0; font: 600 12.5px var(--nk-sans); white-space: nowrap; }
-.tm-file { font: 400 11px var(--nk-mono); color: var(--nk-text-3); margin-left: 6px; }
+.tm-file { font: 400 11px var(--nk-mono); color: var(--nk-text-3); margin-left: 6px; display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; direction: rtl; text-align: left; }
 .tm-info { flex: 1; min-width: 0; color: var(--nk-text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tm-keys { color: var(--nk-text-3); font-size: 11px; white-space: nowrap; }
+.tm-info:empty { flex: 1; }
+.tm-keys { color: var(--nk-text-3); font-size: 11px; white-space: nowrap; display: none; }
+@container (max-width: 800px) { .tm-file { display: none; } }
+@container (min-width: 1180px) { .tm-keys { display: inline; } }
 .tm-restore { height: 26px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--nk-accent); background: var(--nk-accent); color: var(--nk-on-accent); font: 500 12px var(--nk-sans); cursor: pointer; }
 .tm-restore:disabled { background: var(--nk-chrome-2); border-color: var(--nk-line); color: var(--nk-text-3); cursor: default; }
 .tm-close { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--nk-text-2); font-size: 18px; line-height: 1; cursor: pointer; }
@@ -16,9 +19,9 @@ body[data-time-open] #hint { bottom: 168px; }
 .tm-track:focus-visible .tm-tile[aria-selected="true"] .tm-thumb { box-shadow: 0 0 0 2px var(--nk-accent), 0 0 0 5px var(--nk-accent-soft); }
 .tm-track { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 4px 4px 6px; scrollbar-width: thin; border-radius: 6px; cursor: grab; user-select: none; touch-action: pan-x; }
 .tm-track:active { cursor: grabbing; }
-.tm-tile { flex: none; width: 136px; display: grid; gap: 3px; padding: 0; border-radius: 6px; }
-.tm-thumb { position: relative; width: 136px; height: 84px; overflow: hidden; border-radius: 5px; background: var(--nk-frame); box-shadow: inset 0 0 0 1px var(--nk-line-2); }
-.tm-thumb iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #fff; pointer-events: none; opacity: 0; transition: opacity .12s; }
+.tm-tile { flex: none; width: 140px; display: grid; gap: 3px; padding: 0; border-radius: 6px; }
+.tm-thumb { position: relative; width: 140px; height: 72px; overflow: hidden; border-radius: 5px; background: var(--nk-frame); box-shadow: inset 0 0 0 1px var(--nk-line-2); }
+.tm-thumb iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: var(--nk-frame); pointer-events: none; opacity: 0; transition: opacity .12s; }
 .tm-thumb iframe[data-ready] { opacity: 1; }
 .tm-tile[aria-selected="true"] .tm-thumb { box-shadow: 0 0 0 2px var(--nk-accent); }
 .tm-tile[aria-selected="true"] .tm-time { color: var(--nk-accent-text); font-weight: 600; }
@@ -26,12 +29,23 @@ body[data-time-open] #hint { bottom: 168px; }
 .tm-meta { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; }
 .tm-time { font: 500 11.5px var(--nk-sans); font-variant-numeric: tabular-nums; }
 .tm-git { font: 10px var(--nk-mono); color: var(--nk-git, #7a4fd6); }
-.tm-what { font-size: 11px; color: var(--nk-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-what { font-size: 11px; line-height: 1.3; color: var(--nk-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; min-height: 2.6em; }
+.tm-count { margin-left: auto; font: 500 10.5px var(--nk-sans); color: var(--nk-text-2); white-space: nowrap; }
+.tm-btn { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--nk-line-2); background: var(--nk-chrome-2); color: var(--nk-text); font: 500 12px var(--nk-sans); cursor: pointer; white-space: nowrap; }
+.tm-btn:hover:not(:disabled) { background: var(--nk-chrome-3); }
+.tm-btn:disabled { opacity: .5; cursor: default; }
+.tm-btn[aria-pressed="true"] { background: var(--nk-accent-soft); border-color: var(--nk-accent); color: var(--nk-accent-text); }
+.tm-cue { flex: none; padding: 2px 9px; border-radius: 999px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 11px/1.4 var(--nk-sans); white-space: nowrap; }
+.tm-cue[hidden] { display: none; }
+/* the cue on the canvas, in screen pixels: an outline round the frame and a label that stays one size at any zoom */
+#time-cue { position: absolute; z-index: 6; pointer-events: none; border: 2px solid var(--nk-accent); border-radius: 4px; box-sizing: border-box; }
+#time-cue[hidden] { display: none; }
+#time-cue .tc-pill { position: absolute; right: -2px; bottom: calc(100% + 4px); padding: 3px 9px; border-radius: 999px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 11.5px/1.4 var(--nk-sans); white-space: nowrap; }
+#time-cue.above .tc-pill { bottom: auto; top: 6px; right: 6px; }
 @media (prefers-reduced-motion: reduce) { .tm-thumb iframe { transition: none; } }
 
 /* the frame on the canvas while a version is scrubbed: the old version is drawn over the live one, which waits underneath */
 .doc-cell iframe.time-preview { position: absolute; left: 0; top: 0; z-index: 2; display: block; border: 0; pointer-events: none; background: var(--nk-frame); }
 .doc-cell[data-time-previewing] > iframe.doc-frame { visibility: hidden; }
-.doc-cell[data-time-previewing]::after { content: "Earlier version, not saved"; position: absolute; z-index: 3; top: 6px; right: 6px; padding: 3px 8px; border-radius: 999px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 11px/1.3 var(--nk-sans); pointer-events: none; }
-.doc-cell[data-time-previewing] { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
-@media (max-width: 1360px) { .tm-keys { display: none; } }
+#time-cue.narrow .tc-pill { right: auto; left: -2px; }
+#time-cue.narrow.above .tc-pill { right: auto; left: 6px; }

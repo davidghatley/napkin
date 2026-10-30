@@ -77,7 +77,7 @@ export function initNav(ctx) {
 
   // Registered first (capture on window), so Escape sees the tool before tools.js changes it.
   addEventListener('keydown', (ev) => {
-    if (ev.defaultPrevented || ev.isComposing || typing(ev.target)) return;
+    if (ev.defaultPrevented || ev.isComposing || typing(ev.target) || ev.target.closest?.('#time')) return; // the film strip keeps its own Escape and Enter (time-strip.js)
     if (document.body.dataset.modal || document.body.dataset.scrub || document.body.dataset.dragging) return;
     if (ev.key === 'Enter' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && ((ev.target.closest?.('#stage') && !ev.target.closest?.('[data-nodrag]')) || !ev.target.closest?.('button, a, summary, [role=treeitem], [role=option], [role=tab]'))) {
       const sel = ctx.state.selection;

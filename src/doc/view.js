@@ -5,7 +5,7 @@
 //   TSX/JSX: a plain page (doctype, UTF-8, the applied stylesheets, <div id="root">) that renders the component with
 //         no props (contract ruling 5), bundled by esbuild with the folder's own node_modules first.
 // The query's width and theme are the frame's: the browser (or the canvas's iframe) supplies both; nothing is rewritten.
-import { join, dirname, posix } from 'node:path';
+import { join, dirname, posix, extname } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { headInsertAt, attrOf, parseHtml } from './html.js';
@@ -16,7 +16,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const href = (path) => '/raw/' + path.split('/').map(encodeURIComponent).join('/');
 const escHtml = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 
-export function htmlView(engine, comp) {
+// `prefix`: where the folder's files are served from. A film-strip version serves its own stylesheets (time-routes.js).
+export function htmlView(engine, comp, { prefix = '/raw/' } = {}) {
+  const href = (path) => prefix + path.split('/').map(encodeURIComponent).join('/');
   const entry = engine.read(comp.path);
   const s = entry.s;
   const parsed = entry.html || (entry.html = parseHtml(s));
@@ -41,7 +43,7 @@ export function createTsxViews(engine) {
   const load = async () => (esbuild ||= await import('esbuild'));
   engine.events.on('change', () => cache.clear());
   engine.events.on('files', () => cache.clear());
-  // `over` (the film strip): the file's bytes from an earlier version, bundled in place of the file on disk and never cached.
+  // `over` (the film strip): Map(path -> bytes) of an earlier version, bundled in place of those files on disk and never cached.
   async function bundle(comp, over = null) {
     const key = `${comp.path}#${comp.name}`;
     if (!over && cache.has(key)) return cache.get(key);
@@ -65,7 +67,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
         nodePaths: [join(folder, 'node_modules'), join(ROOT, 'node_modules')],
         alias: { react: join(modDir, 'react'), 'react-dom': join(modDir, 'react-dom') },
         define: { 'process.env.NODE_ENV': '"production"' }, loader: { '.svg': 'dataurl', '.png': 'dataurl' },
-        ...(over && { plugins: [{ name: 'napkin-version', setup(b) { const me = engine.abs(comp.path); b.onLoad({ filter: /\.[jt]sx$/ }, (a) => (a.path === me ? { contents: over.toString('utf8'), loader: a.path.endsWith('.tsx') ? 'tsx' : 'jsx', resolveDir: dirname(me) } : undefined)); } }] }),
+        ...(over && { plugins: [{ name: 'napkin-version', setup(b) { const mine = new Map([...over].map(([p, buf]) => [engine.abs(p), buf])); const LOADER = { '.tsx': 'tsx', '.jsx': 'jsx', '.ts': 'ts', '.js': 'js', '.css': 'css' }; b.onLoad({ filter: /\.(tsx|jsx|ts|js|css)$/ }, (a) => (mine.has(a.path) ? { contents: mine.get(a.path).toString('utf8'), loader: LOADER[extname(a.path)], resolveDir: dirname(a.path) } : undefined)); } }] }),
       });
       out = { code: r.outputFiles[0].text };
     } catch (e) { out = { error: explainError((e.errors?.[0]?.text || e.message).slice(0, 400), { next: 'fix the import or the code it names, then save; napkin builds it again.' }), file: e.errors?.[0]?.location?.file }; }

@@ -470,13 +470,13 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return done2(comp, st, kind);
   }
 
-  // Put a component's file back to the bytes of an earlier version: one step, so one undo (the film strip's Restore).
-  function restore(id, { bytes, by = 'unknown', summary = 'restored an earlier version' } = {}) {
+  // Put files back to the bytes of an earlier version (the film strip's Restore): one step across all of them, so one undo.
+  // files: [{ path, bytes }]
+  function restore(id, { files: want, by = 'unknown', summary = 'restored an earlier version' } = {}) {
     const comp = component(id);
-    if (!Buffer.isBuffer(bytes)) throw new DocError('restore needs the earlier version as bytes. Next: send the version from the strip', 400);
-    const before = read(comp.path).s, after = L(bytes);
-    if (before === after) return { ok: true, revision: read(comp.path).rev, changed: [], component: comp.id, noop: true };
-    const files = [{ path: comp.path, before, after }];
+    if (!Array.isArray(want) || !want.length || want.some((f) => !Buffer.isBuffer(f.bytes) || typeof f.path !== 'string')) throw new DocError('restore needs the earlier version as files. Next: send the version from the strip', 400);
+    const files = want.map((f) => ({ path: f.path, before: read(f.path).s, after: L(f.bytes) })).filter((f) => f.before !== f.after);
+    if (!files.length) return { ok: true, revision: read(comp.path).rev, changed: [], component: comp.id, noop: true };
     write(files);
     const step = { by, at: Date.now(), files, edits: [{ op: 'restore' }], summary };
     push(undo, comp.id, step); redo.set(comp.id, (redo.get(comp.id) || []).filter((x) => x.by !== by));
