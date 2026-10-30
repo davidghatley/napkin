@@ -83,8 +83,8 @@ ws.events.on('added', async ({ component, by, summary }) => {
 });
 
 const json = (res, code, body) => { if (body?.error) body.error = explainError(body.error); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
-const STATIC = { '/': 'public/index.html', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js', '/src/css-props.js': 'src/css-props.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js' };
-const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css' };
+const STATIC = { '/': 'public/index.html', '/brand/napkin-favicon.svg': 'public/brand/napkin-favicon.svg', '/brand/napkin-glyph.svg': 'public/brand/napkin-glyph.svg', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js', '/src/css-props.js': 'src/css-props.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js' };
+const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml' };
 const send = (res, file) => {
   res.writeHead(200, { 'content-type': TYPES[file.split('.').pop()], 'cache-control': 'no-store' });
   res.end(readFileSync(join(ROOT, file)));
