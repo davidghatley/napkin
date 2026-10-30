@@ -15,7 +15,9 @@ import { parseHtml, byId as htmlNode, attrOf } from './html.js';
 import { parseCss, varUses, stripCommentsKeep, specificity, splitList } from './css.js';
 import { parseJsx, componentTree } from './jsx.js';
 import { planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf, runsOf, decodeText } from './edit.js';
-import { writeAtomic } from '../atomic.js';
+import { writeAtomic, cleanStaleTmp, sweepDir } from '../atomic.js';
+import { buildDom, matches as selMatches } from './select.js';
+import { createCascade } from '../../public/canvas/inspector-cascade.js';
 import { explainError } from '../errors.js';
 
 const KINDS = { '.html': 'html', '.htm': 'html', '.tsx': 'tsx', '.jsx': 'jsx', '.css': 'css' };
@@ -73,6 +75,10 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     };
     walk(root, 0);
     list = out;
+    // a writer killed mid-write leaves .<name>.tmp-<pid>-<n> or .guard-<pid>-<n> beside the file: sweep those of dead processes
+    const byDir = new Map();
+    for (const f of out) { const d = abs(posix.dirname(f.path)); if (!byDir.has(d)) byDir.set(d, new Set()); byDir.get(d).add(basename(f.path)); }
+    for (const [d, names] of byDir) sweepDir(d, names);
     return out;
   }
   function read(path) {
@@ -231,6 +237,20 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       undefinedVars: [...used].filter((n) => !vars[n]).sort(),
       cascade: 'for one element, the matching rules apply in this order: !important last, then higher specificity (of the matching part), then later order; inline style beats rules of the same importance',
     };
+  }
+
+  // The cascade at one element (decision 0015): the rules that match it in cascade order, which declaration wins each
+  // property, and each var() resolved to the definition that applies, at a frame width and theme.
+  function rulesAt(id, nodeId, { width, theme } = {}) {
+    const comp = component(id);
+    if (comp.kind !== 'html') throw new DocError(`node= needs an HTML component; ${id} is ${comp.kind}. Next: ask for /api/component/${id}/rules without node`, 422);
+    const base = rulesOf(id);
+    const dom = buildDom(tree(id).tree);
+    const el = dom.el(nodeId);
+    if (!el) throw new DocError(`no element ${nodeId} in ${id}. Next: use a node id from GET /api/component/${id}`, 404);
+    const w = Number(width) > 0 ? Number(width) : 1280, dark = theme === 'dark';
+    const cas = createCascade(base.rules, { matches: selMatches, parent: (e) => e.parent, inline: (e) => e.attrs.style || '', id: (e) => e.id }, { width: w, dark, sheets: base.sheets });
+    return { ...base, node: { id: el.id, tag: el.tag, width: w, theme: dark ? 'dark' : 'light', ...cas.explain(el) } };
   }
 
   // ---------- "ask once": variables nothing defines ----------
@@ -427,6 +447,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   // Write each file, checking first that nobody changed it since we read it (then nothing is written).
   function write(files) {
     for (const f of files) { const now = readFileSync(abs(f.path)); if (L(now) !== f.before) throw new DocError(`${f.path} changed on disk while napkin was writing; read it again and retry`, 409); }
+    for (const f of files) cleanStaleTmp(abs(f.path));
     for (const f of files) {
       writeAtomic(abs(f.path), Buffer.from(f.after, 'latin1'));
       let st = null; try { st = statSync(abs(f.path)); } catch { /* raced */ }
@@ -513,7 +534,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   scan(); watchDirs();
   return {
     root, state, events,
-    files: filesList, component, has, tree, rulesOf, sheetsOf, styles, setStyles, edit, layout: () => ({ ...layout }), setLayout,
+    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, layout: () => ({ ...layout }), setLayout,
     latest(verb, by) { // the newest step this caller can undo (or redo) in any component: { component, at } | null
       let best = null;
       for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };

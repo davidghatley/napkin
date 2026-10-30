@@ -47,6 +47,7 @@ import { initInstances } from './instances.js';
 import { initSlots } from './slots.js';
 import { initAgentsLane } from './agents-lane.js';
 import { initDocs } from './docs.js';
+import { initInspector } from './doc-panel.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -178,6 +179,7 @@ client.onChange((f) => {
 
 for (const c of client.components()) sync(c.component);
 const docs = initDocs(ctx);
+initInspector(ctx); // the inspector's scope keys, measuring and checks (doc-panel.js)
 await docs.load(); // the folder's HTML components (decision 0014), drawn with the rest
 await Promise.all([...ctx.state.components.keys()].map((id) => stage.render(id).catch(console.error)));
 stage.layoutAll();

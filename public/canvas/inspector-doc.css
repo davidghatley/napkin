@@ -1,0 +1,107 @@
+/* The inspector for HTML components (moments 2, 6 and 8): where each value comes from, the scope of an edit and the
+   change it makes, the folder's variables as instruments, and the measuring overlays. Chrome only: nothing here
+   reaches inside a frame. */
+
+/* ---------- where each value comes from ---------- */
+#panel .prow { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 6px; align-items: start; padding: 4px 0; border-top: 1px dashed var(--nk-line); }
+#panel .prow:first-of-type { border-top: 0; }
+#panel .prow > label { font: 11.5px/22px var(--nk-mono); color: var(--nk-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .pbody { display: grid; gap: 1px; min-width: 0; }
+#panel .pval { display: flex; align-items: center; gap: 6px; min-width: 0; }
+#panel .pval input.val { flex: 1; min-width: 0; height: 22px; padding: 0 6px; border: 1px solid var(--nk-line); border-radius: 4px; background: var(--nk-chrome-2); color: var(--nk-text); font: 11.5px var(--nk-mono); }
+#panel .pval input.val:hover { border-color: var(--nk-line-2); }
+#panel .pval input.val:focus { outline: 0; border-color: var(--nk-accent); background: var(--nk-chrome); }
+#panel .prow.editing input.val { border-color: var(--nk-accent); box-shadow: 0 0 0 1px var(--nk-accent); }
+#panel .pval .res { flex: none; font: 11px var(--nk-mono); color: var(--nk-text-3); }
+#panel .pval .imp { flex: none; font: 10px var(--nk-mono); color: var(--nk-text-3); }
+#panel .sw { flex: none; width: 14px; height: 14px; border-radius: 3px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nk-text) 28%, transparent); }
+#panel .pfrom { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; min-width: 0; font: 10.5px/16px var(--nk-mono); color: var(--nk-text-3); }
+#panel .pfrom code { font: 10.5px var(--nk-mono); color: var(--nk-text-2); overflow-wrap: anywhere; }
+#panel .pfrom s { color: var(--nk-text-3); }
+#panel .pfrom .k, #panel .pflag .k, #panel .pnote .k { color: var(--nk-text-3); }
+#panel .pflag { display: flex; align-items: center; gap: 6px; font: 10.5px/18px var(--nk-sans); color: var(--nk-text-3); }
+#panel .pbind { display: inline-flex; gap: 6px; align-items: center; height: 18px; padding: 0 6px; border: 0; border-radius: 4px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-accent-text); font: 500 10.5px var(--nk-mono); cursor: pointer; }
+#panel .pbind:hover, #panel .pbind:focus-visible { background: var(--nk-accent-soft); }
+
+/* ---------- the staged edit: scope, the change, Apply ---------- */
+#panel #doc-staged:empty { display: none; }
+#panel .dsec.staged { background: color-mix(in srgb, var(--nk-accent) 5%, var(--nk-chrome)); border-top: 0; border-bottom: 1px solid var(--nk-line); }
+#panel .dsec.staged h3 code { font: 600 11.5px var(--nk-mono); }
+#panel .pnote { margin: 0; font: 11.5px/1.5 var(--nk-sans); color: var(--nk-text-2); }
+#panel .pnote code { font: 11px var(--nk-mono); color: var(--nk-accent-text); }
+#panel .linkish { padding: 0; border: 0; background: none; color: var(--nk-accent-text); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+#panel kbd { display: inline-block; min-width: 16px; padding: 2px 4px; border-radius: 4px; background: var(--nk-chrome-3); border: 1px solid var(--nk-line); color: var(--nk-text-2); font: 500 10px/1 var(--nk-mono); text-align: center; }
+#panel .scope { display: grid; gap: 4px; }
+#panel .opt { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; grid-template-areas: "k t c" ". s s"; gap: 1px 8px; align-items: baseline; text-align: left; padding: 7px 9px; border: 0; border-radius: 6px; background: var(--nk-chrome); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text); font: 12px/1.35 var(--nk-sans); cursor: pointer; }
+#panel .opt kbd { grid-area: k; }
+#panel .opt b { grid-area: t; font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+#panel .opt b code { font: 600 11.5px var(--nk-mono); color: var(--nk-accent-text); }
+#panel .opt .count { grid-area: c; font: 11px var(--nk-sans); color: var(--nk-text-3); }
+#panel .opt .sub { grid-area: s; font: 10.5px var(--nk-mono); color: var(--nk-text-3); overflow-wrap: anywhere; }
+#panel .opt .sub em { font-style: normal; color: var(--nk-warn, #b54708); }
+#panel .opt:hover { box-shadow: inset 0 0 0 1px var(--nk-line-2); }
+#panel .opt.on { background: var(--nk-accent-soft); box-shadow: inset 0 0 0 1px var(--nk-accent); }
+#panel .opt.on kbd { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent, #fff); }
+#panel .opt[aria-disabled="true"] { opacity: .55; cursor: default; }
+#panel .opt:focus-visible, #panel .linkish:focus-visible, #panel .pbind:focus-visible, #panel .ivchip:focus-visible, #panel .mchip:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 1px; }
+#panel .diff { border: 1px solid var(--nk-line); border-radius: 6px; overflow: hidden; font: 10.5px/18px var(--nk-mono); }
+#panel .diff > div { display: grid; grid-template-columns: 30px 14px minmax(0, 1fr); padding: 1px 8px 1px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+#panel .diff > .h { display: block; padding: 2px 8px; background: var(--nk-chrome-2); color: var(--nk-text-3); border-bottom: 1px solid var(--nk-line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#panel .diff .d { background: color-mix(in srgb, #d92d20 13%, var(--nk-chrome)); color: color-mix(in srgb, #b42318 75%, var(--nk-text)); }
+#panel .diff .a { background: color-mix(in srgb, #12b76a 15%, var(--nk-chrome)); color: color-mix(in srgb, #067647 75%, var(--nk-text)); }
+#panel .diff i, #panel .diff u { font-style: normal; text-decoration: none; opacity: .75; text-align: right; padding-right: 4px; }
+#panel .doc-foot { position: sticky; bottom: 0; z-index: 2; display: flex; gap: 8px; padding: 10px 14px; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); }
+#panel .doc-foot[hidden] { display: none; }
+#panel .doc-foot button { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border: 1px solid var(--nk-line-2); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 500 12.5px var(--nk-sans); cursor: pointer; }
+#panel .doc-foot button.primary { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent, #fff); }
+#panel .doc-foot button.primary kbd { background: transparent; border-color: color-mix(in srgb, #fff 45%, transparent); color: inherit; }
+
+/* ---------- the folder's variables as instruments ---------- */
+#panel .vfilter { width: 100%; box-sizing: border-box; height: 24px; padding: 0 8px; border: 1px solid var(--nk-line); border-radius: 5px; background: var(--nk-chrome-2); color: var(--nk-text); font: 11.5px var(--nk-sans); }
+#panel #doc-vars-body { display: grid; gap: 8px; max-height: 280px; overflow: auto; }
+#panel .ivstrip h4 { margin: 0 0 4px; font: 600 11px var(--nk-sans); color: var(--nk-text-2); }
+#panel .ivstrip h4 small { font-weight: 400; color: var(--nk-text-3); margin-left: 4px; }
+#panel .ivchips { display: flex; flex-wrap: wrap; gap: 4px; }
+#panel .ivchip { position: relative; display: inline-flex; align-items: center; gap: 5px; height: 24px; max-width: 100%; padding: 0 7px 0 5px; border: 0; border-radius: 5px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text); font: 11px var(--nk-mono); cursor: grab; touch-action: none; }
+#panel .ivchip:hover { background: var(--nk-chrome-3); }
+#panel .ivchip .ivname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .ivchip .ivval { color: var(--nk-text-3); font-size: 10px; }
+#panel .ivchip .ivbar { display: block; height: 8px; border-radius: 2px; background: var(--nk-accent); opacity: .75; }
+#panel .ivchip .ivtype { font-size: 15px; line-height: 1; min-width: 20px; }
+#panel .ivdot { position: absolute; top: 3px; right: 3px; width: 5px; height: 5px; border-radius: 50%; background: var(--nk-accent); }
+.ivghost { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; padding: 3px 8px; border-radius: 5px; background: var(--nk-accent); color: var(--nk-on-accent, #fff); font: 11px var(--nk-mono); box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
+body[data-var-drag] { cursor: grabbing; }
+.ivdrop { position: absolute; z-index: 14; pointer-events: none; box-sizing: border-box; border: 2px solid var(--nk-accent); background: color-mix(in srgb, var(--nk-accent) 12%, transparent); border-radius: 2px; }
+dialog.ivask { padding: 14px 16px; border: 0; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: 0 0 0 1px var(--nk-line), 0 16px 40px rgba(20, 24, 36, .28); font: 13px/1.5 var(--nk-sans); max-width: 360px; }
+dialog.ivask::backdrop { background: rgba(20, 24, 36, .25); }
+dialog.ivask h2 { margin: 0 0 8px; font: 600 13px var(--nk-sans); }
+dialog.ivask code { font: 12px var(--nk-mono); }
+dialog.ivask .ivopts { display: grid; gap: 4px; }
+dialog.ivask button { display: flex; justify-content: space-between; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text); font: 12px var(--nk-mono); cursor: pointer; }
+dialog.ivask button:focus-visible, dialog.ivask button:hover { box-shadow: inset 0 0 0 2px var(--nk-accent); outline: 0; }
+dialog.ivask .ivset { font: 10.5px var(--nk-sans); color: var(--nk-text-3); }
+dialog.ivask .hint { margin: 8px 0 0; font-size: 11px; color: var(--nk-text-3); }
+
+/* ---------- checks and measuring ---------- */
+#panel .mrow { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+#panel .mchip { height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); color: var(--nk-text-2); font: 500 11.5px var(--nk-sans); cursor: pointer; }
+#panel .mchip[aria-pressed="true"] { background: var(--nk-accent-soft); color: var(--nk-accent-text); box-shadow: inset 0 0 0 1px var(--nk-accent); }
+#inspect-overlay { position: absolute; inset: 0; z-index: 13; pointer-events: none; overflow: hidden; font: 10px/1 var(--nk-mono); }
+#inspect-overlay .im-ring { position: absolute; box-sizing: border-box; border-style: solid; border-color: transparent; }
+#inspect-overlay .im-margin { border-color: rgba(246, 178, 107, .55); }
+#inspect-overlay .im-border { border-color: rgba(255, 229, 153, .7); }
+#inspect-overlay .im-padding { border-color: rgba(147, 196, 125, .55); }
+#inspect-overlay .im-content { position: absolute; background: rgba(111, 168, 220, .4); }
+#inspect-overlay .im-gap { position: absolute; background: repeating-linear-gradient(45deg, rgba(180, 95, 211, .42) 0 3px, rgba(180, 95, 211, .14) 3px 6px); }
+#inspect-overlay .im-sel { opacity: .45; }
+#inspect-overlay .im-num { position: absolute; transform: translate(-50%, -50%); padding: 1px 3px; border-radius: 3px; background: rgba(20, 24, 36, .82); color: #fff; font: 600 9.5px/1 var(--nk-mono); white-space: nowrap; }
+#inspect-overlay .im-g { background: rgba(110, 50, 140, .92); }
+#inspect-overlay .im-read { position: absolute; z-index: 2; padding: 3px 7px; border-radius: 4px; background: rgba(20, 24, 36, .92); color: #fff; font: 10.5px/1.2 var(--nk-mono); white-space: nowrap; }
+#inspect-overlay .im-read b { color: #9fb0ff; font-weight: 600; margin-right: 4px; }
+#inspect-overlay .im-badge { position: absolute; transform: translateY(-100%); padding: 2px 4px; border-radius: 3px; font: 600 10px/1 var(--nk-mono); color: #fff; }
+#inspect-overlay .im-badge.ok { background: #067647; }
+#inspect-overlay .im-badge.bad { background: #b42318; }
+#inspect-overlay .im-badge.unsure { outline: 1px dashed rgba(255, 255, 255, .8); outline-offset: -2px; }
+#inspect-overlay .im-order { position: absolute; transform: translate(-50%, -50%); width: 18px; height: 18px; border-radius: 50%; background: var(--nk-accent); color: var(--nk-on-accent, #fff); font: 600 10px/18px var(--nk-mono); text-align: center; box-shadow: 0 0 0 2px var(--nk-chrome); }
+#inspect-overlay .im-orderline { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+#inspect-overlay .im-orderline polyline { fill: none; stroke: var(--nk-accent); stroke-width: 1.5; stroke-dasharray: 4 3; opacity: .7; }

@@ -2,6 +2,7 @@
 //   GET  /api/files                      { files: [{ path, kind, components: [{ id, name }] }] }
 //   GET  /api/component/<id>             { revision, tree: [{ node, tag, start, end, children, ... }] }
 //   GET  /api/component/<id>/rules       the component's cascade: sheets and rules with file, line and byte ranges
+//        ?node=<id>&width=W&theme=T      plus `node`: the rules matching that element in cascade order, each value's winner, var()s resolved
 //   GET  /api/component/<id>/history     napkin's edits to it, newest first
 //   GET  /view/<id>?width=W&theme=T      the component as its own document (src/doc/view.js)
 //   GET  /raw/<path>                     a file of the folder, as it is (what /view's relative URLs load)
@@ -61,7 +62,10 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         const id = decodeURIComponent(enc);
         if (method !== 'GET') return fail(res, 405, 'method not allowed: use GET or POST as listed in /api/guide'), true;
         if (!sub) return json(res, 200, engine.tree(id)), true;
-        if (sub === 'rules') return json(res, 200, engine.rulesOf(id)), true;
+        if (sub === 'rules') {
+          const node = url.searchParams.get('node');
+          return json(res, 200, node ? engine.rulesAt(id, node, { width: url.searchParams.get('width'), theme: url.searchParams.get('theme') }) : engine.rulesOf(id)), true;
+        }
         if (sub === 'history') return json(res, 200, { ok: true, component: engine.component(id).id, history: engine.history(id) }), true;
         return fail(res, 404, 'not found: use /api/component/<id>, /rules or /history'), true;
       }
@@ -104,6 +108,8 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
       }
       if (method === 'GET' && path.startsWith('/raw/')) {
         const rel = decodeURIComponent(path.slice('/raw/'.length));
+        // a folder's dotfiles (.git/config, .env, .napkin) are not its design: never served, whatever the path says
+        if (rel.split(/[\\/]/).some((seg) => seg.startsWith('.'))) return fail(res, 404, `no file ${rel} in the folder: check the path`), true;
         let p, st; try { p = engine.abs(rel); st = statSync(p); } catch { return fail(res, 404, `no file ${rel} in the folder: check the path`), true; }
         if (!st.isFile()) return fail(res, 404, `no file ${rel} in the folder: check the path`), true;
         res.writeHead(200, { 'content-type': TYPES[extname(p).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-store' });
