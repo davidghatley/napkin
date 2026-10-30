@@ -5,7 +5,7 @@
 //   TSX/JSX: a plain page (doctype, UTF-8, the applied stylesheets, <div id="root">) that renders the component with
 //         no props (contract ruling 5), bundled by esbuild with the folder's own node_modules first.
 // The query's width and theme are the frame's: the browser (or the canvas's iframe) supplies both; nothing is rewritten.
-import { join, dirname, posix } from 'node:path';
+import { join, dirname, posix, relative, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { headInsertAt, attrOf, parseHtml } from './html.js';
@@ -53,7 +53,8 @@ import { createElement, Component } from 'react';
 import { createRoot } from 'react-dom/client';
 const C = M[${JSON.stringify(exportName)}] ?? M.default;
 class Guard extends Component { constructor(p) { super(p); this.state = { e: null }; } static getDerivedStateFromError(e) { return { e }; }
-  componentDidCatch(e) { window.__napkinError = String(e && e.message || e); } render() { return this.state.e ? null : this.props.children; } }
+  componentDidCatch(e) { window.__napkinError = String(e && e.message || e); }
+  render() { return this.state.e ? createElement('pre', { 'data-napkin-error': '', style: { whiteSpace: 'pre-wrap', font: '12px/1.5 ui-monospace,monospace', color: '#b42318', background: '#fff', margin: 0, padding: 12, overflowWrap: 'anywhere' } }, 'napkin could not run ' + ${JSON.stringify(comp.path)} + ': ' + String(this.state.e && this.state.e.message || this.state.e)) : this.props.children; } }
 if (typeof C !== 'function' && !(C && typeof C === 'object' && C.$$typeof)) window.__napkinError = 'no export named ' + ${JSON.stringify(exportName)};
 else createRoot(document.getElementById('root')).render(createElement(Guard, null, createElement(C)));
 `;
@@ -68,7 +69,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
       out = { code: r.outputFiles[0].text };
     } catch (e) {
       const loc = e.errors?.[0]?.location; // say where, as the parse error of a broken file does: "line 3: ..."
-      out = { error: explainError(`${loc?.file && loc.file !== 'napkin-view.jsx' ? `${loc.file}: ` : ''}${loc ? `line ${loc.line}: ` : ''}${(e.errors?.[0]?.text || e.message).slice(0, 400)}`, { next: 'fix the import or the code it names, then save; napkin builds it again.' }), file: e.errors?.[0]?.location?.file }; }
+      out = { error: explainError(`${loc?.file && loc.file !== 'napkin-view.jsx' && !relative(folder, resolve(loc.file)).startsWith('..') ? `${relative(folder, resolve(loc.file))}: ` : ''}${loc ? `line ${loc.line}: ` : ''}${(e.errors?.[0]?.text || e.message).slice(0, 400)}`, { next: 'fix the import or the code it names, then save; napkin builds it again.' }), file: e.errors?.[0]?.location?.file }; }
     cache.set(key, out);
     return out;
   }
@@ -80,7 +81,9 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
       return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><pre data-napkin-error style="white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;background:#fff;margin:0;padding:12px;min-width:0;overflow-wrap:anywhere">napkin could not build ${escHtml(comp.id)}: ${escHtml(b.error)}</pre></body></html>`) };
     }
     const code = b.code.replace(/<\/script/gi, '<\\/script');
-    return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${code}</script></body></html>`) };
+    // a throw while the module loads (nothing to catch it): say so in the frame too
+    const onerr = `addEventListener('error',function(e){var p=document.createElement('pre');p.setAttribute('data-napkin-error','');p.style.cssText='white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;background:#fff;margin:0;padding:12px;overflow-wrap:anywhere';p.textContent='napkin could not run '+${JSON.stringify(comp.path)}+': '+(e.message||e);document.body.append(p)});`.replace(/<\//g, '<\\/');
+    return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${onerr}</script><script>${code}</script></body></html>`) };
   }
   return { view, bundle };
 }

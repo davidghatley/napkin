@@ -25,6 +25,12 @@ export function initDocs(ctx) {
   const learn = () => { for (const c of ctx.state.components.values()) if (isDialect(c) && c.path) { const m = candidates(c); if (m.length === 1) prefixes.add(m[0].slice(0, m[0].length - c.path.length)); } };
   const engineOf = (c) => { if (!c?.path) return null; const m = candidates(c); return m.length === 1 ? m[0] : m.find((p) => prefixes.has(p.slice(0, p.length - c.path.length))) ?? null; };
   api.claims = (s) => { if (!s || !isDialect(s)) return false; const p = engineOf(s); return !!p && (!!s.readOnly || api.forced.has(p)); };
+  // the dialect can read this file again (an adoption was accepted, a hand edit was fixed): its own cell takes over from the engine's frame at once
+  api.release = (s) => {
+    const p = engineOf(s);
+    if (!p || api.forced.has(p)) return;
+    for (const [id, c] of [...ctx.state.components]) if (c.kind === 'html' && c.path === p && c.fileKind !== 'html') { ctx.stage.remove(id); ctx.state.components.delete(id); ctx.emit('removed', { component: id }); }
+  };
   api.takeOver = (id) => {
     const s = ctx.state.components.get(id), p = isDialect(s) && engineOf(s);
     if (!p) return false;

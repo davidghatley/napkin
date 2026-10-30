@@ -1,12 +1,13 @@
-// Screenshots of the stage moments (docs/stage/): node tools/stage-shots.mjs <folder> <out-dir>. The folder is a design-system folder such as the ss-ds corpus (bench/corpus.js).
+// Screenshots of the stage moments (docs/stage/): node tools/stage-shots.mjs <folder> <out-dir> [1440x900]. The folder is a design-system folder such as the ss-ds corpus (bench/corpus.js).
 import { writeFileSync } from 'node:fs';
 import { cli } from '../test/helpers/open.js';
 import { launchChromium } from '../test/helpers/cdp.js';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const dir = process.argv[2], out = process.argv[3];
 const server = await cli(dir);
-const b = await launchChromium({ width: 1440, height: 900 });
-const shot = async (name) => writeFileSync(`${out}/${name}.png`, await b.screenshot());
+const [W, H] = (process.argv[4] || '1440x900').split('x').map(Number), tag = W === 1440 ? '' : `-${W}x${H}`;
+const b = await launchChromium({ width: W, height: H });
+const shot = async (name) => writeFileSync(`${out}/${name}${tag}.png`, await b.screenshot());
 const key = async (type, key, code, vk) => b.send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: vk });
 try {
   for (const scheme of ['light', 'dark']) {

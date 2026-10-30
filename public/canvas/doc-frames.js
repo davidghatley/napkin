@@ -11,7 +11,7 @@ export const DOC_WIDTH = 640;
 
 // DOM elements <-> source nodes. Tags are compared case-insensitively; a DOM element with no source node (implied by
 // the parser, or made by a script) is walked through with the same source list.
-export function mapDom(document, roots) {
+export function mapDom(document, roots, host = null) {
   const byNode = new Map(), byEl = new Map();
   const same = (el, n) => el.localName.toLowerCase() === String(n.tag).toLowerCase();
   const walk = (domKids, srcKids, i) => {
@@ -23,7 +23,8 @@ export function mapDom(document, roots) {
     }
     return i;
   };
-  walk([document.documentElement], roots, 0);
+  if (host) walk([...host.children], roots, 0); // a JSX component: its elements are inside the page's #root, which is not one of them
+  else walk([document.documentElement], roots, 0);
   return { byNode, byEl };
 }
 
@@ -103,7 +104,8 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     if (my !== gen || !next.isConnected) { next.remove(); return false; }
     const old = iframe;
     iframe = next; tree = t; nodes = flatten(t.tree || []);
-    map = mapDom(next.contentDocument, t.tree || []);
+    const fk = ctx.state.components.get(id)?.fileKind;
+    map = mapDom(next.contentDocument, t.tree || [], fk === 'tsx' || fk === 'jsx' ? next.contentDocument.getElementById('root') : null);
     for (const [el, node] of map.byEl) { const p = proxies.get(el); if (p) p.dataset.n = node; }
     next.classList.remove('doc-next');
     if (old && old !== next) old.remove();

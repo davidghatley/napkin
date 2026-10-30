@@ -16,7 +16,7 @@ import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
 
-let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
+let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 24; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function createStage(ctx, root, world, view) {
@@ -146,7 +146,6 @@ export function createStage(ctx, root, world, view) {
     const sec = section(id);
     const token = ++sec.token;
     header(id);
-    if (c.kind === 'html') return renderDoc(id, c, sec, token);
     if (!force && ctx.state.components.size > CULL_AFTER) {
       if (!sec.pos) {
         sec.frame.innerHTML = '<div class="bundle-pending">Preview loads when in view</div>';
@@ -155,6 +154,7 @@ export function createStage(ctx, root, world, view) {
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     sec.pending = false;
+    if (c.kind === 'html') return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
@@ -552,8 +552,14 @@ export function createStage(ctx, root, world, view) {
     const near = box(NEAR), wide = box(WIDE), far = box(1); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
     const ahead = [];
+    // A frame of the document engine is a whole page: zoomed far out (every frame in view, none readable) at most DOC_BUDGET of them load; zoom in and the rest load as they come into view.
+    let docs = [...sections.values()].filter((x) => x.docFrame).length;
+    const farOut = view.get().z < 0.25;
     for (const [id, sec] of sections) {
-      if (sec.pending && visible(sec)) render(id, true).catch(console.error);
+      if (sec.pending && visible(sec)) {
+        const isDoc = ctx.state.components.get(id)?.kind === 'html';
+        if (!isDoc || !farOut || docs < DOC_BUDGET) { if (isDoc) docs++; render(id, true).catch(console.error); }
+      }
       if (!sec.pos || !sec.size.w) continue;
       let off;
       if (mode !== 'exact') { // a gesture (pan or zoom): nothing is taken out, what comes into view is drawn within a frame

@@ -38,6 +38,9 @@ test('ONB-02/03: empty canvas teaches five actions; ? opens the registry sheet, 
     assert.equal(await b.eval('document.querySelector("#empty-state").hidden'), true);
   } finally { await b.close(); await s.stop(); rmSync(dir, { recursive: true, force: true }); }
 });
+// Rewritten for decision 0013 (lead ruling 2026-10-30): was dialect cells (`.mount`, `.build-error`), now each file's /view frame; every file still draws in its own
+// frame, a file that cannot build or run says why inside its frame, and the others still render. A file that exports no component has no frame (it is not one),
+// so "no component exported" is no longer asserted; the rest of the intent is unchanged.
 test('OPN-02: read-only default render, missing import, CSS and missing context errors are isolated', async () => {
   const dir = corpus();
   writeFileSync(join(dir, 'Default.tsx'), `export default function Default({ label = 'Default props work' }) { return <div style={{ padding: 24, background: '#eef', color: '#124' }}>{label}</div>; }`);
@@ -48,13 +51,17 @@ test('OPN-02: read-only default render, missing import, CSS and missing context 
   const before = hashes(dir), s = await cli(dir), b = await launchChromium({ width: 1600, height: 1100 });
   try {
     await b.goto(s.url); await b.waitFor('document.body.dataset.ready === "1"');
-    await b.waitFor('document.querySelector("section[data-name=Default] .mount").innerText.includes("Default props work")');
-    const pageText = await b.eval('document.querySelector("#world").innerText');
-    for (const word of ['Hello', 'Default props work', 'absent', 'missing.module.css', 'Theme context is missing', 'no component exported', 'Provider needed at module load', 'Next:']) assert.ok(pageText.includes(word), word + ': ' + pageText);
+    const frameText = `[...napkin.stage.sections.values()].map((s) => s.docFrame?.doc()?.body?.innerText ?? '').join('\\n')`;
+    await b.waitFor(`${frameText}.includes('Default props work') && ${frameText}.includes('Provider needed at module load')`);
+    const pageText = await b.eval(frameText);
+    for (const word of ['Hello', 'Default props work', 'absent', 'missing.module.css', 'Theme context is missing', 'Provider needed at module load', 'Next:']) assert.ok(pageText.includes(word), word + ': ' + pageText);
+    // isolated: each file has its own frame and its own document; the broken ones do not stop the rest
+    assert.ok(await b.eval(`napkin.stage.sections.get(napkin.find('Default').component).docFrame.doc().body.innerText.includes('Default props work')`));
+    assert.equal(await b.eval(`document.querySelectorAll('.build-error').length`), 0, 'no raw build text in a cell');
     await shot(b, 'OPN-02-read-only');
     for (const name of ['Default', 'Context', 'Missing', 'Css']) {
       await b.eval(`napkin.nav.focus('${name}', null, { animate: false }); true`);
-      if (['Missing', 'Css'].includes(name)) assert.ok(await b.eval(`(() => { const e=document.querySelector('section[data-name=${name}] .build-error').getBoundingClientRect(), s=document.querySelector('#stage').getBoundingClientRect(); return e.left >= s.left && e.right <= s.right; })()`), `${name} build error fits within the stage`);
+      if (['Missing', 'Css'].includes(name)) assert.ok(await b.eval(`(() => { const df = napkin.stage.sections.get(napkin.find('${name}').component).docFrame, p = df.doc().querySelector('[data-napkin-error]').getBoundingClientRect(), f = df.iframe().getBoundingClientRect(), z = f.width / df.iframe().offsetWidth, s = document.querySelector('#stage').getBoundingClientRect(); return f.left + p.left * z >= s.left && f.left + p.right * z <= s.right; })()`), `${name} build error fits within the stage`);
       await shot(b, 'OPN-02-' + name.toLowerCase());
     }
     assert.deepEqual(hashes(dir), before);

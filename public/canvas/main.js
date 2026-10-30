@@ -87,7 +87,8 @@ const ctx = {
     return r;
   },
   hint(text) { const h = $('#hint'); h.textContent = plain(text); clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },
-  title(c) { return nameCounts.get(c.name) > 1 && c.path ? `${c.name} · ${c.path}` : c.name; },
+  // two components with one name show their paths (the dialect's names are counted as they arrive; the engine's are counted here)
+  title(c) { return c.path && (nameCounts.get(c.name) > 1 || (c.kind === 'html' && [...ctx.state.components.values()].filter((x) => x.name === c.name).length > 1)) ? `${c.name} · ${c.path.replace(/#.*$/, '')}` : c.name; },
   named(name) { return [...(idsByName.get(name) || [])].map(id => ctx.state.components.get(id)).filter(Boolean); },
   find(idOrName) { return ctx.state.components.get(idOrName) ?? [...ctx.state.components.values()].find((c) => c.name === idOrName); },
   on(event, cb) { if (!handlers.has(event)) handlers.set(event, new Set()); handlers.get(event).add(cb); return () => handlers.get(event).delete(cb); },
@@ -150,7 +151,7 @@ const sync = id => {
   // A file is drawn once: the engine's frame takes over a dialect file it claims (read-only, or a build that failed). docs.js decides.
   const claimed = !!ctx.docs?.claims(s);
   if (s && !claimed) ctx.state.components.set(id, s); else { ctx.state.components.delete(id); if (claimed) ctx.stage?.remove(id); }
-  if (ctx.docs && (claimed !== claimedIds.has(id) || (s && !claimed && !seenIds.has(id)))) { claimed ? claimedIds.add(id) : claimedIds.delete(id); ctx.docs.reconcileSoon(); }
+  if (ctx.docs && (claimed !== claimedIds.has(id) || (s && !claimed && !seenIds.has(id)))) { if (claimed) claimedIds.add(id); else { if (claimedIds.delete(id) && s) ctx.docs.release(s); } ctx.docs.reconcileSoon(); }
   s ? seenIds.add(id) : seenIds.delete(id);
 };
 
@@ -177,7 +178,7 @@ client.onChange((f) => {
   if (f.type === 'progress') { ctx.state.progress = f; $('#scan-progress').textContent = f.done ? '' : `Scanning components… ${f.scanned} / ${f.total}`; ctx.emit('progress', f); }
   else if (f.type === 'tokens') { ctx.emit('tokens', f); }
   else if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
-  else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
+  else if (f.type === 'problem') { if (ctx.state.components.has(f.component) && !stage.sections.has(f.component)) stage.render(f.component).catch(console.error); else stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'preview') { ctx.emit('preview', f); }
   else if (f.type === 'connection') { document.body.dataset.connection = f.connected ? 'ok' : 'lost'; ctx.emit('connection', f); }
