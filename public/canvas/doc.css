@@ -26,7 +26,7 @@ body[data-play] .doc-cell iframe.doc-frame { pointer-events: auto; }
 #panel .dsec { border-top: 1px solid var(--nk-line); padding: 10px 14px 12px; display: grid; gap: 6px; }
 #panel .dsec h3 { margin: 0; display: flex; align-items: baseline; gap: 8px; font: 700 12.5px var(--nk-sans); color: var(--nk-text); }
 #panel .dsec h3 .where { font: 400 11px var(--nk-sans); color: var(--nk-text-3); }
-#panel #doc-text { width: 100%; box-sizing: border-box; resize: vertical; padding: 6px 8px; border: 1px solid var(--nk-line); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12.5px/1.45 var(--nk-sans); }
+#panel #doc-text, #panel .doc-run { width: 100%; box-sizing: border-box; resize: vertical; padding: 6px 8px; border: 1px solid var(--nk-line); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12.5px/1.45 var(--nk-sans); }
 #panel .doc-classes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 #panel .cls { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px 0 7px; border-radius: 5px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); }
 #panel .cls code { font: 11.5px var(--nk-mono); color: var(--nk-text); }

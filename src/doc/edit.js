@@ -61,7 +61,52 @@ function removeAttr(s, node, name) {
 }
 
 // ---------- text ----------
-function textSplices(s, node, value) {
+// The text runs directly inside an element, in order, each with its span and whether it can be written as text:
+// HTML text between child elements (comments split a run), JSX text, and JSX strings written as {"..."}; a computed
+// {expression} is listed but cannot be edited as text. Runs that are only whitespace are left out.
+// [{ index, from, to, text (latin1, as written), editable, kind, quote? }]   from..to is the run without its outer spaces
+const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' };
+export const decodeText = (t) => t.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => (e[0] === '#' ? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENT[e.toLowerCase()] ?? m));
+export function runsOf(s, node) {
+  const raw = [];
+  if (node.jsx) for (const r of node.jsxRuns || []) raw.push(r.kind === 'text' ? { from: r.start, to: r.end, kind: 'text' } : r.kind === 'string' ? { from: r.valStart, to: r.valEnd, kind: 'string', quote: r.quote, outer: [r.start, r.end] } : { from: r.start, to: r.end, kind: 'computed' });
+  else if (!node.selfClosing && node.closeStart > node.openEnd && !['script', 'style'].includes(node.name)) {
+    const cuts = node.children.map((c) => [c.start, c.end]);
+    for (let i = s.indexOf('<!--', node.openEnd); i >= 0 && i < node.closeStart; i = s.indexOf('<!--', i + 4)) { const e = s.indexOf('-->', i); if (!cuts.some(([a, b]) => i >= a && i < b)) cuts.push([i, e < 0 ? node.closeStart : e + 3]); }
+    cuts.sort((a, b) => a[0] - b[0]);
+    let p = node.openEnd;
+    for (const [a, b] of [...cuts, [node.closeStart, node.closeStart]]) { if (a > p) raw.push({ from: p, to: a, kind: 'text' }); p = Math.max(p, b); }
+  }
+  const out = [];
+  for (const r of raw) {
+    let { from, to } = r;
+    if (r.kind === 'text') { while (from < to && /[ \t\r\n\f]/.test(s[from])) from++; while (to > from && /[ \t\r\n\f]/.test(s[to - 1])) to--; if (from === to) continue; }
+    out.push({ ...r, from, to, index: out.length, text: s.slice(from, to), editable: r.kind !== 'computed' });
+  }
+  return out;
+}
+function textSplices(s, node, value, run) {
+  if (node.jsx && !node.textOnly || !node.jsx && node.children.length || run !== undefined && run !== null) {
+    if (!node.jsx && ['script', 'style'].includes(node.name)) refuse(`<${node.tag}> (${at(s, node.start)}) holds code, not text; edit its rules or the file instead`);
+    const runs = runsOf(s, node);
+    let r;
+    if (run !== undefined && run !== null) {
+      if (!Number.isInteger(run) || !runs[run]) refuse(`<${node.tag}> (${at(s, node.start)}) has no text run ${run} (it has ${runs.length})`, 404);
+      r = runs[run];
+    } else {
+      const editable = runs.filter((x) => x.editable);
+      if (!runs.length) refuse(`<${node.tag}> (${at(s, node.start)}) holds no text of its own; edit the text of one of its elements`);
+      if (editable.length !== 1) refuse(`<${node.tag}> (${at(s, node.start)}) holds ${runs.length} text runs between its elements; send run (0-${Math.max(0, runs.length - 1)}) to choose one`, 409, { runs: runs.map((x) => ({ index: x.index, text: fromL(x.text), editable: x.editable })) });
+      r = editable[0];
+    }
+    if (!r.editable) refuse(`text run ${r.index} of <${node.tag}> (${at(s, node.start)}) is computed in code (${s.slice(r.from, Math.min(r.to, r.from + 40))}); change it in the code`);
+    const v = toL(value);
+    if (r.kind === 'string') { // keep the string's own quotes: escape only what that quote needs
+      const esc = v.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+      return [{ from: r.from, to: r.to, text: r.quote === '`' ? esc.replace(/`|\$\{/g, (c) => '\\' + c) : esc.split(r.quote).join('\\' + r.quote) }];
+    }
+    return [{ from: r.from, to: r.to, text: node.jsx ? jsxText(v) : escText(v) }];
+  }
   if (node.selfClosing || node.openEnd === node.closeStart && node.end === node.openEnd) refuse(`<${node.tag}> (${at(s, node.start)}) has no content to hold text`);
   if (!node.jsx && ['script', 'style'].includes(node.name)) refuse(`<${node.tag}> (${at(s, node.start)}) holds code, not text; edit its rules or the file instead`);
   if (node.jsx ? !node.textOnly : node.children.length) refuse(`<${node.tag}> (${at(s, node.start)}) holds ${node.jsx ? 'elements or {…} expressions' : 'other elements'}; edit the text of one of them instead`);
@@ -170,8 +215,14 @@ const camel = (p) => (p.startsWith('--') ? p : p.replace(/-([a-z])/g, (_, c) => 
 function jsxStyleSplices(s, node, prop, value) {
   const a = attrOf(node, 'style');
   const key = camel(prop);
-  const lit = (v, old) => (old?.type === 'NumericLiteral' && /^-?\d+(\.\d+)?px$/.test(v) ? v.slice(0, -2) : /^-?\d+(\.\d+)?$/.test(v) && old?.type === 'NumericLiteral' ? v : jsonL(v));
-  if (!a) return value === null ? [] : setAttrRaw(s, node, `style={{ ${/^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)}: ${lit(toL(value))} }}`);
+  // Strings keep the quote the file uses: the value's own, else the first string in this style object, else the file's majority.
+  const obj0 = a?.expr?.type === 'ObjectExpression' ? a.expr : null;
+  const firstStr = obj0?.properties.find((p) => p.value?.type === 'StringLiteral')?.value;
+  const fileQ = (s.match(/'/g) || []).length > (s.match(/"/g) || []).length ? "'" : '"';
+  const quoteStr = (v, q) => q + v.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').split(q).join('\\' + q) + q;
+  const lit = (v, old) => (old?.type === 'NumericLiteral' && /^-?\d+(\.\d+)?px$/.test(v) ? v.slice(0, -2) : /^-?\d+(\.\d+)?$/.test(v) && old?.type === 'NumericLiteral' ? v
+    : quoteStr(v, old?.type === 'StringLiteral' ? s[old.start] : firstStr ? s[firstStr.start] : fileQ));
+  if (!a) return value === null ? [] : setAttrRaw(s, node, `style={{ ${/^[A-Za-z_$][\w$]*$/.test(key) ? key : quoteStr(key, fileQ)}: ${lit(toL(value))} }}`);
   const obj = a.expr;
   if (!obj || obj.type !== 'ObjectExpression') refuse(`style on <${node.tag}> (${at(s, node.start)}) is computed in code (${s.slice(a.valStart, Math.min(a.valEnd, a.valStart + 40))}); change it in the code`);
   const props = obj.properties;
@@ -185,7 +236,7 @@ function jsxStyleSplices(s, node, prop, value) {
     return [{ from: p.start, to: p.end, text: '' }];
   }
   if (value === null) return [];
-  const k2 = /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
+  const k2 = /^[A-Za-z_$][\w$]*$/.test(key) ? key : quoteStr(key, firstStr ? s[firstStr.start] : fileQ);
   if (!props.length) return [{ from: obj.start + 1, to: obj.end - 1, text: ` ${k2}: ${lit(toL(value))} ` }];
   const last = props[props.length - 1];
   const multi = s.slice(obj.start, obj.end).includes('\n');
@@ -246,7 +297,7 @@ export function planMove(s, node, parent, index) {
 export function planNodeEdit(s, node, edit) {
   const str = (v, what) => { if (typeof v !== 'string') refuse(`${edit.op} needs ${what} as a string`, 400); return v; };
   switch (edit.op) {
-    case 'text': return textSplices(s, node, str(edit.value, 'value'));
+    case 'text': return textSplices(s, node, str(edit.value, 'value'), edit.run);
     case 'attr': case 'prop': {
       const name = str(edit.name, 'name');
       if (!/^[^\s"'>/=]+$/.test(name)) refuse(`"${name}" is not an attribute name`, 400);

@@ -72,7 +72,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
   }
   async function view(comp) {
     const links = engine.applied().map((p) => `<link rel="stylesheet" href="${href(p)}">`).join('');
-    const b = await bundle(comp);
+    const b = comp.broken ? { error: explainError(comp.broken, { next: 'fix the syntax error, then save; napkin reads it again.' }) } : await bundle(comp);
     if (b.error) {
       // The frame still draws: it says why the component could not be built (the canvas shows the same page).
       return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><pre data-napkin-error style="white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;margin:8px">napkin could not build ${escHtml(comp.id)}: ${escHtml(b.error)}</pre></body></html>`) };

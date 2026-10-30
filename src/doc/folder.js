@@ -12,9 +12,9 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { L, toL, fromL, lineOf, applySplices, mapPos } from './source.js';
 import { parseHtml, byId as htmlNode, attrOf } from './html.js';
-import { parseCss, varUses, stripCommentsKeep } from './css.js';
+import { parseCss, varUses, stripCommentsKeep, specificity, splitList } from './css.js';
 import { parseJsx, componentTree } from './jsx.js';
-import { planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf } from './edit.js';
+import { planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf, runsOf, decodeText } from './edit.js';
 import { writeAtomic } from '../atomic.js';
 import { explainError } from '../errors.js';
 
@@ -26,6 +26,9 @@ export const stateRoot = () => process.env.NAPKIN_STATE_DIR || join(process.env.
 const hash = (buf) => createHash('sha256').update(buf).digest('hex').slice(0, 12);
 const posixRel = (p) => p.split(sep).join('/');
 // Component name of an HTML file: its folder for index/preview/demo files ("components/Pill/preview.html" -> "Pill").
+// A TSX/JSX file that does not parse still gets one component, named after the file ("game-view.tsx" -> "GameView"),
+// so its frame can say why it does not build instead of disappearing.
+const fileComponentName = (path) => basename(path).replace(/\.[jt]sx$/i, '').split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'Component';
 const htmlName = (path) => { const b = basename(path).replace(/\.html?$/i, ''); return /^(index|preview|demo|example|component)$/i.test(b) && dirname(path) !== '.' ? basename(dirname(path)) : b; };
 
 export class DocError extends Error { constructor(message, status = 400, extra = {}) { super(message); this.status = status; Object.assign(this, extra); } }
@@ -104,7 +107,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       if (kind === 'html') return { path, kind, revision, components: [{ id: path, name: htmlName(path) }] };
       if (kind === 'css') return { path, kind, revision, components: [] };
       let comps = [];
-      try { const c = jsx(path); comps = c.jsx.components.map((x) => ({ id: `${path}#${x.name}`, name: x.name })); } catch { /* unreadable: listed with none */ }
+      try { const c = jsx(path); comps = c.jsx.error ? [{ id: `${path}#${fileComponentName(path)}`, name: fileComponentName(path), broken: true }] : c.jsx.components.map((x) => ({ id: `${path}#${x.name}`, name: x.name })); } catch { /* unreadable: listed with none */ }
       return { path, kind, revision, components: comps, ...(cache.get(path)?.jsx?.error && { error: explainError(cache.get(path).jsx.error, { file: path }) }) };
     });
   }
@@ -117,6 +120,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     if (!existsSync(abs(path))) throw new DocError(`no component ${id}: ${path} does not exist. Next: use a component id from GET /api/files`, 404);
     if (kind === 'html') { if (name) throw new DocError(`no component ${id}: one .html file is one component (${path}). Next: use the id ${path}`, 404); return { id, path, kind, name: htmlName(path) }; }
     const c = jsx(path);
+    if (c.jsx.error && (!name || name === fileComponentName(path))) return { id: `${path}#${fileComponentName(path)}`, path, kind, name: fileComponentName(path), broken: c.jsx.error };
     const comp = name ? c.jsx.components.find((x) => x.name === name) : c.jsx.components[0];
     if (!comp) throw new DocError(`no component ${id}${c.jsx.error ? ` (${c.jsx.error})` : ''}. Next: use a component id from GET /api/files`, 404);
     return { id: `${path}#${comp.name}`, path, kind, name: comp.name, exportName: comp.exportName, isDefault: comp.isDefault };
@@ -139,13 +143,16 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   const attrMap = (s, n) => Object.fromEntries(n.attrs.filter((a) => !a.spread).map((a) => [fromL(a.name), a.valStart === null ? '' : a.quote || !n.jsx ? fromL(a.value) : `{${fromL(a.value.slice(1, -1))}}`]));
   function tree(id) {
     const comp = component(id);
+    if (comp.broken) return { component: comp.id, file: comp.path, kind: comp.kind, name: comp.name, revision: read(comp.path).rev, tree: [], error: explainError(`${comp.path}: ${comp.broken}`, { next: 'fix the syntax error, then save; napkin reads it again.' }) };
     const { entry, roots } = nodesOf(comp);
     keep(comp.path, entry);
     const s = entry.s;
     const out = (n) => ({
       node: n.id, tag: n.tag, start: n.start, end: n.end, openEnd: n.openEnd, closeStart: n.closeStart, line: lineOf(s, n.start),
       attrs: attrMap(s, n), ...(n.implicitEnd && { implicitEnd: true }), ...(n.jsx ? { textOnly: n.textOnly } : {}),
-      ...((n.jsx ? n.textOnly : !n.children.length) && n.closeStart > n.openEnd && { text: fromL(s.slice(n.openEnd, n.closeStart)).trim().slice(0, 200) }),
+      ...((n.jsx ? n.textOnly : !n.children.length) && n.closeStart > n.openEnd && !['script', 'style'].includes(n.name) && { text: decodeText(fromL(s.slice(n.openEnd, n.closeStart))).trim().slice(0, 2000) }),
+      // mixed content (text between child elements, or {"..."} / {expr} in JSX): each run of text, editable by index (op text, run)
+      ...(!(n.jsx ? n.textOnly : !n.children.length) && (() => { const r = runsOf(s, n); return r.length ? { runs: r.map((x) => ({ index: x.index, text: n.jsx && x.kind !== 'text' ? fromL(x.text) : decodeText(fromL(x.text)), editable: x.editable, ...(x.kind !== 'text' && { kind: x.kind }) })) } : {}; })()),
       children: n.children.map(out),
     });
     return { component: comp.id, file: comp.path, kind: comp.kind, name: comp.name, revision: entry.rev, tree: roots.map(out) };
@@ -195,14 +202,35 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       const c = read(sh.file);
       const parsed = sh.origin === 'style' ? parseCss(c.s, sh.from, sh.to) : (c.css ||= parseCss(c.s));
       for (const r of parsed.rules) {
+        const selector = fromL(r.selector);
         rules.push({
-          sheet: k, file: sh.file, kind: r.kind, selector: fromL(r.selector), line: lineOf(c.s, r.selStart), start: r.selStart, end: r.close + 1,
+          sheet: k, order: rules.length, file: sh.file, kind: r.kind, selector, line: lineOf(c.s, r.selStart), start: r.selStart, end: r.close + 1,
+          // per selector of the list: its specificity [ids, classes, types]; a rule counts with the most specific part that matches
+          parts: r.kind === 'style' ? splitList(selector).map((p) => ({ selector: p, specificity: specificity(p) })) : [],
           media: r.context.filter((x) => x.name === 'media').map((x) => fromL(x.prelude)), context: r.context.map((x) => `@${x.name} ${fromL(x.prelude)}`.trim()),
-          decls: r.decls.map((d) => ({ prop: fromL(d.prop), value: fromL(d.value), important: d.important, line: lineOf(c.s, d.start), start: d.start, end: d.end, valStart: d.valStart, valEnd: d.valEnd })),
+          decls: r.decls.map((d) => ({ prop: fromL(d.prop), value: fromL(d.value), important: d.important, line: lineOf(c.s, d.start), start: d.start, end: d.end, valStart: d.valStart, valEnd: d.valEnd,
+            uses: [...new Set(varUses(c.s.slice(d.valStart, d.valEnd)).map((u) => u.name))] })),
         });
       }
     });
-    return { component: comp.id, sheets: sheets.map((sh) => ({ file: sh.file ?? null, href: sh.href ?? null, origin: sh.origin, media: sh.media ?? null, external: !!sh.external, missing: !!sh.missing, node: sh.node ?? null })), rules };
+    // Variable provenance: every definition of each custom property in the cascade (and in the file's inline styles), with
+    // where it is and under which selector and @media. The browser's matching picks the live one for an element.
+    const vars = {};
+    const def = (name, d) => { (vars[name] ||= []).push(d); };
+    for (const r of rules) for (const d of r.decls) if (d.prop.startsWith('--')) def(d.prop, { file: r.file, line: d.line, start: d.start, end: d.end, valStart: d.valStart, valEnd: d.valEnd, value: d.value, selector: r.selector, media: r.media, context: r.context, rule: r.order, important: d.important });
+    if (comp.kind === 'html') {
+      const { entry } = nodesOf(comp);
+      for (const n of entry.html.nodes) {
+        const st = attrOf(n, 'style'); if (!st || st.valStart === null) continue;
+        for (const d of styleDecls(entry.s, st.valStart, st.valEnd)) if (d.prop.startsWith('--')) def(fromL(d.prop), { file: comp.path, line: lineOf(entry.s, d.start), start: d.start, end: d.end, valStart: d.valStart, valEnd: d.valEnd, value: fromL(entry.s.slice(d.valStart, d.valEnd)), inline: true, node: n.id, media: [], context: [] });
+      }
+    }
+    const used = new Set(rules.flatMap((r) => r.decls.flatMap((d) => d.uses)));
+    return {
+      component: comp.id, sheets: sheets.map((sh) => ({ file: sh.file ?? null, href: sh.href ?? null, origin: sh.origin, media: sh.media ?? null, external: !!sh.external, missing: !!sh.missing, node: sh.node ?? null })), rules, vars,
+      undefinedVars: [...used].filter((n) => !vars[n]).sort(),
+      cascade: 'for one element, the matching rules apply in this order: !important last, then higher specificity (of the matching part), then later order; inline style beats rules of the same importance',
+    };
   }
 
   // ---------- "ask once": variables nothing defines ----------

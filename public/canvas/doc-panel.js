@@ -54,10 +54,16 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   if (ctx.state.selection !== sel) return; // the selection moved on while the rules loaded
   const win = target?.ownerDocument.defaultView;
   const media = (r) => !r.media.length || r.media.every((m) => { try { return win?.matchMedia(m).matches; } catch { return false; } });
-  const hits = target ? data.rules.filter((r) => r.kind === 'style' && parts(r.selector).some((p) => matches(target, p)) && media(r)) : [];
-  // The rule nearest the element wins a property it shares with an earlier one (same importance); earlier ones show struck.
+  // The rules that match, in cascade order: higher specificity (of the most specific part that matches) wins, then the
+  // later rule. The panel lists the winner first; a declaration another one beats is struck through.
+  const cmp = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+  const specOf = (r) => (r.parts || []).filter((p) => matches(target, p.selector)).map((p) => p.specificity).reduce((m, x) => (cmp(x, m) > 0 ? x : m), [0, 0, 0]);
+  const hits = (target ? data.rules.filter((r) => r.kind === 'style' && parts(r.selector).some((p) => matches(target, p)) && media(r)) : [])
+    .map((r) => ({ r, spec: specOf(r) })).sort((x, y) => cmp(x.spec, y.spec) || x.r.order - y.r.order).map((x) => Object.assign(x.r, { spec: x.spec }));
+  const inlineProps = new Set(String(node.attrs?.style || '').split(';').map((x) => x.split(':')[0].trim().toLowerCase()).filter(Boolean));
   const won = new Map();
   for (const r of [...hits].reverse()) for (const d of [...r.decls].reverse()) { const k = d.prop.toLowerCase(); if (!won.has(k) || (d.important && !won.get(k).important)) won.set(k, d); }
+  for (const [k, d] of won) if (inlineProps.has(k) && !d.important) won.set(k, null); // inline style beats a normal rule
   const inline = Object.entries(node.attrs || {}).find(([k]) => k === 'style')?.[1] ?? '';
   const inlineDecls = inline.split(';').map((x) => x.trim()).filter(Boolean).map((x) => { const i = x.indexOf(':'); return i < 0 ? null : { prop: x.slice(0, i).trim(), value: x.slice(i + 1).trim() }; }).filter(Boolean);
   const classes = (node.attrs?.class || '').split(/\s+/).filter(Boolean);
@@ -67,8 +73,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const same = data.rules.filter((x) => x.file === r.file && x.kind === 'style' && normSel(x.selector) === normSel(r.selector) && normMedia(x.media.at(-1)) === normMedia(r.media.at(-1)));
     return same.indexOf(r);
   };
-  const vars = new Map(); // custom properties this element's values use -> their definitions in the cascade
-  for (const r of data.rules) for (const d of r.decls) if (d.prop.startsWith('--')) { if (!vars.has(d.prop)) vars.set(d.prop, []); vars.get(d.prop).push({ r, d }); }
+  const vars = new Map(); // custom properties this element's values use -> their definitions (server provenance: file, line, selector, @media)
+  for (const [name, defs] of Object.entries(data.vars || {})) vars.set(name, defs.filter((x) => !x.inline).map((x) => ({ r: { file: x.file, media: x.media || [] }, d: { value: x.value, line: x.line } })));
   const used = new Set(); for (const d of [...inlineDecls, ...hits.flatMap((r) => r.decls)]) for (const m of String(d.value).matchAll(/var\(\s*(--[\w-]+)/g)) used.add(m[1]);
   const cs = target ? getComputedStyle(target) : null;
 
@@ -79,6 +85,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     </div>
     <div class="doc-body">
       ${textOnly ? `<section class="dsec"><h3>Text</h3><textarea id="doc-text" data-key="text" rows="${Math.min(6, Math.max(1, Math.ceil(node.text.length / 34)))}" aria-label="Text">${esc(node.text)}</textarea></section>` : ''}
+      ${node.runs?.length ? `<section class="dsec"><h3>Text <span class="where">${node.runs.length} run${node.runs.length === 1 ? '' : 's'} between its elements</span></h3>${node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join('')}</section>` : ''}
       <section class="dsec"><h3>Classes</h3>
         <div class="doc-classes" id="doc-classes">${classes.map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
           <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>
@@ -89,7 +96,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       </section>
       <section class="dsec"><h3>Rules <span class="where">${hits.length} matching</span></h3>
         ${hits.length ? [...hits].reverse().map((r) => `<div class="rule" data-rule="${data.rules.indexOf(r)}">
-          <div class="rhead"><code class="sel">${esc(r.selector)}</code>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line}">${esc(r.file.split('/').pop())}:${r.line}</span></div>
+          <div class="rhead"><code class="sel">${esc(r.selector)}</code>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line} · specificity ${r.spec.join(',')}">${esc(r.file.split('/').pop())}:${r.line}</span></div>
           <div class="decls">${r.decls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'rule', rule: data.rules.indexOf(r), idx: index(r), line: d.line, over: won.get(d.prop.toLowerCase()) !== d })).join('')}
             <div class="decl add"><input class="prop" data-key="r${data.rules.indexOf(r)}-new-prop" data-rule="${data.rules.indexOf(r)}" placeholder="property" aria-label="New property in ${esc(r.selector)}" spellcheck="false"><input class="val" data-key="r${data.rules.indexOf(r)}-new-val" data-rule="${data.rules.indexOf(r)}" placeholder="value" aria-label="New value in ${esc(r.selector)}" spellcheck="false"></div></div>
         </div>`).join('') : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>'}
@@ -119,6 +126,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   }
   const ruleEdit = (r, prop, value) => { const rr = data.rules[r]; return { op: 'rule', file: rr.file, selector: rr.selector, ...(rr.media.length ? { media: rr.media.at(-1) } : {}), index: index(rr), prop, value }; };
   el.querySelector('#doc-text')?.addEventListener('change', (ev) => { if (ev.target.value !== node.text) send([{ op: 'text', node: sel.node, value: ev.target.value }]); });
+  el.querySelectorAll('.doc-run').forEach((t) => t.addEventListener('change', () => { if (t.value !== t.defaultValue) send([{ op: 'text', node: sel.node, run: Number(t.dataset.run), value: t.value }]); }));
   el.querySelectorAll('.cls-x').forEach((b) => b.addEventListener('click', () => send([{ op: 'class', node: sel.node, remove: [b.dataset.remove] }])));
   el.querySelector('#doc-class-add')?.addEventListener('doc-commit', (ev) => {
     const add = ev.target.value.trim().replace(/^\./, '').split(/\s+/).filter(Boolean);

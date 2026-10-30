@@ -177,3 +177,54 @@ export function varUses(text, base = 0) {
 }
 // Comments blanked with spaces (offsets stay the same).
 export const stripCommentsKeep = (t) => t.replace(/\/\*[\s\S]*?\*\//g, (c) => ' '.repeat(c.length));
+
+// Selector specificity [ids, classes/attributes/pseudo-classes, types/pseudo-elements] of one complex selector (no
+// commas), as the cascade computes it: :is()/:not()/:has() take their most specific argument, :where() counts nothing,
+// :nth-child(... of S) adds S, and the universal selector and combinators count nothing.
+export function splitList(sel) {
+  const out = []; let depth = 0, cur = '', q = null;
+  for (const ch of sel) {
+    if (q) { cur += ch; if (ch === q) q = null; continue; }
+    if (ch === '"' || ch === "'") q = ch;
+    if (ch === '(' || ch === '[') depth++;
+    if (ch === ')' || ch === ']') depth--;
+    if (ch === ',' && !depth) { out.push(cur.trim()); cur = ''; } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur.trim());
+  return out;
+}
+export function specificity(sel) {
+  const s = stripComments(sel);
+  let a = 0, b = 0, c = 0, i = 0;
+  const add = (x) => { a += x[0]; b += x[1]; c += x[2]; };
+  const max = (list) => splitList(list).map(specificity).reduce((m, x) => (cmpSpec(x, m) > 0 ? x : m), [0, 0, 0]);
+  const args = (from) => { let depth = 1, j = from; while (j < s.length && depth) { if (s[j] === '(') depth++; else if (s[j] === ')') depth--; j++; } return [s.slice(from, j - 1), j]; };
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch === '#') { a++; i++; while (i < s.length && /[\w-]|\\/.test(s[i])) i++; continue; }
+    if (ch === '.') { b++; i++; while (i < s.length && /[\w-]|\\/.test(s[i])) i++; continue; }
+    if (ch === '[') { b++; while (i < s.length && s[i] !== ']') i++; i++; continue; }
+    if (ch === ':') {
+      if (s[i + 1] === ':') { c++; i += 2; while (i < s.length && /[\w-]/.test(s[i])) i++; if (s[i] === '(') i = args(i + 1)[1]; continue; }
+      i++; let name = ''; while (i < s.length && /[\w-]/.test(s[i])) name += s[i++];
+      name = name.toLowerCase();
+      if (['before', 'after', 'first-line', 'first-letter'].includes(name)) { c++; continue; } // legacy one-colon pseudo-elements
+      if (s[i] === '(') {
+        const [inner, next] = args(i + 1); i = next;
+        if (name === 'where') continue;
+        if (['is', 'not', 'has', 'matches', '-webkit-any', '-moz-any'].includes(name)) { add(max(inner)); continue; }
+        if (/^nth-(last-)?child$/.test(name)) { b++; const of = /\sof\s+([\s\S]+)$/i.exec(inner); if (of) add(max(of[1])); continue; }
+        b++; continue;
+      }
+      b++; continue;
+    }
+    if (/[A-Za-z_]/.test(ch)) { // a type selector (a namespace prefix before | counts nothing)
+      while (i < s.length && /[\w-]/.test(s[i])) i++;
+      if (!(s[i] === '|' && s[i + 1] !== '=')) c++;
+      continue;
+    }
+    i++;
+  }
+  return [a, b, c];
+}
+export const cmpSpec = (x, y) => x[0] - y[0] || x[1] - y[1] || x[2] - y[2];

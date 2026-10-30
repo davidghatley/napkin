@@ -88,9 +88,21 @@ export function parseJsx(s, ext = '.tsx') {
       return { name, lname: name, start: a.start, end: a.end, valStart: v.start, valEnd: v.end, quote: null, value: s.slice(v.start, v.end), expr: v.type === 'JSXExpressionContainer' ? v.expression : v };
     });
     const textOnly = n.children.every((c) => c.type === 'JSXText');
+    // The element's own text runs, in order: plain JSX text, a string written as {"..."}, or a computed {expression}.
+    const runs = [];
+    for (const c of n.children) {
+      if (c.type === 'JSXText') runs.push({ kind: 'text', start: c.start, end: c.end });
+      else if (c.type === 'JSXExpressionContainer') {
+        const x = c.expression;
+        if (x.type === 'JSXEmptyExpression') continue;
+        if (x.type === 'StringLiteral') runs.push({ kind: 'string', start: c.start, end: c.end, valStart: x.start + 1, valEnd: x.end - 1, quote: s[x.start] });
+        else if (x.type === 'TemplateLiteral' && !x.expressions.length) runs.push({ kind: 'string', start: c.start, end: c.end, valStart: x.start + 1, valEnd: x.end - 1, quote: '`' });
+        else if (x.type !== 'JSXElement' && x.type !== 'JSXFragment') runs.push({ kind: 'computed', start: c.start, end: c.end });
+      }
+    }
     const el = {
       tag: jsxName(o.name), name: jsxName(o.name), start: n.start, openEnd: o.end, closeStart: n.closingElement ? n.closingElement.start : o.end, end: n.end,
-      attrs, children: [], parent: stack[stack.length - 1] || null, selfClosing: o.selfClosing, jsx: true, textOnly, ast: n,
+      attrs, children: [], parent: stack[stack.length - 1] || null, selfClosing: o.selfClosing, jsx: true, textOnly, jsxRuns: runs, ast: n,
       directChildren: new Set(n.children.filter((c) => c.type === 'JSXElement').map((c) => c.start)),
     };
     // An element passed as a prop (icon={<Icon />}) belongs to its host but is not one of its source children.

@@ -7,19 +7,19 @@ no napkin runtime dependency, and nothing napkin needs inside your folder.
 
 ## Quickstart
 
-Use Node.js 26 or newer, npm, and git. Run these commands from this checkout:
+Use Node.js 26 or newer, npm, and git. From this checkout:
 
 <!-- quickstart:start -->
 ```sh
 npm ci
-node src/cli.js init ../my-napkin
+cp -r examples/starter ../my-napkin
 node src/cli.js open ../my-napkin
 ```
 <!-- quickstart:end -->
 
-`init` requires an empty destination, and the example puts it next to this
-checkout (`../my-napkin`), not inside it. It creates `napkin.json` and
-`components/Welcome.tsx`, then exits. `open` starts the server and prints the
+`open` takes any folder: point it at your own components instead of the copied
+starter (`node src/cli.js open path/to/your/folder`). Nothing in the folder is
+required and napkin writes nothing there except the edits you make. It prints the
 canvas address and a `.mcp.json` object for Claude Code. The default port is 4810;
 napkin tries the next port if it is occupied. Use `--port 0` for a free random port.
 Open the printed address. Stop the server with Ctrl+C.
@@ -44,6 +44,12 @@ in place, with undo. If the files use CSS variables that nothing they load defin
 folder's stylesheets apply and remembers the answer outside the folder. napkin
 writes nothing into the folder except the edits you make. The engine and its HTTP
 contract are described in [decision 0014](docs/decisions/0014-document-engine.md).
+
+### Optional: a starter project
+
+`node src/cli.js init <empty folder>` writes a `napkin.json` and
+`components/Welcome.tsx` into an empty folder and exits. It is not needed to open
+anything; it only gives you a fresh folder to start from.
 
 ## A 40-component sample
 
