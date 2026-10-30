@@ -14,6 +14,7 @@
 import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
+import { createDocFrame } from './doc-frames.js';
 
 let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -36,6 +37,7 @@ export function createStage(ctx, root, world, view) {
   function cellElement(id, node, variant) {
     const sec = sections.get(id);
     if (!sec) return null;
+    if (sec.docFrame) return sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js)
     const css = `.mount [data-n="${CSS.escape(node)}"]`;
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
@@ -144,6 +146,7 @@ export function createStage(ctx, root, world, view) {
     const sec = section(id);
     const token = ++sec.token;
     header(id);
+    if (c.kind === 'html') return renderDoc(id, c, sec, token);
     if (!force && ctx.state.components.size > CULL_AFTER) {
       if (!sec.pos) {
         sec.frame.innerHTML = '<div class="bundle-pending">Preview loads when in view</div>';
@@ -191,9 +194,32 @@ export function createStage(ctx, root, world, view) {
     refreshOverlays();
   }
 
+  // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
+  async function renderDoc(id, c, sec, token) {
+    if (!sec.docFrame) {
+      sec.docFrame = createDocFrame(ctx, id, { onResize: () => { if (!sections.has(id)) return; measure(sec); if (laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.frame.replaceChildren(sec.docFrame.cell);
+      sec.el.dataset.kind = 'html';
+    }
+    let ok = false;
+    try { ok = await sec.docFrame.load(c.revision); }
+    catch (e) { if (token === sec.token) { sec.docFrame.cell.querySelector('.build-error')?.remove(); sec.docFrame.cell.append(errorCard(`could not load ${c.path}: ${e.message}`)); } }
+    if (token !== sec.token) return;
+    sec.el.dataset.revision = c.revision; sec.el.dataset.ready = '1';
+    sec.el.querySelector('.rev').textContent = `r${String(c.revision).slice(0, 7)}`;
+    finish(sec, id, c.revision);
+    if (ok) {
+      const sels = ctx.state.selections.filter((s) => !(s.component === id && !sec.docFrame.has(s.node)));
+      if (sels.length !== ctx.state.selections.length) ctx.selectMany(sels);
+      else if (ctx.state.selection?.component === id) ctx.emit('select', ctx.state.selection); // the panel reads the new values
+    }
+    refreshOverlays();
+  }
+
   function remove(id) {
     const sec = sections.get(id);
     if (!sec) return;
+    sec.docFrame?.destroy();
     sec.token++; sec.unmounts.forEach((u) => u()); sec.el.remove(); sections.delete(id); auto.delete(id);
     if (ctx.state.selections.some((s) => s.component === id)) ctx.selectMany(ctx.state.selections.filter((s) => s.component !== id));
   }
@@ -582,15 +608,22 @@ export function createStage(ctx, root, world, view) {
   ctx.on('layout', () => queueCull());
 
   // ---------------------------------------------------------------------------------------------- pointer: hover, click, marquee, frame drag
-  const hit = (target) => {
+  const hit = (target, ev) => {
     const el = target.closest?.('.mount [data-n]');
     const cell = el?.closest('.cell');
+    if (!el && ev && !document.body.dataset.play) { // an HTML component's frame: hit-test the document inside it
+      const dc = target.closest?.('.doc-cell');
+      const id = dc?.closest('.cmp')?.dataset.component;
+      const p = id && sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY);
+      return p ? { el: p, id, variant: {} } : null;
+    }
     return el && cell && { el, id: cell.closest('.cmp').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
   root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
   const setHoverEl = (el, h) => { hoverEl = el; ctx.emit('hover', h ? { component: h.id, node: h.el.dataset.n } : null); refreshOverlays(); };
-  root.addEventListener('mouseover', (ev) => { if (document.body.dataset.play) return; const h = hit(ev.target); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mouseover', (ev) => { if (document.body.dataset.play) return; const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mousemove', (ev) => { if (document.body.dataset.play || !ev.target.closest?.('.doc-cell')) return; const h = hit(ev.target, ev); if ((h?.el ?? null) !== hoverEl) setHoverEl(h?.el ?? null, h); });
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
   function hoverNode(sel) {
@@ -601,7 +634,7 @@ export function createStage(ctx, root, world, view) {
   root.addEventListener('click', (ev) => {
     if (document.body.dataset.play) return; // play mode: the click belongs to the component
     if (suppressClick && Date.now() - suppressClick < 300) { suppressClick = 0; return; }
-    const h = hit(ev.target);
+    const h = hit(ev.target, ev);
     if (h) ev.preventDefault();
     if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
@@ -684,6 +717,7 @@ export function createStage(ctx, root, world, view) {
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
+      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; if (first) ctx.select({ component: d.id, node: first.node, variant: {} }); }
       else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
     }
@@ -694,7 +728,9 @@ export function createStage(ctx, root, world, view) {
     if (c) c.canvas = { ...pos };
     auto.delete(d.id);
     try {
-      const r = await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
+      const r = c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
+        ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, ...pos }) })
+        : await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     } catch (e) { document.querySelector('#error').textContent = `Could not save the position: ${plain(e.message)}`; }
     ctx.emit('moved', { component: d.id, ...pos });

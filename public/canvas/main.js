@@ -46,6 +46,7 @@ import { initTabs } from './tabs.js';
 import { initInstances } from './instances.js';
 import { initSlots } from './slots.js';
 import { initAgentsLane } from './agents-lane.js';
+import { initDocs } from './docs.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -172,9 +173,12 @@ client.onChange((f) => {
   else if (f.type === 'presence') ctx.emit('presence', f); // presence.js
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); counts(); }
+  else if (typeof f.type === 'string' && f.type.startsWith('doc-')) ctx.emit(f.type, f); // the document engine (docs.js)
 });
 
 for (const c of client.components()) sync(c.component);
+const docs = initDocs(ctx);
+await docs.load(); // the folder's HTML components (decision 0014), drawn with the rest
 await Promise.all([...ctx.state.components.keys()].map((id) => stage.render(id).catch(console.error)));
 stage.layoutAll();
 nav.restore();
@@ -183,3 +187,4 @@ counts();
 initEmpty(ctx, $('#stage'));
 $('#revision').parentElement.hidden = !ctx.state.selection;
 document.body.dataset.ready = '1';
+docs.ask();

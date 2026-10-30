@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { headInsertAt, attrOf, parseHtml } from './html.js';
 import { fromL } from './source.js';
+import { explainError } from '../errors.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 const href = (path) => '/raw/' + path.split('/').map(encodeURIComponent).join('/');
@@ -20,10 +21,11 @@ export function htmlView(engine, comp) {
   const s = entry.s;
   const parsed = entry.html || (entry.html = parseHtml(s));
   const at = headInsertAt(s, parsed);
-  const links = engine.applied().map((p) => `<link rel="stylesheet" href="${href(p)}">`).join('');
+  // data-napkin marks what napkin added, so the canvas's element map skips it (it draws nothing by itself)
+  const links = engine.applied().map((p) => `<link rel="stylesheet" href="${href(p)}" data-napkin>`).join('');
   const dir = posix.dirname(comp.path);
   const hasBase = parsed.nodes.some((n) => n.name === 'base' && attrOf(n, 'href'));
-  const base = hasBase ? '' : `<base href="${href(dir === '.' ? '' : dir + '/')}">`;
+  const base = hasBase ? '' : `<base href="${href(dir === '.' ? '' : dir + '/')}" data-napkin>`;
   const body = Buffer.concat([entry.buf.subarray(0, at), Buffer.from(links + base, 'utf8'), entry.buf.subarray(at)]);
   // The charset the file declares is the one the browser uses when it opens the file; say the same over HTTP.
   const meta = parsed.nodes.find((n) => n.name === 'meta' && attrOf(n, 'charset'));
@@ -64,7 +66,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
         define: { 'process.env.NODE_ENV': '"production"' }, loader: { '.svg': 'dataurl', '.png': 'dataurl' },
       });
       out = { code: r.outputFiles[0].text };
-    } catch (e) { out = { error: (e.errors?.[0]?.text || e.message).slice(0, 400), file: e.errors?.[0]?.location?.file }; }
+    } catch (e) { out = { error: explainError((e.errors?.[0]?.text || e.message).slice(0, 400), { next: 'fix the import or the code it names, then save; napkin builds it again.' }), file: e.errors?.[0]?.location?.file }; }
     cache.set(key, out);
     return out;
   }

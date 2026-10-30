@@ -12,11 +12,12 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { DocError } from './folder.js';
+import { explainError } from '../errors.js';
 import { htmlView, createTsxViews } from './view.js';
 
 const TYPES = { '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.mp4': 'video/mp4', '.webm': 'video/webm' };
 
-export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false } = {}) {
+export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false, legacyNewest = () => null } = {}) {
   const tsx = createTsxViews(engine);
   // Doc frames never carry a `component` key: the canvas's dialect client treats that key as one of its own components.
   engine.events.on('change', ({ component, ...c }) => broadcast({ type: 'doc-change', ...c, via: component ?? null, affects: safe(() => engine.componentsUsing(c.path), []) }));
@@ -25,20 +26,22 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
   const safe = (fn, d) => { try { return fn(); } catch { return d; } };
 
   const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
-  const fail = (res, e) => {
-    if (e instanceof DocError) return json(res, e.status, { ok: false, error: e.message, ...(e.revision && { revision: e.revision }), ...(e.matches && { matches: e.matches }) });
-    console.error(e); return json(res, 500, { ok: false, error: String(e.message) });
+  // Every error leaves with one next step (explainError), like every other napkin boundary.
+  const fail = (res, status, error, extra = {}) => json(res, status, { ok: false, error: explainError(error), ...extra });
+  const failWith = (res, e) => {
+    if (e instanceof DocError) return fail(res, e.status, e.message, { ...(e.revision && { revision: e.revision }), ...(e.matches && { matches: e.matches }) });
+    console.error(e); return fail(res, 500, String(e.message));
   };
   // The body is kept on the request (req.napkinBody) so a route that falls through can still read it.
   const body = async (req) => {
     if (req.napkinBody === undefined) { let b = ''; for await (const c of req) b += c; req.napkinBody = b; }
-    try { return JSON.parse(req.napkinBody); } catch { throw new DocError('body is not JSON', 400); }
+    try { return JSON.parse(req.napkinBody); } catch { throw new DocError('body is not JSON. Next: send valid JSON and retry', 400); }
   };
   const who = (req) => {
     const name = identify(/^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1]);
     if (!name) throw new DocError('identity required: send "Authorization: Bearer <token>" (POST /api/session { as } gives you one)', 401);
     const mode = permission(name);
-    if (mode !== 'write') throw new DocError(`agent "${name}" is ${mode === 'read' ? 'read-only' : 'propose-only'} (napkin.json agents): direct edits are not allowed`, 403);
+    if (mode !== 'write') throw new DocError(`agent "${name}" is ${mode === 'read' ? 'read-only' : 'propose-only'} (napkin.json agents): direct edits are not allowed. Next: check the caller name and permissions in napkin.json`, 403);
     return name;
   };
 
@@ -50,16 +53,21 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
       if (path === '/api/styles') {
         if (method === 'GET') return json(res, 200, engine.styles()), true;
         if (method === 'POST') { const m = await body(req); who(req); return json(res, 200, engine.setStyles(m?.applied)), true; }
-        return json(res, 405, { ok: false, error: 'method not allowed' }), true;
+        return fail(res, 405, 'method not allowed: use GET or POST as listed in /api/guide'), true;
       }
       if (path.startsWith('/api/component/')) {
         const [enc, sub] = path.slice('/api/component/'.length).split('/');
         const id = decodeURIComponent(enc);
-        if (method !== 'GET') return json(res, 405, { ok: false, error: 'method not allowed' }), true;
+        if (method !== 'GET') return fail(res, 405, 'method not allowed: use GET or POST as listed in /api/guide'), true;
         if (!sub) return json(res, 200, engine.tree(id)), true;
         if (sub === 'rules') return json(res, 200, engine.rulesOf(id)), true;
         if (sub === 'history') return json(res, 200, { ok: true, component: engine.component(id).id, history: engine.history(id) }), true;
-        return json(res, 404, { ok: false, error: 'not found' }), true;
+        return fail(res, 404, 'not found: use /api/component/<id>, /rules or /history'), true;
+      }
+      if (path === '/api/layout') {
+        if (method === 'GET') return json(res, 200, { ok: true, frames: engine.layout() }), true;
+        const m = await body(req); who(req);
+        return json(res, 200, engine.setLayout(m?.component, Number(m?.x), Number(m?.y))), true;
       }
       if (method === 'POST' && path === '/api/edit') {
         const m = await body(req);
@@ -67,12 +75,23 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         if (!m || typeof m.component !== 'string') throw new DocError('send { component, baseRevision, edits }', 400);
         return json(res, 200, engine.edit(m.component, { baseRevision: m.baseRevision, edits: m.edits, by, summary: m.summary })), true;
       }
-      if (method === 'POST' && (path === '/api/undo' || path === '/api/redo')) {
-        // Only for the engine's components; anything else falls through to the TSX-dialect store (src/api.js).
+      const step = /^\/api\/(undo|redo)$/.exec(path) || /^\/api\/components\/([^/]+)\/(undo|redo)$/.exec(path);
+      if (method === 'POST' && step) {
+        // Only for the engine's components; anything else falls through to the TSX-dialect store (src/api.js). With no
+        // component named, the caller's newest step in either engine is the one undone.
+        const verb = step.length === 2 ? step[1] : step[2];
         const raw = await body(req).catch(() => null);
-        if (!raw || typeof raw.component !== 'string' || legacy(raw.component) || !engine.has(raw.component)) return false;
+        let id = step.length === 3 ? decodeURIComponent(step[1]) : raw?.component;
+        if (id === undefined || id === null) {
+          const name = identify(/^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1]);
+          const mine = name && engine.latest(verb, name);
+          if (!mine || (legacyNewest(verb, name) ?? -1) > mine.at) return false;
+          id = mine.component;
+        }
+        if (typeof id !== 'string' || legacy(id) || !engine.has(id)) return false;
         const by = who(req);
-        return json(res, 200, path === '/api/undo' ? engine.undo(raw.component, by) : engine.redo(raw.component, by)), true;
+        const r = verb === 'undo' ? engine.undo(id, by) : engine.redo(id, by);
+        return json(res, 200, { ...r, [verb === 'undo' ? 'undone' : 'redone']: { summary: engine.history(id)[0]?.summary?.replace(/^(undo|redo): /, '') } }), true;
       }
       if (method === 'GET' && path.startsWith('/view/')) {
         const id = decodeURIComponent(path.slice('/view/'.length));
@@ -83,12 +102,12 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
       }
       if (method === 'GET' && path.startsWith('/raw/')) {
         const rel = decodeURIComponent(path.slice('/raw/'.length));
-        let p, st; try { p = engine.abs(rel); st = statSync(p); } catch { return json(res, 404, { ok: false, error: `no file ${rel}` }), true; }
-        if (!st.isFile()) return json(res, 404, { ok: false, error: `no file ${rel}` }), true;
+        let p, st; try { p = engine.abs(rel); st = statSync(p); } catch { return fail(res, 404, `no file ${rel} in the folder: check the path`), true; }
+        if (!st.isFile()) return fail(res, 404, `no file ${rel} in the folder: check the path`), true;
         res.writeHead(200, { 'content-type': TYPES[extname(p).toLowerCase()] || 'application/octet-stream', 'cache-control': 'no-store' });
         return res.end(readFileSync(p)), true;
       }
-    } catch (e) { return fail(res, e), true; }
+    } catch (e) { return failWith(res, e), true; }
     return false;
   };
 }

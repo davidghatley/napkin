@@ -1,0 +1,53 @@
+/* The document engine on the canvas (decision 0014): HTML components drawn in their own frame, the "ask once"
+   stylesheet question, and the HTML design panel. Editor rules here never reach inside a frame: it is its own document. */
+
+/* the frame: the file as the browser draws it. While editing, the stage hit-tests it from outside. */
+.cell.doc-cell { padding: 0; border: 1px solid var(--nk-cell-line); border-style: solid; border-radius: 2px; align-items: stretch; justify-content: flex-start; min-width: 0; min-height: 0; background: transparent; overflow: visible; }
+.doc-cell iframe.doc-frame { display: block; border: 0; background: transparent; color-scheme: normal; pointer-events: none; }
+body[data-play] .doc-cell iframe.doc-frame { pointer-events: auto; }
+.doc-cell iframe.doc-next { position: absolute; left: 0; top: 0; visibility: hidden; }
+.doc-cell figcaption { top: calc(100% + 4px); left: 0; right: auto; text-align: left; }
+
+/* ask once: which stylesheets the folder's components share */
+#ask-styles { position: absolute; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); max-height: calc(100% - 32px); overflow: auto; padding: 16px 18px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: 0 0 0 1px var(--nk-line), 0 12px 32px rgba(20, 24, 36, .18); font: 13px/1.5 var(--nk-sans); }
+#ask-styles h2 { margin: 0 0 6px; font: 600 14px var(--nk-sans); }
+#ask-styles p { margin: 0 0 10px; color: var(--nk-text-2); }
+#ask-styles ul { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 4px; }
+#ask-styles label { display: flex; align-items: baseline; gap: 8px; cursor: pointer; }
+#ask-styles code { font: 12px var(--nk-mono); color: var(--nk-text); }
+#ask-styles .why { color: var(--nk-text-3); font-size: 11.5px; }
+#ask-styles .actions { display: flex; gap: 8px; margin: 0; }
+#ask-styles button { height: 28px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--nk-line-2); background: var(--nk-chrome-2); color: var(--nk-text); font: 500 12.5px var(--nk-sans); cursor: pointer; }
+#ask-styles button.primary { background: var(--nk-accent); border-color: var(--nk-accent); color: #fff; }
+
+/* the HTML design panel */
+#panel .doc-head .mono { font: 11.5px var(--nk-mono); }
+#panel .doc-body { display: grid; }
+#panel .dsec { border-top: 1px solid var(--nk-line); padding: 10px 14px 12px; display: grid; gap: 6px; }
+#panel .dsec h3 { margin: 0; display: flex; align-items: baseline; gap: 8px; font: 700 12.5px var(--nk-sans); color: var(--nk-text); }
+#panel .dsec h3 .where { font: 400 11px var(--nk-sans); color: var(--nk-text-3); }
+#panel #doc-text { width: 100%; box-sizing: border-box; resize: vertical; padding: 6px 8px; border: 1px solid var(--nk-line); border-radius: 6px; background: var(--nk-chrome-2); color: var(--nk-text); font: 12.5px/1.45 var(--nk-sans); }
+#panel .doc-classes { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+#panel .cls { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px 0 7px; border-radius: 5px; background: var(--nk-chrome-2); box-shadow: inset 0 0 0 1px var(--nk-line); }
+#panel .cls code { font: 11.5px var(--nk-mono); color: var(--nk-text); }
+#panel .cls-x, #panel .decl-x { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--nk-text-3); font: 13px/1 var(--nk-sans); cursor: pointer; }
+#panel .cls-x:hover, #panel .decl-x:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
+#panel #doc-class-add { flex: 1; min-width: 80px; height: 22px; padding: 0 6px; border: 1px dashed var(--nk-line-2); border-radius: 5px; background: transparent; color: var(--nk-text); font: 11.5px var(--nk-mono); }
+#panel .rule { display: grid; gap: 2px; padding: 6px 0 4px; border-top: 1px dashed var(--nk-line); }
+#panel .rule:first-of-type { border-top: 0; }
+#panel .rhead { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+#panel .rhead .sel { font: 600 11.5px var(--nk-mono); color: var(--nk-accent-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .rhead .media { font: 10.5px var(--nk-mono); color: var(--nk-text-3); white-space: nowrap; }
+#panel .src { margin-left: auto; flex: none; font: 10.5px var(--nk-mono); color: var(--nk-text-3); }
+#panel .decls { display: grid; gap: 1px; }
+#panel .decl { display: grid; grid-template-columns: minmax(70px, 40%) minmax(0, 1fr) auto auto auto; align-items: center; gap: 4px; min-height: 24px; }
+#panel .decl .prop { font: 11.5px var(--nk-mono); color: var(--nk-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .decl input { min-width: 0; height: 22px; padding: 0 6px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--nk-text); font: 11.5px var(--nk-mono); }
+#panel .decl input:hover { border-color: var(--nk-line-2); }
+#panel .decl input:focus { outline: 0; border-color: var(--nk-accent); background: var(--nk-chrome); }
+#panel .decl.over .prop, #panel .decl.over input { text-decoration: line-through; color: var(--nk-text-3); }
+#panel .decl .imp { font: 10px var(--nk-mono); color: var(--nk-text-3); }
+#panel .decl.add { grid-template-columns: minmax(70px, 40%) minmax(0, 1fr); }
+#panel .decl.add input { border-style: dashed; border-color: var(--nk-line); }
+#panel .decl.ro .val { font: 11.5px var(--nk-mono); color: var(--nk-text-3); }
+#panel #doc-error { margin: 8px 14px; }

@@ -16,6 +16,7 @@ import { parseCss, varUses, stripCommentsKeep } from './css.js';
 import { parseJsx, componentTree } from './jsx.js';
 import { planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf } from './edit.js';
 import { writeAtomic } from '../atomic.js';
+import { explainError } from '../errors.js';
 
 const KINDS = { '.html': 'html', '.htm': 'html', '.tsx': 'tsx', '.jsx': 'jsx', '.css': 'css' };
 const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', 'out', 'coverage', 'bower_components', 'vendor', 'target']);
@@ -38,15 +39,17 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   const past = new Map();         // path -> Map(rev -> s)   a few recent texts, for stale edits
   let list = null;                // [{ path, kind }]
   const dirs = new Set();
-  let applied = [];
-  try { applied = JSON.parse(readFileSync(join(state, 'styles.json'), 'utf8')).applied || []; } catch { /* never answered */ }
+  let applied = [], answered = false;
+  try { const j = JSON.parse(readFileSync(join(state, 'styles.json'), 'utf8')); applied = j.applied || []; answered = true; } catch { /* never answered */ }
+  let layout = {};  // component -> { x, y }: where its frame sits on the canvas (state dir, never the folder)
+  try { layout = JSON.parse(readFileSync(join(state, 'layout.json'), 'utf8')).frames || {}; } catch { /* nothing moved yet */ }
   const undo = new Map(), redo = new Map(); // component -> [step]
   const history = new Map();      // component -> [{ revision, by, at, summary }]
 
   // ---------- files ----------
   const abs = (path) => {
     const p = resolve(root, path);
-    if (p !== root && !p.startsWith(root + sep)) throw new DocError(`${path} is outside the folder`, 400);
+    if (p !== root && !p.startsWith(root + sep)) throw new DocError(`${path} is outside the folder. Next: use a path inside the folder napkin opened`, 400);
     return p;
   };
   function scan() {
@@ -71,7 +74,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   }
   function read(path) {
     const p = abs(path);
-    let st; try { st = statSync(p); } catch { cache.delete(path); throw new DocError(`no file ${path}`, 404); }
+    let st; try { st = statSync(p); } catch { cache.delete(path); throw new DocError(`no file ${path}. Next: check the path against GET /api/files`, 404); }
     const c = cache.get(path);
     if (c && c.mtimeMs === st.mtimeMs && c.size === st.size && c.ino === st.ino) return c;
     const buf = readFileSync(p);
@@ -94,24 +97,25 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   function filesList() {
     if (!list) scan();
     return list.map(({ path, kind }) => {
-      if (kind === 'html') return { path, kind, components: [{ id: path, name: htmlName(path) }] };
-      if (kind === 'css') return { path, kind, components: [] };
+      const revision = (() => { try { return read(path).rev; } catch { return null; } })();
+      if (kind === 'html') return { path, kind, revision, components: [{ id: path, name: htmlName(path) }] };
+      if (kind === 'css') return { path, kind, revision, components: [] };
       let comps = [];
       try { const c = jsx(path); comps = c.jsx.components.map((x) => ({ id: `${path}#${x.name}`, name: x.name })); } catch { /* unreadable: listed with none */ }
-      return { path, kind, components: comps, ...(cache.get(path)?.jsx?.error && { error: cache.get(path).jsx.error }) };
+      return { path, kind, revision, components: comps, ...(cache.get(path)?.jsx?.error && { error: explainError(cache.get(path).jsx.error, { file: path }) }) };
     });
   }
   function component(id) {
-    if (typeof id !== 'string' || !id) throw new DocError('no component named', 400);
+    if (typeof id !== 'string' || !id) throw new DocError('no component named. Next: send a component id from GET /api/files', 400);
     const [path, name] = id.includes('#') ? [id.slice(0, id.lastIndexOf('#')), id.slice(id.lastIndexOf('#') + 1)] : [id, null];
     const kind = kindOf(path);
-    if (!kind || kind === 'css') throw new DocError(`no component ${id}`, 404);
-    try { abs(path); } catch { throw new DocError(`no component ${id}`, 404); }
-    if (!existsSync(abs(path))) throw new DocError(`no component ${id}: ${path} does not exist`, 404);
-    if (kind === 'html') { if (name) throw new DocError(`no component ${id}: one .html file is one component (${path})`, 404); return { id, path, kind, name: htmlName(path) }; }
+    if (!kind || kind === 'css') throw new DocError(`no component ${id}. Next: use a component id from GET /api/files`, 404);
+    try { abs(path); } catch { throw new DocError(`no component ${id}. Next: use a component id from GET /api/files`, 404); }
+    if (!existsSync(abs(path))) throw new DocError(`no component ${id}: ${path} does not exist. Next: use a component id from GET /api/files`, 404);
+    if (kind === 'html') { if (name) throw new DocError(`no component ${id}: one .html file is one component (${path}). Next: use the id ${path}`, 404); return { id, path, kind, name: htmlName(path) }; }
     const c = jsx(path);
     const comp = name ? c.jsx.components.find((x) => x.name === name) : c.jsx.components[0];
-    if (!comp) throw new DocError(`no component ${id}${c.jsx.error ? ` (${c.jsx.error})` : ''}`, 404);
+    if (!comp) throw new DocError(`no component ${id}${c.jsx.error ? ` (${c.jsx.error})` : ''}. Next: use a component id from GET /api/files`, 404);
     return { id: `${path}#${comp.name}`, path, kind, name: comp.name, exportName: comp.exportName, isDefault: comp.isDefault };
   }
   const has = (id) => { try { component(id); return true; } catch { return false; } };
@@ -124,7 +128,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     }
     const e = entry || jsx(comp.path);
     const parsed = e.jsx || (e.jsx = parseJsx(e.s, extname(comp.path)));
-    if (parsed.error) throw new DocError(`${comp.path}: ${parsed.error}`, 422);
+    if (parsed.error) throw new DocError(`${comp.path}: ${parsed.error}. Next: fix the syntax error, then save; napkin reads it again`, 422);
     const decl = parsed.components.find((x) => x.name === comp.name);
     const t = componentTree(parsed, decl);
     return { entry: e, roots: t.roots, flat: t.flat, find: (nid) => t.flat.find((x) => x.id === String(nid)) || null };
@@ -218,41 +222,79 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     }
     return { used, defined };
   }
+  // Class names a component's elements use that no rule in its cascade mentions.
+  const CLASS_IN_SELECTOR = /\.(-?[_a-zA-Z][\w-]*)/g;
+  function unstyledOf(comp) {
+    const { entry } = nodesOf(comp);
+    const used = new Set();
+    for (const n of entry.html.nodes) { const a = attrOf(n, 'class'); if (a?.value) for (const t of fromL(a.value).split(/\s+/)) if (t) used.add(t); }
+    if (!used.size) return used;
+    for (const sh of sheetsOf(comp)) {
+      if (sh.external || sh.missing) continue;
+      const c = read(sh.file);
+      for (const r of parseCss(c.s, sh.from, sh.to).rules) for (const m of fromL(r.selector).matchAll(CLASS_IN_SELECTOR)) used.delete(m[1]);
+    }
+    return used;
+  }
   function styles() {
-    const missing = new Map(); // name -> count of components
+    const missing = new Map(), unstyled = new Map(); // name -> count of components
     const comps = filesList().filter((f) => f.kind === 'html').map((f) => ({ id: f.path, path: f.path, kind: 'html' }));
     for (const comp of comps) {
       let v; try { v = varsOf(comp); } catch { continue; }
       for (const [name, u] of v.used) if (!u.fallback && !v.defined.has(name)) missing.set(name, (missing.get(name) || 0) + 1);
+      if (v.used.size && [...v.used].some(([name, u]) => !u.fallback && !v.defined.has(name))) for (const k of unstyledOf(comp)) unstyled.set(k, (unstyled.get(k) || 0) + 1);
     }
-    // Stylesheets in the folder that define those variables, best first.
+    // Stylesheets in the folder that define those variables, or style those classes, best first; `pick` is a small set
+    // that covers them (variables first, so the cascade reads tokens before the rules that use them).
     const suggest = [];
     if (missing.size) {
       for (const f of filesList().filter((x) => x.kind === 'css')) {
         if (applied.includes(f.path)) continue;
         let c; try { c = css(f.path); } catch { continue; }
         const defs = new Set(); for (const m of stripCommentsKeep(c.s).matchAll(/(?:^|[;{\s])(--[\w-]+)\s*:/g)) defs.add(m[1]);
-        const covers = [...missing.keys()].filter((n) => defs.has(n)).length;
-        if (covers) suggest.push({ path: f.path, defines: covers });
+        const classes = new Set(); for (const r of c.css.rules) for (const m of fromL(r.selector).matchAll(CLASS_IN_SELECTOR)) classes.add(m[1]);
+        const vars = [...missing.keys()].filter((n) => defs.has(n)), styled = [...unstyled.keys()].filter((k) => classes.has(k));
+        if (vars.length || styled.length) suggest.push({ path: f.path, defines: vars.length, styles: styled.length, vars, classes: styled });
       }
-      suggest.sort((a, b) => b.defines - a.defines || a.path.length - b.path.length);
+      suggest.sort((a, b) => (b.defines + b.styles) - (a.defines + a.styles) || a.path.length - b.path.length);
     }
-    return { undefinedVars: [...missing.keys()].sort(), applied: [...applied], components: comps.length, missing: [...missing].map(([name, components]) => ({ name, components })), suggest };
+    const pick = [], left = { vars: new Set(missing.keys()), classes: new Set(unstyled.keys()) };
+    for (;;) {
+      const gain = (x) => x.vars.filter((n) => left.vars.has(n)).length + x.classes.filter((k) => left.classes.has(k)).length;
+      const best = suggest.filter((x) => !pick.includes(x)).sort((a, b) => gain(b) - gain(a) || a.path.length - b.path.length)[0];
+      if (!best || !gain(best)) break;
+      pick.push(best); best.vars.forEach((n) => left.vars.delete(n)); best.classes.forEach((k) => left.classes.delete(k));
+    }
+    pick.sort((a, b) => (b.defines > b.styles) - (a.defines > a.styles));
+    return {
+      undefinedVars: [...missing.keys()].sort(), applied: [...applied], answered, components: comps.length,
+      missing: [...missing].map(([name, components]) => ({ name, components })), unstyledClasses: unstyled.size,
+      suggest: suggest.map(({ path, defines, styles: st }) => ({ path, defines, styles: st })), pick: pick.map((x) => x.path),
+    };
   }
   function setStyles(next) {
     if (!Array.isArray(next) || next.some((p) => typeof p !== 'string')) throw new DocError('send { applied: ["tokens.css", ...] }: folder-relative stylesheet paths', 400);
     const clean = [];
     for (const p of next) {
       const rel = posixRel(relative(root, abs(p)));
-      if (kindOf(rel) !== 'css') throw new DocError(`${p} is not a .css file`, 400);
-      if (!existsSync(abs(rel))) throw new DocError(`no stylesheet ${p} in the folder`, 404);
+      if (kindOf(rel) !== 'css') throw new DocError(`${p} is not a .css file. Next: choose stylesheets (.css) from the folder`, 400);
+      if (!existsSync(abs(rel))) throw new DocError(`no stylesheet ${p} in the folder. Next: choose a .css path listed by GET /api/files`, 404);
       if (!clean.includes(rel)) clean.push(rel);
     }
-    applied = clean;
+    applied = clean; answered = true;
     mkdirSync(state, { recursive: true });
     writeAtomic(join(state, 'styles.json'), JSON.stringify({ folder: real, applied }, null, 2) + '\n');
     events.emit('styles', { applied: [...applied] });
     return { ok: true, applied: [...applied] };
+  }
+
+  function setLayout(id, x, y) {
+    const comp = component(id);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new DocError('send { component, x, y } with numbers. Next: retry with the frame position', 400);
+    layout[comp.id] = { x: Math.round(x), y: Math.round(y) };
+    mkdirSync(state, { recursive: true });
+    writeAtomic(join(state, 'layout.json'), JSON.stringify({ folder: real, frames: layout }) + '\n');
+    return { ok: true, component: comp.id, canvas: layout[comp.id] };
   }
 
   // ---------- edits ----------
@@ -279,9 +321,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     }
     const baseNodes = needsNodes ? nodesOf(comp, comp.kind === 'html' ? { s: baseText, html: parseHtml(baseText) } : { s: baseText, jsx: parseJsx(baseText, extname(comp.path)) }) : null;
     const startOf = (nid, what, k) => {
-      if (nid === undefined || nid === null) throw new DocError(`edit #${k}: ${what} is missing`, 400);
+      if (nid === undefined || nid === null) throw new DocError(`edit #${k}: ${what} is missing. Next: send the node id from GET /api/component`, 400);
       const n = baseNodes.find(String(nid));
-      if (!n) throw new DocError(`edit #${k}: no node ${nid} in ${comp.id}`, 404);
+      if (!n) throw new DocError(`edit #${k}: no node ${nid} in ${comp.id}. Next: read GET /api/component again and use a current node id`, 404);
       return { start: n.start, head: baseText.slice(n.start, n.openEnd) };
     };
     // Base offsets -> current text: when rebasing, a node must still begin with the same start tag at a unique place.
@@ -292,7 +334,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       return hits[0];
     };
     const refs = edits.map((e, k) => {
-      if (!e || typeof e !== 'object') throw new DocError(`edit #${k} is not an object`, 400);
+      if (!e || typeof e !== 'object') throw new DocError(`edit #${k} is not an object. Next: send edits as objects like { op: 'text', node, value }`, 400);
       if (e.op === 'rule' || e.op === 'var') return {};
       const r = {};
       if (e.op === 'insert') r.parent = locate(startOf(e.parent, 'parent', k), k);
@@ -308,15 +350,15 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       try {
         let path, splices;
         if (e.op === 'rule' || e.op === 'var') {
-          if (typeof e.file !== 'string') throw new DocError(`edit #${k}: ${e.op} needs file (a folder-relative path)`, 400);
+          if (typeof e.file !== 'string') throw new DocError(`edit #${k}: ${e.op} needs file. Next: send file as a folder-relative path`, 400);
           path = posixRel(relative(root, abs(e.file)));
-          if (!['css', 'html'].includes(kindOf(path))) throw new DocError(`edit #${k}: ${e.file} is not a stylesheet or an HTML file`, 400);
+          if (!['css', 'html'].includes(kindOf(path))) throw new DocError(`edit #${k}: ${e.file} is not a stylesheet or an HTML file. Next: choose a .css or .html file`, 400);
           const s = textOf(path);
           splices = (e.op === 'rule' ? planRule(s, sheetsIn(path, s), e) : planVar(s, sheetsIn(path, s), e)).splices;
         } else {
           path = comp.path;
           const s = textOf(path);
-          const find = (start, what) => { const n = nodeIn(comp, s, map(path, start)); if (!n) throw new DocError(`edit #${k}: the ${what} is gone after an earlier edit of this batch`, 409); return n; };
+          const find = (start, what) => { const n = nodeIn(comp, s, map(path, start)); if (!n) throw new DocError(`edit #${k}: the ${what} is gone after an earlier edit of this batch. Next: send it as a separate batch`, 409); return n; };
           if (e.op === 'insert') splices = planInsert(s, find(refs[k].parent, 'parent'), e.index ?? 0, e.html ?? e.jsx);
           else if (e.op === 'move') splices = planMove(s, find(refs[k].node, 'node'), find(refs[k].parent, 'parent'), e.index ?? 0);
           else splices = planNodeEdit(s, find(refs[k].node, 'node'), e);
@@ -326,9 +368,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
         if (!done.has(path)) done.set(path, []);
         done.get(path).push(splices);
       } catch (err) {
-        if (err instanceof EditRefused) throw new DocError(`edit #${k} (${e.op}): ${err.message}`, err.status, { matches: err.matches });
+        if (err instanceof EditRefused) throw new DocError(explainError(`edit #${k} (${e.op}): ${err.message}`), err.status, { matches: err.matches });
         if (err instanceof DocError) throw err;
-        throw new DocError(`edit #${k} (${e.op}): ${err.message}`, 400);
+        throw new DocError(explainError(`edit #${k} (${e.op}): ${err.message}`), 400);
       }
     });
     const changed = [...texts].filter(([path, s]) => s !== read(path).s);
@@ -367,7 +409,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       let q = 0; while (q < a.length - p && q < b.length - p && a[a.length - 1 - q] === b[b.length - 1 - q]) q++;
       const ctxA = a.slice(Math.max(0, p - 40), a.length - q + 40), ctxB = b.slice(Math.max(0, p - 40), b.length - q + 40);
       const i = now.indexOf(ctxA);
-      if (i < 0 || now.indexOf(ctxA, i + 1) >= 0) throw new DocError(`${f.path} changed since that edit, around it; napkin will not overwrite those changes`, 409);
+      if (i < 0 || now.indexOf(ctxA, i + 1) >= 0) throw new DocError(`${f.path} changed since that edit, around it; napkin will not overwrite those changes. Next: edit the value directly instead`, 409);
       out.push({ path: f.path, before: now, after: now.slice(0, i) + ctxB + now.slice(i + ctxA.length) });
     }
     return out;
@@ -377,7 +419,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const [fromStack, toStack, a, b] = kind === 'undo' ? [undo, redo, 'after', 'before'] : [redo, undo, 'before', 'after'];
     const stack = fromStack.get(comp.id) || [];
     let k = stack.length - 1; while (k >= 0 && stack[k].by !== by) k--;
-    if (k < 0) throw new DocError(`nothing of yours to ${kind} in ${comp.id}`, 409);
+    if (k < 0) throw new DocError(`nothing of yours to ${kind} in ${comp.id}. Next: check GET /api/component/<id>/history for who made the edits`, 409);
     const st = stack[k];
     const files = swap(st, a, b);
     write(files);
@@ -429,7 +471,12 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   scan(); watchDirs();
   return {
     root, state, events,
-    files: filesList, component, has, tree, rulesOf, sheetsOf, styles, setStyles, edit,
+    files: filesList, component, has, tree, rulesOf, sheetsOf, styles, setStyles, edit, layout: () => ({ ...layout }), setLayout,
+    latest(verb, by) { // the newest step this caller can undo (or redo) in any component: { component, at } | null
+      let best = null;
+      for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };
+      return best;
+    },
     undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'),
     history: (id) => [...(history.get(component(id).id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,

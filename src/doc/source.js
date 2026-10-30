@@ -27,7 +27,7 @@ export function lineOf(s, offset) {
 // A splice is { from, to, text } on the latin1 string. Splices of one change never overlap; they are applied from the end.
 export function applySplices(s, splices) {
   const sorted = [...splices].sort((a, b) => b.from - a.from || b.to - a.to);
-  for (let k = 1; k < sorted.length; k++) if (sorted[k].to > sorted[k - 1].from) throw new Error('internal: overlapping splices');
+  for (let k = 1; k < sorted.length; k++) if (sorted[k].to > sorted[k - 1].from) throw new Error('internal: overlapping splices. Next: send the edits as separate batches');
   let out = s;
   for (const sp of sorted) out = out.slice(0, sp.from) + sp.text + out.slice(sp.to);
   return out;

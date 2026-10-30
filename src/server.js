@@ -90,7 +90,8 @@ ws.events.on('added', async ({ component, by, summary }) => {
   if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)), ...(by && { by, summary }) });
 });
 
-const docRoutes = createDocRoutes(docs, { identify: (t) => api.identify(t), permission: (name) => agentPermission(dir, name), broadcast, legacy: (id) => !!ws.find(id) });
+const docRoutes = createDocRoutes(docs, { identify: (t) => api.identify(t), permission: (name) => agentPermission(dir, name), broadcast, legacy: (id) => !!ws.find(id),
+  legacyNewest: (verb, by) => { let at = null; for (const x of ws.entries()) { const t = x.store[verb + 'Top']?.(by); if (t && (at === null || t.at > at)) at = t.at; } return at; } });
 const json = (res, code, body) => { if (body?.error) body.error = explainError(body.error); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 const STATIC = { '/': 'public/index.html', '/brand/napkin-favicon.svg': 'public/brand/napkin-favicon.svg', '/brand/napkin-glyph.svg': 'public/brand/napkin-glyph.svg', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js', '/src/css-props.js': 'src/css-props.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml' };

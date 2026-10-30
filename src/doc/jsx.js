@@ -6,6 +6,7 @@
 // component: { name, exportName, isDefault, start, end }   start..end is the declaration the component's JSX lives in
 // element: { tag, name, start, openEnd, closeStart, end, attrs, children, parent, selfClosing, jsx: true, textOnly, text }
 import { parse } from '@babel/parser';
+import { explainError } from '../errors.js';
 
 const SKIP = new Set(['loc', 'extra', 'leadingComments', 'trailingComments', 'innerComments', 'range', 'start', 'end', 'typeAnnotation', 'typeParameters', 'returnType']);
 function walk(node, visit, parent = null) {
@@ -35,7 +36,7 @@ export function parseJsx(s, ext = '.tsx') {
   let ast;
   const plugins = ext === '.jsx' || ext === '.js' ? ['jsx'] : ['typescript', 'jsx'];
   try { ast = parse(s, { sourceType: 'module', plugins, errorRecovery: true }); }
-  catch (e) { return { ast: null, components: [], elements: [], error: `line ${e.loc?.line ?? '?'}: ${e.message.replace(/\s*\(\d+:\d+\)$/, '')}` }; }
+  catch (e) { return { ast: null, components: [], elements: [], error: explainError(`line ${e.loc?.line ?? '?'}: ${e.message.replace(/\s*\(\d+:\d+\)$/, '')}`) }; }
   // Top-level declarations by local name.
   const locals = new Map();
   for (const st of ast.program.body) {
