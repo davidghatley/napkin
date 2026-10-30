@@ -5,7 +5,7 @@ import { parseColor, contrast, classify, nearest, offScale, bindExact, bindPiece
 import { mediaMatches, parseInline } from '../../public/canvas/inspector-cascade.js';
 import { normalizeTyped, varChange } from '../../public/canvas/inspector-scope.js';
 
-const vars = { '--space-1': '4px', '--space-2': '8px', '--space-3': '12px', '--space-4': '16px', '--radius-1': '2px', '--ink': '#16181d', '--vermilion': '#ee5228', '--paper': 'rgb(238, 237, 231)', '--font-mono': '"IBM Plex Mono", monospace', '--type-body': '400 16px/24px system-ui' };
+const vars = { '--line-heavy': '3px', '--line-hair': '1px', '--c': '#123456', '--leading-body': '24px', '--text-sm': '14px', '--space-1': '4px', '--space-2': '8px', '--space-3': '12px', '--space-4': '16px', '--radius-1': '2px', '--ink': '#16181d', '--vermilion': '#ee5228', '--paper': 'rgb(238, 237, 231)', '--font-mono': '"IBM Plex Mono", monospace', '--type-body': '400 16px/24px system-ui' };
 const g = classify(vars);
 
 test('colour parsing and WCAG contrast', () => {
@@ -20,8 +20,10 @@ test('colour parsing and WCAG contrast', () => {
 });
 
 test('the strips: swatch, scale and type', () => {
-  assert.deepEqual(g.color.map((v) => v.name), ['--ink', '--vermilion', '--paper']);
+  assert.deepEqual(g.color.map((v) => v.name).sort(), ['--c', '--ink', '--paper', '--vermilion']);
   assert.deepEqual(g.space.map((v) => v.name), ['--space-1', '--space-2', '--space-3', '--space-4']);
+  assert.deepEqual(g.other.map((v) => v.name), ['--line-heavy', '--line-hair'], 'a name that says nothing about spacing or type is not a scale');
+  assert.deepEqual([g.size.map((v) => v.name), g.leading.map((v) => v.name)], [['--text-sm'], ['--leading-body']]);
   assert.deepEqual(g.radius.map((v) => v.name), ['--radius-1']);
   assert.deepEqual(g.type.map((v) => v.name), ['--font-mono', '--type-body']);
 });
@@ -36,6 +38,12 @@ test('off scale: raw colours and lengths are flagged with the nearest variable; 
   assert.deepEqual(offScale('color', 'var(--ink)', g), []);
   assert.deepEqual(offScale('color', 'currentcolor', g), []);
   assert.equal(nearest('padding', '13px', g).name, '--space-3');
+  // no false flags: a value is only offered a variable of its own group that it is close to
+  assert.deepEqual(offScale('font-size', '16px', g), [], '16px is 2px from --text-sm (14px): not near enough, and not the line heights or hairlines');
+  assert.deepEqual(offScale('line-height', '24px', g).map((o) => [o.name, o.exact]), [['--leading-body', true]], 'exactly a variable: said so');
+  assert.deepEqual(offScale('line-height', '25px', g).map((o) => o.name), ['--leading-body']);
+  assert.deepEqual(offScale('color', 'red', g), [], 'red is nowhere near the folder’s colours');
+  assert.deepEqual(offScale('border', '1px solid #16181d', g).map((o) => [o.token, o.name]), [['#16181d', '--ink']], 'the hairline is a border width, not a space');
   assert.equal(nearest('border-radius', '3px', g).name, '--radius-1');
   assert.equal(nearest('margin', '10px', { ...g, space: [] }), null, 'no space variables, nothing to offer');
 });

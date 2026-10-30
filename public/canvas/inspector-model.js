@@ -49,7 +49,8 @@ export function kindOfProp(prop) {
   if (/^(color|background|background-color|border(-(top|right|bottom|left|block|inline)(-(start|end))?)?(-color)?|outline(-color)?|fill|stroke|caret-color|accent-color|text-decoration-color|column-rule-color)$/.test(p)) return 'color';
   if (/^(padding|margin|gap|row-gap|column-gap)(-(top|right|bottom|left|block|inline)(-(start|end))?)?$/.test(p) || /^(inset|top|right|bottom|left)$/.test(p)) return 'space';
   if (/^border(-(top|right|bottom|left|start-start|start-end|end-start|end-end))*-radius$/.test(p)) return 'radius';
-  if (/^(font-size|line-height)$/.test(p)) return 'size';
+  if (p === 'font-size') return 'size';
+  if (p === 'line-height') return 'leading';
   if (/^(font-family|font)$/.test(p)) return 'type';
   return null;
 }
@@ -69,36 +70,40 @@ export function tokens(value) {
 // ---------- the folder's variables as instruments ----------
 // vars: { '--space-3': '12px', ... } (resolved values, for the current theme). Sorted into strips.
 export function classify(vars) {
-  const out = { color: [], space: [], radius: [], size: [], type: [], other: [] };
+  const out = { color: [], space: [], radius: [], size: [], leading: [], type: [], other: [] };
   for (const [name, value] of Object.entries(vars)) {
     const v = String(value).trim();
     if (!v) continue;
     const c = parseColor(v), px = parseLength(v);
     if (c) out.color.push({ name, value: v, rgba: c });
     else if (px !== null) {
-      const kind = /radius|round|corner/i.test(name) ? 'radius' : /font|text|type|size|leading|line/i.test(name) && !/space|gap|pad|margin/i.test(name) ? 'size' : 'space';
+      // a length belongs to a group by what its name says it is for; a name that says nothing (--line-heavy) is left out
+      const kind = /leading|line-?height/i.test(name) ? 'leading' : /radius|round|corner|disc/i.test(name) ? 'radius' : /space|gap|pad|margin|gutter|inset/i.test(name) ? 'space' : /font-?size|text-?(xs|sm|md|lg|xl|size)|type-?size|(^|-)fs(-|$)|^--size(-|$)/i.test(name) ? 'size' : 'other';
       out[kind].push({ name, value: v, px });
-    } else if (/font|type|family|face/i.test(name) || /^\s*(\d{3}\s+)?[\d.]+(px|rem)(\/[\d.]+(px|rem)?)?\s+\S/.test(v) || /["'][^"']+["']/.test(v) && /,/.test(v)) out.type.push({ name, value: v });
+    } else if (/^\s*-?[\d.]+\s*$/.test(v) && /leading|line-?height/i.test(name)) out.leading.push({ name, value: v, px: parseFloat(v) * 16, unitless: true });
+    else if (/font|type|family|face/i.test(name) || /^\s*(\d{3}\s+)?[\d.]+(px|rem)(\/[\d.]+(px|rem)?)?\s+\S/.test(v) || /["'][^"']+["']/.test(v) && /,/.test(v)) out.type.push({ name, value: v });
     else out.other.push({ name, value: v });
   }
-  for (const k of ['space', 'radius', 'size']) out[k].sort((a, b) => a.px - b.px || a.name.localeCompare(b.name));
+  for (const k of ['space', 'radius', 'size', 'leading']) out[k].sort((a, b) => a.px - b.px || a.name.localeCompare(b.name));
   return out;
 }
-const FAMILY = { space: /space|gap|pad|margin|unit|size/i, radius: /radius|round|corner/i, size: /size|text|type|font|leading|line/i };
-// The folder variable closest to one raw token of `prop`, or null. { name, value, exact }.
+// Perceptual distance (CIE76 in Lab) between two colours.
+const lab = ([r, g, b]) => { const f = (t) => (t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16 / 116); const R = lin(r), G = lin(g), B = lin(b); const x = f((R * 0.4124 + G * 0.3576 + B * 0.1805) / 0.95047), y = f(R * 0.2126 + G * 0.7152 + B * 0.0722), z = f((R * 0.0193 + G * 0.1192 + B * 0.9505) / 1.08883); return [116 * y - 16, 500 * (x - y), 200 * (y - z)]; };
+export const deltaE = (a, b) => Math.hypot(...lab(a).map((v, i) => v - lab(b)[i])) + Math.abs((a[3] ?? 1) - (b[3] ?? 1)) * 40;
+const COLOR_NEAR = 9; // about "the same colour, typed a little off"
+// The folder variable a raw value is close enough to, within its own group (colour to colour, space to space, size to
+// size, line height to line height), or null. A value nothing is close to is not on or near the scale: not flagged.
 export function nearest(prop, token, groups) {
   const kind = kindOfProp(prop);
   if (kind === 'color') {
-    const c = parseColor(token); if (!c || !groups.color.length) return null;
-    const best = groups.color.map((v) => ({ v, d: colorDistance(c, v.rgba) })).sort((a, b) => a.d - b.d || a.v.name.localeCompare(b.v.name))[0];
-    return { name: best.v.name, value: best.v.value, exact: best.d < 0.5 };
+    const c = parseColor(token); if (!c) return null;
+    const best = groups.color.map((v) => ({ v, d: deltaE(c, v.rgba) })).filter((x) => x.d <= COLOR_NEAR).sort((a, b) => a.d - b.d || a.v.name.localeCompare(b.v.name))[0];
+    return best ? { name: best.v.name, value: best.v.value, exact: best.d < 0.5 } : null;
   }
-  if (kind === 'space' || kind === 'radius' || kind === 'size') {
-    const px = parseLength(token); if (px === null) return null;
-    const pool = groups[kind];
-    if (!pool.length) return null;
-    const best = pool.map((v) => ({ v, d: Math.abs(v.px - px) })).sort((a, b) => a.d - b.d || (FAMILY[kind].test(b.v.name) - FAMILY[kind].test(a.v.name)) || a.v.name.localeCompare(b.v.name))[0];
-    return { name: best.v.name, value: best.v.value, exact: best.d < 0.01 };
+  if (kind === 'space' || kind === 'radius' || kind === 'size' || kind === 'leading') {
+    const px = parseLength(token); if (px === null || !/(px|rem)$/i.test(token)) return null;
+    const best = groups[kind].map((v) => ({ v, d: Math.abs(v.px - px) })).filter((x) => x.d <= Math.max(1, px * 0.1)).sort((a, b) => a.d - b.d || a.v.name.localeCompare(b.v.name))[0];
+    return best ? { name: best.v.name, value: best.v.value, exact: best.d < 0.01 } : null;
   }
   return null;
 }
@@ -106,6 +111,7 @@ export function nearest(prop, token, groups) {
 export function offScale(prop, value, groups) {
   const kind = kindOfProp(prop);
   if (!kind || kind === 'type' || /var\(/.test(value)) return [];
+  if (kind === 'color' && /(^|\s)(url|linear-gradient|radial-gradient|conic-gradient)\(/.test(value)) return [];
   const out = [];
   for (const t of tokens(value)) {
     const raw = kind === 'color' ? parseColor(t) !== null && !/^(transparent|currentcolor)$/i.test(t) : /^-?[\d.]+(px|rem)$/i.test(t) && parseLength(t) !== 0;

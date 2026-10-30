@@ -95,6 +95,9 @@ test('http: ?node= over the wire, and /raw refuses dot-segments', async () => {
     assert.equal(r.node.width, 400); assert.equal(r.node.theme, 'dark');
     assert.equal((await get('api/component/a.html/rules?node=zzz')).status, 404);
     assert.equal((await get('raw/tokens.css')).status, 200);
+    // dot segments are refused as written, not as a URL parser would fold them
+    const lit = (p) => new Promise((res, rej) => { const q = new URL(app.url); import('node:http').then(({ request }) => request({ host: q.hostname, port: q.port, path: p, method: 'GET' }, (r) => { r.resume(); res(r.statusCode); }).on('error', rej).end()); });
+    for (const p of ['/raw/./tokens.css', '/raw/sub/../tokens.css', '/raw/%2e/tokens.css', '/raw/a/%2e%2e/tokens.css']) assert.equal(await lit(p), 404, p);
     for (const p of ['raw/.secret', 'raw/.git/config', 'raw/%2e%2e/x', 'raw/.git%2fconfig']) assert.equal((await get(p)).status, 404, p);
   } finally { await app.stop(); }
 });

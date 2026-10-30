@@ -26,6 +26,7 @@ export const docsChanged = () => { stamp++; usage.clear(); };
 let staged = null;   // the value being edited: { key, prop, text, typed, raw, scope }
 let live = null;     // the panel as last drawn: { selKey, ready, stage, ... }
 let lastProp = null; // the value field you were last in (a variable clicked in the strips goes there)
+const previews = []; // rules changed for a preview: { rule, css } (cssText to put back)
 let measure = null;
 let currentCtx = null;
 
@@ -47,14 +48,18 @@ function wireKeys(el) {
       if (k === 'b') currentCtx?.inspector?.toggleBound(); else currentCtx?.inspector?.scope({ e: 'element', c: 'class', v: 'variable' }[k]);
       return;
     }
-    if (ev.key === 'Escape' && staged) { ev.preventDefault(); if (isText(t)) t.value = t.defaultValue; currentCtx?.inspector?.cancel(); return; }
+    // Tab from the value being edited goes straight to where it will be written, then Apply; Shift+Tab comes back
+    if (staged && ev.key === 'Tab' && !ev.shiftKey && t.matches?.('.vrow input.val') && t.dataset.prop === staged.prop) { const to = t.closest('#panel').querySelector('#doc-staged .opt[tabindex="0"]'); if (to) { ev.preventDefault(); to.focus(); return; } }
+    if (staged && ev.key === 'Tab' && ev.shiftKey && t.classList?.contains('opt')) { const back = t.closest('#panel').querySelector(`.vrow input.val[data-prop="${CSS.escape(staged.prop)}"]`); if (back) { ev.preventDefault(); back.focus(); return; } }
+    if (staged && t.classList?.contains('opt') && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(ev.key)) { ev.preventDefault(); currentCtx?.inspector?.step(ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' ? -1 : 1); return; }
+    if (ev.key === 'Escape' && staged) { ev.preventDefault(); ev.stopPropagation(); if (isText(t)) t.value = t.defaultValue; currentCtx?.inspector?.cancel(); return; }
     if (ev.key === 'Enter' && staged && !isText(t) && (t.localName !== 'button' || t.classList.contains('opt'))) { ev.preventDefault(); currentCtx?.inspector?.apply(); return; }
     if (!isText(t) || !t.closest('.doc-body')) return;
     if (ev.key === 'Escape') { t.value = t.defaultValue; t.blur(); return; }
     if (ev.key !== 'Enter' || (ev.shiftKey && t.id === 'doc-text')) return;
     ev.preventDefault();
     if (t.id === 'doc-class-add' || t.closest('.decl.add')) t.dispatchEvent(new CustomEvent('doc-commit', { bubbles: true }));
-    else if (t.closest('.prow') && staged) currentCtx?.inspector?.apply();
+    else if (t.closest('.vrow') && staged) currentCtx?.inspector?.apply();
     else t.blur(); // its change event applies it
   });
 }
@@ -110,6 +115,7 @@ export function initInspector(ctx) {
     toggleBound: () => live?.toggleBound?.(),
     apply: () => live?.apply?.(),
     cancel: () => live?.cancel?.(),
+    step: (d) => live?.step?.(d),
     stageValue: (prop, text) => live?.stage?.(prop, text),
     bindVariable: (at, name, group, value, prop) => bindTo(ctx, at, name, group, value, prop),
     toggle: (name, on) => { const v = measure.toggle(name, on); live?.syncChecks?.(); return v; },
@@ -145,11 +151,14 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   if (ctx.state.selection !== sel || live !== me) return; // the selection moved on while the rules loaded
   const win = target?.ownerDocument.defaultView;
   const ids = new WeakMap(); let nid = 0;
+  // the element and its ancestors that have a node in the file are known by that node's id (the "inherited from" links)
+  const chainIds = (function find(list, trail) { for (const n of list || []) { const t = [...trail, n.node]; if (n.node === sel.node) return t; const f = find(n.children, t); if (f) return f; } return null; })(frame.tree()?.tree, []) || [];
+  for (const id of chainIds) { const e = frame.element(id)?.el; if (e) ids.set(e, id); }
   const cas = target ? createCascade(data.rules, {
     matches, parent: (e) => e.parentElement, inline: (e) => e.getAttribute('style') || '', id: (e) => ids.get(e) ?? (ids.set(e, ++nid), nid),
     media: (p) => { try { return win.matchMedia(p).matches; } catch { return false; } },
   }, { sheets: data.sheets }) : null;
-  const explain = cas ? cas.explain(target) : { rules: [], inline: [], props: {}, vars: {} };
+  const explain = cas ? cas.explain(target) : { rules: [], inline: [], props: {}, vars: {}, inherited: [] };
   const classes = (node.attrs?.class || '').split(/\s+/).filter(Boolean);
   const textOnly = !node.children.length && node.text !== undefined;
   const label = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.map((c) => '.' + c).join('')}`;
@@ -180,17 +189,32 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const base = (f) => String(f).split('/').pop();
   const swatch = (v) => (parseColor(v) ? `<span class="sw" style="background:${esc(v)}"></span>` : '');
 
+  // one line of provenance: it never wraps (the whole text is on hover)
+  const line = (cls, ...parts) => { const html = parts.join(' '); const text = html.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"'); return `<div class="pfrom ${cls}" title="${esc(text)}">${html}</div>`; };
+  const k = (t) => `<span class="k">${esc(t)}</span>`;
+  const where = (s2) => (s2.kind === 'inline' ? `<code>inline style</code> ${k(`${comp.path}:${node.line}`)}` : `<code>${esc(s2.selector)}</code> ${k(`${base(s2.file)}:${s2.declLine ?? s2.line}${s2.media?.length ? ` · @media ${s2.media.at(-1)}` : ''}`)}`);
+  const sayBy = (b) => (b.kind === 'inline' ? 'the inline style' : `${b.selector} ${base(b.file)}:${b.declLine ?? b.line}`);
+
   function valueRow([prop, w]) {
-    const s = w.source;
-    const where = s.kind === 'inline' ? `<code>inline style</code><span class="k">${esc(comp.path)}:${node.line}</span>` : `<code>${esc(s.selector)}</code><span class="k">${esc(base(s.file))}:${s.declLine ?? s.line}${s.media.length ? ` · @media ${esc(s.media.at(-1))}` : ''}</span>`;
-    const lost = (beats.get(`${prop.toLowerCase()}|${srcKey(s)}`) || []).slice(0, 2).map((b) => `<div class="pfrom"><span class="k">beats</span><s>${esc(b.value)}</s><span class="k">from ${esc(b.selector)} :${b.line}</span></div>`).join('');
+    const s2 = w.source;
+    const lost = (beats.get(`${prop.toLowerCase()}|${srcKey(s2)}`) || []).slice(0, 2).map((b) => line('', k('beats'), `<s>${esc(b.value)}</s>`, k(`from ${b.selector} :${b.line}`))).join('');
+    const part = w.state === 'partial' ? (w.lost || []).map((l) => line('lost', `<code>${esc(l.props.join(', '))}</code>`, k(`from ${sayBy(l.by)}`))).join('') : '';
     const v = firstVar(w.value), info = v && explain.vars[v];
-    const varLine = v ? `<div class="pfrom"><code>${esc(v)}</code>${info?.source ? `<span class="k">defined in</span><code>${info.source.kind === 'inline' ? 'inline style' : esc(info.source.selector)}</code><span class="k">${info.source.kind === 'rule' ? `${esc(base(info.source.file))}:${info.source.declLine}` : ''}${info.source.media?.length ? ` · @media ${esc(info.source.media.at(-1))}` : ''}${info.inherited ? ' · inherited' : ''}</span>` : '<span class="k">is not defined</span>'}</div>` : '';
+    const varLine = v ? line('', `<code>${esc(v)}</code>`, info?.source ? k('defined in') + ' ' + where(info.source) + (info.inherited ? ' ' + k('· inherited') : '') : k('is not defined')) : '';
     const off = offScale(prop, w.value, groups)[0];
-    const flag = off ? `<div class="pflag"><span class="k">off your scale${off.exact ? ', exactly' : ', nearest'}</span><button type="button" class="pbind" data-prop="${esc(prop)}" data-token="${esc(off.token)}" data-var="${esc(off.name)}" title="Write var(${esc(off.name)}) in place of ${esc(off.token)}">${esc(off.name)} <span class="k">${esc(off.value)}</span></button></div>` : '';
-    return `<div class="prow${off ? ' off' : ''}" data-prop="${esc(prop)}"><label for="pv-${esc(prop)}">${esc(prop)}</label><div class="pbody">
-      <div class="pval">${swatch(w.resolved ?? w.value)}<input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="${esc(w.value)}" aria-label="${esc(prop)}" spellcheck="false">${w.important ? '<span class="imp">!important</span>' : ''}${w.resolved && w.resolved !== w.value ? `<span class="res">${esc(w.resolved)}</span>` : ''}</div>
-      <div class="pfrom">${where}</div>${lost}${varLine}${flag}</div></div>`;
+    const flag = off ? `<div class="pflag"><span class="k">${off.exact ? 'is exactly' : 'close to'}</span><button type="button" class="pbind" data-prop="${esc(prop)}" data-token="${esc(off.token)}" data-var="${esc(off.name)}" title="Write var(${esc(off.name)}) in place of ${esc(off.token)}">${esc(off.name)} <span class="k">${esc(off.value)}</span></button></div>` : '';
+    const shown = w.resolved ?? w.value;
+    return `<div class="vrow${off ? ' off' : ''}${w.state === 'partial' ? ' partial' : ''}" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}">${esc(prop)}</label>${w.state === 'partial' ? '<span class="pstate">partly overridden</span>' : ''}${w.important ? '<span class="imp">!important</span>' : ''}${w.resolved && w.resolved !== w.value ? `<span class="res" title="${esc(w.resolved)}">${esc(w.resolved)}</span>` : ''}</div>
+      <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="${esc(w.value)}" aria-label="${esc(prop)}" spellcheck="false" title="${esc(w.value)}"></div>
+      ${line('', where(s2))}${part}${lost}${varLine}${flag}</div>`;
+  }
+  // what this element takes from an ancestor because nothing sets it here, with a link that selects that ancestor
+  function inheritedRow(e) {
+    const link = typeof e.from === 'string' && frame.has(e.from) ? `<button type="button" class="plink" data-node="${esc(e.from)}" title="Select the element it comes from">${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)} ${esc(e.source.kind === 'inline' ? '' : `${base(e.source.file)}:${e.source.declLine ?? e.source.line}`)}</button>` : `<code>${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)}</code>`;
+    const shown = e.resolved ?? e.value;
+    return `<div class="vrow inh" data-inherited="${esc(e.prop)}"><div class="phead"><span class="lbl">${esc(e.sets.length > 1 && e.sets.length < 6 ? e.sets.join(', ') : e.prop)}</span></div>
+      <div class="pval">${swatch(shown)}<span class="ro" title="${esc(shown)}">${esc(e.value)}</span></div>
+      <div class="pfrom" title="inherited from ${esc(e.source.selector ?? 'inline style')}">${k('inherited from')} ${link}</div></div>`;
   }
 
   // the variables this element's values are made of, each at the definition that applies here
@@ -207,11 +231,11 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       <code class="prop">${esc(name)}</code><input class="val" data-key="v-${esc(name)}" value="${esc(v.raw)}" aria-label="${esc(name)}" spellcheck="false" title="now ${esc(v.value)}"><span class="src" title="${esc(s.file)}:${s.declLine} · ${esc(s.selector)}">${esc(base(s.file))}:${s.declLine}${v.inherited ? ' ↑' : ''}</span></div>`;
   }
 
-  function declRow({ prop, value, important, kind, rule, idx, line, over, by, resolved }) {
+  function declRow({ prop, value, important, kind, rule, idx, line, over, partial, by, resolved }) {
     const k = kind === 'rule' ? `r${rule}-${prop}` : `s-${prop}`;
     const src = kind === 'rule' ? `<span class="src">:${line}</span>` : '';
-    const why = over && by ? `beaten by ${by.kind === 'inline' ? 'the inline style' : `${by.selector} (${base(by.file)}:${by.declLine ?? by.line})`}` : '';
-    return `<div class="decl${over ? ' over' : ''}" data-kind="${kind}" data-prop="${esc(prop)}"${kind === 'rule' ? ` data-rule="${rule}" data-index="${idx}"` : ''}>
+    const why = (over || partial) && by ? `${partial ? 'partly overridden by' : 'beaten by'} ${by.kind === 'inline' ? 'the inline style' : `${by.selector} (${base(by.file)}:${by.declLine ?? by.line})`}` : '';
+    return `<div class="decl${over ? ' over' : ''}${partial ? ' partial' : ''}" data-kind="${kind}" data-prop="${esc(prop)}"${kind === 'rule' ? ` data-rule="${rule}" data-index="${idx}"` : ''}>
       <code class="prop"${why ? ` title="${esc(why)}"` : ''}>${esc(prop)}</code><input class="val" data-key="${esc(k)}" value="${esc(value)}" aria-label="${esc(prop)}" spellcheck="false"${resolved ? ` title="now ${esc(resolved)}"` : why ? ` title="${esc(why)}"` : ''}>${important ? '<span class="imp">!important</span>' : ''}<button type="button" class="decl-x" aria-label="Remove ${esc(prop)}">×</button>${src}</div>`;
   }
   const rulesStrong = [...explain.rules].reverse();
@@ -229,16 +253,17 @@ export async function renderDocPanel(ctx, el, sel, comp) {
           <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>
       </section>
       <section class="dsec" id="doc-values"><h3>Where each value comes from <span class="where">type to change one, then choose where it goes</span></h3>
-        ${props.length ? props.map(valueRow).join('') : '<p class="hint">Nothing styles this element yet.</p>'}
+        ${props.length ? props.map(valueRow).join('') : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : '<p class="hint">Nothing styles this element yet.</p>'}
       </section>
+      ${explain.inherited.length ? `<section class="dsec" id="doc-inherited"><h3>Inherited <span class="where">from the elements around it</span></h3>${explain.inherited.map(inheritedRow).join('')}</section>` : ''}
       <section class="dsec"><h3>Inline style <span class="where">style="…"</span></h3>
-        <div class="decls" id="doc-inline">${inlineDecls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'style', over: d.state === 'overridden', by: d.by, resolved: d.resolved })).join('')}
+        <div class="decls" id="doc-inline">${inlineDecls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'style', over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
           <div class="decl add"><input class="prop" data-key="inline-new-prop" placeholder="property" aria-label="New inline property" spellcheck="false"><input class="val" data-key="inline-new-val" placeholder="value" aria-label="New inline value" spellcheck="false"></div></div>
       </section>
       <section class="dsec"><h3>Rules <span class="where">${rulesStrong.length} matching, strongest first</span></h3>
         ${rulesStrong.length ? rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
           <div class="rhead"><code class="sel">${esc(r.selector)}</code>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line} · specificity ${r.specificity.join(',')}">${esc(base(r.file))}:${r.line}</span></div>
-          <div class="decls">${r.decls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'rule', rule: r.order, idx: index(data.rules[r.order]), line: d.line, over: d.state === 'overridden', by: d.by, resolved: d.resolved })).join('')}
+          <div class="decls">${r.decls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'rule', rule: r.order, idx: index(data.rules[r.order]), line: d.line, over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
             <div class="decl add"><input class="prop" data-key="r${r.order}-new-prop" data-rule="${r.order}" placeholder="property" aria-label="New property in ${esc(r.selector)}" spellcheck="false"><input class="val" data-key="r${r.order}-new-val" data-rule="${r.order}" placeholder="value" aria-label="New value in ${esc(r.selector)}" spellcheck="false"></div></div>
         </div>`).join('') : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>'}
       </section>
@@ -255,7 +280,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     </div>
     <div id="doc-dock" hidden>
       <div id="doc-staged" aria-live="polite"></div>
-      <div class="doc-foot" id="doc-foot"><button type="button" class="primary" id="doc-apply">Apply <kbd>↵</kbd></button><button type="button" id="doc-cancel">Cancel <kbd>Esc</kbd></button></div>
+      <div class="doc-foot" id="doc-foot"><button type="button" class="primary" id="doc-apply">Apply <kbd>↵</kbd></button><button type="button" id="doc-cancel">Cancel <kbd>Esc</kbd></button>
+        <span class="legend"><kbd>E</kbd>this element <kbd>C</kbd>this class <kbd>V</kbd>this variable</span></div>
     </div>`;
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
   wireKeys(el);
@@ -314,26 +340,37 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const optionsFor = () => scopeOptions({
     prop: staged.prop, typed: staged.typed, bound: staged.raw ? null : bindExact(staged.prop, staged.typed, groups), comp, node: { ...node, node: sel.node }, classes,
     matched: cas ? cas.matched(target) : [], winner: winners[staged.prop], vars: explain.vars, data, uses,
+    wouldLose: (m, prop, imp) => cas.wouldLose(target, m, prop, imp),
   });
   const chosenOf = (opts) => opts.find((o) => o.id === staged.scope && !o.disabled) || opts.find((o) => !o.disabled);
-  // the staged change shows on the canvas before it is written (every frame that uses the rule or variable)
+  // The staged change shows on the canvas before it is written, by changing the rule itself in every frame that has it
+  // (the CSS object model), so it sits at the rule's real place in the cascade: what the preview shows is what the file
+  // will make, longhands that still win included. A change at this element is an inline style.
   function preview(opt) {
     clearPreview(ctx);
     if (!opt || !target) return;
     const e = opt.edit;
     if (opt.id === 'element') { target.setAttribute('data-napkin-prev', target.getAttribute('style') ?? ''); target.style.setProperty(e.prop, e.value); return; }
     if (!opt.preview?.selector) return;
-    const css = `${opt.preview.selector} { ${e.prop ?? e.name}: ${e.value} !important }`;
-    const wrap = opt.preview.media ? `@media ${opt.preview.media} { ${css} }` : css;
-    for (const sec of ctx.stage.sections.values()) {
+    for (const [id, sec] of ctx.stage.sections) {
       const d = sec.docFrame?.doc(); if (!d) continue;
-      const s = d.createElement('style'); s.setAttribute('data-napkin', ''); s.setAttribute('data-napkin-preview', ''); s.textContent = wrap; (d.head || d.documentElement).append(s);
+      for (const r of findRules(d, ctx.state.components.get(id)?.path, e.file, e.op === 'var' ? null : opt.preview.selector, e.media, e.index, e.op === 'var' ? e.name : null)) {
+        previews.push({ rule: r, css: r.style.cssText });
+        r.style.setProperty(e.prop ?? e.name, e.value, r.style.getPropertyPriority(e.prop ?? e.name));
+      }
     }
   }
+  // a long declaration keeps its changed end: the shared start becomes "…" (the whole line is on hover)
+  const diffText = (l, lines) => {
+    const other = lines.find((x) => x !== l); if (!other || l.text.length < 34) return l.text;
+    let i = 0; while (i < l.text.length && l.text[i] === other.text[i]) i++;
+    i = l.text.lastIndexOf(' ', i);
+    return i > 10 ? `${l.text.slice(0, l.text.indexOf(':') + 1)} …${l.text.slice(i)}` : l.text;
+  };
   function renderStaged() {
     const host = el.querySelector('#doc-staged'), dock = el.querySelector('#doc-dock');
     if (!host) return;
-    el.querySelectorAll('.prow').forEach((r) => r.classList.toggle('editing', !!staged && r.dataset.prop === staged.prop));
+    el.querySelectorAll('.vrow').forEach((r) => r.classList.toggle('editing', !!staged && r.dataset.prop === staged.prop));
     if (!staged) { host.innerHTML = ''; dock.hidden = true; preview(null); light(null); return; }
     const had = host.contains(document.activeElement) ? (document.activeElement.dataset.scope || document.activeElement.id) : null; // a redraw keeps the focus where it was
     const opts = optionsFor(), chosen = chosenOf(opts);
@@ -345,21 +382,22 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       const k = o.id === 'class' ? `r:${subject.file}:${subject.line}` : `v:${subject}`;
       if (!usage.has(k)) measureUse(ctx, o.id === 'class' ? 'rule' : 'var', subject).then(() => { if (staged && live === me) renderStaged(); });
     }
-    const one = (o) => `<button type="button" role="radio" class="opt${o.id === staged.scope ? ' on' : ''}" aria-checked="${o.id === staged.scope}" data-scope="${o.id}"${o.disabled ? ' aria-disabled="true"' : ''}>
-      <kbd>${o.key}</kbd><b>${o.title}${o.code ? ` <code>${esc(o.code)}</code>` : ''}</b><span class="count">${esc(o.countText ?? '')}</span><span class="sub" title="${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · ${esc(o.warn)}` : ''}">${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · <em>${esc(o.warn)}</em>` : ''}</span></button>`;
+    const one = (o) => `<button type="button" role="radio" class="opt${o.id === staged.scope ? ' on' : ''}" aria-checked="${o.id === staged.scope}" tabindex="${o.id === staged.scope ? 0 : -1}" data-scope="${o.id}"${o.disabled ? ' aria-disabled="true"' : ''} title="${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · ${esc(o.warn)}` : ''}">
+      <kbd>${o.key}</kbd><b>${o.title}${o.code ? ` <code>${esc(o.code)}</code>` : ''}</b><span class="count">${esc(o.disabled ? 'not here' : o.countText ?? '')}</span></button>`;
     const n = chosen?.diff.lines.some((l) => l.kind === 'del') ? 1 : chosen?.diff.lines.length ?? 0;
+    const note = chosen ? (chosen.warn ? `<em>${esc(chosen.warn)}</em> · ${esc(chosen.sub)}` : esc(chosen.sub)) : esc(opts.find((o) => o.id === staged.scope)?.why ?? '');
     host.innerHTML = `<section class="dsec staged">
-      <h3>Change <code>${esc(staged.prop)}</code> <span class="where">${chosen && chosen.id !== 'element' ? 'the canvas shows it before you apply' : 'this element only'}</span></h3>
-      ${exact && !staged.raw && chosen?.id !== 'variable' ? `<p class="pnote"><code>${esc(rawList)}</code> is on your scale, so napkin writes <code>${esc(varList)}</code>. <button type="button" class="linkish" id="doc-raw">Write ${esc(rawList)} instead <kbd>B</kbd></button></p>` : ''}
+      <h3><code>${esc(staged.prop)}</code> <span class="where">${chosen && chosen.id !== 'element' ? 'previewing on the canvas' : 'this element only'}</span></h3>
+      ${exact && !staged.raw && chosen?.id !== 'variable' ? `<p class="pnote"><code>${esc(rawList)}</code> is on your scale: writing <code>${esc(varList)}</code>. <button type="button" class="linkish" id="doc-raw">Keep ${esc(rawList)} <kbd>B</kbd></button></p>` : ''}
       ${exact && staged.raw ? `<p class="pnote">Writing the plain value. <button type="button" class="linkish" id="doc-raw">Use <code>${esc(varList)}</code> <kbd>B</kbd></button></p>` : ''}
       <div class="scope" role="radiogroup" aria-label="Where this change goes">${opts.map(one).join('')}</div>
-      <h3>The change <span class="where">${n} line${n === 1 ? '' : 's'}</span></h3>
-      <div class="diff" id="doc-diff"><div class="h">${esc(chosen?.diff.head ?? '')}</div>${(chosen?.diff.lines ?? []).map((l) => `<div class="${l.kind === 'del' ? 'd' : 'a'}"><i>${l.line}</i><u>${l.kind === 'del' ? '−' : '+'}</u>${esc(l.text)}</div>`).join('')}</div>
+      <p class="scopenote" title="${esc(chosen?.sub ?? '')}">${note}</p>
+      <div class="diff" id="doc-diff" aria-label="The change, ${n} line"><div class="h" title="${esc(chosen?.diff.head ?? '')}">${esc(chosen?.diff.head ?? '')}</div>${(chosen?.diff.lines ?? []).map((l) => `<div class="${l.kind === 'del' ? 'd' : 'a'}" title="${esc(l.text)}"><i>${l.line}</i><u>${l.kind === 'del' ? '−' : '+'}</u><span>${esc(diffText(l, chosen.diff.lines))}</span></div>`).join('')}</div>
     </section>`;
     const first = dock.hidden;
     dock.hidden = false;
     // the dock covers the bottom of the panel instead of pushing the values down; the value being edited is kept above it
-    if (first) { el.style.setProperty('--dock', `${dock.offsetHeight + 8}px`); el.querySelector('.prow.editing')?.scrollIntoView({ block: 'nearest' }); }
+    if (first) { el.style.setProperty('--dock', `${dock.offsetHeight + 8}px`); el.querySelector('.vrow.editing')?.scrollIntoView({ block: 'nearest' }); }
     host.querySelectorAll('[data-scope]').forEach((b) => b.addEventListener('click', () => setScope(b.dataset.scope)));
     host.querySelector('#doc-raw')?.addEventListener('click', toggleBound);
     if (had) (host.querySelector(`[data-scope="${had}"]`) || host.querySelector(`#${had}`))?.focus({ preventScroll: true });
@@ -371,7 +409,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (!w) return false;
     if (!text.trim() || text.trim() === w.value) { staged = null; renderStaged(); return false; }
     const prev = staged?.prop === prop ? staged : null;
-    const field = el.querySelector(`.prow input[data-prop="${CSS.escape(prop)}"]`); // a variable bound from the strips shows in the field
+    const field = el.querySelector(`.vrow input[data-prop="${CSS.escape(prop)}"]`); // a variable bound from the strips shows in the field
     if (field && field.value !== text) field.value = text;
     staged = { key: selKey, prop, text, typed: normalizeTyped(prop, text.trim()), raw: prev?.raw ?? false, scope: prev?.scope ?? null };
     const opts = optionsFor();
@@ -387,10 +425,16 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     el.querySelector(`[data-scope="${id}"]`)?.focus({ preventScroll: true });
     return true;
   }
+  function step(d) { // arrow keys on the scope options: the next one that can be used
+    if (!staged) return false;
+    const order = ['element', 'class', 'variable'], opts = optionsFor();
+    for (let i = order.indexOf(staged.scope) + d; i >= 0 && i < 3; i += d) if (!opts.find((o) => o.id === order[i])?.disabled) return setScope(order[i]);
+    return false;
+  }
   function toggleBound() { if (staged) { staged.raw = !staged.raw; renderStaged(); } }
   function cancel() {
     if (!staged) return;
-    const input = el.querySelector(`.prow input[data-prop="${CSS.escape(staged.prop)}"]`); if (input) input.value = input.defaultValue;
+    const input = el.querySelector(`.vrow input[data-prop="${CSS.escape(staged.prop)}"]`); if (input) input.value = input.defaultValue;
     staged = null; renderStaged(); showError('');
   }
   async function apply() {
@@ -403,10 +447,12 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (j.ok) { staged = null; renderStaged(); light(null); } else renderStaged();
     return j;
   }
-  el.querySelectorAll('.prow input.val').forEach((inp) => {
+  el.querySelectorAll('.vrow input.val').forEach((inp) => {
     inp.addEventListener('input', () => stage(inp.dataset.prop, inp.value));
     inp.addEventListener('focus', () => { lastProp = inp.dataset.prop; });
   });
+  el.addEventListener('pointerdown', () => { const a = document.activeElement; if (a?.matches?.('.vrow input.val') && el.contains(a)) lastProp = a.dataset.prop; }, true); // before the click moves the focus
+  el.querySelectorAll('.plink').forEach((b) => b.addEventListener('click', () => ctx.select({ component: comp.component, node: b.dataset.node, variant: {} })));
   el.querySelectorAll('.pbind').forEach((b) => b.addEventListener('click', () => {
     const w = winners[b.dataset.prop]; if (!w) return;
     stage(b.dataset.prop, tokens(w.value).map((t) => (t === b.dataset.token ? `var(${b.dataset.var})` : t)).join(' '));
@@ -441,20 +487,37 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   el.querySelector('#chk-order')?.addEventListener('click', () => { measure.toggle('order'); syncChecks(); });
   syncChecks();
 
-  Object.assign(me, { stage, setScope, toggleBound, apply, cancel, syncChecks, bindHere, explain });
+  Object.assign(me, { stage, step, setScope, toggleBound, apply, cancel, syncChecks, bindHere, explain });
   if (staged && staged.key === selKey && winners[staged.prop]) { // a redraw while a value was being edited: put it back
-    const input = el.querySelector(`.prow input[data-prop="${CSS.escape(staged.prop)}"]`);
+    const input = el.querySelector(`.vrow input[data-prop="${CSS.escape(staged.prop)}"]`);
     if (input) input.value = staged.text;
     renderStaged();
   } else if (staged) { staged = null; clearPreview(ctx); }
 }
 
+// The rules of a frame's document that are the Nth one (in file order) with this selector and @media in that file. A
+// stylesheet the page loads twice (applied by napkin and linked by the file) is two copies; each is returned.
+function findRules(doc, ownPath, file, selector, media, index, declares) { // a variable is found by the rules that define it (the var op counts those), a value by its selector
+  const sel = selector && normSel(selector), med = normMedia(media || '');
+  const groups = new Map(); // where the rules came from -> the matching ones, in order
+  const fileOf = (sheet) => { if (sheet.href) { try { const u = new URL(sheet.href); return u.pathname.startsWith('/raw/') ? decodeURIComponent(u.pathname.slice(5)) : null; } catch { return null; } } return ownPath; };
+  const walk = (rules, f, chain, gk) => {
+    for (const r of rules) {
+      if (r.type === 1) { if (f === file && (!sel || normSel(r.selectorText) === sel) && (chain.at(-1) ?? '') === med && (!declares || r.style.getPropertyValue(declares) !== '')) { if (!groups.has(gk)) groups.set(gk, []); groups.get(gk).push(r); } }
+      else if (r.type === 3 && r.styleSheet) { let list; try { list = r.styleSheet.cssRules; } catch { continue; } walk(list, fileOf(r.styleSheet), chain, r.styleSheet.href ? r.styleSheet : gk); }
+      else if (r.type === 4) walk(r.cssRules, f, [...chain, normMedia(r.conditionText || r.media?.mediaText || '')], gk);
+      else if (r.cssRules && r.type !== 5) walk(r.cssRules, f, chain, gk);
+    }
+  };
+  for (const sheet of doc.styleSheets) { let list; try { list = sheet.cssRules; } catch { continue; } walk(list, fileOf(sheet), [], sheet.href ? sheet : 'inline'); }
+  return [...groups.values()].map((g) => g[index]).filter(Boolean);
+}
 // The staged change shows on the canvas before it is written; this takes it away again.
 function clearPreview(ctx) {
+  for (const { rule, css } of previews.splice(0)) { try { rule.style.cssText = css; } catch { /* the frame was replaced */ } }
   try {
     for (const sec of ctx.stage.sections.values()) {
       const d = sec.docFrame?.doc(); if (!d) continue;
-      d.querySelectorAll('style[data-napkin-preview]').forEach((s) => s.remove());
       d.querySelectorAll('[data-napkin-prev]').forEach((e) => { const was = e.getAttribute('data-napkin-prev'); e.removeAttribute('data-napkin-prev'); if (was) e.setAttribute('style', was); else e.removeAttribute('style'); });
     }
   } catch { /* a frame is being replaced */ }

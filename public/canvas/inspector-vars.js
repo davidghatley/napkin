@@ -9,19 +9,21 @@ const TITLES = { color: 'Colour', space: 'Space', radius: 'Radius', size: 'Size'
 const PROPS = { color: ['color', 'background-color', 'border-color', 'fill', 'outline-color'], space: ['padding', 'margin', 'gap', 'padding-top', 'padding-bottom', 'padding-left', 'padding-right', 'row-gap', 'column-gap'], radius: ['border-radius'], size: ['font-size', 'line-height'], type: ['font-family', 'font'] };
 export const propsFor = (group, value) => (group === 'type' && /^\s*(\d{3}\s+)?[\d.]+(px|rem)/.test(value) ? ['font'] : PROPS[group] || []);
 
+// the sample is always 16px: a display face at 72px would swallow the strip
+const typeSample = (value) => { const m = /^\s*(?:(\d{3})\s+)?[\d.]+(?:px|rem)(?:\/[\d.]+(?:px|rem)?)?\s+(.*)$/.exec(value); return m ? `${m[1] ?? 400} 16px ${esc(m[2])}` : `16px ${esc(value)}`; };
 export function stripsHtml(groups, used = new Set(), filter = '') {
   const f = filter.trim().toLowerCase();
   const sec = Object.keys(TITLES).map((g) => {
     const items = groups[g].filter((v) => !f || v.name.toLowerCase().includes(f) || String(v.value).toLowerCase().includes(f));
     if (!items.length) return '';
-    const chip = (v) => {
+    const chip = (v, i) => {
       const dot = used.has(v.name) ? '<i class="ivdot" title="used by this element"></i>' : '';
       const sample = g === 'color' ? `<span class="sw" style="background:${esc(v.value)}"></span>`
-        : g === 'type' ? `<span class="ivtype" style="font:${/^\s*(\d{3}\s+)?[\d.]+(px|rem)/.test(v.value) ? esc(v.value) : `16px ${esc(v.value)}`}">Aa</span>`
+        : g === 'type' ? `<span class="ivtype" style="font:${typeSample(v.value)}">Aa</span>`
         : `<span class="ivbar" style="width:${Math.max(2, Math.min(44, v.px * 1.1))}px"></span>`;
-      return `<button type="button" class="ivchip vc-${g}" data-var="${esc(v.name)}" data-group="${g}" data-value="${esc(v.value)}" title="${esc(v.name)}: ${esc(v.value)}. Click to use it on the value you are on, or drag it onto an element." aria-label="${esc(v.name)} ${esc(v.value)}">${sample}${dot}<span class="ivname">${esc(v.name.replace(/^--/, ''))}</span><span class="ivval">${g === 'color' ? esc(v.value) : esc(String(v.value).slice(0, 16))}</span></button>`;
+      return `<button type="button" class="ivchip vc-${g}" tabindex="${i === 0 ? 0 : -1}" data-var="${esc(v.name)}" data-group="${g}" data-value="${esc(v.value)}" title="${esc(v.name)}: ${esc(v.value)}. Click to use it on the value you are on, or drag it onto an element." aria-label="${esc(v.name)} ${esc(v.value)}">${sample}${dot}<span class="ivname">${esc(v.name.replace(/^--/, ''))}</span>${g === 'color' ? '' : `<span class="ivval">${esc(String(v.value).slice(0, 14))}</span>`}</button>`;
     };
-    return `<div class="ivstrip vs-${g}" role="group" aria-label="${TITLES[g]} variables"><h4>${TITLES[g]} <small>${items.length}</small></h4><div class="ivchips">${items.map(chip).join('')}</div></div>`;
+    return `<div class="ivstrip vs-${g}" role="group" aria-label="${TITLES[g]} variables"><h4>${TITLES[g]} <small>${items.length}</small></h4><div class="ivchips">${items.map((v, i) => chip(v, i)).join('')}</div></div>`;
   }).join('');
   return sec || '<p class="hint">No variables match.</p>';
 }
@@ -37,6 +39,14 @@ export function wireStrips(env) {
   root.addEventListener('click', (ev) => {
     const chip = ev.target.closest?.('.ivchip'); if (!chip || chip.dataset.dragged) { if (chip) delete chip.dataset.dragged; return; }
     env.bind(chip.dataset.var, chip.dataset.group, chip.dataset.value);
+  });
+  // one Tab stop per strip: arrows move between its chips (Home and End jump)
+  root.addEventListener('keydown', (ev) => {
+    const chip = ev.target.closest?.('.ivchip'); if (!chip || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+    const list = [...chip.closest('.ivchips').querySelectorAll('.ivchip')], i = list.indexOf(chip);
+    const to = ev.key === 'ArrowRight' || ev.key === 'ArrowDown' ? list[i + 1] : ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' ? list[i - 1] : ev.key === 'Home' ? list[0] : ev.key === 'End' ? list.at(-1) : null;
+    if (!to) return;
+    ev.preventDefault(); list.forEach((c) => { c.tabIndex = c === to ? 0 : -1; }); to.focus();
   });
   // hovering or focusing a variable shows where it is used (the stage lights it up, when the stage can)
   const lit = (name) => { try { name ? ctx.stage?.highlight?.({ variable: name }) : ctx.stage?.clearHighlight?.(); } catch { /* the stage may not know */ } };

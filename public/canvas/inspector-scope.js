@@ -36,7 +36,7 @@ const styleAfter = (before, prop, value) => {
 
 // in: { prop, typed, comp: { path }, node: { node, line, attrs }, classes, matched, winner, vars, data, uses }
 //   typed:   what the person typed (already normalised); bound: the same with exact scale values as var()
-export function scopeOptions({ prop, typed, bound, comp, node, classes, matched, winner: w0, vars, data, uses = {} }) {
+export function scopeOptions({ prop, typed, bound, comp, node, classes, matched, winner: w0, vars, data, uses = {}, wouldLose = () => [] }) {
   const winner = w0?.source?.kind === 'none' ? null : w0; // a property nothing sets yet has no winner
   const value = bound ?? typed;
   const out = [];
@@ -62,11 +62,11 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
     const d = rule.decls.find((x) => x.prop.toLowerCase() === prop.toLowerCase());
     const u = uses.rule?.(rule) ?? null;
     const m = hit ?? matched.find((x) => x.rule === rule);
-    const strongerHere = winner && winner.source && !(winner.source.kind === 'rule' && winner.source.order === rule.order) && (winner.source.kind === 'inline' || winner.important || (m && cmp3(winner.source.specificity, m.spec) >= 0));
+    const lost = m ? wouldLose(m, prop, !!d?.important) : []; // what would still beat the new value, so the preview and the file agree
     out.push({
       id: 'class', key: 'C', title: single ? 'Class' : 'Rule', code: single ? (hit?.part ?? rule.selector) : rule.selector, count: u?.count ?? null, countText: u ? `${u.count} use${u.count === 1 ? '' : 's'}` : '',
       sub: `${rule.file.split('/').pop()}:${rule.line}${u?.where ? ` · ${u.where}` : ''}`,
-      warn: strongerHere ? `${winner.source.kind === 'inline' ? 'this element’s inline style' : winner.source.selector} still wins here` : null,
+      warn: lost.length ? `${lost[0].props.join(', ')} still ${lost[0].by.kind === 'inline' ? 'comes from the inline style' : `wins from ${lost[0].by.selector}`}` : null,
       preview: { selector: rule.selector, media: rule.media.at(-1) ?? null },
       edit: { op: 'rule', file: rule.file, selector: rule.selector, media: rule.media.at(-1) ?? '', index: index(rule), prop, value },
       diff: { head: `${rule.file} · ${rule.selector}${rule.media.length ? ` @media ${rule.media.at(-1)}` : ''}`, lines: [...(d ? [{ kind: 'del', line: d.line, text: declLine(prop, d.value, d.important) }] : []), { kind: 'add', line: d ? d.line : (rule.decls.at(-1)?.line ?? rule.line) + 1, text: declLine(prop, value, d?.important) }] },

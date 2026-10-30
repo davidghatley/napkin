@@ -70,7 +70,7 @@ export function initMeasure(ctx) {
     for (const gp of gaps) { const k = `${Math.round(gp.x)}|${Math.round(gp.y)}|${Math.round(gp.w)}|${Math.round(gp.h)}`; if (seen.has(k)) continue; seen.add(k); g.append(div('im-gap', box(gp.x, gp.y, gp.w, gp.h))); g.append(div('im-num im-g', { left: `${gp.x + gp.w / 2}px`, top: `${gp.y + gp.h / 2}px` }, String(r1(gp.v)))); }
     const name = `${el.localName}${el.id ? '#' + el.id : ''}${[...el.classList].map((c) => '.' + c).join('')}`;
     const fmt = (a) => (a.every((v) => v === a[0]) ? String(r1(a[0])) : a[0] === a[2] && a[1] === a[3] ? `${r1(a[0])} ${r1(a[1])}` : a.map(r1).join(' ')); // as CSS shorthand
-    const read = div('im-read', { left: `${R.x}px`, top: `${Math.max(2, R.y - 26)}px` });
+    const read = div('im-read', {}); // a readout at the top of the stage, so it never sits on what it measures
     read.innerHTML = '';
     const nm = document.createElement('b'); nm.textContent = name; read.append(nm);
     read.append(document.createTextNode(` ${r1(R.w / z)} × ${r1(R.h / z)}  margin ${fmt(m)}  padding ${fmt(p)}${gaps.length ? `  gap ${r1(gaps[0].v)}` : ''}`));
@@ -113,6 +113,7 @@ export function initMeasure(ctx) {
         if (r.w < 2 || r.h < 2) continue;
         const chip = div(`im-badge ${ok ? 'ok' : 'bad'}${unknown ? ' unsure' : ''}`, { left: `${r.x}px`, top: `${r.y}px` }, `${unknown ? '~' : ''}${ratio >= 21 ? '21' : r1(ratio)}`);
         chip.title = `${unknown ? 'a background image or gradient is behind it, so this is an estimate. ' : ''}${hex(fg)} on ${hex(bg)}: ${r1(ratio)}:1, needs ${need}:1${large ? ' (large text)' : ''}`;
+        into.append(div(`im-box ${ok ? 'ok' : 'bad'}`, box(r.x, r.y, r.w, r.h)));
         into.append(chip);
         out.push({ el: el.localName, ratio: r1(ratio), need, ok });
       }
@@ -134,7 +135,7 @@ export function initMeasure(ctx) {
       });
       const tab = (e) => { const t = Number(e.getAttribute('tabindex')); return Number.isInteger(t) && t > 0 ? t : Infinity; };
       const order = els.map((e, i) => [e, i]).sort((a, b) => tab(a[0]) - tab(b[0]) || a[1] - b[1]).map((x) => x[0]);
-      const pts = order.map((e) => { const r = rectIn(iframe, e, base); return { x: r.x + Math.min(10, r.w / 2), y: r.y + Math.min(10, r.h / 2), r }; });
+      const pts = order.map((e) => { const r = rectIn(iframe, e, base); return { x: r.x, y: r.y, r }; }); // on the corner, so the label is mostly outside the element
       if (pts.length > 1) {
         const svg = document.createElementNS(NS, 'svg'); svg.setAttribute('class', 'im-orderline');
         const path = document.createElementNS(NS, 'polyline'); path.setAttribute('points', pts.map((p) => `${p.x},${p.y}`).join(' ')); svg.append(path); into.append(svg);

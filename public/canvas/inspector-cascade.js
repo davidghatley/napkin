@@ -96,6 +96,33 @@ export function parseInline(text) {
   flush();
   return out;
 }
+// ---------- shorthands ----------
+// A shorthand sets every one of its longhands, so the winner is chosen per longhand: `border` loses its colour to a
+// later `border-color` and keeps its width and style. cover(prop) is the list of longhands a declaration sets.
+const SIDES = ['top', 'right', 'bottom', 'left'];
+const SH = {
+  padding: SIDES.map((x) => `padding-${x}`), margin: SIDES.map((x) => `margin-${x}`), inset: SIDES,
+  'border-width': SIDES.map((x) => `border-${x}-width`), 'border-style': SIDES.map((x) => `border-${x}-style`), 'border-color': SIDES.map((x) => `border-${x}-color`),
+  'border-radius': ['top-left', 'top-right', 'bottom-right', 'bottom-left'].map((x) => `border-${x}-radius`),
+  gap: ['row-gap', 'column-gap'], 'grid-gap': ['row-gap', 'column-gap'], overflow: ['overflow-x', 'overflow-y'],
+  outline: ['outline-width', 'outline-style', 'outline-color'],
+  background: ['background-color', 'background-image', 'background-position', 'background-size', 'background-repeat', 'background-attachment', 'background-origin', 'background-clip'],
+  font: ['font-style', 'font-variant', 'font-weight', 'font-stretch', 'font-size', 'line-height', 'font-family'],
+  'text-decoration': ['text-decoration-line', 'text-decoration-style', 'text-decoration-color', 'text-decoration-thickness'],
+  'list-style': ['list-style-type', 'list-style-position', 'list-style-image'], flex: ['flex-grow', 'flex-shrink', 'flex-basis'],
+};
+for (const x of SIDES) SH[`border-${x}`] = ['width', 'style', 'color'].map((t) => `border-${x}-${t}`);
+SH.border = SIDES.flatMap((x) => SH[`border-${x}`]);
+const cover = (prop) => { const l = prop.startsWith('--') ? prop : prop.toLowerCase(); return SH[l] || [l]; };
+// the shorthand names that say a set of lost longhands in fewer words (border-top-color ... -> border-color)
+const sayLost = (lost, own) => {
+  const left = new Set(lost), out = [];
+  for (const [name, list] of Object.entries(SH).sort((a, b) => b[1].length - a[1].length)) if (name !== own.toLowerCase() && list.length > 1 && list.every((k) => left.has(k))) { out.push(name); list.forEach((k) => left.delete(k)); }
+  return [...out, ...left];
+};
+// properties a child takes from its parent when nothing sets them on it
+const INHERITED = ['color', 'font-family', 'font-size', 'font-style', 'font-variant', 'font-weight', 'font-stretch', 'line-height', 'letter-spacing', 'word-spacing', 'text-align', 'text-indent', 'text-transform', 'white-space', 'cursor', 'visibility', 'direction', 'list-style-type', 'list-style-position', 'quotes', 'caret-color', 'text-shadow', 'tab-size', 'word-break', 'overflow-wrap', 'hyphens', 'fill', 'stroke'];
+
 const sameProp = (a, b) => (a.startsWith('--') || b.startsWith('--') ? a === b : a.toLowerCase() === b.toLowerCase());
 
 export function createCascade(rules, ad, opts = {}) {
@@ -123,12 +150,16 @@ export function createCascade(rules, ad, opts = {}) {
     matchCache.set(el, m);
     return m;
   }
-  // Every declaration of `prop` that reaches el, weakest first; the last one wins.
+  // Every declaration that sets the longhand `prop` on el (a shorthand counts for each longhand it sets), weakest first;
+  // the last one wins.
+  const rankOf = (a, b) => a.rank - b.rank || (a.rank === 0 || a.rank === 2 ? cmp(a.spec, b.spec) : 0) || a.order - b.order || a.k - b.k;
+  const sets = (d, key) => (key.startsWith('--') ? d.prop === key : cover(d.prop).includes(key));
   function candidates(el, prop) {
+    const key = prop.startsWith('--') ? prop : prop.toLowerCase();
     const out = [];
-    for (const m of matched(el)) if (!m.pseudo) m.rule.decls.forEach((d, k) => { if (sameProp(d.prop, prop)) out.push({ kind: 'rule', rank: d.important ? 2 : 0, spec: m.spec, order: m.rule.order, k, d, m }); });
-    inlineOf(el).forEach((d, k) => { if (sameProp(d.prop, prop)) out.push({ kind: 'inline', rank: d.important ? 3 : 1, spec: [0, 0, 0], order: Infinity, k, d }); });
-    return out.sort((a, b) => a.rank - b.rank || (a.rank === 0 || a.rank === 2 ? cmp(a.spec, b.spec) : 0) || a.order - b.order || a.k - b.k);
+    for (const m of matched(el)) if (!m.pseudo) m.rule.decls.forEach((d, k) => { if (sets(d, key)) out.push({ kind: 'rule', rank: d.important ? 2 : 0, spec: m.spec, order: m.rule.order, k, d, m }); });
+    inlineOf(el).forEach((d, k) => { if (sets(d, key)) out.push({ kind: 'inline', rank: d.important ? 3 : 1, spec: [0, 0, 0], order: Infinity, k, d }); });
+    return out.sort(rankOf);
   }
   const sourceOf = (c) => (c.kind === 'inline'
     ? { kind: 'inline' }
@@ -176,20 +207,25 @@ export function createCascade(rules, ad, opts = {}) {
 
   // ---------- the whole story of one element ----------
   function explain(el) {
-    const props = new Map(); // prop key -> winner
     const all = [];          // every declaration reaching el, with its place
-    const note = (c) => { all.push(c); };
-    for (const m of matched(el)) if (!m.pseudo) m.rule.decls.forEach((d, k) => note({ kind: 'rule', m, d, k }));
-    inlineOf(el).forEach((d, k) => note({ kind: 'inline', d, k }));
-    const keyOf = (p) => (p.startsWith('--') ? p : p.toLowerCase());
-    for (const c of all) { const key = keyOf(c.d.prop); if (!props.has(key)) props.set(key, candidates(el, c.d.prop).at(-1)); }
+    for (const m of matched(el)) if (!m.pseudo) m.rule.decls.forEach((d, k) => all.push({ kind: 'rule', m, d, k, rank: d.important ? 2 : 0, spec: m.spec, order: m.rule.order }));
+    inlineOf(el).forEach((d, k) => all.push({ kind: 'inline', d, k, rank: d.important ? 3 : 1, spec: [0, 0, 0], order: Infinity }));
+    const winMemo = new Map();
+    const winner = (key) => { if (!winMemo.has(key)) winMemo.set(key, candidates(el, key).at(-1)); return winMemo.get(key); };
+    // per declaration: which of the longhands it sets it keeps, and who took the others
+    const stat = new Map();
+    for (const c of all) {
+      const keys = cover(c.d.prop), lost = new Map();
+      for (const k of keys) { const w = winner(k); if (w.d !== c.d) { const sk = w.kind === 'inline' ? 'inline' : `r${w.m.rule.order}`; if (!lost.has(sk)) lost.set(sk, { keys: [], w }); lost.get(sk).keys.push(k); } }
+      const n = [...lost.values()].reduce((t, x) => t + x.keys.length, 0);
+      stat.set(c.d, { state: n === 0 ? 'applied' : n === keys.length ? 'overridden' : 'partial', lost: [...lost.values()].map((x) => ({ props: sayLost(x.keys, c.d.prop), by: sourceOf(x.w) })) });
+    }
     const usedVars = new Set();
     const shape = (c) => {
       if (c.m?.pseudo) return { prop: c.d.prop, value: c.d.value, important: !!c.d.important, line: c.d.line, state: 'pseudo' };
-      const winner = props.get(keyOf(c.d.prop));
-      const applied = winner.d === c.d;
-      const info = { prop: c.d.prop, value: c.d.value, important: !!c.d.important, ...(c.kind === 'rule' && { line: c.d.line }), state: applied ? 'applied' : 'overridden' };
-      if (!applied) info.by = sourceOf(winner);
+      const st = stat.get(c.d);
+      const info = { prop: c.d.prop, value: c.d.value, important: !!c.d.important, ...(c.kind === 'rule' && { line: c.d.line }), state: st.state };
+      if (st.state !== 'applied') { info.by = st.lost[0].by; info.lost = st.lost; }
       if (/var\(/.test(c.d.value)) {
         const s = substitute(el, c.d.value);
         info.resolved = s.ok ? s.text : null;
@@ -208,9 +244,43 @@ export function createCascade(rules, ad, opts = {}) {
       vars[n] = v ? { value: v.value, raw: v.raw, source: v.source, at: v.at, inherited: v.at !== ad.id(el) } : null;
       if (v) for (const u of substitute(el, v.raw).uses) if (vars[u] === undefined) queue.push(u);
     }
+    // the strongest declaration of each property name that wins something (a shorthand that lost everything has no row)
+    const best = new Map();
+    for (const c of all) {
+      if (stat.get(c.d).state === 'overridden') continue;
+      const key = c.d.prop.startsWith('--') ? c.d.prop : c.d.prop.toLowerCase();
+      if (!best.has(key) || rankOf(best.get(key), c) < 0) best.set(key, c);
+    }
     const winners = {};
-    for (const [k, c] of props) { const s = c.d.value && /var\(/.test(c.d.value) ? substitute(el, c.d.value) : null; winners[k] = { value: c.d.value, ...(s && { resolved: s.ok ? s.text : null }), important: !!c.d.important, source: sourceOf(c) }; }
-    return { rules: rulesOut, inline, props: winners, vars };
+    for (const [k, c] of best) {
+      const s = c.d.value && /var\(/.test(c.d.value) ? substitute(el, c.d.value) : null, st = stat.get(c.d);
+      winners[k] = { value: c.d.value, ...(s && { resolved: s.ok ? s.text : null }), important: !!c.d.important, source: sourceOf(c), state: st.state, ...(st.state === 'partial' && { lost: st.lost }) };
+    }
+    // what el takes from its ancestors because nothing here sets it
+    const inherited = []; const seen = new Map();
+    for (const key of INHERITED) {
+      if (winner(key)) continue;
+      for (let p = ad.parent(el); p; p = ad.parent(p)) {
+        const w = candidates(p, key).at(-1);
+        if (!w) continue;
+        let e = seen.get(w.d);
+        if (!e) { const s = /var\(/.test(w.d.value) ? substitute(p, w.d.value) : null; e = { prop: w.d.prop, value: w.d.value, ...(s && { resolved: s.ok ? s.text : null }), source: sourceOf(w), from: ad.id(p), sets: [] }; seen.set(w.d, e); inherited.push(e); }
+        e.sets.push(key);
+        break;
+      }
+    }
+    return { rules: rulesOut, inline, props: winners, vars, inherited };
   }
-  return { matched, candidates, explain, customValue, resolve, sourceOf };
+  // What would still beat a value written for `prop` in the rule `m` (an entry of matched(el)): the longhands (or the
+  // same property) that another declaration wins from it. [{ props, by }]; empty when the new value would show.
+  function wouldLose(el, m, prop, important = false) {
+    const at = m.rule.decls.findIndex((d) => sameProp(d.prop, prop)); // edited where it is, or added at the end of the rule
+    const mine = { rank: important ? 2 : 0, spec: m.spec, order: m.rule.order, k: at < 0 ? 1e9 : at }, lost = new Map();
+    for (const key of cover(prop)) {
+      const w = candidates(el, key).filter((c) => !(c.kind === 'rule' && c.m.rule === m.rule && sameProp(c.d.prop, prop))).at(-1);
+      if (w && rankOf(mine, w) < 0) { const sk = w.kind === 'inline' ? 'inline' : `r${w.m.rule.order}`; if (!lost.has(sk)) lost.set(sk, { keys: [], w }); lost.get(sk).keys.push(key); }
+    }
+    return [...lost.values()].map((x) => ({ props: sayLost(x.keys, prop), by: sourceOf(x.w) }));
+  }
+  return { matched, candidates, wouldLose, explain, customValue, resolve, sourceOf };
 }
