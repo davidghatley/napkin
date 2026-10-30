@@ -108,3 +108,78 @@ test('refusals are one spot at a time; ambiguous rules list their matches; nothi
     assert.deepEqual(JSON.parse(readFileSync(join(eng.state, 'styles.json'), 'utf8')).applied, ['s.css']);
   } finally { eng.close(); rmSync(dir, { recursive: true, force: true }); rmSync(stateDir, { recursive: true, force: true }); }
 });
+
+const firstTag = (list, tag) => { for (const n of list) { if (n.tag === tag) return n; const f = firstTag(n.children, tag); if (f) return f; } return null; };
+
+test('text runs: mixed content is editable run by run; computed JSX text is refused alone', () => {
+  const dir = folder({
+    'm.html': '<p>two &amp; <b>bold</b></p>\n<p>one <i>x</i> two <!-- c --> three</p>\n',
+    'P.tsx': "export function P({ n }) { return <div><p>{\"x\"}</p><p>{'y'} and {n}</p></div>; }\n",
+  });
+  const eng = openFolder(dir, { stateDir: mkdtempSync(join(tmpdir(), 'napkin-doc-state-')) });
+  try {
+    const t = eng.tree('m.html');
+    const [p1, p2] = t.tree.filter((n) => n.tag === 'p');
+    assert.deepEqual(p1.runs.map((r) => r.text), ['two &']);
+    assert.deepEqual(p2.runs.map((r) => r.text), ['one', 'two', 'three']);
+    eng.edit('m.html', { by: 't', edits: [{ op: 'text', node: p1.node, value: 'three &' }] }); // the one run, no index needed
+    assert.throws(() => eng.edit('m.html', { by: 't', edits: [{ op: 'text', node: p2.node, value: 'z' }] }), (e) => e.status === 409 && /send run/.test(e.message));
+    eng.edit('m.html', { by: 't', edits: [{ op: 'text', node: p2.node, run: 2, value: '3' }] });
+    assert.equal(readFileSync(join(dir, 'm.html'), 'utf8'), '<p>three & <b>bold</b></p>\n<p>one <i>x</i> two <!-- c --> 3</p>\n');
+    const j = eng.tree('P.tsx#P');
+    const [q1, q2] = j.tree[0].children;
+    assert.deepEqual(q2.runs.map((r) => [r.text, r.editable]), [['y', true], ['and', true], ['{n}', false]]);
+    eng.edit('P.tsx#P', { by: 't', edits: [{ op: 'text', node: q1.node, value: 'say "hi"' }] });
+    eng.edit('P.tsx#P', { by: 't', edits: [{ op: 'text', node: q2.node, run: 0, value: "it's" }] });
+    assert.throws(() => eng.edit('P.tsx#P', { by: 't', edits: [{ op: 'text', node: q2.node, run: 2, value: 'z' }] }), /computed in code/);
+    assert.equal(readFileSync(join(dir, 'P.tsx'), 'utf8'), "export function P({ n }) { return <div><p>{\"say \\\"hi\\\"\"}</p><p>{'it\\'s'} and {n}</p></div>; }\n");
+  } finally { eng.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a TSX file that does not parse keeps a component whose frame says why (file and line)', async () => {
+  const dir = folder({ 'ui/game-view.tsx': 'export function GameView() {\n  return <div>\n}\n' });
+  const eng = openFolder(dir, { stateDir: mkdtempSync(join(tmpdir(), 'napkin-doc-state-')) });
+  try {
+    const f = eng.files().find((x) => x.path === 'ui/game-view.tsx');
+    assert.deepEqual(f.components.map((c) => c.id), ['ui/game-view.tsx#GameView']);
+    const t = eng.tree('ui/game-view.tsx#GameView');
+    assert.deepEqual(t.tree, []); assert.match(t.error, /game-view\.tsx: line \d+/);
+    const { createTsxViews } = await import('../../src/doc/view.js');
+    const v = await createTsxViews(eng).view(eng.component('ui/game-view.tsx#GameView'));
+    assert.equal(v.status, 200); assert.match(v.body.toString(), /could not build ui\/game-view\.tsx#GameView: line \d+/);
+    assert.throws(() => eng.edit('ui/game-view.tsx#GameView', { by: 't', edits: [{ op: 'delete', node: '0' }] }), (e) => e.status === 422);
+  } finally { eng.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('TSX style edits keep the file\'s quote style', () => {
+  const dir = folder({ 'S.tsx': "export const S = () => <div style={{ color: 'red', margin: 4 }}><span style={{}}>a</span></div>;\n" });
+  const eng = openFolder(dir, { stateDir: mkdtempSync(join(tmpdir(), 'napkin-doc-state-')) });
+  try {
+    const t = eng.tree('S.tsx#S');
+    eng.edit('S.tsx#S', { by: 't', edits: [{ op: 'style', node: t.tree[0].node, prop: 'color', value: 'blue' }, { op: 'style', node: t.tree[0].node, prop: 'padding', value: '2px 4px' }, { op: 'style', node: t.tree[0].node, prop: 'margin', value: '8px' }] });
+    eng.edit('S.tsx#S', { by: 't', edits: [{ op: 'style', node: t.tree[0].children[0].node, prop: 'font-weight', value: 'bold' }] });
+    assert.equal(readFileSync(join(dir, 'S.tsx'), 'utf8'), "export const S = () => <div style={{ color: 'blue', margin: 8, padding: '2px 4px' }}><span style={{ fontWeight: 'bold' }}>a</span></div>;\n");
+  } finally { eng.close(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('rules: specificity per selector part, cascade order, and where every variable is defined', () => {
+  const dir = folder({
+    't.css': ':root { --ink: #111; }\n@media (prefers-color-scheme: dark) { :root { --ink: #eee; } }\n',
+    'p.html': '<link rel="stylesheet" href="t.css"><style>#a .x, p { color: var(--ink); } .x:hover > b { color: var(--ink, red); }</style><p id="a" style="--pad: 4px; padding: var(--pad)">x</p>',
+  });
+  const eng = openFolder(dir, { stateDir: mkdtempSync(join(tmpdir(), 'napkin-doc-state-')) });
+  try {
+    const r = eng.rulesOf('p.html');
+    const style = r.rules.filter((x) => x.kind === 'style');
+    assert.deepEqual(style.map((x) => x.order), [...style.map((x) => x.order)].sort((a, b) => a - b));
+    const list = style.find((x) => x.selector.startsWith('#a'));
+    assert.deepEqual(list.parts.map((p) => [p.selector, p.specificity]), [['#a .x', [1, 1, 0]], ['p', [0, 0, 1]]]);
+    assert.deepEqual(style.find((x) => x.selector.startsWith('.x:hover')).parts[0].specificity, [0, 2, 1]);
+    assert.deepEqual(list.decls[0].uses, ['--ink']);
+    assert.deepEqual(r.vars['--ink'].map((d) => [d.file, d.line, d.value, d.selector, d.media]), [['t.css', 1, '#111', ':root', []], ['t.css', 2, '#eee', ':root', ['(prefers-color-scheme: dark)']]]);
+    const ink = r.vars['--ink'][0];
+    assert.equal(readFileSync(join(dir, 't.css'), 'latin1').slice(ink.valStart, ink.valEnd), '#111');
+    assert.deepEqual(r.vars['--pad'].map((d) => [d.inline, d.value]), [[true, '4px']]);
+    assert.deepEqual(r.undefinedVars, []);
+  } finally { eng.close(); rmSync(dir, { recursive: true, force: true }); }
+});

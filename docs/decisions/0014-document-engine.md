@@ -26,3 +26,16 @@ Decision 0013 makes the file text the source of truth: napkin opens any folder, 
 - Two edit paths exist for dialect TSX until the canvas's dialect features move onto the splice path: the contract's ops go through `src/doc/edit.js`, the canvas's dialect ops through `src/store.js`. Both write whole files atomically and both are watched, so they see each other's changes.
 - An HTML file is one component (contract ruling 4). Variants inside a file (modifier classes, repeated examples) are a canvas concern for later lanes.
 - Implied elements have no node, so they cannot be selected; a `<tbody>` the browser adds is reached through its source parent and children.
+
+## Round 2 (2026-10-30, after the critic)
+- **Text runs.** An element with mixed content (`<p>two &amp; <b>bold</b></p>`, JSX `<p>{"x"} and {n}</p>`) lists its runs in the tree (`runs: [{ index, text, editable }]`). `{ op: 'text', node, run }` edits one run; with no `run`, the element's only editable run is meant. A JSX string run keeps its quotes; a computed `{expr}` run is refused on its own.
+- **A TSX file that does not parse** keeps one component named after the file, and its `/view` frame says why, with the file and line. Its tree is empty, with an `error`.
+- **TSX `style` edits** keep the file's quote style (the value's own quote, else the style object's, else the file's majority).
+- **Provenance.** `GET /api/component/<id>/rules` gives each style rule its cascade `order` and the specificity of each selector part, each declaration the variables it `uses`, and `vars`: every definition of each custom property (file, line, byte span, selector, @media, or the inline style and node). The canvas orders matching rules by importance, then specificity, then order. Inline style beats a normal rule.
+- **Nothing in the folder, on every default path.** A guarded write's hard link sits beside the file (same filesystem) and is always removed; there is no private folder. With sidecar writes off (the CLI's default), the dialect workspace keeps frame positions, preview widths and slot texts in the state dir (`workspace.json`), and proposals go to the state dir even for a napkin.json project. A server started with sidecar writes on (`--write-sidecars`, or `src/server.js` without `--no-sidecars`) keeps its old project behaviour.
+
+## Open items
+- **Theme wipe** (moment 5): frames follow the system's `prefers-color-scheme`. Per-frame themes belong to the canvas piece.
+- **Propose mode for agents on HTML:** propose-only agents get 403 on the engine's edits until proposals cover it (P4).
+- **`<base>` side effects:** /view adds `<base href="/raw/<dir>/">`, so `document.baseURI`, links to `#fragment` (resolved against the base) and scripts that read `location` relative to the base differ from opening the file directly. A file with its own `<base>` gets none (its relative URLs then resolve against `/view/`). Rendering is unaffected in the corpus; a later piece may serve files at their own path instead.
+- `@layer` and `!important` across origins are not modelled in the canvas's cascade order (the browser's own result is what the frame shows).
