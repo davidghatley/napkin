@@ -176,6 +176,7 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 | 2026-10-21 mid round 2 | $103.21 today, machine-wide (Claude $93.72, Codex $9.48, Opencode $0.00); about $50 since round 1 began | ccusage@20.0.26 daily |
 | 2026-10-22, after the agents-ui merge | $276.43 total since 2026-10-21, machine-wide ($8.06 so far on 10-22) | same command; Opencode free models $0.00 |
 | 2026-10-29, after FEEL-01, before walk 2 | $1,133.41 total since 2026-10-21, machine-wide (10-21 $268.37, 10-22 $334.25, 10-23 $257.78, 10-24..26 $26.06, 10-27 $84.96, 10-28 $128.28, 10-29 $33.71) | ccusage@20.0.26 daily; includes other sessions on this machine, so napkin's share is lower |
+| 2026-10-30, after the P1 engine merge (Dream 2) | 10-29 $158.66, 10-30 $52.30 so far, machine-wide | ccusage@20.0.26 daily --offline |
 
 ## New dependencies (merged)
 
@@ -202,3 +203,30 @@ Lanes are groups of areas that share files, so parallel builders don't collide. 
 
 ## Pause (2026-10-29)
 David chose to pause for review after round 6 (AskUserQuestion). State: 140/141 pass; FEEL-02 needs David; feat/core 463e359 (suite 696/691/0 fail, 5 skipped). Walk 3 waits for David. Open for David: FEEL-02, N8, shadcn dialect widening, decisions 0006-0012.
+
+## Dream 2 (2026-10-30): HTML/CSS first, beyond Figma
+David approved the re-dream on 2026-10-30 (decision 0013, INTENT updated). The run-1 rows above stay as history; Dream 2 is measured by these rows. Branch `feat/html`. Measures are locked (`bench/`, from 89f4d06).
+
+| Row | Bar | Status | Evidence |
+|---|---|---|---|
+| D1 fidelity | 100% render, <=0.1% px diff vs Chromium opening the file, 100% selectable | critic-pass (P1 round 2) | `bench/fidelity.js`: 83 components, 80 compared, worst diff 0%; 3 shadcn files have no reference (unmeasured) |
+| D2 exact edits | 60 edits: span-exact, nothing else touched, reopen matches, undo byte-exact | critic-pass | `bench/edits.js`: 60/60, every op 6/6 |
+| D4 nothing imposed | 1 command, 0 files added (`git status --ignored`), first render <=2 s, quickstart <=5 lines | critic-pass | `bench/imposed.js`: 5/5 folders clean, ss-ds first view 486 ms; README checked by hand |
+| D6 nothing lost | full suite 0 failing; dialect/sidecar-only criteria retired with reasons | critic-pass at the P1 merge | suite at ed16add: 706 tests, 701 pass, 0 fail, 5 skipped (env-gated) |
+| D3 designer chooses napkin | 11 moment journeys + designer panel (2 of 3) + David | not started | mockups waiting for David's lock |
+| D5 proving demo on HTML | presence, 2 accepted + 1 rejected proposal, exact final diff | not started | P4 |
+| M1-M11 | moment journeys | not started | P2, P3, P5, P4 |
+
+**P1 engine** (Opus builder, two rounds; two fresh Sonnet critics): `src/doc/` maps files by byte range (HTML, CSS, JSX); one edit path for all 10 ops; HTML frames are same-origin iframes of `/view`; state lives outside the folder. Decision 0014 (proposed). Merged into feat/html as a fast-forward to ed16add, the commit the round-2 critic ran green.
+
+**Retired or amended criteria (lead, under decision 0013 and D4; nothing deleted):**
+- WPC-06: the in-folder `.napkin/lock` and self-ignoring folder are now asserted absent. Reason: D4 requires nothing written into an opened folder. Every other check unchanged (55982bc).
+- WPC-18/06: same, plus a canvas move and a preview setting now write no sidecar and still survive a restart. Reason: 0013 removes sidecars (55982bc).
+- OPN-01: a canvas move returns 200 and saves outside the folder, instead of 403. The folder-bytes-unchanged check stays (ed16add).
+
+**Open gaps from the P1 critics, assigned to the next lanes:**
+- The canvas draws only HTML through the new engine; TSX/JSX still appear as read-only dialect cells or not at all (P3).
+- The panel resolves `var(--x)` to the last matching definition, not the cascade's (P2); `/rules` has no per-node cascade for agents (P2).
+- A kill -9 mid-write can leave `.name.tmp-*`/`.name.guard-*` beside an HTML file; the doc engine has no sweep (P2).
+- `/raw/` serves dotfiles such as `.git/config` (local only) (P2).
+- Theme wipe has no mechanism yet; needs a decision (P3). Agents' propose mode on the new engine (P4).
