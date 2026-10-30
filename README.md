@@ -47,9 +47,13 @@ contract are described in [decision 0014](docs/decisions/0014-document-engine.md
 
 ### Optional: a starter project
 
-`node src/cli.js init <empty folder>` writes a `napkin.json` and
-`components/Welcome.tsx` into an empty folder and exits. It is not needed to open
-anything; it only gives you a fresh folder to start from.
+`init` writes a `napkin.json` and `components/Welcome.tsx` into an empty folder
+and exits. It is not needed to open anything; it only gives you a fresh folder to
+start from (outside this checkout):
+
+```sh
+node src/cli.js init ../my-napkin
+```
 
 ## A 40-component sample
 
