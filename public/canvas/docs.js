@@ -4,6 +4,7 @@
 // files use variables nothing they load defines. The answer is kept by the server, outside the folder.
 //   initDocs(ctx) -> { load(), styles }   call load() before the first stage.render pass
 import { docsChanged } from './doc-panel.js';
+import { plain } from './words.js';
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const getJson = async (path) => { const r = await fetch(path); return r.ok ? r.json() : null; };
@@ -72,7 +73,7 @@ export function initDocs(ctx) {
     const send = async (applied) => {
       const r = await ctx.fetch('/api/styles', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ applied }) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.ok === false) { ctx.hint(j.error || `Could not save the answer (${r.status})`); return; }
+      if (!r.ok || j.ok === false) { ctx.hint(plain(j.error || `Could not save the answer (${r.status})`)); return; }
       box.remove();
     };
     box.querySelector('#ask-styles-apply').onclick = () => send(order.filter((p) => box.querySelector(`input[value="${CSS.escape(p)}"]`).checked));

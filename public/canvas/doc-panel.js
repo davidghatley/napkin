@@ -3,6 +3,7 @@
 // the file and line it lives on. Matching is the browser's own: element.matches() and matchMedia() inside the frame.
 // Every change is one contract edit (POST /api/edit): text, class, style, rule or var. The file is the source of truth;
 // the frame and this panel redraw from it when the engine says it changed.
+import { plain } from './words.js';
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const normSel = (t) => String(t).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\s*([,>+~])\s*/g, '$1').trim();
 const normMedia = (t) => String(t ?? '').replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')').replace(/\s*:\s*/g, ': ').trim().toLowerCase();
@@ -113,7 +114,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     showError('');
     const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: comp.component, baseRevision: comp.revision, edits }) });
     const j = await r.json().catch(() => ({ ok: false, error: `the edit failed (${r.status})` }));
-    if (!j.ok) showError(j.error); else { stamp++; if (j.revision) comp.revision = j.revision; }
+    if (!j.ok) showError(plain(j.error)); else { stamp++; if (j.revision) comp.revision = j.revision; }
     return j;
   }
   const ruleEdit = (r, prop, value) => { const rr = data.rules[r]; return { op: 'rule', file: rr.file, selector: rr.selector, ...(rr.media.length ? { media: rr.media.at(-1) } : {}), index: index(rr), prop, value }; };
