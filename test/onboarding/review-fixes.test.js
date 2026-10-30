@@ -44,7 +44,9 @@ test('WPC-06: copied repository and two clones have identical ids; existing side
   } finally { rmSync(parent, { recursive: true, force: true }); }
 });
 
-test('WPC-06: init + open stays git-clean while running and stopped; root ignore is untouched', async () => {
+// Lead amendment (decision 0013, D4, 2026-10-30): napkin writes nothing into an opened folder, so the old
+// in-folder lock and self-ignoring .napkin folder are now asserted absent. The git-clean checks are unchanged.
+test('WPC-06: init + open stays git-clean while running and stopped; root ignore is untouched; nothing is written into the folder', async () => {
   const parent = mkdtempSync(join(tmpdir(), 'napkin-clean-open-')), dir = join(parent, 'project');
   let server;
   try {
@@ -54,9 +56,8 @@ test('WPC-06: init + open stays git-clean while running and stopped; root ignore
     const status = () => git(dir, 'status', '--short', '-uall');
     assert.equal(status(), '');
     server = await cli(dir, [], { NODE_OPTIONS: '' });
-    assert.equal(existsSync(join(dir, 'components/.napkin/lock')), true);
-    assert.equal(readFileSync(join(dir, 'components/.napkin/.gitignore'), 'utf8'), '*\n');
-    assert.equal(status(), '', 'the live lock and its ignore file are invisible to git');
+    assert.equal(existsSync(join(dir, 'components/.napkin')), false, 'no private folder inside the opened folder while running');
+    assert.equal(git(dir, 'status', '--short', '-uall', '--ignored'), '', 'nothing, not even an ignored file, is added while running');
     await server.stop(); server = null;
     assert.equal(existsSync(join(dir, 'components/.napkin/lock')), false);
     assert.equal(status(), '');
@@ -66,7 +67,7 @@ test('WPC-06: init + open stays git-clean while running and stopped; root ignore
     mkdirSync(join(dir, 'components/nested'));
     const file = join(dir, 'components/nested/text.txt'); writeFileSync(file, 'before');
     writeAtomic(file, 'after', { guard: 'before' });
-    assert.equal(readFileSync(join(dir, 'components/nested/.napkin/.gitignore'), 'utf8'), '*\n');
+    assert.equal(existsSync(join(dir, 'components/nested/.napkin')), false, 'a guarded edit leaves no private folder beside the file');
     assert.equal(status(), '?? components/nested/text.txt\n');
   } finally { if (server) await server.stop(); rmSync(parent, { recursive: true, force: true }); }
 });
