@@ -73,9 +73,9 @@ export function writeAtomic(file, data, { exclusive = false, check, guard } = {}
     } finally { closeSync(fd); }
     check?.();
     if (guard !== undefined && !exclusive) {
-      const gdir = join(privateDir(dirname(file)), 'guard');
-      mkdirSync(gdir, { recursive: true });
-      guardPath = join(gdir, `${basename(file)}.${process.pid}.${counter++}`);
+      // The guard link sits beside the file like the temp file does (a hard link needs the same filesystem) and is always
+      // removed below: a guarded write leaves no private folder in the folder it writes (decision 0013).
+      guardPath = join(dirname(file), `.${basename(file)}.guard-${process.pid}-${counter++}`);
       try { linkSync(file, guardPath); } catch { guardPath = null; } // no target yet: nothing to guard
       if (guardPath) { let same = false; try { same = statSync(file).ino === statSync(guardPath).ino; } catch { /* target vanished */ } if (!same) throw new HandSave(''); }
     }
@@ -98,7 +98,7 @@ export { alive };
 
 // Temp files left behind by a writer that was killed. Only those of dead processes are removed.
 export function cleanStaleTmp(file) {
-  const prefixes = [`.${basename(file)}.tmp-`, `.${basename(file).replace(/\.tsx$/, '.napkin.json')}.tmp-`]; // the component and its sidecar
+  const prefixes = [`.${basename(file)}.tmp-`, `.${basename(file)}.guard-`, `.${basename(file).replace(/\.tsx$/, '.napkin.json')}.tmp-`]; // the component (temp file and guard link) and its sidecar
   let names; try { names = readdirSync(dirname(file)); } catch { return; }
   for (const n of names) {
     const prefix = prefixes.find((x) => n.startsWith(x));

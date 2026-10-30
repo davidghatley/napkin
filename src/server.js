@@ -66,7 +66,7 @@ const presence = createPresence({ broadcast });
 // A proposal is work in progress too: show the agent on its node while it proposes.
 const PEOPLE = new Set(['you', 'file', 'git', 'unknown']);
 const tint = (by) => (PEOPLE.has(by) || !by ? {} : presence.color(by)); // agents get their presence colour on every frame that names them
-const api = createApi(ws, { dir, colorOf: tint, broadcast: (f) => {
+const api = createApi(ws, { dir, colorOf: tint, inFolder: !args['no-sidecars'], broadcast: (f) => {
   if (f.type === 'proposal') {
     broadcast({ ...f, proposal: { ...f.proposal, ...tint(f.proposal.by) } });
     if (!f.proposal.adoption && !f.proposal.create && !f.proposal.updated) presence.set(f.proposal.by, { component: f.component, node: nodeOfEdit(f.proposal.edits?.[0]), variant: f.proposal.edits?.[0]?.variant ?? null });
