@@ -14,6 +14,7 @@ import { extname } from 'node:path';
 import { DocError } from './folder.js';
 import { explainError } from '../errors.js';
 import { htmlView, createTsxViews } from './view.js';
+import { createTimeRoutes } from './time-routes.js';
 
 const TYPES = { '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.mp4': 'video/mp4', '.webm': 'video/webm' };
 
@@ -46,10 +47,14 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
     return name;
   };
 
+  // ---- time and code (moments 9 and 10): the film strip's history, restore and the copy payload (time-routes.js) ----
+  const time = createTimeRoutes(engine, { tsx, who, json, body, fail });
+
   // Returns true when the request was one of ours.
   return async function handle(req, res, url) {
     const path = url.pathname, method = req.method;
     try {
+      if (await time(req, res, url)) return true;
       if (method === 'GET' && path === '/api/files') return json(res, 200, { files: engine.files(url.searchParams.get('kinds') ? { kinds: url.searchParams.get('kinds').split(',') } : {}) }), true;
       if (path === '/api/styles') {
         if (method === 'GET') return json(res, 200, engine.styles()), true;

@@ -1,0 +1,37 @@
+/* The film strip (moment 9, time-strip.js) and the quiet pieces around Copy gives real code. Canvas tokens only (canvas.css). */
+#time { position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 6px; padding: 8px 12px 10px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px/1.4 var(--nk-sans); }
+#time[hidden] { display: none; }
+body[data-time-open] #hint { bottom: 168px; }
+.tm-head { display: flex; align-items: center; gap: 12px; min-height: 28px; }
+.tm-title { margin: 0; font: 600 12.5px var(--nk-sans); white-space: nowrap; }
+.tm-file { font: 400 11px var(--nk-mono); color: var(--nk-text-3); margin-left: 6px; }
+.tm-info { flex: 1; min-width: 0; color: var(--nk-text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-keys { color: var(--nk-text-3); font-size: 11px; white-space: nowrap; }
+.tm-restore { height: 26px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--nk-accent); background: var(--nk-accent); color: var(--nk-on-accent); font: 500 12px var(--nk-sans); cursor: pointer; }
+.tm-restore:disabled { background: var(--nk-chrome-2); border-color: var(--nk-line); color: var(--nk-text-3); cursor: default; }
+.tm-close { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--nk-text-2); font-size: 18px; line-height: 1; cursor: pointer; }
+.tm-close:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
+#time button:focus-visible { outline: 2px solid var(--nk-select); outline-offset: 2px; }
+.tm-track:focus-visible { outline: none; }
+.tm-track:focus-visible .tm-tile[aria-selected="true"] .tm-thumb { box-shadow: 0 0 0 2px var(--nk-accent), 0 0 0 5px var(--nk-accent-soft); }
+.tm-track { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 4px 4px 6px; scrollbar-width: thin; border-radius: 6px; cursor: grab; user-select: none; touch-action: pan-x; }
+.tm-track:active { cursor: grabbing; }
+.tm-tile { flex: none; width: 136px; display: grid; gap: 3px; padding: 0; border-radius: 6px; }
+.tm-thumb { position: relative; width: 136px; height: 84px; overflow: hidden; border-radius: 5px; background: var(--nk-frame); box-shadow: inset 0 0 0 1px var(--nk-line-2); }
+.tm-thumb iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #fff; pointer-events: none; opacity: 0; transition: opacity .12s; }
+.tm-thumb iframe[data-ready] { opacity: 1; }
+.tm-tile[aria-selected="true"] .tm-thumb { box-shadow: 0 0 0 2px var(--nk-accent); }
+.tm-tile[aria-selected="true"] .tm-time { color: var(--nk-accent-text); font-weight: 600; }
+.tm-tile[data-source="now"] .tm-thumb { box-shadow: inset 0 0 0 1px var(--nk-line-2), 0 0 0 1px var(--nk-line); }
+.tm-meta { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; }
+.tm-time { font: 500 11.5px var(--nk-sans); font-variant-numeric: tabular-nums; }
+.tm-git { font: 10px var(--nk-mono); color: var(--nk-git, #7a4fd6); }
+.tm-what { font-size: 11px; color: var(--nk-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (prefers-reduced-motion: reduce) { .tm-thumb iframe { transition: none; } }
+
+/* the frame on the canvas while a version is scrubbed: the old version is drawn over the live one, which waits underneath */
+.doc-cell iframe.time-preview { position: absolute; left: 0; top: 0; z-index: 2; display: block; border: 0; pointer-events: none; background: var(--nk-frame); }
+.doc-cell[data-time-previewing] > iframe.doc-frame { visibility: hidden; }
+.doc-cell[data-time-previewing]::after { content: "Earlier version, not saved"; position: absolute; z-index: 3; top: 6px; right: 6px; padding: 3px 8px; border-radius: 999px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 11px/1.3 var(--nk-sans); pointer-events: none; }
+.doc-cell[data-time-previewing] { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
+@media (max-width: 1360px) { .tm-keys { display: none; } }

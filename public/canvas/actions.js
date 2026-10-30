@@ -64,6 +64,11 @@ export const ACTIONS = [
   action('proposals', 'Open the proposals tray and focus the first proposal', 'Alt+P', ['KeyP'], refs('proposals', 'keydown'), (c) => c.proposals.openTray(), 'review'),
   action('proposals-keys', 'Proposals tray: move / show ghost / accept / reject / fold', '↑ ↓ · Enter · A · R · Escape', ['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'a', 'A', 'r', 'R'], refs('proposals', 'keydown')),
   action('clash', 'Clash chip: use mine or keep theirs', 'Tab to the chip, then Enter', [], []),
+  action('versions', 'Versions: open the film strip of the selected component', 'H', ['h', 'H'], refs('time-strip', 'keydown'), (c) => c.time?.toggle(), 'view'),
+  action('versions-scrub', 'Versions: older / newer · first / now · restore · close', '← → · Home · End · Enter · Escape', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', 'Escape'], refs('time-strip', 'keydown')),
+  action('versions-restore', 'Film strip: restore the picked frame', 'Enter in the strip', [], [], (c) => c.time?.restore(), 'edit'),
+  action('copy-code', 'Copy the element as code (its HTML or JSX and the CSS that applies)', 'Ctrl/Cmd+C', [], [], (c) => c.copyCode?.copy(), 'edit'),
+  action('paste-code', 'Paste copied code into the selected element', 'Ctrl/Cmd+V', [], [], (c) => c.copyCode?.pasteFromClipboard(), 'edit'),
   action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
   action('theme', 'Switch light or dark chrome', 'Click the theme button', [], [], () => document.querySelector('#theme-toggle').click(), 'theme'),
 ];
@@ -72,6 +77,6 @@ export const ACTIONS = [
 export const KEYBOARD_HANDLERS = {
   'colorpop.js:keydown': 2, 'component-ops.js:keydown': 1, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'layers.js:keydown': 4, 'matrix.js:keydown': 1, 'nav.js:keydown': 1, 'panel.js:keydown': 5,
   'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage.js:keydown': 1, 'stage.js:keyup': 1,
-  'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
+  'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run).map((a) => ({ ...a, run: () => a.run(ctx) }));

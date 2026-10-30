@@ -41,9 +41,10 @@ export function createTsxViews(engine) {
   const load = async () => (esbuild ||= await import('esbuild'));
   engine.events.on('change', () => cache.clear());
   engine.events.on('files', () => cache.clear());
-  async function bundle(comp) {
+  // `over` (the film strip): the file's bytes from an earlier version, bundled in place of the file on disk and never cached.
+  async function bundle(comp, over = null) {
     const key = `${comp.path}#${comp.name}`;
-    if (cache.has(key)) return cache.get(key);
+    if (!over && cache.has(key)) return cache.get(key);
     const { build } = await load();
     const folder = engine.root;
     const modDir = existsSync(join(folder, 'node_modules/react')) ? join(folder, 'node_modules') : join(ROOT, 'node_modules');
@@ -64,15 +65,16 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
         nodePaths: [join(folder, 'node_modules'), join(ROOT, 'node_modules')],
         alias: { react: join(modDir, 'react'), 'react-dom': join(modDir, 'react-dom') },
         define: { 'process.env.NODE_ENV': '"production"' }, loader: { '.svg': 'dataurl', '.png': 'dataurl' },
+        ...(over && { plugins: [{ name: 'napkin-version', setup(b) { const me = engine.abs(comp.path); b.onLoad({ filter: /\.[jt]sx$/ }, (a) => (a.path === me ? { contents: over.toString('utf8'), loader: a.path.endsWith('.tsx') ? 'tsx' : 'jsx', resolveDir: dirname(me) } : undefined)); } }] }),
       });
       out = { code: r.outputFiles[0].text };
     } catch (e) { out = { error: explainError((e.errors?.[0]?.text || e.message).slice(0, 400), { next: 'fix the import or the code it names, then save; napkin builds it again.' }), file: e.errors?.[0]?.location?.file }; }
-    cache.set(key, out);
+    if (!over) cache.set(key, out);
     return out;
   }
-  async function view(comp) {
+  async function view(comp, over = null) {
     const links = engine.applied().map((p) => `<link rel="stylesheet" href="${href(p)}">`).join('');
-    const b = comp.broken ? { error: explainError(comp.broken, { next: 'fix the syntax error, then save; napkin reads it again.' }) } : await bundle(comp);
+    const b = comp.broken && !over ? { error: explainError(comp.broken, { next: 'fix the syntax error, then save; napkin reads it again.' }) } : await bundle(comp, over);
     if (b.error) {
       // The frame still draws: it says why the component could not be built (the canvas shows the same page).
       return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><pre data-napkin-error style="white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;margin:8px">napkin could not build ${escHtml(comp.id)}: ${escHtml(b.error)}</pre></body></html>`) };

@@ -421,6 +421,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   function done2(comp, step, kind) {
     const revision = read(comp.path).rev;
     push(history, comp.id, { revision, by: step.by, at: Date.now(), summary: (kind === 'edit' ? '' : kind + ': ') + step.summary, files: step.files.map((f) => f.path) });
+    // 'commit' carries the bytes before and after (the film strip, src/doc/history.js, keeps them outside the folder)
+    for (const f of step.files) events.emit('commit', { path: f.path, before: Buffer.from(f.before, 'latin1'), after: Buffer.from(f.after, 'latin1'), by: step.by, kind, summary: step.summary, at: Date.now(), component: comp.id });
     for (const f of step.files) events.emit('change', { path: f.path, revision: read(f.path).rev, by: step.by, component: comp.id, kind, summary: step.summary });
     return { ok: true, revision, changed: step.files.map((f) => f.path), component: comp.id };
   }
@@ -468,6 +470,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return done2(comp, st, kind);
   }
 
+  // Put a component's file back to the bytes of an earlier version: one step, so one undo (the film strip's Restore).
+  function restore(id, { bytes, by = 'unknown', summary = 'restored an earlier version' } = {}) {
+    const comp = component(id);
+    if (!Buffer.isBuffer(bytes)) throw new DocError('restore needs the earlier version as bytes. Next: send the version from the strip', 400);
+    const before = read(comp.path).s, after = L(bytes);
+    if (before === after) return { ok: true, revision: read(comp.path).rev, changed: [], component: comp.id, noop: true };
+    const files = [{ path: comp.path, before, after }];
+    write(files);
+    const step = { by, at: Date.now(), files, edits: [{ op: 'restore' }], summary };
+    push(undo, comp.id, step); redo.set(comp.id, (redo.get(comp.id) || []).filter((x) => x.by !== by));
+    return done2(comp, step, 'edit');
+  }
+
   // ---------- watcher ----------
   const watchers = new Map();
   let timer = null; const pending = new Set();
@@ -513,7 +528,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   scan(); watchDirs();
   return {
     root, state, events,
-    files: filesList, component, has, tree, rulesOf, sheetsOf, styles, setStyles, edit, layout: () => ({ ...layout }), setLayout,
+    files: filesList, component, has, tree, rulesOf, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout,
     latest(verb, by) { // the newest step this caller can undo (or redo) in any component: { component, at } | null
       let best = null;
       for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };

@@ -47,6 +47,8 @@ import { initInstances } from './instances.js';
 import { initSlots } from './slots.js';
 import { initAgentsLane } from './agents-lane.js';
 import { initDocs } from './docs.js';
+import { initTimeStrip } from './time-strip.js';
+import { initCopyCode } from './copy-code.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -124,6 +126,8 @@ initSlots(ctx); // CMP-05: slot drop zones
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 await initTokens(ctx); // token source, theme preview and Tokens drawer
 ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
+initTimeStrip(ctx);   // moment 9: the film strip of a component's versions (H)
+initCopyCode(ctx);    // moment 10: Cmd-C gives the file's own HTML/JSX and CSS; Cmd-V inserts it
 initAgentsLane(ctx);  // presence, proposals tray + ghost cells, Activity tab, clash chip
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 // #revision shows 8 characters (the frame title shows 7); the full revision is its tooltip
