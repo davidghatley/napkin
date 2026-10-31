@@ -210,7 +210,7 @@ export function initHighlight(ctx) {
   function paintRule() {
     const host = side.querySelector('#hl-rule');
     if (!host) return;
-    if (!info) { host.innerHTML = ''; return; }
+    if (!info) { host.innerHTML = `<div class="hl-head"><div class="hl-crumb"><code>${esc(label)}</code></div><div class="hl-sub"><span></span><button type="button" id="hl-back" title="Back to the element (Escape)">Back <kbd>Esc</kbd></button></div></div>`; host.querySelector('#hl-back').onclick = () => clear(); return; }
     const had = host.contains(document.activeElement) ? document.activeElement.dataset.prop : null;
     const tail = (f) => String(f).split('/').pop();
     host.innerHTML = `<div class="hl-head"><div class="hl-crumb"><span class="hl-file">${esc(tail(info.file))}</span><span aria-hidden="true">›</span><code>${esc(label)}</code></div><div class="hl-sub">line ${info.line}${info.media ? ` · @media ${esc(info.media)}` : ''}<button type="button" id="hl-back" title="Back to the element (Escape)">Back <kbd>Esc</kbd></button></div></div>
@@ -232,7 +232,7 @@ export function initHighlight(ctx) {
         if (ev.key !== 'Enter') return;
         ev.preventDefault(); ev.stopPropagation();
         clearTimeout(inp._t);
-        if (!typed) return;
+        if (!typed) { if (change) keepChange(); return; }
         const t = typed; typed = null; pvTok++;
         const j = await post([editOf(t.prop, t.value)]);
         pv.clear();
@@ -386,13 +386,13 @@ export function initHighlight(ctx) {
     redraw();
     if (!quiet) {
       snapshot();
-      loadInfo();
+      paintRule(); loadInfo();
       // every place in view when they fit at a size the outlines read; else the first one
       if (places.length) requestAnimationFrame(() => {
         const rects = places.map((p) => ctx.stage.sections.get(p.id)?.docFrame?.cell.getBoundingClientRect()).filter(Boolean).map((r) => ctx.view.rectToWorld(r));
         const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y)), x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
         const box = ctx.view.stageBox(), fit = Math.min((box.width - 120) / Math.max(1, x1 - x0), (box.height - 120) / Math.max(1, y1 - y0));
-        if (counts.frames > 1 && fit >= 0.2) { focusPlace(0, { fly: false }); ctx.view.flyTo({ x: x0, y: y0 - 30, w: x1 - x0, h: y1 - y0 + 30 }, { pad: 60, max: 1 }); }
+        if (counts.frames > 1 && fit >= 0.15) { focusPlace(0, { fly: false }); ctx.view.flyTo({ x: x0, y: y0 - 30, w: x1 - x0, h: y1 - y0 + 30 }, { pad: 60, max: 1 }); }
         else focusPlace(0);
       });
     }

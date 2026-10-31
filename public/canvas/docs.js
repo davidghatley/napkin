@@ -109,7 +109,16 @@ export function initDocs(ctx) {
     docsChanged();
     await refreshStyles();
     for (const c of ctx.state.components.values()) if (c.kind === 'html') redraw(c.component);
+    settleLayout();
   });
+  // The stylesheets change every frame's height. When the frames have drawn again the ones nobody has placed are packed for
+  // their real sizes, the same layout a reload gives, and fit once; a person's own placement is never touched.
+  let settle = 0, settleOff = null;
+  function settleLayout() {
+    const go = () => { settleOff?.(); settleOff = null; ctx.stage.layoutAll(); ctx.view.fitAll({ animate: false }); };
+    clearTimeout(settle); settle = setTimeout(go, 900);
+    if (!settleOff) { const on = () => { clearTimeout(settle); settle = setTimeout(go, 350); }; settleOff = ctx.on('render', on); }
+  }
   async function refreshStyles() { api.styles = await getJson('/api/styles'); ask(); }
 
   // ---------- ask once ----------

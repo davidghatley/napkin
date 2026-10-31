@@ -240,6 +240,8 @@ David approved the re-dream on 2026-10-30 (decision 0013, INTENT updated). The r
 
 **Accepted limits:** 60 components at fit-all leaves 20 named placeholders (no snapshot mechanism); reload peak 46 frames, budget 40 plus a batch; a keyframes match through an ancestor selector can show an unused animation; a hand-only rule reorder isn't refused; a comment-only sheet difference stays on restore; a file with no component has no frame, listed instead; a hand edit taking a dialect file out of the dialect keeps its last good render.
 
+**Smoothing pass (branch area/html-smooth):** one owner closed the open list below and the known seams; the scores wait for a blind critic. Evidence: `docs/evidence/smooth/`.
+
 **Open for smoothing:** a restore can silently drop a rule no component draws; `test/mcp/render.test.js` p95 sits at its 500 ms limit and flakes; no test yet for B in the film strip vs breakpoints; ruler tick tooltips ignore strict conditions.
 
 **Open gaps from the P1 critics (status at the time of P1):**

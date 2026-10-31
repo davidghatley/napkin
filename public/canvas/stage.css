@@ -279,3 +279,6 @@ body[data-bp] #hint { bottom: 126px; }
 /* the selection's name sits in the room just above the frame: the title and ruler make way for it */
 .cmp[data-chip-top] .cmp-head { transform: translateY(calc(-22px * var(--nk-ls, 1))) scale(var(--nk-lf, 1)); }
 .cmp[data-chip-top] .cell-ruler { transform: translateY(calc(-22px * var(--nk-ls, 1))); }
+#overlay-select[data-tags="none"]::after, #overlay-select[data-tags="none"] .osize { display: none; }
+#layers .lcomp { margin-top: 0; }
+body[data-wipe] #grid { visibility: hidden; }

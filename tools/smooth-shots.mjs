@@ -51,7 +51,6 @@ const MOMENTS = {
     await h.select('Note', '.ss-note__tag');
     await h.b.eval(`napkin.view.fitSelection?.({ animate: false })`).catch(() => {});
     await h.sleep(500);
-    await h.shot('m2-selected');
     await h.type('.vrow input[data-prop="padding"]', 'var(--space-1) var(--space-4)');
     await h.sleep(1600);
     await h.b.eval(`document.querySelector('#doc-staged [data-scope="class"]')?.click()`);
@@ -63,7 +62,6 @@ const MOMENTS = {
     await h.select('Note', '.ss-note__tag');
     await h.b.eval(`napkin.stage.highlight({ selector: '.ss-label', file: 'components.css' })`);
     await h.sleep(1500);
-    await h.shot('m3-lit');
     await h.type('.hl-decl input[data-prop="letter-spacing"]', '.12em'); await h.sleep(500);
     await h.key('Enter', 'Enter', 0, 13);
     await h.sleep(2500);
@@ -81,6 +79,7 @@ const MOMENTS = {
     await h.sleep(700);
     await h.shot('m4');
     await h.b.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: g.x - 132, y: g.y, button: 'left', buttons: 0, clickCount: 1 });
+    await h.b.eval(`napkin.stage.sections.get(napkin.find('Plate').component).docFrame.commitWidth(640)`); await h.sleep(300);
   },
   async m6(h) { // variables as instruments
     await h.select('Callout', '.ss-call, li, p, span');
@@ -92,7 +91,7 @@ const MOMENTS = {
     await h.b.eval(`napkin.view.fitAll({ animate: false })`); await h.sleep(800);
     await h.b.eval(`napkin.inspector?.toggle('contrast', true) ?? 0`).catch(() => {}); await h.sleep(800);
     await h.shot('m8-contrast-fit');
-    await h.b.eval(`napkin.inspector?.toggle('contrast', false)`).catch(() => {});
+    await h.b.eval(`napkin.inspector?.toggle('contrast', false)`).catch(() => {}); await h.sleep(3400);
     await h.select('Plate', 'figure');
     await h.b.eval(`napkin.nav.focus(napkin.find('Plate').component, null, { animate: false })`); await h.sleep(800);
     const c = await h.centre('Plate', 'header, figcaption');
@@ -101,9 +100,23 @@ const MOMENTS = {
     await h.shot('m8');
     await h.b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Alt', code: 'AltLeft', windowsVirtualKeyCode: 18 });
   },
+  async m5(h) { // the wipe, with the frames as they are
+    await h.b.eval(`napkin.view.fitAll({ animate: false })`); await h.sleep(500);
+    await h.b.eval(`napkin.theme.set({ left: 'light', right: 'dark', at: 50 }); napkin.theme.open()`);
+    await h.b.waitFor(`napkin.theme.clones().size > 5`, 30000); await h.sleep(2500);
+    await h.shot('m5');
+    await h.b.eval(`napkin.theme.close()`); await h.sleep(800);
+  },
+  async styles(h) { // the Styles tab
+    await h.b.eval(`napkin.view.fitAll({ animate: false }); napkin.stylesTab.show('styles')`); await h.sleep(2500);
+    await h.b.eval(`napkin.stage.highlight({ variable: '--ink-muted' })`); await h.sleep(2000);
+    await h.shot('styles');
+    await h.b.eval(`napkin.stylesTab.show('layers')`);
+  },
   async m9(h) { // the film strip after a few edits
     await h.select('Note', '.ss-note__tag');
     for (const [prop, value] of [['letter-spacing', '.2em'], ['padding', '8px 24px'], ['font-size', '13px']]) { await h.edit('Note', { op: 'rule', file: 'components.css', selector: '.ss-note__tag', prop, value }); await h.sleep(1200); }
+    await h.b.eval(`napkin.select(null)`); await h.select('Note', '.ss-note__tag');
     await h.b.eval(`napkin.time.open?.() ?? napkin.time.toggle()`); await h.sleep(3000);
     await h.b.eval(`document.querySelector('#stage').focus()`);
     await h.shot('m9');

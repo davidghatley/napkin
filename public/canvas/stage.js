@@ -295,13 +295,13 @@ export function createStage(ctx, root, world, view) {
     // Frames of files only: they vary in height, so they stack in columns (shortest first) as wide as the canvas shows, and read at a larger zoom
     if (!taken.length && ids.length > 2 && ids.every((id) => sections.get(id).el.dataset.kind === 'html')) {
       const sb = view.stageBox(), colW = Math.max(...ids.map((id) => boxes.get(id).w)) + MASONRY_GAP;
-      const n = Math.max(1, Math.round(Math.sqrt(area * Math.max(0.8, sb.width / Math.max(1, sb.height))) / colW));
-      const heights = Array(n).fill(0);
-      for (const id of ids) {
-        const c = heights.indexOf(Math.min(...heights)), top = boxes.get(id).top;
-        out.set(id, { x: c * colW, y: heights[c] + top });
-        heights[c] += top + sections.get(id).size.h;
-      }
+      const stack = (n) => { const heights = Array(n).fill(0), at = new Map(); for (const id of ids) { const c = heights.indexOf(Math.min(...heights)), top = boxes.get(id).top; at.set(id, { x: c * colW, y: heights[c] + top }); heights[c] += top + sections.get(id).size.h; } return { heights, at }; };
+      // as many columns as read largest on the canvas you have
+      const zoomOf = (n, heights) => Math.min((sb.width - 144) / (n * colW), (sb.height - 144) / Math.max(1, Math.max(...heights)));
+      let n = 1, best = stack(1);
+      for (let k = 2; k <= Math.min(8, ids.length); k++) { const t = stack(k); if (zoomOf(k, t.heights) > zoomOf(n, best.heights)) { n = k; best = t; } }
+      const heights = best.heights;
+      for (const [id, p] of best.at) out.set(id, p);
       return { out, width: n * colW, bottom: Math.max(...heights) };
     }
     const rows = [[]];
@@ -496,6 +496,7 @@ export function createStage(ctx, root, world, view) {
     const r = selEl.getBoundingClientRect(), H = 22, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
     const frame = selEl.closest('.doc-cell'), fr = frame?.querySelector('iframe.doc-frame')?.getBoundingClientRect(), z = view.get().z;
     if (!fr) return 'above';
+    if (z < 0.45) { for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top'); return 'none'; } // an overview: the name is in the layers, the frame's title stays readable
     const sec = selEl.closest('section.cmp'), tight = r.top - fr.top < H + 9;
     for (const other of world.querySelectorAll('.cmp[data-chip-top]')) if (other !== sec || !tight) other.removeAttribute('data-chip-top');
     if (tight) sec.setAttribute('data-chip-top', '');
