@@ -10,3 +10,4 @@ data/
 *.safetensors
 examples/consumer-app/dist/
 .dream-gauntlet/
+storybook-static/

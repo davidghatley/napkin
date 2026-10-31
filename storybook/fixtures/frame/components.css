@@ -1,0 +1,329 @@
+/* Secret Sauce components, v2.1. Loads after tokens.css. Class prefix: ss-
+   Colour, space, motion and type families come from tokens; no hex lives in this file.
+
+   REFERENCE: one line per component (what · when · tokens)
+   ss-body      page ground and body text · every page · paper, ink, font-text (Hoop), body 16/24
+   ss-label     mono uppercase label · plate heads, spec strips, captions of figures · ink-muted, font-mono 11/16
+   ss-plate     frame + __head + __body (figure | key) + __cap · every figure, manual, card · sheet, rule, ink, space-3/4/6
+   ss-key       numbered key matched to callouts; li.is-focal for the one vermilion · inside a plate · ink, vermilion, font-serif 16
+   ss-call      callout disc, 24px, mono numeral; --focal = the one thing to look at · on figures · sheet, ink, vermilion, radius-disc
+   ss-spine     64px vertical band: glyph (40px, 8px cells), title, run; --ink, --slim (44px, run only) · stand-alone pieces · cobalt, on-cobalt
+   ss-spec      spec strip of real numbers; <i> = the key, plain = the value · bottom of plates and cards · ink, ink-muted, rule
+   ss-seed      16-cell seed strip, grouped by nibble so it reads as hex · inside ss-spec · ink, rule (--cobalt variant)
+   ss-chips     the piece's two inks as 16px squares · inside ss-spec · the inks themselves
+   ss-pill      status, always with a word, 20px tall · tables, card heads · teal-text, vermilion-text, cobalt-text, ink-muted
+   ss-note      labelled box with a full frame (no side rail); --rule (vermilion) --verify (cobalt) --trap (ink) · manuals · ink, vermilion, cobalt
+   ss-press     the press button, 48px · game surfaces only · phosphor, on-phosphor, radius-hardware, shadow-press
+   ss-field     the prompt field, 48px, matches ss-press · game surfaces only · sheet, ink, radius-hardware, shadow-press
+   ss-lockup    mark + leader + name + line, built on the mark's cell (--lockup-cell) · signatures · ink, ink-muted
+   ss-px        Stem 7 pixel text on whole cells; --label 16 · --s 32 · --m 48 · --l 72 · --xl 120 · numerals, HUDs, titles · font-pixel
+   ss-mark-type the typed mark: "dh" in Stem 7 (liga) · lockup option, splash corner · font-pixel
+   ss-live      phosphor "this is live" indicator, stepped blink · game surfaces only · phosphor, phosphor-text, dur-cell, ease-step
+   ss-blink     the live blink on any element (SVG cursor, selection brackets) · phosphor parts only · dur-cell, ease-step
+   ss-hud       game readout: mono keys, Stem 7 values, ss-meter cells · game surfaces only (data-theme="dark") · ink, phosphor, rule
+   ss-meter     a value as cells (HP, fuel); .on cells are phosphor · inside ss-hud · phosphor, rule
+   ss-build     stepped reveal: children appear one per --dur-cell, no easing · built things (glyphs, tiles, rows) · dur-cell, ease-step
+   ss-carry     the one eased move (a panel or card arriving) · carried things · dur-move, ease-move
+   ss-poster    riso block: two inks overprint (multiply), seed-derived misregistration, optional Bastarda word · social, thumbnail, OG only · cobalt, vermilion, sun, font-poster
+   ss-page      the reading column: 62rem, 16px phone gutters (safe-area aware), children can't push it wide · every docs page · space tokens
+   ss-runhead   the line above everything: title left, edition and date right, mono label · top of every docs page · ink, ink-muted, type-label
+   ss-chapter   a numbered chapter head: Stem 7 number, a label, an h2, heavy rule · manuals, reports · cobalt-text, type-h1, line-heavy
+   ss-lead      the first paragraph under a title · once per page or chapter · type-lead, 46rem
+   ss-foot      the closing row: lockup left, edition right · bottom of every docs page · ink, rule
+   ss-input     a docs text field: square, hairline ink frame, 40px · tools and filters outside games · sheet, ink, type-body
+   ss-button    a docs button, 40px, square; --primary is cobalt (one per view) · tools and forms outside games · ink, cobalt, on-cobalt
+   ss-prose     long-form reading text styled by element (h1-h3, p, lists, code, quote, table, hr) · generated markdown, docs · ink, type-body
+   ss-mast      the house title move: one wide line (__x, Hoop Bold) over one condensed line (__c, Spire) · page and cover titles · font-display, font-condensed
+   ss-tabs      accessible tab list (role=tablist, arrow keys) with a cobalt underline · switching views in docs and tools · ink, cobalt
+   ss-check     checkbox drawn as a seed cell: an empty frame, a filled square when on · filters and settings · ink, cobalt
+   ss-table     data table: mono head, hairline rows, .num for tabular numbers; wrap in ss-table-wrap · any table · ink, rule, type-small
+   ss-code      a code or command block with an optional __label row · commands in docs and manuals · sheet, rule, type-data
+   ss-aside     attributed margin note: __initial, __who, __src, then __body; sources differ by name, never by ink · commentary beside a text · sheet, rule
+   data-motion="still"  on any wrapper: every ss- animation off, final state shown · static exports, screenshots
+
+   Type: font: var(--type-<style>) sets weight, size, line height and family together (tokens.css).
+   Sizes: every font-size is a house step (11 · 13 · 16 · 20 · 25 · 32 · 48 · 72 · 120). Every line-height is
+   a whole pixel on the 4px grid, so text below a label never lands on a half pixel at 1x. */
+
+/* ---------- base ---------- */
+.ss-body { margin: 0; background: var(--paper); color: var(--ink); font: var(--type-body); }
+.ss-label { font: 500 11px/16px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.ss-label b, .ss-label strong { color: var(--cobalt-text); font-weight: 600; }
+:where(.ss-plate, .ss-press, .ss-field, .ss-hud) :focus-visible, .ss-press:focus-visible, .ss-field:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ss-plate, .ss-note, .ss-field, .ss-spine, .ss-poster { box-sizing: border-box; }
+/* code anywhere gets the mono face (zero specificity; the size follows the text around it). A v2.1 benchmark page
+   fell back to the browser's monospace for code inside a note. */
+:where(code, kbd, samp, pre) { font-family: var(--font-mono); }
+/* links anywhere are cobalt-text (zero specificity). The v2.1 release page found browser blue on links outside ss-prose. */
+:where(a) { color: var(--cobalt-text); text-underline-offset: 3px; }
+
+/* ---------- plate: frame, header row, figure + key, caption ---------- */
+.ss-plate { background: var(--sheet); border: var(--line-hair) solid var(--rule); padding: var(--space-3) var(--space-4) var(--space-4); }
+/* baseline keeps the left and right labels on one line even when one side carries a b/strong */
+.ss-plate__head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: var(--space-1) var(--space-4); padding-bottom: var(--space-3); margin-bottom: var(--space-4); border-bottom: var(--line-hair) solid var(--ink); }
+.ss-plate__body { display: grid; grid-template-columns: minmax(0, 1fr) 13rem; gap: var(--space-6); }
+.ss-plate__body > * { min-width: 0; }
+.ss-plate__cap { font: italic 400 16px/24px var(--font-serif); color: var(--ink-muted); margin: var(--space-4) 0 0; max-width: 46rem; }
+@media (max-width: 640px) { .ss-plate__body { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- callout disc ----------
+   24px (on the 4px grid). The line box fills the 22px inside the ring, so the numeral's position is
+   set by the font's own metrics: measured centred to 0.5px at 1x and 2x for 0-9 and 10-99. */
+.ss-call { box-sizing: border-box; display: inline-block; flex: none; width: 24px; height: 24px; border-radius: var(--radius-disc); border: var(--line-hair) solid var(--ink); background: var(--sheet); color: var(--ink); font: 600 11px/22px var(--font-mono); font-variant-numeric: tabular-nums; text-align: center; letter-spacing: 0; vertical-align: middle; }
+.ss-call--focal { background: var(--vermilion); color: var(--on-vermilion); }
+
+/* ---------- key: numbered list matched to callouts ----------
+   The term's line box is the disc's height (24px), so the term's caps centre on the disc. */
+.ss-key { list-style: none; margin: 0; padding: 0 0 0 var(--space-4); border-left: var(--line-hair) solid var(--rule); counter-reset: k; display: grid; align-content: start; gap: var(--space-3); font-size: 13px; line-height: 20px; }
+.ss-key li { counter-increment: k; display: grid; grid-template-columns: 24px minmax(0, 1fr); column-gap: var(--space-2); }
+.ss-key li::before { content: counter(k); grid-row: 1 / span 2; box-sizing: border-box; width: 24px; height: 24px; border-radius: var(--radius-disc); border: var(--line-hair) solid var(--ink); background: var(--sheet); color: var(--ink); font: 600 11px/22px var(--font-mono); font-variant-numeric: tabular-nums; text-align: center; }
+.ss-key li.is-focal::before { background: var(--vermilion); color: var(--on-vermilion); }
+.ss-key b { display: block; font: 600 11px/24px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+.ss-key i { display: block; font: var(--type-caption); color: var(--ink-muted); }
+@media (max-width: 640px) { .ss-key { border-left: 0; padding-left: 0; border-top: var(--line-hair) solid var(--rule); padding-top: var(--space-3); } }
+
+/* ---------- spine: vertical band on the left edge ----------
+   64px = 16 grid units. The glyph is 40px (8px cells) at a 12px inset, so its cells sit on the 4px grid.
+   Title 48px condensed, nudged so the caps (not the em box) centre in the band. The run gives way first. */
+.ss-spine { display: flex; flex-direction: column; justify-content: space-between; align-items: center; gap: var(--space-4); width: 64px; padding: var(--space-3) 0; background: var(--cobalt); color: var(--on-cobalt); overflow: hidden; }
+.ss-spine--ink { background: var(--ink); color: var(--paper); }
+/* Night: an ink spine would invert into a bright bar (a lightbox, not a spine), and a sheet band would vanish on a
+   plate. It becomes a rule-grey band with ink type (about 9:1), distinct from both paper and sheet. */
+[data-theme="dark"] .ss-spine--ink, [data-theme="dark"].ss-spine--ink { background: var(--rule); color: var(--ink); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ss-spine--ink:not([data-theme="light"] .ss-spine--ink) { background: var(--rule); color: var(--ink); } }
+.ss-spine > * { flex: none; }
+.ss-spine__glyph { display: block; width: 40px; height: 40px; }
+.ss-spine__title { writing-mode: vertical-rl; transform: rotate(180deg) translateX(var(--spine-optical, -1px)); font-family: var(--font-condensed); font-weight: 400; font-size: 48px; line-height: 48px; letter-spacing: 0; text-transform: uppercase; white-space: nowrap; }
+.ss-spine__run { flex: 0 1 auto; min-height: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; writing-mode: vertical-rl; transform: rotate(180deg); font: 500 11px/16px var(--font-mono); letter-spacing: .2em; text-transform: uppercase; }
+/* slim: plates and docs. 44px band, 20px glyph (4px cells) at a 12px inset, run only. */
+.ss-spine--slim { width: 44px; }
+.ss-spine--slim .ss-spine__glyph { width: 20px; height: 20px; }
+.ss-spine--slim .ss-spine__title { display: none; }
+
+/* ---------- spec strip + seed strip + chips ---------- */
+.ss-spec { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-6); border-top: var(--line-hair) solid var(--ink); padding-top: var(--space-3); font: 500 11px/16px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ss-spec i { font-style: normal; color: var(--ink-muted); }
+/* 8px cells (= label cap height) on a 12px pitch; an extra 4px between nibbles so 16 bits read as 4 hex digits */
+.ss-seed { display: inline-flex; gap: var(--space-1); flex: none; }
+.ss-seed i { width: 8px; height: 8px; background: var(--rule); }
+.ss-seed i:nth-child(4n + 5) { margin-left: var(--space-1); }
+.ss-seed i.on { background: var(--seed-on, var(--ink)); }
+.ss-seed--cobalt { --seed-on: var(--cobalt); }
+.ss-chips { display: inline-flex; gap: var(--space-1); flex: none; }
+.ss-chips i { width: 16px; height: 16px; }
+
+/* ---------- pill: status always carries a word ----------
+   20px tall: 1px frame + 1px pad + a 16px line. Cap height centres to 0.5px. */
+.ss-pill { display: inline-block; box-sizing: border-box; height: 20px; font: 600 11px/16px var(--font-mono); letter-spacing: .1em; text-transform: uppercase; padding: 1px 7px; border-radius: var(--radius-hair); border: var(--line-hair) solid currentColor; white-space: nowrap; vertical-align: middle; }
+.ss-pill--ok { color: var(--teal-text); } .ss-pill--bad { color: var(--vermilion-text); } .ss-pill--info { color: var(--cobalt-text); } .ss-pill--mute { color: var(--ink-muted); }
+
+/* ---------- note: a labelled box, full frame, no side rail ---------- */
+.ss-note { border: var(--line-hair) solid var(--ink); background: var(--sheet); }
+.ss-note__tag { display: block; padding: var(--space-1) var(--space-3); background: var(--ink); color: var(--paper); font: 600 11px/16px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; }
+.ss-note--rule .ss-note__tag { background: var(--vermilion); color: var(--on-vermilion); }
+.ss-note--verify .ss-note__tag { background: var(--cobalt); color: var(--on-cobalt); }
+/* trap keeps the ink tag: sun would be a third ink on a docs page (two spot inks per piece). The word TRAP carries it. */
+.ss-note__body { padding: var(--space-3); font-size: 16px; line-height: 24px; }
+
+/* ---------- press button + field: in-game UI only (radius-hardware, shadow-press) ----------
+   Both 48px tall (2 + 12 + 20 + 12 + 2) so a field and its button share a baseline. Plex Mono 600:
+   700 is not a loaded weight and would be synthesised. */
+.ss-press { box-sizing: border-box; font: 600 16px/20px var(--font-mono); letter-spacing: .12em; text-transform: uppercase; padding: var(--space-3) var(--space-6); border: 2px solid var(--ink); border-radius: var(--radius-hardware); background: var(--phosphor); color: var(--on-phosphor); box-shadow: var(--shadow-press); cursor: pointer; }
+.ss-press:active { transform: translateY(3px); box-shadow: none; }
+.ss-press--quiet { background: var(--sheet); color: var(--ink); }
+.ss-field { font: 500 16px/20px var(--font-mono); padding: var(--space-3) var(--space-4); border: 2px solid var(--ink); border-radius: var(--radius-hardware); background: var(--sheet); color: var(--ink); box-shadow: var(--shadow-press); width: 100%; }
+.ss-field::placeholder { color: var(--ink-muted); }
+
+/* ---------- lockup: mark + leader + name + line ----------
+   Everything is counted in mark cells (--lockup-cell, default 4px: a 28px mark). Gap 2 cells, leader 4 cells.
+   The leader sits on the mark's bar row (row 4 of 7), and the name's line box is the mark's height so its
+   caps centre on that same row. */
+.ss-lockup { --lockup-cell: 4px; display: inline-grid; grid-template-columns: auto auto auto; grid-template-rows: auto auto; column-gap: calc(var(--lockup-cell) * 2); justify-content: start; justify-self: start; align-items: start; width: max-content; color: var(--ink); }
+.ss-lockup__mark { grid-row: 1; display: block; width: calc(var(--lockup-cell) * 7); height: calc(var(--lockup-cell) * 7); }
+.ss-lockup__lead { grid-row: 1; width: calc(var(--lockup-cell) * 4); height: 0; margin-top: calc(var(--lockup-cell) * 3.5 - .5px); border-top: var(--line-hair) solid currentColor; }
+.ss-lockup__name { grid-row: 1; display: block; font: 600 13px/28px var(--font-mono); line-height: calc(var(--lockup-cell) * 7); letter-spacing: .16em; text-transform: uppercase; white-space: nowrap; }
+.ss-lockup__line { grid-row: 2; grid-column: 3; display: block; margin-top: calc(var(--space-1) * -1); font: 400 11px/16px var(--font-mono); letter-spacing: .04em; text-transform: none; color: var(--ink-muted); white-space: nowrap; }
+/* when name and line share one wrapper span (v1 markup), the wrapper takes the third column */
+.ss-lockup > span:not([class]) { grid-row: 1 / span 2; grid-column: 3; }
+.ss-lockup > span:not([class]) .ss-lockup__line { margin-top: calc(var(--space-1) * -1); }
+
+/* ---------- Stem 7 pixel text ----------
+   Stem 7's em is 8 cells (UPM 2400, 300 units a cell; cap 7, ascent 8, descent 2), so each house step lands
+   on whole-pixel cells: 16 = 2px, 32 = 4px, 48 = 6px, 72 = 9px, 120 = 15px. With the line box = one em, the
+   cap top sits on the line top and the baseline on cell 7, so text placed on a whole pixel stays on the grid.
+   Never synthesised (bold asks for the real Stem 7 Bold and falls back to Regular), never smoothed, never
+   tracked off the cell. Below 16px use .ss-label (IBM Plex Mono). Place it at whole-pixel x and y. */
+.ss-px { --px-cell: 4px; font-family: var(--font-pixel); font-size: calc(var(--px-cell) * 8); line-height: calc(var(--px-cell) * 8); font-weight: 400; font-style: normal; font-synthesis: none; font-kerning: normal; font-variant-ligatures: common-ligatures; letter-spacing: 0; word-spacing: 0; text-transform: none; -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeSpeed; }
+.ss-px b, .ss-px strong { font-weight: 700; font-synthesis: none; }
+.ss-px em, .ss-px i { font-style: normal; }
+.ss-px--label { --px-cell: 2px; text-transform: uppercase; } .ss-px--s { --px-cell: 4px; } .ss-px--m { --px-cell: 6px; } .ss-px--l { --px-cell: 9px; } .ss-px--xl { --px-cell: 15px; }
+/* the typed mark: "dh" sets the 7x7 mark via the font's liga. Line box 8 cells (baseline on cell 7), clipped
+   to the mark's 7 cells so it occupies exactly the drawn mark's box. Size it by cell like the drawn mark. */
+.ss-mark-type { --px-cell: 4px; display: inline-block; font-family: var(--font-pixel); font-size: calc(var(--px-cell) * 8); line-height: calc(var(--px-cell) * 8); height: calc(var(--px-cell) * 7); overflow: hidden; vertical-align: top; font-weight: 400; font-synthesis: none; font-variant-ligatures: common-ligatures; font-feature-settings: "liga" 1; letter-spacing: 0; -webkit-font-smoothing: none; }
+.ss-lockup .ss-mark-type { --px-cell: var(--lockup-cell); grid-row: 1; }
+
+/* ---------- live: phosphor means "this can change this second" ----------
+   A 2x2-cell square that blinks on/off in whole steps (14 cells = 980ms a cycle). Game surfaces only.
+   Static under reduced motion and in still frames, where it shows "on". */
+.ss-live { display: inline-flex; align-items: center; gap: var(--space-2); font: 500 11px/16px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--phosphor-text); }
+.ss-live::before { content: ""; flex: none; width: 8px; height: 8px; background: var(--phosphor); animation: ss-blink calc(var(--dur-cell) * 14) var(--ease-step) infinite; }
+/* the same blink on any element (an SVG cursor, selection brackets): phosphor parts only */
+.ss-blink { animation: ss-blink calc(var(--dur-cell) * 14) var(--ease-step) infinite; }
+.ss-live--bare { font-size: 0; gap: 0; }
+@keyframes ss-blink { 50% { opacity: 0; } }
+
+/* ---------- HUD: the game readout pattern ----------
+   <dl class="ss-hud"><dt>HP</dt><dd class="ss-px ss-px--s">12/12</dd> ...</dl>
+   Keys are mono labels, values are Stem 7 on whole cells, one value may be live (.is-live) in phosphor-text.
+   The key column is a fixed 64px (--hud-key), not max-content: a text-width column would start the pixel
+   values on a fractional x and blur them. Game surfaces put data-theme="dark" on their wrapper. */
+.ss-hud { display: grid; grid-template-columns: var(--hud-key, 64px) max-content; align-items: baseline; gap: var(--space-2) var(--space-4); margin: 0; color: var(--ink); }
+.ss-hud dt { font: 500 11px/16px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); }
+.ss-hud dd { margin: 0; }
+.ss-hud .is-live { color: var(--phosphor-text); }
+.ss-meter { display: inline-flex; gap: var(--space-1); vertical-align: middle; }
+.ss-meter i { width: 8px; height: 16px; background: var(--rule); }
+.ss-meter i.on { background: var(--phosphor); }
+
+/* ---------- build: things that are built arrive one cell per tick ----------
+   Each child is hidden, then appears whole at (index + 1) x --dur-cell. No easing, no fade. */
+.ss-build > * { --ss-i: 17; animation: ss-appear var(--dur-cell) var(--ease-step) backwards; animation-delay: calc((var(--ss-i) - 1) * var(--dur-cell)); }
+.ss-build > :nth-child(1) { --ss-i: 1; } .ss-build > :nth-child(2) { --ss-i: 2; } .ss-build > :nth-child(3) { --ss-i: 3; } .ss-build > :nth-child(4) { --ss-i: 4; }
+.ss-build > :nth-child(5) { --ss-i: 5; } .ss-build > :nth-child(6) { --ss-i: 6; } .ss-build > :nth-child(7) { --ss-i: 7; } .ss-build > :nth-child(8) { --ss-i: 8; }
+.ss-build > :nth-child(9) { --ss-i: 9; } .ss-build > :nth-child(10) { --ss-i: 10; } .ss-build > :nth-child(11) { --ss-i: 11; } .ss-build > :nth-child(12) { --ss-i: 12; }
+.ss-build > :nth-child(13) { --ss-i: 13; } .ss-build > :nth-child(14) { --ss-i: 14; } .ss-build > :nth-child(15) { --ss-i: 15; } .ss-build > :nth-child(16) { --ss-i: 16; }
+@supports (order: sibling-index()) { .ss-build > :nth-child(n) { --ss-i: sibling-index(); } }
+@keyframes ss-appear { from { visibility: hidden; } to { visibility: hidden; } }
+
+/* ---------- carry: the one eased move ----------
+   A panel or card arriving. Set --carry-from (default 16px up from below). Put a clipping parent around
+   slide-ins. Never bounces: ease-move has no overshoot. */
+.ss-carry { animation: ss-carry var(--dur-move) var(--ease-move) both; }
+@keyframes ss-carry { from { transform: var(--carry-from, translateY(16px)); } }
+
+/* ---------- poster: the riso block (social, thumbnail, OG only) ----------
+   Two drums print two layers (__a, __b); __b overprints __a with multiply, so where they cross a third
+   colour appears for free. Misregistration is read from --seed: x = 2((seed >> 3) & 3) - 3,
+   y = 2((seed >> 7) & 3) - 3, in whole px (-3, -1, 1, 3), so the offset is itself a readout.
+   Inks default to cobalt + vermilion; set --poster-a / --poster-b to switch pairs (sun goes on the ground).
+   Words print in ink (on-sun on a sun ground): vermilion on sun is 2.2:1, so the second ink goes to shapes,
+   never to type. Bastarda only at its crisp sizes, poster-xl 117, poster-l 78 or poster-m 52 (a 13px em). Fixed artwork: data-theme="light" on the poster. */
+.ss-poster { --seed: 0; --poster-a: var(--cobalt); --poster-b: var(--vermilion); --poster-ground: var(--paper);
+  --misreg-x: calc((2 * mod(round(down, var(--seed) / 8, 1), 4) - 3) * 1px);
+  --misreg-y: calc((2 * mod(round(down, var(--seed) / 128, 1), 4) - 3) * 1px);
+  position: relative; isolation: isolate; overflow: hidden; background: var(--poster-ground); color: var(--ink); }
+.ss-poster--sun { --poster-ground: var(--sun); color: var(--on-sun); }
+.ss-poster__a { color: var(--poster-a); }
+.ss-poster__b { color: var(--poster-b); mix-blend-mode: multiply; transform: translate(var(--misreg-x), var(--misreg-y)); }
+.ss-poster__word { font-family: var(--font-poster); font-size: 78px; line-height: 78px; font-weight: 400; font-synthesis: none; letter-spacing: 0; }
+.ss-poster__word--m { font-size: 52px; line-height: 52px; }
+.ss-poster__word--xl { font-size: 117px; line-height: 117px; }
+
+/* ---------- motion switches ---------- */
+[data-motion="still"] :is(.ss-live, .ss-blink, .ss-build > *, .ss-carry),
+[data-motion="still"] .ss-live::before,
+[data-motion="still"]:is(.ss-blink, .ss-build > *, .ss-carry) { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ss-press:active { transform: none; }
+  .ss-live::before, .ss-blink, .ss-build > *, .ss-carry { animation: none; }
+}
+
+/* ---------- prose: style by element, so markdown can't drift ---------- */
+.ss-prose { max-width: 46rem; font: var(--type-body); color: var(--ink); }
+.ss-prose > * { margin: 0; }
+.ss-prose > * + * { margin-top: var(--space-3); }
+.ss-prose h1 { font: var(--type-h1); letter-spacing: -.01em; text-wrap: balance; }
+.ss-prose h2 { font: var(--type-h2); text-wrap: balance; }
+.ss-prose h3 { font: var(--type-h3); text-wrap: balance; }
+.ss-prose > * + h2 { margin-top: var(--space-8); }
+.ss-prose > * + h3 { margin-top: var(--space-6); }
+.ss-prose :is(h1, h2, h3) + * { margin-top: var(--space-2); }
+.ss-prose ul, .ss-prose ol { padding-left: var(--space-6); }
+.ss-prose li + li, .ss-prose li > :is(ul, ol) { margin-top: var(--space-1); }
+.ss-prose li::marker { color: var(--ink-muted); }
+.ss-prose ol > li::marker { font: 500 13px/20px var(--font-mono); }
+.ss-prose strong { font-weight: 650; }
+.ss-prose a { color: var(--cobalt-text); text-underline-offset: 3px; }
+.ss-prose :not(pre) > code { font: var(--type-data); background: var(--rule-faint); padding: 0 var(--space-1); overflow-wrap: anywhere; }
+/* a quote is set in the caption voice inside a full hairline frame: no side rail */
+.ss-prose blockquote { border: var(--line-hair) solid var(--rule); background: var(--sheet); padding: var(--space-3) var(--space-4); font: var(--type-caption); color: var(--ink-muted); }
+.ss-prose hr { border: 0; border-top: var(--line-hair) solid var(--rule); }
+.ss-prose table { border-collapse: collapse; width: 100%; font: var(--type-small); }
+.ss-prose th { text-align: left; font: var(--type-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); padding: 0 var(--space-3) var(--space-2) 0; border-bottom: var(--line-hair) solid var(--ink); vertical-align: bottom; }
+.ss-prose td { padding: var(--space-2) var(--space-3) var(--space-2) 0; border-bottom: var(--line-hair) solid var(--rule); vertical-align: top; }
+
+/* ---------- mast: the house title move ---------- */
+.ss-mast { margin: 0; font-family: var(--font-display); font-weight: 700; font-synthesis: none; font-size: 72px; line-height: 64px; letter-spacing: -.02em; text-transform: uppercase; color: var(--ink); }
+.ss-mast__x, .ss-mast__c { display: block; }
+.ss-mast__c { font-family: var(--font-condensed); font-weight: 400; letter-spacing: 0; color: var(--cobalt-text); }
+.ss-mast--m { font-size: 48px; line-height: 48px; letter-spacing: -.015em; }
+@media (max-width: 560px) { .ss-mast { font-size: 48px; line-height: 48px; } }
+
+/* ---------- tabs: one underline in cobalt, keyboard per the ARIA pattern ---------- */
+.ss-tabs { display: flex; flex-wrap: wrap; gap: 0 var(--space-6); border-bottom: var(--line-hair) solid var(--ink); }
+.ss-tabs [role="tab"] { font: 600 16px/24px var(--font-sans); color: var(--ink-muted); background: none; border: 0; padding: var(--space-2) 0 var(--space-1); margin-bottom: -1px; border-bottom: var(--line-heavy) solid transparent; cursor: pointer; }
+.ss-tabs [role="tab"]:hover { color: var(--ink); }
+.ss-tabs [role="tab"][aria-selected="true"] { color: var(--ink); border-bottom-color: var(--cobalt); }
+.ss-tabs [role="tab"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[role="tabpanel"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 4px; }
+
+/* ---------- check: a seed cell you can tick ---------- */
+.ss-check { display: inline-flex; align-items: center; gap: var(--space-2); font: var(--type-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink); cursor: pointer; }
+.ss-check input { appearance: none; -webkit-appearance: none; flex: none; box-sizing: border-box; width: 16px; height: 16px; margin: 0; border: var(--line-hair) solid var(--ink); background: var(--sheet); display: grid; place-items: center; cursor: pointer; }
+.ss-check input::before { content: ""; width: 8px; height: 8px; background: var(--cobalt); visibility: hidden; }
+.ss-check input:checked::before { visibility: visible; }
+.ss-check input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ---------- table ---------- */
+.ss-table-wrap { overflow-x: auto; min-width: 0; max-width: 100%; }
+.ss-table { border-collapse: collapse; width: 100%; font: var(--type-small); color: var(--ink); }
+.ss-table th { text-align: left; font: var(--type-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); padding: 0 var(--space-3) var(--space-2) 0; border-bottom: var(--line-hair) solid var(--ink); white-space: nowrap; vertical-align: bottom; }
+.ss-table td { padding: var(--space-2) var(--space-3) var(--space-2) 0; border-bottom: var(--line-hair) solid var(--rule); vertical-align: top; }
+.ss-table .num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ss-table code { font: var(--type-data); }
+
+/* ---------- code block ---------- */
+.ss-code { min-width: 0; max-width: 100%; margin: 0; background: var(--sheet); border: var(--line-hair) solid var(--rule); }
+.ss-code__label { display: block; padding: var(--space-1) var(--space-4); border-bottom: var(--line-hair) solid var(--rule); font: var(--type-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); }
+.ss-code pre { margin: 0; padding: var(--space-3) var(--space-4); overflow-x: auto; font: var(--type-data); color: var(--ink); }
+.ss-code .c { color: var(--ink-muted); }
+
+/* ---------- aside: an attributed margin note ----------
+   Sources are told apart by name and initial, never by ink: note colours keep their meanings
+   (rule = vermilion, verify = cobalt, trap = ink). The initial is Stem 7 on 2px cells in an ink square. */
+.ss-aside { border: var(--line-hair) solid var(--rule); background: var(--sheet); }
+.ss-aside__head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: var(--line-hair) solid var(--rule); }
+.ss-aside__initial { flex: none; width: 24px; height: 24px; display: grid; place-items: center; background: var(--ink); color: var(--paper);
+  font-family: var(--font-pixel); font-size: 16px; line-height: 16px; font-synthesis: none; -webkit-font-smoothing: none; text-transform: uppercase; }
+.ss-aside__who { font: 600 11px/16px var(--font-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--ink); }
+.ss-aside__src { margin-left: auto; font: var(--type-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); }
+.ss-aside__body { padding: var(--space-3); font: var(--type-body); }
+.ss-aside__body p { margin: 0; } .ss-aside__body p + p { margin-top: var(--space-2); }
+
+/* ---------- page frame: column, run head, chapter head, lead, foot ----------
+   Every docs page rebuilt these by hand (the v2 manual, the guides page, the v2.1 proposals), so they live here now. */
+.ss-page { box-sizing: border-box; max-width: calc(62rem + 2 * var(--space-6)); margin: 0 auto; padding: 0 max(var(--space-4), env(safe-area-inset-right, 0px)) var(--space-16) max(var(--space-4), env(safe-area-inset-left, 0px));
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-8); }
+@media (min-width: 720px) { .ss-page { padding-inline: var(--space-6); } }
+.ss-page > * { min-width: 0; margin: 0; }
+.ss-runhead { display: flex; justify-content: space-between; flex-wrap: wrap; gap: var(--space-1) var(--space-4); padding: var(--space-4) 0 var(--space-3); border-bottom: var(--line-hair) solid var(--ink);
+  font: var(--type-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.ss-runhead b { color: var(--ink); font-weight: 600; }
+.ss-chapter { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-4); align-items: end; margin-top: var(--space-8); padding-bottom: var(--space-3); border-bottom: var(--line-heavy) solid var(--ink); }
+.ss-chapter__no { grid-row: span 2; color: var(--cobalt-text); font-family: var(--font-pixel); font-size: 48px; line-height: 48px; font-synthesis: none; -webkit-font-smoothing: none; font-variant-numeric: tabular-nums; }
+.ss-chapter__label { font: var(--type-label); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-muted); }
+.ss-chapter h2, .ss-chapter__title { margin: 0; font: var(--type-h1); letter-spacing: -.01em; text-wrap: balance; }
+.ss-lead { margin: 0; max-width: 46rem; font: var(--type-lead); }
+.ss-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--space-4); margin-top: var(--space-8); padding-top: var(--space-4); border-top: var(--line-hair) solid var(--ink); }
+
+/* ---------- docs controls: square, flat, 40px tall (1 + 7 + 24 + 7 + 1) ----------
+   The game pair (ss-field, ss-press) keeps radius-hardware and shadow-press; these never do. */
+.ss-input { box-sizing: border-box; height: 40px; padding: 7px var(--space-3); border: var(--line-hair) solid var(--ink); border-radius: 0; background: var(--sheet); color: var(--ink); font: var(--type-body); width: 100%; min-width: 0; }
+.ss-input::placeholder { color: var(--ink-muted); }
+.ss-button { box-sizing: border-box; height: 40px; padding: 0 var(--space-4); border: var(--line-hair) solid var(--ink); border-radius: 0; background: var(--sheet); color: var(--ink); font: var(--type-label); line-height: 38px; letter-spacing: .14em; text-transform: uppercase; cursor: pointer; white-space: nowrap; }
+.ss-button:hover { background: var(--rule-faint); }
+.ss-button--primary { background: var(--cobalt); border-color: var(--cobalt); color: var(--on-cobalt); }
+.ss-button--primary:hover { background: var(--cobalt); text-decoration: underline; text-underline-offset: 3px; }
+.ss-button:disabled { color: var(--ink-muted); border-color: var(--rule); cursor: default; }
+:is(.ss-input, .ss-button):focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
