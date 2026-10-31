@@ -1,5 +1,5 @@
 /* The film strip (moment 9, time-strip.js) and the quiet pieces around Copy gives real code. Canvas tokens only (canvas.css). */
-#time { container-type: inline-size; position: absolute; z-index: 7; left: 12px; right: 12px; bottom: 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head acts" "track track"; gap: 6px 10px; align-items: center; padding: 6px 12px 8px; border-radius: 10px; background: var(--nk-chrome); color: var(--nk-text); box-shadow: var(--nk-shadow-pop); font: 12px/1.4 var(--nk-sans); }
+#time { container-type: inline-size; position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; min-width: 0; border-top: 1px solid var(--nk-line); display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head acts" "track track"; gap: 6px 10px; align-items: center; padding: 6px 14px 8px; background: var(--nk-chrome); color: var(--nk-text); font: 12px/1.4 var(--nk-sans); }
 #time[hidden] { display: none; }
 body[data-time-open] #hint { bottom: 184px; }
 .tm-head { grid-area: head; display: flex; min-width: 0; align-items: center; gap: 12px; min-height: 28px; }

@@ -53,7 +53,7 @@ export function wireStrips(env) {
     ev.preventDefault(); list.forEach((c) => { c.tabIndex = c === to ? 0 : -1; }); to.focus();
   });
   // hovering or focusing a variable shows where it is used (the stage lights it up, when the stage can)
-  const lit = (name) => { try { name ? ctx.stage?.highlight?.({ variable: name }) : ctx.stage?.clearHighlight?.(); } catch { /* the stage may not know */ } };
+  const lit = (name) => { try { ctx.stage?.lightQuiet?.(name ? { variable: name } : null); } catch { /* the stage may not know */ } };
   root.addEventListener('pointerover', (ev) => { const c = ev.target.closest?.('.ivchip'); if (c) lit(c.dataset.var); });
   root.addEventListener('pointerout', (ev) => { if (ev.target.closest?.('.ivchip')) lit(null); });
   root.addEventListener('focusin', (ev) => {

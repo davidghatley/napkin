@@ -67,6 +67,10 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     };
     const up = () => { grip.removeEventListener('pointermove', move); delete cell.dataset.resizing; say(width); saveWidth(); };
     cell.dataset.resizing = '1';
+    const before = document.createElement('div'); before.className = 'cell-was'; before.style.width = `${w0}px`; before.style.height = `${cell.offsetHeight}px`; before.innerHTML = `<span>${w0} before the drag</span>`; cell.append(before);
+    // the inspector shows the width and what it crosses while the edge is held; it goes back on release unless it was open already
+    const auto = !ctx.breakpoints?.active?.(); if (auto) ctx.breakpoints?.open?.();
+    grip.addEventListener('pointerup', () => { before.remove(); if (auto) ctx.breakpoints?.close?.(); }, { once: true });
     grip.addEventListener('pointermove', move);
     grip.addEventListener('pointerup', up, { once: true });
   });
@@ -111,7 +115,8 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   function size() {
     const d = iframe?.contentDocument;
     if (!d?.documentElement) return;
-    const h = Math.max(24, Math.min(4000, Math.ceil(d.documentElement.getBoundingClientRect().height)));
+    // the frame hugs its content (a body with a fixed viewport height or overflow never gets an inner scrollbar on the canvas)
+    const h = Math.max(24, Math.min(4000, Math.ceil(Math.max(d.documentElement.getBoundingClientRect().height, d.documentElement.scrollHeight > iframe.clientHeight + 1 ? d.documentElement.scrollHeight : 0))));
     if (iframe.style.height !== `${h}px`) { iframe.style.height = `${h}px`; onResize(Date.now() - widthAt < 2000); }
   }
   const settle = (f) => new Promise((res) => {
@@ -143,6 +148,9 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     try { ro = new next.contentWindow.ResizeObserver(() => size()); ro.observe(next.contentDocument.documentElement); } catch { ro = null; }
     // keyboard focus never stays inside a frame while editing: the canvas's keys keep working
     next.contentWindow.addEventListener('focus', () => { if (!document.body.dataset.play) next.blur(); });
+    // while editing a frame has no scrollbars of its own: the canvas is what scrolls. Play gives them back (the file's own)
+    const noBars = next.contentDocument.createElement('style'); noBars.setAttribute('data-napkin', ''); noBars.setAttribute('data-napkin-chrome', ''); noBars.textContent = 'html{scrollbar-width:none}html::-webkit-scrollbar{display:none}';
+    if (!document.body.dataset.play) (next.contentDocument.head || next.contentDocument.documentElement).append(noBars);
     size();
     ruler.update(); say(width);
     return true;

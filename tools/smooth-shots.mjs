@@ -64,7 +64,8 @@ const MOMENTS = {
     await h.b.eval(`napkin.stage.highlight({ selector: '.ss-label', file: 'components.css' })`);
     await h.sleep(1500);
     await h.shot('m3-lit');
-    await h.edit('Plate', { op: 'rule', file: 'components.css', selector: '.ss-label', prop: 'letter-spacing', value: '.12em' });
+    await h.type('.hl-decl input[data-prop="letter-spacing"]', '.12em'); await h.sleep(500);
+    await h.key('Enter', 'Enter', 0, 13);
     await h.sleep(2500);
     await h.shot('m3');
   },
@@ -72,8 +73,14 @@ const MOMENTS = {
     await h.select('Plate', 'figure');
     await h.b.eval(`napkin.nav.focus(napkin.find('Plate').component, null, { animate: false })`); await h.sleep(800);
     await h.b.eval(`napkin.stage.sections.get(napkin.find('Plate').component).docFrame.setWidth(624, true)`); await h.sleep(900);
-    await h.b.eval(`napkin.breakpoints.open()`); await h.sleep(2500);
+    await h.b.eval(`napkin.breakpoints.open()`); await h.sleep(2200);
+    // the width is dragged for real, past the 640 breakpoint and held
+    const g = JSON.parse(await h.b.eval(`napkin.stage.sections.get(napkin.find('Plate').component).docFrame.commitWidth(800)`).then(() => h.sleep(1400)).then(() => h.b.eval(`(() => { const r = napkin.stage.sections.get(napkin.find('Plate').component).docFrame.grip.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()`)));
+    await h.mouse('mouseMoved', g.x, g.y); await h.mouse('mousePressed', g.x, g.y);
+    for (let i = 1; i <= 6; i++) { await h.b.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: g.x - i * 22, y: g.y, button: 'left', buttons: 1, modifiers: 1 }); await h.sleep(60); }
+    await h.sleep(700);
     await h.shot('m4');
+    await h.b.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: g.x - 132, y: g.y, button: 'left', buttons: 0, clickCount: 1 });
   },
   async m6(h) { // variables as instruments
     await h.select('Callout', '.ss-call, li, p, span');
@@ -105,6 +112,6 @@ const MOMENTS = {
 for (const size of opt.sizes.split(',')) for (const scheme of opt.schemes.split(',')) {
   const [W, H] = size.split('x').map(Number);
   await session(W, H, scheme, async (h) => {
-    for (const m of only) { const t = Date.now(); try { await MOMENTS[m](h); console.log(size, scheme, m, 'ok', Date.now() - t, 'ms'); } catch (e) { console.log(size, scheme, m, 'FAILED', e.message); } await h.b.goto(await h.b.eval('location.href')); await h.b.waitFor('document.body.dataset.ready === "1"', 30000); await h.b.waitFor(`document.querySelectorAll('.doc-frame').length >= 20`, 60000); await h.sleep(1200); }
+    for (const m of only) { const t = Date.now(); try { await MOMENTS[m](h); console.log(size, scheme, m, 'ok', Date.now() - t, 'ms'); } catch (e) { console.log(size, scheme, m, 'FAILED', e.message); } await h.b.eval(`napkin.nav.unfocus({ animate: false }); napkin.select(null); napkin.breakpoints?.close?.(); napkin.stage.clearHighlight(); napkin.time?.close?.()`).catch(() => {}); await h.b.send("Page.reload"); await h.sleep(500); await h.b.waitFor('document.body.dataset.ready === "1"', 30000); await h.b.waitFor(`document.querySelectorAll('.doc-frame').length >= 20`, 60000); await h.sleep(1200); }
   });
 }

@@ -16,7 +16,7 @@ import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
 
-let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
+let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function createStage(ctx, root, world, view) {
@@ -50,7 +50,7 @@ export function createStage(ctx, root, world, view) {
     if (sec) return sec;
     const el = document.createElement('section');
     el.className = 'cmp'; el.dataset.component = id;
-    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="badge" hidden></span><span class="rev"></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
+    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="cmp-path" hidden></span><span class="badge" hidden></span><span class="rev"></span><span class="cmp-note" hidden></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
     sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false };
     sections.set(id, sec);
     world.append(el);
@@ -216,6 +216,7 @@ export function createStage(ctx, root, world, view) {
       sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
       sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
       sec.el.dataset.kind = 'html';
+      const path = sec.el.querySelector('.cmp-path'); path.textContent = (c.path || '').split('/').slice(-2).join('/'); path.title = c.path || ''; path.hidden = false;
     }
     let ok = false;
     try { ok = await sec.docFrame.load(c.revision); }
@@ -289,8 +290,20 @@ export function createStage(ctx, root, world, view) {
     let y = taken.length ? Math.max(...taken.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + CLEAR : 0;
     const boxes = new Map(ids.map((id) => [id, headBox(sections.get(id), z)]));
     const area = ids.reduce((a, id) => a + (boxes.get(id).w + GAP_X) * (sections.get(id).size.h + boxes.get(id).top), 0);
-    const width = Math.max(1400, ...ids.map((id) => boxes.get(id).w), Math.round(Math.sqrt(area * 1.7)));
+    const width = Math.max(ids.every((id) => sections.get(id).el.dataset.kind === 'html') ? 1300 : 1400, ...ids.map((id) => boxes.get(id).w), Math.round(Math.sqrt(area * 1.7)));
     const out = new Map();
+    // Frames of files only: they vary in height, so they stack in columns (shortest first) as wide as the canvas shows, and read at a larger zoom
+    if (!taken.length && ids.length > 2 && ids.every((id) => sections.get(id).el.dataset.kind === 'html')) {
+      const sb = view.stageBox(), colW = Math.max(...ids.map((id) => boxes.get(id).w)) + MASONRY_GAP;
+      const n = Math.max(1, Math.round(Math.sqrt(area * Math.max(0.8, sb.width / Math.max(1, sb.height))) / colW));
+      const heights = Array(n).fill(0);
+      for (const id of ids) {
+        const c = heights.indexOf(Math.min(...heights)), top = boxes.get(id).top;
+        out.set(id, { x: c * colW, y: heights[c] + top });
+        heights[c] += top + sections.get(id).size.h;
+      }
+      return { out, width: n * colW, bottom: Math.max(...heights) };
+    }
     const rows = [[]];
     for (const id of ids) {
       const { w } = boxes.get(id);
@@ -478,9 +491,26 @@ export function createStage(ctx, root, world, view) {
     }
     return out;
   };
+  // On a frame of the engine the name and size sit above the box, or below it when that lands on fewer lines of text.
+  function docTagSide(selEl) {
+    const r = selEl.getBoundingClientRect(), H = 22, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
+    const frame = selEl.closest('.doc-cell'), fr = frame?.querySelector('iframe.doc-frame')?.getBoundingClientRect(), z = view.get().z;
+    if (!fr) return 'above';
+    const sec = selEl.closest('section.cmp'), tight = r.top - fr.top < H + 9;
+    for (const other of world.querySelectorAll('.cmp[data-chip-top]')) if (other !== sec || !tight) other.removeAttribute('data-chip-top');
+    if (tight) sec.setAttribute('data-chip-top', '');
+    const lines = [];
+    try { const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), rg = doc.createRange(); for (let n = walker.nextNode(), i = 0; n && i < 600; n = walker.nextNode(), i++) { if (!/\S/.test(n.nodeValue)) continue; rg.selectNodeContents(n); for (const c of rg.getClientRects()) lines.push({ l: fr.left + c.left * z, r: fr.left + c.right * z, t: fr.top + c.top * z, b: fr.top + c.bottom * z }); } } catch { return 'above'; }
+    const onText = (top) => lines.filter((c) => c.l < r.left + lw && c.r > r.left && c.t < top + H && c.b > top).length;
+    selectBox.style.setProperty('--nk-tagw', `${lw + 4 + sizeChip.textContent.length * 6.4 + 14}px`); // a small box: the size goes beside the name, never over the title
+    return onText(r.top - 7 - H) <= onText(r.bottom + 7) ? 'above' : 'below';
+  }
   function tagSide(selEl) {
     let side = 'below';
-    if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
+    selectBox.toggleAttribute('data-doc', !!selEl?.docFrame);
+    if (!selEl?.docFrame) for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top');
+    if (selectBox.style.display === 'block' && selEl?.docFrame) side = docTagSide(selEl);
+    else if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
       const caps = captionRects(selEl.closest('section.cmp'));
       if (caps.length) {
         const r = selEl.getBoundingClientRect(), narrow = r.width < 190, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), cw = sizeChip.textContent.length * 6.4 + 14, H = 20, pad = 3;
@@ -494,12 +524,22 @@ export function createStage(ctx, root, world, view) {
     }
     if (selectBox.dataset.tags !== side) selectBox.dataset.tags = side;
   }
+  // How a designer names an element of a file: its tag and first class ("span.ss-note__tag"), never a path through the tree.
+  const elementName = (el) => (el ? `${el.localName}${el.id ? `#${el.id}` : ''}${el.classList?.length ? `.${el.classList[0]}` : ''}` : '');
+  // The edit being staged, said on the canvas: on the selection's chip ("class scope · 1 of 3") and in the frame's title row.
+  let editNote = null;
+  function setEditNote(note) { // { component, chip, title } or null
+    if (editNote?.component && editNote.component !== note?.component) { const n = sections.get(editNote.component)?.el.querySelector('.cmp-note'); if (n) { n.hidden = true; n.textContent = ''; } }
+    editNote = note;
+    if (note) { const n = sections.get(note.component)?.el.querySelector('.cmp-note'); if (n) { n.textContent = note.title || ''; n.hidden = !note.title; } }
+    refreshOverlays();
+  }
   function refreshOverlays() {
     const sels = ctx.state.selections, sel = ctx.state.selection;
     if (!sels.length && !hoverEl && !measuring && !selectBox.style.display.includes('block') && !hoverBox.style.display.includes('block')) return; // nothing is shown, so there is nothing to place (and no layout to force)
     const base = overlays.getBoundingClientRect();
     const selEl = selectedElement(sel);
-    place(selectBox, selEl, sel && `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`, base);
+    place(selectBox, selEl, sel && (selEl?.docFrame ? elementName(selEl.el) + (editNote?.chip ? ` ${editNote.chip}` : '') : `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`), base);
     if (selEl?.isConnected && selectBox.style.display === 'block') { const r = selEl.getBoundingClientRect(), z = view.get().z; sizeChip.textContent = `${Math.round(r.width / z)} × ${Math.round(r.height / z)}`; }
     tagSide(selEl);
     const others = sels.filter((s) => s !== sel);
@@ -515,7 +555,8 @@ export function createStage(ctx, root, world, view) {
   function drawMeasure(base) {
     const a = measuring && selectedElement(ctx.state.selection), b = measuring && hoverEl;
     measureBox.replaceChildren();
-    if (!a || !b || a === b || !a.isConnected || !b.isConnected || a.closest('[data-cull]') || b.closest('[data-cull]')) { measureBox.dataset.active = ''; return; }
+    const nested = a?.docFrame && b?.docFrame && a.el?.ownerDocument === b.el?.ownerDocument && (a.el.contains(b.el) || b.el.contains(a.el)); // inside its own selection the box model says it all
+    if (!a || !b || a === b || nested || !a.isConnected || !b.isConnected || a.closest('[data-cull]') || b.closest('[data-cull]')) { measureBox.dataset.active = ''; return; }
     measureBox.dataset.active = '1';
     const A = a.getBoundingClientRect(), B = b.getBoundingClientRect(), z = view.get().z;
     const put = (axis, from, to, cross, value) => {
@@ -778,7 +819,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

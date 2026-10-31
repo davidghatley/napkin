@@ -51,6 +51,8 @@ import { initTimeStrip } from './time-strip.js';
 import { initCopyCode } from './copy-code.js';
 import { initLive } from './stage-live.js';
 import { initHighlight } from './stage-highlight.js';
+import { initLegend } from './legend.js';
+import { initStylesTab } from './styles-tab.js';
 import { initWidths } from './stage-ruler.js';
 import { initTheme } from './stage-theme.js';
 import { initChrome } from './stage-chrome.js';
@@ -118,6 +120,7 @@ const view = createView(ctx, $('#stage'), $('#world'));
 const stage = createStage(ctx, $('#stage'), $('#world'), view);
 Object.assign(ctx, { view, stage });
 initLive(ctx); // M1: Space-P holds play mode (registered before play.js so it sees P first)
+initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
 ctx.live.mountButton(); // the Play control, after the tools have built the toolbar
@@ -131,6 +134,7 @@ const nav = initNav(ctx);
 initHandles(ctx);
 initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
 initPlay(ctx); // CMP-09: P makes the cells live
+initStylesTab(ctx); // the sidebar's Styles tab
 initBreakpoints(ctx); // M4: the breakpoints panel and the widths strip
 initWidths(ctx); // M4: next / previous breakpoint, back to 640 px
 initTheme(ctx); // M5: the theme wipe
@@ -167,7 +171,7 @@ function counts() {
   // WPC-35: counted from the documents, not from the cells on screen (frames far off screen are not drawn), so zoom never changes it
   let cells = 0; for (const c of ctx.state.components.values()) if (c.doc) cells += variantGrid(c.doc).length;
   const n = ctx.state.components.size;
-  $('#counts').textContent = `${n} component${n === 1 ? '' : 's'} · ${cells} variant${cells === 1 ? '' : 's'}`;
+  $('#counts').textContent = `${n} component${n === 1 ? '' : 's'}${cells ? ` · ${cells} variant${cells === 1 ? '' : 's'}` : ''}`;
 }
 
 // The change log has a fixed number of rows that are rewritten in place, so a new entry never moves the rows (FEEL-04).

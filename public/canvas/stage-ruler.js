@@ -72,7 +72,7 @@ export function createRuler(frame) {
     if (!bps.length) { el.replaceChildren(); return; }
     el.style.width = `${reach}px`;
     const ticks = shown.map((b) => {
-      const kind = [...b.kinds].map((k) => (k === 'max' ? 'and under' : 'and up')).join(' · ');
+      const kind = [...(b.loose ?? [])].map((k) => (k === 'max' ? 'and under' : 'and up')).concat([...(b.strict ?? [])].map((k) => (k === 'max' ? 'under' : 'over'))).join(' · ');
       return `<button type="button" class="rt${b.px > reach ? ' far' : ''}" tabindex="-1"${b.px > reach ? ' hidden' : ''} data-px="${Math.round(b.px)}" style="left:${b.px}px" title="${Math.round(b.px)} px: ${b.rules} @media rule${b.rules === 1 ? '' : 's'} (${kind}). Click to jump here."><i></i><span>${Math.round(b.px)}</span></button>`;
     }).join('');
     const more = beyond.length ? `<button type="button" class="rt-more" tabindex="-1" data-px="${Math.round(beyond[0].px)}" style="left:${reach}px" title="${beyond.map((b) => Math.round(b.px)).join(', ')} px: wider than this frame. Click to jump to ${Math.round(beyond[0].px)}.">${Math.round(beyond[0].px)} →</button>` : '';

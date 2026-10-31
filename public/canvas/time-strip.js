@@ -7,7 +7,7 @@
 // gives the newest text back; it refuses with a reason when a shared stylesheet changed since in a way that would undo other work.
 //   initTimeStrip(ctx) -> ctx.time = { open(), close(), toggle(), restore(), pick(index|'now'), flip(), fit(), state() }
 import { plain } from './words.js';
-import { thumbs } from './time-thumbs.js';
+import { thumbs, THUMB_W, THUMB_H } from './time-thumbs.js';
 
 const enc = encodeURIComponent;
 const ENGINE = new Set(['html', 'tsx', 'jsx']);
@@ -34,7 +34,7 @@ export function initTimeStrip(ctx) {
   // DOM order is Tab order: the track first, then Before, Fit, Restore, Close (CSS puts the buttons back in the header row)
   el.innerHTML = `<header class="tm-head"><h2 class="tm-title">Versions <span class="tm-file" id="time-file"></span></h2>
     <span class="tm-cue" id="time-cue-chip" hidden>Earlier version</span><span class="tm-info" id="time-info" role="status" aria-live="polite"></span>
-    <span class="tm-keys">← → scrub · B before / after · Enter restore · Esc close</span></header>
+    </header>
     <div class="tm-track" id="time-track" role="listbox" tabindex="0" aria-label="Versions, oldest first. Left and right move, Enter restores"></div>
     <div class="tm-acts"><button type="button" id="time-flip" class="tm-btn" aria-pressed="false" title="Flip between the version before this change and after it (B)" disabled>Before</button>
     <button type="button" id="time-fit" class="tm-btn" title="Bring the component into view above the strip">Fit</button>
@@ -135,7 +135,11 @@ export function initTimeStrip(ctx) {
       r = x1 > x0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : { x: 0, y: 0, w: fr.width, h: 200 };
     }
     const p = 10, x = Math.max(0, r.x - p), y = Math.max(0, r.y - p);
-    return { x, y, w: Math.max(40, Math.min(fr.width - x, r.w + 2 * p)), h: Math.max(30, r.h + 2 * p), frameWidth: fr.width };
+    let w = Math.max(40, Math.min(fr.width - x, r.w + 2 * p)), h = Math.max(30, r.h + 2 * p);
+    // a selected element fills the tile, cut from its start: a tile shows the change at a size you can see it (a band 600 px wide and 32 high would be a stripe)
+    let top = y;
+    if (node) { const shape = THUMB_W / THUMB_H; if (w / h > shape) { w = Math.max(h * shape, 150); h = w / shape; } else { h = Math.max(w / shape, Math.min(h, 90)); w = h * shape; } top = Math.max(0, r.y + r.h / 2 - h / 2); }
+    return { x, y: top, w, h, frameWidth: fr.width };
   }
 
   async function load({ keep = false } = {}) {
@@ -219,16 +223,19 @@ export function initTimeStrip(ctx) {
   function open() {
     const id = targetId();
     if (!id) { ctx.hint('Select an HTML or React component first, then open its versions'); return false; }
+    ctx.breakpoints?.close?.();
     S.id = id; S.open = true; S.revealed = false; S.side = 'after'; el.hidden = false; document.body.dataset.timeOpen = '1';
     track.focus({ preventScroll: true });
+    ctx.legend?.push('versions', [['← →', 'scrub'], ['B', 'before / after'], ['↵', 'restore'], ['Esc', 'close']]);
     S.tiles = []; S.at = -1; track.replaceChildren(); thumbsOf.reset(); // nothing of the last time it was open
+    requestAnimationFrame(() => { if (S.open) reveal(); }); // the frame, above the strip, at a size you can see a change at
     load();
     return true;
   }
   // Closing leaves the selection and the view alone.
   function close() {
     if (!S.open) return;
-    S.open = false; el.hidden = true; delete document.body.dataset.timeOpen; S.gen++;
+    S.open = false; el.hidden = true; delete document.body.dataset.timeOpen; S.gen++; ctx.legend?.pop('versions');
     clearPreview(); thumbsOf.reset();
   }
   const toggle = () => (S.open ? close() : open());

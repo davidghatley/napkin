@@ -139,7 +139,28 @@ export function initTheme(ctx) {
       const w = a.offsetWidth, x = Math.max(0, Math.min(w, (lineX - r.left) / z));
       b.style.clipPath = `inset(0 ${w - x}px 0 0)`;
     }
+    sides(box, lineX);
   }
+  // A frame's title, caption and ruler take the colour of the side of the line they are on, on that side's own canvas colour,
+  // so nothing pale sits on the dark half. The grip of the line moves off any title it would cover.
+  const lumOf = (c) => { const m = String(c).match(/[\d.]+/g)?.map(Number); if (!m) return 1; const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]); };
+  function sides(box, lineX) {
+    const leftBg = getComputedStyle(stageBg).backgroundColor, rightBg = getComputedStyle(stageEl).backgroundColor;
+    const word = (bg) => (lumOf(bg) < 0.2 ? 'dark' : 'light');
+    const set = (el, r) => { if (!el) return; const side = r.right <= lineX ? 'L' : r.left >= lineX ? 'R' : 'X'; const key = side === 'L' ? word(leftBg) : side === 'R' ? word(rightBg) : 'cross'; if (el.dataset.wipeSide !== key) el.dataset.wipeSide = key; el.style.backgroundColor = side === 'L' ? leftBg : side === 'R' ? rightBg : ''; };
+    const covered = [];
+    for (const sec of ctx.stage.sections.values()) {
+      const t = sec.el.querySelector('.cmp-title'); if (!t) continue;
+      const r = t.getBoundingClientRect(); set(t, r);
+      if (r.left - 12 < lineX && r.right + 12 > lineX) covered.push(r);
+      const cap = sec.docFrame?.cell.querySelector('figcaption'); if (cap && sec.el.dataset.sel !== undefined) { set(cap, cap.getBoundingClientRect()); const rl = sec.docFrame.cell.querySelector('.cell-ruler'); if (rl) set(rl, rl.getBoundingClientRect()); }
+    }
+    const grab = line.querySelector('.wl-grab'), H = 34; let y = box.top + box.height / 2;
+    const hits = (at) => covered.some((r) => r.top - 6 < at + H / 2 && r.bottom + 6 > at - H / 2);
+    for (let d = 0; d < box.height / 2 - H && hits(y); d += 14) { const up = box.top + box.height / 2 - d, dn = box.top + box.height / 2 + d; y = !hits(dn) ? dn : up; if (!hits(y)) break; }
+    grab.style.top = `${y - box.top}px`;
+  }
+  const clearSides = () => { for (const e of document.querySelectorAll('[data-wipe-side]')) { delete e.dataset.wipeSide; e.style.backgroundColor = ''; } };
   let queued = 0;
   const queueClip = () => { if (S.on && !queued) queued = requestAnimationFrame(() => { queued = 0; clip(); }); };
 
@@ -177,14 +198,14 @@ export function initTheme(ctx) {
 
   function open() {
     if (S.on) { range.focus(); return; }
-    S.on = true; document.body.dataset.wipe = '1'; bar.hidden = false; line.hidden = false; stageBg.hidden = false;
+    ctx.legend?.push('wipe', [['← →', 'move the line'], ['Esc', 'done']]); S.on = true; document.body.dataset.wipe = '1'; bar.hidden = false; line.hidden = false; stageBg.hidden = false;
     fillSelects(); range.value = String(S.at);
     paintAll().then(() => ctx.emit('wipe', { on: true }));
     range.focus({ preventScroll: true });
   }
   function close() {
     if (!S.on) return;
-    S.on = false; delete document.body.dataset.wipe; bar.hidden = true; line.hidden = true;
+    ctx.legend?.pop('wipe'); S.on = false; delete document.body.dataset.wipe; bar.hidden = true; line.hidden = true; clearSides();
     for (const b of clones.values()) b.remove(); clones.clear();
     for (const c of cards.values()) c.remove(); cards.clear();
     for (const sec of ctx.stage.sections.values()) { sec.frame.style.background = ''; }

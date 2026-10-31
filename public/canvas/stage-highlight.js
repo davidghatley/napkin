@@ -6,8 +6,10 @@
 // The outlines are drawn on the canvas page, over each frame (one layer per frame, so panning and zooming cost nothing); the
 // frames' documents are only read. A selector is matched as the browser matches it, with :hover, :focus and the like left
 // out (the outline marks where the rule applies, not when).
+import { createPreview } from './inspector-preview.js';
+import { plain } from './words.js';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const MAX_BOXES = 300;
+const MAX_BOXES = 300, MAX_NUMBERS = 40;
 const DYNAMIC = /::?[\w-]+(?:\([^)]*\))?/g;
 const KEEP = new Set(['not', 'is', 'where', 'has', 'nth-child', 'nth-of-type', 'nth-last-child', 'nth-last-of-type', 'first-child', 'last-child', 'only-child', 'first-of-type', 'last-of-type', 'only-of-type', 'root', 'empty', 'checked', 'disabled', 'enabled', 'required', 'optional', 'read-only', 'placeholder-shown', 'default', 'indeterminate', 'lang', 'dir', 'link', 'any-link', 'scope']);
 
@@ -95,7 +97,11 @@ export function initHighlight(ctx) {
   bar.id = 'hl-bar'; bar.hidden = true; bar.setAttribute('role', 'status'); bar.dataset.nodrag = '1';
   const side = document.createElement('aside');
   side.id = 'hl-side'; side.hidden = true; side.setAttribute('aria-label', 'Where this rule applies'); side.dataset.nodrag = '1';
-  stageEl.append(bar, side);
+  stageEl.append(bar);
+  document.querySelector('#inspector').prepend(side); // the rule's home is the inspector: its values, where it lights up, the change, Keep and Revert
+  const pv = createPreview(ctx);
+  let quiet = false; // true: only the outlines, for a rule row under the pointer or a staged edit; the inspector stays as it is
+  let info = null;   // the rule or variable as the file has it: { file, line, decls: [{ prop, value }], rule? }
   let spec = null, label = '', counts = { places: 0, frames: 0, direct: 0, indirect: 0, through: [] };
   let places = []; // [{ id, el, node, ordinal, indirect }]
   let change = null; // { path, line: [{ n, was, now }] } while an edit to a file the highlight reads is not yet kept
@@ -131,20 +137,19 @@ export function initHighlight(ctx) {
       boxes.push({ r, indirect, el });
       if (boxes.length >= MAX_BOXES) break;
     }
-    layer.innerHTML = boxes.map(({ r, indirect }, i) => `<i class="hl-box${indirect ? ' hl-indirect' : ''}" data-i="${i}" style="left:${(r.left + win.scrollX).toFixed(1)}px;top:${(r.top + win.scrollY).toFixed(1)}px;width:${r.width.toFixed(1)}px;height:${r.height.toFixed(1)}px">${i === 0 ? `<b>${ordinal}</b>` : ''}</i>`).join('');
+    layer.innerHTML = boxes.map(({ r, indirect }, i) => `<i class="hl-box${indirect ? ' hl-indirect' : ''}" data-i="${i}" style="left:${(r.left + win.scrollX).toFixed(1)}px;top:${(r.top + win.scrollY).toFixed(1)}px;width:${r.width.toFixed(1)}px;height:${r.height.toFixed(1)}px">${ordinal + i <= MAX_NUMBERS ? `<b>${ordinal + i}</b>` : ''}</i>`).join('');
     layer.dataset.places = String(list.length);
-    return { found: list.map(({ el, indirect }) => ({ id, el, node: f.nodeOf(el), ordinal, indirect })), through };
+    return { found: list.map(({ el, indirect }, i) => ({ id, el, node: f.nodeOf(el), ordinal: ordinal + i, indirect })), through };
   }
   function redraw(only) {
     if (!spec) return;
-    const keep = only ? places.filter((p) => p.id !== only) : [];
     const mine = [], through = new Set();
-    let k = 0;
+    let k = 0, n = 1;
     for (const [id, f] of frames()) {
-      if (only && id !== only) { const has = keep.filter((p) => p.id === id); if (has.length) { k++; mine.push(...has.map((p) => ({ ...p, ordinal: k }))); } continue; }
-      const r = draw(id, f, k + 1);
+      if (only && id !== only) { const has = places.filter((p) => p.id === id); if (has.length) { k++; const first = n; has.forEach((p, i) => { p.ordinal = first + i; }); mine.push(...has); n += has.length; relabel(id, first); } continue; }
+      const r = draw(id, f, n);
       for (const t of r.through) through.add(t);
-      if (r.found.length) { k++; mine.push(...r.found); }
+      if (r.found.length) { k++; mine.push(...r.found); n += r.found.length; }
     }
     places = mine;
     const indirect = places.filter((p) => p.indirect).length;
@@ -152,10 +157,12 @@ export function initHighlight(ctx) {
     document.body.dataset.highlight = String(places.length);
     paintBar(); paintSide();
   }
+  // a frame that was not redrawn keeps its boxes; only their numbers follow the frames before it
+  function relabel(id, first) { for (const b of layers.get(id)?.querySelectorAll('.hl-box b') ?? []) b.textContent = String(first + Number(b.parentElement.dataset.i)); }
   const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
   function paintBar() {
-    bar.hidden = !spec;
-    if (!spec) return;
+    bar.hidden = !spec || quiet;
+    if (!spec || quiet) return;
     bar.innerHTML = `<code>${esc(label)}</code> <span class="hl-count">lights ${plural(counts.places, 'place')}${counts.frames ? ` in ${plural(counts.frames, 'component')}` : ''}</span><button type="button" id="hl-clear" aria-label="Clear the highlight (Escape)">Clear <kbd>Esc</kbd></button>`;
     bar.querySelector('#hl-clear').onclick = () => clear();
   }
@@ -166,12 +173,108 @@ export function initHighlight(ctx) {
     const line = ctx.stage.sections.get(p.id)?.docFrame?.node(p.node)?.line;
     return { name: `${tag}${cls}`, text, line };
   };
+  // ---- the rule or the variable, as the file has it: the values are the first thing in the panel, and they edit the file ----
+  const normSel = (t) => String(t).replace(/\s+/g, ' ').trim();
+  async function loadInfo() {
+    const my = spec, wantId = places[0]?.id ?? [...ctx.state.components.values()].find((c) => c.kind === 'html')?.component;
+    if (!wantId) return;
+    const d = await fetch(`/api/component/${encodeURIComponent(wantId)}/rules`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (spec !== my || !d) return;
+    if (spec.variable) {
+      const def = (d.vars?.[spec.variable] || []).find((x) => !x.inline);
+      info = def ? { kind: 'variable', component: wantId, file: def.file, line: def.line, media: def.media?.at?.(-1) ?? '', decls: [{ prop: spec.variable, value: def.value }] } : null;
+    } else {
+      const r = (d.rules || []).find((x) => x.kind === 'style' && (!spec.file || x.file === spec.file) && normSel(x.selector) === normSel(spec.selector));
+      info = r ? { kind: 'rule', component: wantId, file: r.file, line: r.line, media: r.media?.at(-1) ?? '', selector: r.selector, decls: r.decls.map((x) => ({ prop: x.prop, value: x.value })), all: d.rules.filter((x) => x.kind === 'style' && x.file === r.file) } : null;
+    }
+    paintRule();
+  }
+  const editOf = (prop, value) => (info.kind === 'variable'
+    ? { op: 'var', file: info.file, name: prop, value, media: info.media, index: 0 }
+    : { op: 'rule', file: info.file, selector: info.selector, media: info.media, index: indexOf(info.selector, info.media), prop, value });
+  const indexOf = (selector, media) => { const same = (info.all || []).filter((r) => normSel(r.selector) === normSel(selector) && (r.media?.at(-1) ?? '') === media); return Math.max(0, same.findIndex((r) => r.line === info.line && normSel(r.selector) === normSel(selector))); };
+  const post = (edits, dryRun) => ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: info.component, baseRevision: ctx.state.components.get(info.component)?.revision, edits, ...(dryRun && { dryRun: true }) }) }).then((r) => r.json()).catch((e) => ({ ok: false, error: e.message }));
+  let typed = null, pvTok = 0; // { prop, value } while a value here is being typed: the frames show it, the file does not have it yet
+  async function previewTyped() {
+    const tok = ++pvTok;
+    if (!typed) { pv.clear(); redraw(); return; }
+    const j = await post([editOf(typed.prop, typed.value)], true);
+    if (tok !== pvTok || !typed) return;
+    if (!j.ok) { pv.clear(); sayRule(plainError(j.error)); return; }
+    sayRule('');
+    await pv.apply(j.files || []);
+    if (tok === pvTok) redraw();
+  }
+  const plainError = (t) => plain(String(t || '').replace(/^edit #\d+ \(\w+\):\s*/, ''));
+  const sayRule = (t) => { const e = side.querySelector('#hl-note'); if (e) { e.textContent = t; e.hidden = !t; } };
+  function paintRule() {
+    const host = side.querySelector('#hl-rule');
+    if (!host) return;
+    if (!info) { host.innerHTML = ''; return; }
+    const had = host.contains(document.activeElement) ? document.activeElement.dataset.prop : null;
+    const tail = (f) => String(f).split('/').pop();
+    host.innerHTML = `<div class="hl-head"><div class="hl-crumb"><span class="hl-file">${esc(tail(info.file))}</span><span aria-hidden="true">›</span><code>${esc(label)}</code></div><div class="hl-sub">line ${info.line}${info.media ? ` · @media ${esc(info.media)}` : ''}<button type="button" id="hl-back" title="Back to the element (Escape)">Back <kbd>Esc</kbd></button></div></div>
+      <section class="hl-sec"><header><h3>${info.kind === 'variable' ? 'Variable' : 'Rule'}</h3><span id="hl-rule-note">edits show on all ${plural(counts.places, 'place')} now</span></header>
+      <div class="hl-decls">${info.decls.map((d) => `<label class="hl-decl"><span>${esc(d.prop)}:</span><span class="hl-val"><input data-prop="${esc(d.prop)}" value="${esc(d.value)}" spellcheck="false" aria-label="${esc(d.prop)}"><i class="hl-was" hidden></i></span></label>`).join('')}</div>
+      <p id="hl-note" class="hl-explain" hidden></p></section>`;
+    host.querySelector('#hl-back').onclick = () => clear();
+    for (const inp of host.querySelectorAll('input[data-prop]')) {
+      const was = inp.parentElement.querySelector('.hl-was');
+      inp.addEventListener('focus', () => { lastProp = inp.dataset.prop; paintSame(); });
+      inp.addEventListener('input', () => {
+        const same = inp.value.trim() === inp.defaultValue.trim() || !inp.value.trim();
+        typed = same ? null : { prop: inp.dataset.prop, value: inp.value.trim() };
+        was.hidden = same; was.textContent = `was ${inp.defaultValue}`;
+        clearTimeout(inp._t); inp._t = setTimeout(previewTyped, 90);
+      });
+      inp.addEventListener('keydown', async (ev) => {
+        if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); if (typed) { inp.value = inp.defaultValue; was.hidden = true; typed = null; clearTimeout(inp._t); previewTyped(); sayRule(''); } else { inp.blur(); stageEl.focus({ preventScroll: true }); } return; }
+        if (ev.key !== 'Enter') return;
+        ev.preventDefault(); ev.stopPropagation();
+        clearTimeout(inp._t);
+        if (!typed) return;
+        const t = typed; typed = null; pvTok++;
+        const j = await post([editOf(t.prop, t.value)]);
+        pv.clear();
+        if (!j.ok) { sayRule(plainError(j.error)); typed = t; return; }
+        sameFrom = { prop: t.prop, was: inp.defaultValue, now: t.value };
+        sayRule('');
+      });
+    }
+    if (had) host.querySelector(`input[data-prop="${CSS.escape(had)}"]`)?.focus();
+    paintSame();
+  }
+  // the same value written out by hand in other rules: said, and left alone unless asked
+  let lastProp = null, sameFrom = null;
+  function paintSame() {
+    const host = side.querySelector('#hl-same'); if (!host) return;
+    host.innerHTML = '';
+    if (!info || info.kind !== 'rule') return;
+    const prop = sameFrom?.prop ?? lastProp, value = sameFrom?.was ?? info.decls.find((d) => d.prop === prop)?.value;
+    if (!prop || !value) return;
+    const others = info.all.filter((r) => !(r.line === info.line && normSel(r.selector) === normSel(info.selector)) && r.decls.some((d) => d.prop === prop && d.value === value));
+    if (!others.length) return;
+    const now = sameFrom?.now;
+    host.innerHTML = `<header><h3>Same value, typed by hand</h3><span>${plural(others.length, 'rule')}</span></header>
+      <p class="hl-explain"><code>${esc(prop)}: ${esc(value)}</code> is written out again in ${plural(others.length, 'other rule')}. ${now ? 'This edit left them alone.' : 'An edit here leaves them alone.'}</p>
+      <p class="hl-same-list">${others.slice(0, 16).map((r) => `<code>${esc(normSel(r.selector))} <i>:${r.line}</i></code>`).join(' ')}${others.length > 16 ? ` and ${others.length - 16} more` : ''}</p>
+      ${now ? `<button type="button" id="hl-same-all">Change all ${others.length + 1} together</button>` : ''}`;
+    host.querySelector('#hl-same-all')?.addEventListener('click', async () => {
+      const edits = others.map((r) => { const m = r.media?.at(-1) ?? '', same = info.all.filter((x) => normSel(x.selector) === normSel(r.selector) && (x.media?.at(-1) ?? '') === m); return { op: 'rule', file: r.file, selector: r.selector, media: m, index: same.indexOf(r), prop, value: now }; });
+      const j = await post(edits);
+      if (!j.ok) sayRule(plainError(j.error)); else { sameFrom = null; ctx.hint(`${plural(others.length, 'more rule')} now say ${now}`); }
+    });
+  }
   function paintSide() {
-    side.hidden = !spec;
-    if (!spec) { side.replaceChildren(); return; }
+    const was = side.hidden;
+    side.hidden = !spec || quiet;
+    document.body.classList.toggle('insp-rule', !side.hidden);
+    if (!spec || quiet) { if (!side.hidden || !was) side.replaceChildren(); return; }
+    if (!side.querySelector('#hl-rule')) side.innerHTML = '<div id="hl-rule"></div><div id="hl-rest"></div><div id="hl-same-box" class="hl-sec"><div id="hl-same"></div></div><div class="hl-spacer"></div><div id="hl-foot"></div>';
+    const note = side.querySelector('#hl-rule-note'); if (note) note.textContent = `edits show on all ${plural(counts.places, 'place')} now`;
     const groups = new Map();
     for (const p of places) { if (!groups.has(p.id)) groups.set(p.id, []); groups.get(p.id).push(p); }
-    const row = (p, i) => { const d = describe(p); return `<li><button type="button" class="hl-row${p.indirect ? ' hl-ind' : ''}" data-id="${esc(p.id)}" data-node="${esc(p.node ?? '')}" data-k="${places.indexOf(p)}"><span class="hl-n">${p.ordinal}</span><code>${esc(d.name)}</code><span class="hl-t">${esc(d.text)}</span>${d.line ? `<span class="hl-l">:${d.line}</span>` : ''}</button></li>`; };
+    const row = (p) => { const d = describe(p); return `<li><button type="button" class="hl-row${p.indirect ? ' hl-ind' : ''}" data-id="${esc(p.id)}" data-node="${esc(p.node ?? '')}" data-k="${places.indexOf(p)}"><span class="hl-n">${p.ordinal}</span><code title="${esc(d.name)}">${esc(d.name)}</code><span class="hl-t">${esc(d.text)}</span>${d.line ? `<span class="hl-l">:${d.line}</span>` : ''}</button></li>`; };
     const group = (list, title) => {
       if (!list.length) return '';
       const by = new Map(); for (const p of list) { if (!by.has(p.id)) by.set(p.id, []); by.get(p.id).push(p); }
@@ -181,13 +284,17 @@ export function initHighlight(ctx) {
     const explain = spec.variable
       ? `${plural(counts.places, 'place')} in ${plural(counts.frames, 'component')}${counts.indirect ? `, including ${counts.indirect} through other variables (${counts.through.map((t) => `<code>${esc(t)}</code>`).join(', ')})` : ''}.`
       : `${plural(counts.places, 'place')} in ${plural(counts.frames, 'component')} match this rule.`;
-    side.innerHTML = `<header><h3>Lights up</h3><span>${plural(counts.places, 'place')}</span></header>
+    side.querySelector('#hl-rest').innerHTML = `<section class="hl-sec"><header><h3>Lights up</h3><span>${plural(counts.places, 'place')}</span></header>
       <p class="hl-explain">${explain}</p>
-      <div class="hl-list">${spec.variable ? `${group(direct, `Used directly · ${direct.length}`)}${group(indirect, `Through other variables · ${indirect.length}`)}` : group(direct, '')}${places.length ? '' : '<p class="hl-more">Nothing on the canvas uses this.</p>'}</div>
-      ${change ? `<section class="hl-change"><header><h3>The change</h3><span>${plural(change.lines.length, 'line')}</span></header>
+      <div class="hl-list">${spec.variable ? `${group(direct, `Used directly · ${direct.length}`)}${group(indirect, `Through other variables · ${indirect.length}`)}` : group(direct, '')}${places.length ? '' : '<p class="hl-more">Nothing on the canvas uses this.</p>'}</div></section>
+      ${change ? `<section class="hl-change hl-sec"><header><h3>The change</h3><span>${plural(change.lines.length, 'line')}</span></header>
         <div class="hl-diff">${change.lines.map((l) => `${l.was !== null ? `<div class="del"><i>${l.n}</i>− ${esc(l.was.trim())}</div>` : ''}${l.now !== null ? `<div class="add"><i>${l.n}</i>+ ${esc(l.now.trim())}</div>` : ''}`).join('')}</div>
-        <p class="hl-explain">Change all together: this edit already applies to all ${plural(counts.places, 'place')}.</p>
-        <div class="hl-actions"><button type="button" id="hl-keep" class="primary">Keep</button><button type="button" id="hl-revert">Revert</button></div></section>` : ''}`;
+        <p class="hl-explain">Change all together: this edit already applies to all ${plural(counts.places, 'place')}.</p></section>` : ''}`;
+    const foot = side.querySelector('#hl-foot');
+    const keepFocus = foot.contains(document.activeElement) ? document.activeElement.id : null;
+    foot.innerHTML = change ? '<button type="button" id="hl-keep" class="primary">Keep <kbd>↵</kbd></button><button type="button" id="hl-revert">Revert</button>' : '';
+    foot.hidden = !change;
+    if (keepFocus) foot.querySelector(`#${keepFocus}`)?.focus();
     side.querySelectorAll('.hl-row').forEach((b) => {
       b.addEventListener('click', () => { if (b.dataset.node) ctx.select({ component: b.dataset.id, node: b.dataset.node, variant: {} }); focusPlace(Number(b.dataset.k)); });
     });
@@ -255,34 +362,52 @@ export function initHighlight(ctx) {
     const now = await textOf(path); if (now === null || !spec) return;
     const lines = diffLines(baselines.get(path), now).map((l) => { const [w, n] = trimmed(l.was, l.now); return { ...l, was: w, now: n }; });
     change = lines.length ? { path, lines } : null;
+    if (!change) sameFrom = null;
     paintSide();
+    loadInfo();
   }
-  function keepChange() { if (!change) return; textOf(change.path).then((t) => { if (t !== null) baselines.set(change.path, t); change = null; paintSide(); }); }
+  function keepChange() { if (!change) return; textOf(change.path).then((t) => { if (t !== null) baselines.set(change.path, t); change = null; sameFrom = null; paintSide(); paintSame(); }); }
   function revertChange() { ctx.undo?.(); } // undo is the revert: the file goes back one step and the diff empties by itself
 
   let queued = 0;
   const later = () => { if (spec && !queued) queued = requestAnimationFrame(() => { queued = 0; redraw(); }); };
 
-  function highlight(s) {
+  function highlight(s, opts = {}) {
     if (!s || (!s.selector && !s.variable)) { clear(); return { ...counts }; }
+    if (opts.quiet && spec && !quiet) return { ...counts }; // a chosen rule stays chosen
+    const wasQuiet = quiet;
+    quiet = !!opts.quiet;
     spec = s.variable ? { variable: s.variable.startsWith('--') ? s.variable : `--${s.variable}` } : { selector: String(s.selector), file: s.file || null };
     label = spec.variable ?? spec.selector.replace(/\s+/g, ' ').trim();
     for (const l of layers.values()) l.remove(); layers.clear();
-    change = null;
+    change = null; info = null; typed = null; sameFrom = null; lastProp = null; pv.clear();
     walkAt = -1;
+    if (!quiet || wasQuiet !== quiet) side.replaceChildren();
     redraw();
-    snapshot();
-    if (places.length) requestAnimationFrame(() => focusPlace(0)); // fly to the first place
-    ctx.emit('highlight', { ...spec, ...counts });
+    if (!quiet) {
+      snapshot();
+      loadInfo();
+      // every place in view when they fit at a size the outlines read; else the first one
+      if (places.length) requestAnimationFrame(() => {
+        const rects = places.map((p) => ctx.stage.sections.get(p.id)?.docFrame?.cell.getBoundingClientRect()).filter(Boolean).map((r) => ctx.view.rectToWorld(r));
+        const x0 = Math.min(...rects.map((r) => r.x)), y0 = Math.min(...rects.map((r) => r.y)), x1 = Math.max(...rects.map((r) => r.x + r.w)), y1 = Math.max(...rects.map((r) => r.y + r.h));
+        const box = ctx.view.stageBox(), fit = Math.min((box.width - 120) / Math.max(1, x1 - x0), (box.height - 120) / Math.max(1, y1 - y0));
+        if (counts.frames > 1 && fit >= 0.2) { focusPlace(0, { fly: false }); ctx.view.flyTo({ x: x0, y: y0 - 30, w: x1 - x0, h: y1 - y0 + 30 }, { pad: 60, max: 1 }); }
+        else focusPlace(0);
+      });
+    }
+    ctx.emit('highlight', { ...spec, ...counts, quiet });
     return { ...counts };
   }
   function clear() {
     if (!spec) return;
-    spec = null; places = []; change = null; walkAt = -1; baselines.clear();
+    spec = null; places = []; change = null; walkAt = -1; baselines.clear(); quiet = false; info = null; typed = null; sameFrom = null; pv.clear();
     for (const l of layers.values()) l.remove(); layers.clear();
-    bar.hidden = true; side.hidden = true; delete document.body.dataset.highlight;
+    bar.hidden = true; side.hidden = true; side.replaceChildren(); document.body.classList.remove('insp-rule'); delete document.body.dataset.highlight;
     ctx.emit('highlight', null);
   }
+  // for a rule row under the pointer or a staged edit: outlines only. The next one replaces it; a chosen rule is never touched.
+  const lightQuiet = (arg) => { if (arg) return highlight(arg, { quiet: true }); if (quiet) clear(); return null; };
 
   // when the rule or the file is edited the frame loads again: its outlines follow
   ctx.on('render', ({ component }) => { if (spec && ctx.stage.sections.get(component)?.docFrame) redraw(component); });
@@ -290,7 +415,7 @@ export function initHighlight(ctx) {
   ctx.on('layout', later); ctx.on('framewidth', later);
   ctx.on('removed', later);
 
-  Object.assign(ctx.stage, { highlight, clearHighlight: clear });
+  Object.assign(ctx.stage, { highlight: (a) => highlight(a), clearHighlight: clear, lightQuiet });
 
   // ---------- the list: "Highlight rule…" ----------
   const box = document.createElement('div');
@@ -350,9 +475,9 @@ export function initHighlight(ctx) {
   list.addEventListener('mousedown', (ev) => { const li = ev.target.closest('li[data-i]'); if (li) { ev.preventDefault(); choose(shown[Number(li.dataset.i)]); } });
   addEventListener('keydown', (ev) => {
     if (ev.isComposing) return;
-    if (ev.code === 'Escape' && spec && box.hidden && !document.body.dataset.modal && !/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) { ev.preventDefault(); ev.stopImmediatePropagation(); clear(); return; }
+    if (ev.code === 'Escape' && spec && !quiet && box.hidden && !document.body.dataset.modal && !/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) { ev.preventDefault(); ev.stopImmediatePropagation(); clear(); return; }
     // while something is lit, Tab and Shift-Tab walk its places (select, and fly there); the last Tab goes on to Keep / Revert when there is a change to decide on
-    if (ev.key === 'Tab' && spec && box.hidden && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.isComposing && !document.body.dataset.modal && !/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) {
+    if (ev.key === 'Tab' && spec && !quiet && box.hidden && !ev.ctrlKey && !ev.metaKey && !ev.altKey && !ev.isComposing && !document.body.dataset.modal && !/^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName)) {
       if (lastFocusOnPanel()) { if (ev.shiftKey && document.activeElement === side.querySelector('#hl-keep')) { ev.preventDefault(); ev.stopImmediatePropagation(); stageEl.focus({ preventScroll: true }); walk(-1); } return; } // inside the panel Tab keeps its normal job
       if (!(ev.target === stageEl || (stageEl.contains(ev.target) && !ev.target.closest('button, a[href], input, select, textarea, summary, [role=dialog], [role=slider], #bp-panel, #bp-strip, #theme-wipe, #play-bar, #ask-styles')))) return; // from a control elsewhere, Tab moves focus as it always did
       ev.preventDefault(); ev.stopImmediatePropagation();
@@ -364,6 +489,6 @@ export function initHighlight(ctx) {
     if (ev.code === 'KeyH' && ev.altKey && !ev.ctrlKey && !ev.metaKey && !ev.shiftKey && !(document.body.dataset.modal && box.hidden)) { ev.preventDefault(); ev.stopImmediatePropagation(); pick(); }
   }, true);
 
-  ctx.highlight = { walk, keep: keepChange, revert: revertChange, hasChange: () => !!change, pick, active: () => (spec ? { ...spec, ...counts } : null), places: () => counts.places, rows: () => places.map((p) => ({ component: p.id, node: p.node, indirect: p.indirect })) };
+  ctx.highlight = { walk, keep: keepChange, revert: revertChange, hasChange: () => !!change, pick, active: () => (spec ? { ...spec, ...counts, quiet } : null), placeOf: (el) => places.find((p) => p.el === el)?.ordinal ?? null, places: () => counts.places, rows: () => places.map((p) => ({ component: p.id, node: p.node, indirect: p.indirect })) };
   return ctx.highlight;
 }

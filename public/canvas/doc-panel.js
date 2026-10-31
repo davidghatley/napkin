@@ -197,9 +197,12 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   // one line of provenance: it never wraps (the whole text is on hover)
   const line = (cls, ...parts) => { const html = parts.join(' '); const text = html.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"'); return `<div class="pfrom ${cls}" title="${esc(text)}">${html}</div>`; };
   const k = (t) => `<span class="k">${esc(t)}</span>`;
+  // the file most values come from is said once, in the section's head; the rows say the line
+  const fileCount = new Map(); for (const [, w] of Object.entries(explain.props)) if (w.source?.kind === 'rule') { const f = String(w.source.file).split('/').pop(); fileCount.set(f, (fileCount.get(f) ?? 0) + 1); }
+  const mainFile = [...fileCount].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
   // the selector gives way to an ellipsis, the file and line never do
-  const loc = (t) => `<span class="k loc">${esc(t)}</span>`;
-  const where = (s2) => (s2.kind === 'inline' ? `<code class="selp">inline style</code> ${loc(`${comp.path}:${node.line}`)}` : `<code class="selp">${esc(s2.selector)}</code> ${loc(`${base(s2.file)}:${s2.declLine ?? s2.line}${s2.media?.length ? ` · @media ${s2.media.at(-1)}` : ''}`)}`);
+  const loc = (t) => `<span class="k loc">${esc(t).replace(/^(.*)(:\d+)/, (m, a, b) => (a === mainFile ? `<span class="same-file">${a}</span>${b}` : m))}</span>`;
+  const where = (s2) => (s2.kind === 'inline' ? `<code class="selp">inline style</code> ${loc(`${comp.path}:${node.line}`)}` : `<button type="button" class="selp lit" data-lit-sel="${esc(s2.selector)}" data-lit-file="${esc(s2.file)}" title="Light up every place this rule applies"><code>${esc(s2.selector)}</code></button> ${loc(`${base(s2.file)}:${s2.declLine ?? s2.line}${s2.media?.length ? ` · @media ${s2.media.at(-1)}` : ''}`)}`);
   const sayBy = (b) => (b.kind === 'inline' ? 'the inline style' : `${b.selector} ${base(b.file)}:${b.declLine ?? b.line}`);
 
   function valueRow([prop, w]) {
@@ -207,21 +210,21 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const lost = (beats.get(`${prop.toLowerCase()}|${srcKey(s2)}`) || []).slice(0, 2).map((b) => line('', k('beats'), `<s>${esc(b.value)}</s>`, k(`from ${b.selector} :${b.line}`))).join('');
     const part = w.state === 'partial' ? (w.lost || []).map((l) => line('lost', `<code>${esc(l.props.join(', '))}</code>`, k(`from ${sayBy(l.by)}`))).join('') : '';
     const v = firstVar(w.value), info = v && explain.vars[v];
-    const varLine = v ? line('', `<code>${esc(v)}</code>`, info?.source ? k('defined in') + ' ' + where(info.source) + (info.inherited ? ' ' + k('· inherited') : '') : k('is not defined')) : '';
+    const varLine = v ? line('pvar', `<button type="button" class="lit" data-lit-var="${esc(v)}" title="Light up every place this variable is used"><code>${esc(v)}</code></button>`, info?.source ? k('defined in') + ' ' + where(info.source) + (info.inherited ? ' ' + k('· inherited') : '') : k('is not defined')) : '';
     const offs = offScale(prop, w.value, groups).slice(0, 3);
     const flag = offs.map((off) => `<div class="pflag"><span class="k">${esc(off.token)} ${off.exact ? 'is exactly' : 'is close to'}</span><button type="button" class="pbind" data-prop="${esc(prop)}" data-token="${esc(off.token)}" data-var="${esc(off.name)}" title="Write var(${esc(off.name)}) in place of ${esc(off.token)}">${esc(off.name)} <span class="k">${esc(off.value)}</span></button></div>`).join('');
     const shown = w.resolved ?? w.value;
-    return `<div class="vrow${offs.length ? ' off' : ''}${w.state === 'partial' ? ' partial' : ''}" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}">${esc(prop)}</label>${w.state === 'partial' ? '<span class="pstate">partly overridden</span>' : ''}${w.important ? '<span class="imp">!important</span>' : ''}${w.resolved && w.resolved !== w.value ? `<span class="res" title="${esc(w.resolved)}">${esc(w.resolved)}</span>` : ''}</div>
+    return `<div class="vrow${offs.length ? ' off' : ''}${w.state === 'partial' ? ' partial' : ''}" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}">${esc(prop)}</label>${w.state === 'partial' ? '<span class="pstate">partly overridden</span>' : ''}${w.important ? '<span class="imp">!important</span>' : ''}${w.resolved && w.resolved !== w.value ? `<span class="res${String(w.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(w.resolved)}">${esc(w.resolved)}</span>` : ''}</div>
       <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="${esc(w.value)}" aria-label="${esc(prop)}" spellcheck="false" title="${esc(w.value)}"></div>
-      ${line('', where(s2))}${part}${lost}${varLine}${flag}</div>`;
+      <div class="pmore">${line('', where(s2))}${part}${lost}${varLine}${flag}</div></div>`;
   }
   // what this element takes from an ancestor because nothing sets it here, with a link that selects that ancestor
   function inheritedRow(e) {
     const link = typeof e.from === 'string' && frame.has(e.from) ? `<button type="button" class="plink" data-node="${esc(e.from)}" title="Select the element it comes from"><span class="selp">${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)}</span> ${e.source.kind === 'inline' ? '' : loc(`${base(e.source.file)}:${e.source.declLine ?? e.source.line}`)}</button>` : `<code class="selp">${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)}</code>`;
     const shown = e.resolved ?? e.value, name = e.sets.length > 1 && e.sets.length < 6 ? e.sets.join(', ') : e.prop;
-    return `<div class="vrow inh" data-prop="${esc(e.prop)}"><div class="phead"><label for="pv-${esc(e.prop)}">${esc(name)}</label><span class="pstate">inherited</span>${e.resolved && e.resolved !== e.value ? `<span class="res" title="${esc(e.resolved)}">${esc(e.resolved)}</span>` : ''}</div>
+    return `<div class="vrow inh" data-prop="${esc(e.prop)}"><div class="phead"><label for="pv-${esc(e.prop)}">${esc(name)}</label><span class="pstate">inherited</span>${e.resolved && e.resolved !== e.value ? `<span class="res${String(e.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(e.resolved)}">${esc(e.resolved)}</span>` : ''}</div>
       <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(e.prop)}" data-key="pv-${esc(e.prop)}" data-prop="${esc(e.prop)}" value="${esc(e.value)}" aria-label="${esc(e.prop)} (inherited)" spellcheck="false" title="${esc(e.value)}"></div>
-      <div class="pfrom"><span class="k">inherited from</span> ${link}</div></div>`;
+      <div class="pmore"><div class="pfrom"><span class="k">inherited from</span> ${link}</div></div></div>`;
   }
 
   // the variables this element's values are made of, each at the definition that applies here
@@ -235,7 +238,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const bucket = defs.filter((x) => x.file === s.file && normMedia(x.media.at(-1)) === normMedia(s.media.at(-1)));
     const k = Math.max(0, bucket.findIndex((x) => x.line === s.declLine && normSel(x.selector) === normSel(s.selector)));
     return `<div class="decl" data-kind="var" data-prop="${esc(name)}" data-file="${esc(s.file)}" data-index="${k}" data-media="${esc(s.media.at(-1) ?? '')}">
-      <code class="prop">${esc(name)}</code><input class="val" data-key="v-${esc(name)}" value="${esc(v.raw)}" aria-label="${esc(name)}" spellcheck="false" title="now ${esc(v.value)}"><span class="src" title="${esc(s.file)}:${s.declLine} · ${esc(s.selector)}">${esc(base(s.file))}:${s.declLine}${v.inherited ? ' ↑' : ''}</span></div>`;
+      <button type="button" class="lit prop" data-lit-var="${esc(name)}" title="Light up every place this variable is used"><code>${esc(name)}</code></button><input class="val" data-key="v-${esc(name)}" value="${esc(v.raw)}" aria-label="${esc(name)}" spellcheck="false" title="now ${esc(v.value)}"><span class="src" title="${esc(s.file)}:${s.declLine} · ${esc(s.selector)}">${esc(base(s.file))}:${s.declLine}${v.inherited ? ' ↑' : ''}</span></div>`;
   }
 
   function declRow({ prop, value, important, kind, rule, idx, line, over, partial, by, resolved }) {
@@ -246,36 +249,39 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       <code class="prop"${why ? ` title="${esc(why)}"` : ''}>${esc(prop)}</code><input class="val" data-key="${esc(k)}" value="${esc(value)}" aria-label="${esc(prop)}" spellcheck="false"${resolved ? ` title="now ${esc(resolved)}"` : why ? ` title="${esc(why)}"` : ''}>${important ? '<span class="imp">!important</span>' : ''}<button type="button" class="decl-x" aria-label="Remove ${esc(prop)}">×</button>${src}</div>`;
   }
   const rulesStrong = [...explain.rules].reverse();
+  // a soft fold: closed it takes no room, but what is in it stays in reach (Tab into it opens it)
+  const softOpen = (id) => !!openFolds.get(id);
+  const soft = (id) => (softOpen(id) ? ' data-open="1"' : '');
   const fold = (id, dflt) => ((openFolds.has(id) ? openFolds.get(id) : dflt) ? ' open' : '');
 
   el.innerHTML = `
     <div class="selhead doc-head" data-node="${esc(sel.node)}">
-      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(label)}</span></div>
-      <p class="hint mono" id="doc-source">${esc(comp.path)}:${node.line}</p>
+      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(label)}</span></div>
+      <p class="hint mono doc-where"><span id="doc-source" title="${esc(comp.path)}:${node.line}">${esc(comp.path)}:${node.line}</span><button type="button" id="doc-frame-width" title="Frame width and breakpoints (B)">${frame.width} px <kbd>B</kbd></button></p>
     </div>
     <div class="doc-body">
-      ${textOnly ? `<section class="dsec"><h3>Text</h3><textarea id="doc-text" data-key="text" rows="${Math.min(6, Math.max(1, Math.ceil(node.text.length / 34)))}" aria-label="Text">${esc(node.text)}</textarea></section>` : ''}
+      ${textOnly ? `<section class="dsec"><h3>Text</h3><textarea id="doc-text" data-key="text" rows="${Math.min(4, Math.max(1, Math.ceil(node.text.length / 38)))}" aria-label="Text">${esc(node.text)}</textarea></section>` : ''}
       ${node.runs?.length ? `<section class="dsec"><h3>Text <span class="where">${node.runs.length} run${node.runs.length === 1 ? '' : 's'} between its elements</span></h3>${node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join('')}</section>` : ''}
       <section class="dsec"><h3>Classes</h3>
         <div class="doc-classes" id="doc-classes">${classes.map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
           <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>
       </section>
-      <section class="dsec" id="doc-values"><h3>Where each value comes from <span class="where">type to change one, then choose where it goes</span></h3>
+      <section class="dsec" id="doc-values"><h3>Where each value comes from${mainFile ? `<span class="where hfile">${esc(mainFile)}</span>` : ''}</h3>
         ${props.length ? props.map(valueRow).join('') : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : '<p class="hint">Nothing styles this element yet.</p>'}
       </section>
-      ${explain.inherited.length ? `<section class="dsec" id="doc-inherited"><h3>Inherited <span class="where">from the elements around it</span></h3>${explain.inherited.map(inheritedRow).join('')}</section>` : ''}
+      ${explain.inherited.length ? `<section class="dsec soft" id="doc-inherited" data-soft="inherited"${soft('inherited')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('inherited')}">Inherited <span class="where">${explain.inherited.length} from the elements around it</span></button></h3><div class="soft-b">${explain.inherited.map(inheritedRow).join('')}</div></section>` : ''}
       <details class="dsec fold" data-fold="inline"${fold('inline', inlineDecls.length > 0)}><summary><h3>Inline style <span class="where">${inlineDecls.length ? `${inlineDecls.length} set` : 'none yet'}</span></h3></summary>
         <div class="decls" id="doc-inline">${inlineDecls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'style', over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
           <div class="decl add"><input class="prop" data-key="inline-new-prop" placeholder="property" aria-label="New inline property" spellcheck="false"><input class="val" data-key="inline-new-val" placeholder="value" aria-label="New inline value" spellcheck="false"></div></div>
       </details>
       <details class="dsec fold" data-fold="rules"${fold('rules', false)}><summary><h3>Rules <span class="where">${rulesStrong.length} matching, strongest first</span></h3></summary>
         ${rulesStrong.length ? rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
-          <div class="rhead"><code class="sel">${esc(r.selector)}</code>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line} · specificity ${r.specificity.join(',')}">${esc(base(r.file))}:${r.line}</span></div>
+          <div class="rhead"><button type="button" class="lit" data-lit-sel="${esc(r.selector)}" data-lit-file="${esc(r.file)}" title="Light up every place this rule applies"><code class="sel">${esc(r.selector)}</code></button>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line} · specificity ${r.specificity.join(',')}">${esc(base(r.file))}:${r.line}</span></div>
           <div class="decls">${r.decls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'rule', rule: r.order, idx: index(data.rules[r.order]), line: d.line, over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
             <div class="decl add"><input class="prop" data-key="r${r.order}-new-prop" data-rule="${r.order}" placeholder="property" aria-label="New property in ${esc(r.selector)}" spellcheck="false"><input class="val" data-key="r${r.order}-new-val" data-rule="${r.order}" placeholder="value" aria-label="New value in ${esc(r.selector)}" spellcheck="false"></div></div>
         </div>`).join('') : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>'}
       </details>
-      ${varNames.length ? `<section class="dsec"><h3>Variables <span class="where">the definition that applies here</span></h3><div class="decls">${varNames.map(varRow).join('')}</div></section>` : ''}
+      ${varNames.length ? `<section class="dsec soft" data-soft="vars-here"${soft('vars-here')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('vars-here')}">Variables here <span class="where">${varNames.length}, the definition that applies</span></button></h3><div class="soft-b"><div class="decls">${varNames.map(varRow).join('')}</div></div></section>` : ''}
       <section class="dsec" id="doc-vars"><h3>Your variables <span class="where">${Object.keys(folderVars).length} in this folder</span></h3>
         <input id="doc-vars-filter" data-key="vars-filter" class="vfilter" type="search" placeholder="find a variable" aria-label="Find a variable" spellcheck="false">
         <div id="doc-vars-body">${stripsHtml(groups, new Set(varNames))}</div>
@@ -291,6 +297,11 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       <div class="doc-foot" id="doc-foot"><button type="button" class="primary" id="doc-apply">Apply <kbd>↵</kbd></button><button type="button" id="doc-cancel">Cancel <kbd>Esc</kbd></button></div>
     </div>`;
   el.querySelectorAll('details.fold').forEach((d) => d.addEventListener('toggle', () => openFolds.set(d.dataset.fold, d.open)));
+  el.querySelectorAll('.dsec.soft').forEach((sec) => {
+    const set = (on) => { openFolds.set(sec.dataset.soft, on); sec.toggleAttribute('data-open', on); sec.querySelector('.soft-h').setAttribute('aria-expanded', String(on)); };
+    sec.querySelector('.soft-h').addEventListener('click', () => set(!sec.hasAttribute('data-open')));
+    sec.querySelector('.soft-b').addEventListener('focusin', () => set(true));
+  });
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
   wireKeys(el);
 
@@ -333,11 +344,14 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     p.addEventListener('doc-commit', () => v.focus());
   }
   // one rule lights up everywhere: hovering a rule or a variable asks the stage to show where it applies (when it can)
-  const light = (arg) => { try { arg ? ctx.stage?.highlight?.(arg) : ctx.stage?.clearHighlight?.(); } catch { /* the stage may not know */ } };
+  const light = (arg) => { try { ctx.stage?.lightQuiet?.(arg); } catch { /* the stage may not know */ } };
   for (const r of el.querySelectorAll('.rule')) {
     r.addEventListener('pointerenter', () => { if (!staged) light({ selector: r.dataset.selector, file: r.dataset.file }); });
     r.addEventListener('pointerleave', () => { if (!staged) light(null); });
   }
+
+  el.querySelectorAll('[data-lit-sel], [data-lit-var]').forEach((b) => b.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); ctx.stage?.highlight?.(b.dataset.litVar ? { variable: b.dataset.litVar } : { selector: b.dataset.litSel, file: b.dataset.litFile }); }));
+  el.querySelector('#doc-frame-width')?.addEventListener('click', () => ctx.breakpoints?.open?.());
 
   // ---------- the staged value: scope, the change, Apply ----------
   const winners = explain.props;
@@ -444,7 +458,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const host = el.querySelector('#doc-staged'), dock = el.querySelector('#doc-dock');
     if (!host) return;
     el.querySelectorAll('.vrow').forEach((r) => r.classList.toggle('editing', !!staged && r.dataset.prop === staged.prop));
-    if (!staged) { host.innerHTML = ''; dock.hidden = true; preview(null); light(null); return; }
+    if (!staged) { host.innerHTML = ''; dock.hidden = true; preview(null); light(null); ctx.stage?.setEditNote?.(null); ctx.legend?.pop('staged'); return; }
+    ctx.legend?.push('staged', [['E', 'this element'], ['C', 'this class'], ['V', 'this variable'], ['↵', 'apply'], ['Esc', 'cancel']]);
     const had = host.contains(document.activeElement) ? (document.activeElement.dataset.scope || document.activeElement.id) : null; // a redraw keeps the focus where it was
     const opts = optionsFor(), chosen = chosenOf(opts);
     if (chosen) staged.scope = chosen.id;
@@ -456,7 +471,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       if (!usage.has(k)) measureUse(ctx, o.id === 'class' ? 'rule' : 'var', subject).then(() => { if (staged && live === me) renderStaged(); });
     }
     const one = (o) => `<button type="button" role="radio" class="opt${o.id === staged.scope ? ' on' : ''}" aria-checked="${o.id === staged.scope}" tabindex="${o.id === staged.scope ? 0 : -1}" data-scope="${o.id}"${o.disabled ? ' aria-disabled="true"' : ''} title="${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · ${esc(o.warn)}` : ''}">
-      <kbd>${o.key}</kbd><span class="otxt"><b>${o.title}</b><span class="osub">${o.id === 'element' ? 'inline style' : o.disabled ? 'not here' : `${o.code ? esc(o.code) : ''}${o.countText ? ` · ${esc(o.countText)}` : ''}`}</span></span></button>`;
+      <kbd>${o.key}</kbd><span class="otxt"><b>${o.title}${o.code && !o.disabled ? ` <code>${esc(o.code)}</code>` : ''}</b><span class="osub">${o.id === 'element' ? `inline style · ${esc(base(comp.path))}:${node.line}` : o.disabled ? 'not here' : esc(o.sub || '')}</span></span><span class="ocount">${o.countText ? esc(o.countText) : ''}</span></button>`;
     const fx = staged.invalid ? { invalid: true } : chosen ? staged.fx?.[JSON.stringify(chosen.edit)] : null, not = whyNot(chosen, fx);
     const applyBtn = el.querySelector('#doc-apply'); if (applyBtn) { applyBtn.disabled = !!staged.invalid; applyBtn.title = staged.invalid ? `Not a value ${staged.prop} accepts` : ''; }
     const n = chosen?.diff.lines.some((l) => l.kind === 'del') ? 1 : chosen?.diff.lines.length ?? 0;
@@ -477,6 +492,18 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (had) (host.querySelector(`[data-scope="${had}"]`) || host.querySelector(`#${had}`))?.focus({ preventScroll: true });
     preview(chosen);
     if (chosen?.id === 'class') light({ selector: chosen.edit.selector, file: chosen.edit.file }); else if (chosen?.id === 'variable') light({ variable: chosen.edit.name }); else light(null);
+    // the scope, said on the canvas where the eye is
+    const reach = chosen?.id === 'element' ? 0 : ctx.highlight?.places?.() ?? 0, at = target && ctx.highlight?.placeOf?.(target);
+    const kind = chosen?.id === 'class' ? 'class' : chosen?.id === 'variable' ? 'variable' : 'element';
+    ctx.stage?.setEditNote?.({ component: comp.component, chip: kind === 'element' ? 'this element' : `${kind} scope${reach ? ` · ${at ? `${at} of ` : ''}${reach}` : ''}`, title: kind === 'element' ? 'editing · this element only' : `editing · ${reach} place${reach === 1 ? '' : 's'} preview the change` });
+  }
+  // the first keystroke brings what is being edited up to a size you can see it change at
+  function legible() {
+    const r = frame?.cell.getBoundingClientRect(), box = ctx.view.stageBox(), v = ctx.view.get();
+    if (!r || !target?.isConnected) return;
+    const inView = r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
+    if (v.z >= 0.6 && inView) return;
+    ctx.view.flyTo(ctx.view.rectToWorld(r), { pad: 72, max: 1 });
   }
   function stage(prop, text) {
     const w = winners[prop];
@@ -486,6 +513,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const important = /\s*!\s*important\s*$/i.test(raw), t = raw.replace(/\s*!\s*important\s*$/i, '').trim(); // !important is written as the flag it is
     if (!important && (t === w.value || normalizeTyped(prop, t) === w.value || sameMeaning(prop, normalizeTyped(prop, t), w.value))) { staged = null; renderStaged(); ctx.hint(`No change: ${prop} is already ${w.value}`); return false; }
     const prev = staged?.prop === prop ? staged : null;
+    if (!staged) legible();
     const field = el.querySelector(`.vrow input[data-prop="${CSS.escape(prop)}"]`); // a variable bound from the strips shows in the field
     if (field && field.value !== text) field.value = text;
     const typed0 = normalizeTyped(prop, t);
@@ -566,7 +594,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     el.querySelector('#chk-contrast')?.setAttribute('aria-pressed', String(m.contrast));
     el.querySelector('#chk-order')?.setAttribute('aria-pressed', String(m.order));
     const sum = el.querySelector('#chk-sum');
-    if (sum) sum.textContent = [m.contrast && s.contrast ? `${s.contrast.total} text elements, ${s.contrast.fail} below AA` : '', m.order && s.order ? `${s.order.total} tab stops` : ''].filter(Boolean).join(' · ');
+    if (sum) sum.textContent = [m.contrast && s.contrast ? `${s.contrast.total} text elements, ${s.contrast.fail} below AA` : '', m.order && s.order ? `${s.order.total} tab stops` : '', (m.contrast || m.order) && (ctx.view?.get().z ?? 1) < 0.45 ? 'zoom in to read each one' : ''].filter(Boolean).join(' · ');
   };
   el.querySelector('#chk-contrast')?.addEventListener('click', () => { measure.toggle('contrast'); syncChecks(); });
   el.querySelector('#chk-order')?.addEventListener('click', () => { measure.toggle('order'); syncChecks(); });

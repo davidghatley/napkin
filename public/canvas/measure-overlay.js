@@ -11,6 +11,7 @@
 import { parseColor, contrast, hex } from './inspector-model.js';
 
 const NS = 'http://www.w3.org/2000/svg';
+const LABEL_ZOOM = 0.45; // below this the canvas is an overview: contrast and order labels are kept to what fails and the selected frame
 const FOCUSABLE = 'a[href], button, input:not([type=hidden]), select, textarea, summary, [tabindex], [contenteditable=""], [contenteditable="true"]';
 const px = (v) => parseFloat(v) || 0;
 const r1 = (n) => Math.round(n * 10) / 10;
@@ -158,7 +159,7 @@ export function initMeasure(ctx) {
         const ratio = contrast(fg, bg, bg), size = px(cs.fontSize), large = size >= 24 || (size >= 18.66 && px(cs.fontWeight) >= 700);
         const need = large ? 3 : 4.5, ok = ratio >= need;
         total++; if (!ok) fail++;
-        items.push({ el: el.localName, ratio: r1(ratio), need, ok, unknown, fg: hex(fg), bg: hex(bg), large, r: rectIn(iframe, el, base) });
+        items.push({ frame: iframe, el: el.localName, ratio: r1(ratio), need, ok, unknown, fg: hex(fg), bg: hex(bg), large, r: rectIn(iframe, el, base) });
       }
     }
     return { total, fail, items };
@@ -177,7 +178,7 @@ export function initMeasure(ctx) {
         const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0;
       });
       const tab = (e) => { const t = Number(e.getAttribute('tabindex')); return Number.isInteger(t) && t > 0 ? t : Infinity; };
-      groups.push(els.map((e, i) => [e, i]).sort((a, b) => tab(a[0]) - tab(b[0]) || a[1] - b[1]).map((x) => rectIn(iframe, x[0], base)));
+      groups.push({ frame: iframe, list: els.map((e, i) => [e, i]).sort((a, b) => tab(a[0]) - tab(b[0]) || a[1] - b[1]).map((x) => rectIn(iframe, x[0], base)) });
     }
     return groups;
   }
@@ -197,16 +198,21 @@ export function initMeasure(ctx) {
     const labels = [];
     if (state.contrast) {
       const c = collectContrast(base, list);
-      state.summary.contrast = { total: c.total, fail: c.fail, items: c.items.map(({ r, ...i }) => i) };
+      state.summary.contrast = { total: c.total, fail: c.fail, items: c.items.map(({ r, frame, ...i }) => i) };
+      // far out a label per line of text is noise: only what fails, and the selected frame, are marked. The count stays in the panel.
+      const selFrame = ctx.state.selection && ctx.stage?.sections?.get(ctx.state.selection.component)?.docFrame?.iframe();
+      const near = (ctx.view?.get().z ?? 1) >= LABEL_ZOOM;
       for (const i of c.items) {
-        if (i.r.w < 2 || i.r.h < 2) continue;
+        if (i.r.w < 2 || i.r.h < 2 || (!near && i.ok && i.frame !== selFrame)) continue;
         layer.append(div(`im-box ${i.ok ? 'ok' : 'bad'}`, box(i.r.x - 1, i.r.y - 1, i.r.w + 2, i.r.h + 2)));
         labels.push({ cls: `im-badge ${i.ok ? 'ok' : 'bad'}${i.unknown ? ' unsure' : ''}`, text: `${i.unknown ? '~' : ''}${i.ratio >= 21 ? '21' : i.ratio}`, title: `${i.unknown ? 'a background image or gradient is behind it, so this is an estimate. ' : ''}${i.fg} on ${i.bg}: ${i.ratio}:1, needs ${i.need}:1${i.large ? ' (large text)' : ''}`, anchor: i.r, bad: !i.ok });
       }
     }
     if (state.order) {
       let total = 0;
-      for (const g of collectOrder(base, list)) g.forEach((r, k) => { total++; labels.push({ cls: 'im-order', text: String(k + 1), anchor: r }); });
+      const selFrame = ctx.state.selection && ctx.stage?.sections?.get(ctx.state.selection.component)?.docFrame?.iframe();
+      const near = (ctx.view?.get().z ?? 1) >= LABEL_ZOOM;
+      for (const g of collectOrder(base, list)) g.list.forEach((r, k) => { total++; if (near || g.frame === selFrame) labels.push({ cls: 'im-order', text: String(k + 1), anchor: r }); });
       state.summary.order = { total };
     }
     // the ones that must be seen (below AA) first, then top to bottom
@@ -243,6 +249,7 @@ export function initMeasure(ctx) {
       if (!['contrast', 'order'].includes(name)) return state[name];
       state[name] = on === undefined ? !state[name] : !!on;
       redraw(); draw(); // draw now, so the caller can read the summary
+      if (state[name] && name === 'contrast' && (ctx.view?.get().z ?? 1) < LABEL_ZOOM && state.summary.contrast) ctx.hint?.(`${state.summary.contrast.total} text elements, ${state.summary.contrast.fail} below AA. Zoom in to read each one`);
       return state[name];
     },
     read: () => state.summary, // the numbers behind what is drawn (also what a test reads)
