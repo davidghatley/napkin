@@ -34,7 +34,8 @@
     </div>
   </header>
   <nav id="sidebar" aria-label="Layers and changes">
-    <h2 class="pane-title">Layers</h2>
+    <h2 class="pane-title sr-only">Layers</h2>
+    <div class="side-tabs" role="tablist" aria-label="Sidebar"><button type="button" role="tab" id="tab-layers" aria-selected="true" aria-controls="layers">Layers</button><button type="button" role="tab" id="tab-styles" aria-selected="false" aria-controls="styles" tabindex="-1">Styles</button></div>
     <div id="layers" role="tree" aria-label="Layers"></div>
     <details id="changes" open><summary>Changes</summary><p id="changes-placeholder" class="empty">No changes yet.</p><ul id="log" aria-live="polite"></ul></details>
   </nav>

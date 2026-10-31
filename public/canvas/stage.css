@@ -269,9 +269,7 @@ body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
 .st-none { margin: 12px 14px; color: var(--nk-text-3); font-size: 12px; }
 
 /* ---- the chrome around the new pieces: denser rows, one source of quiet ---- */
-.top-right .meta { display: none; }
-.lrow { height: 26px; }
-.lrow .lname, .lcomp .lname { font-size: 12px; }
+.top-right .meta { visibility: hidden; }
 body[data-bp] #hint { bottom: 126px; }
 #stage:not([data-zoom-band="near"]) .cmp[data-sel] .doc-cell:not([data-resizing]) figcaption { visibility: hidden !important; }
 #statusbar .hints { width: 470px; }

@@ -8,11 +8,7 @@ const enc = encodeURIComponent;
 const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 300 }) : setTimeout(fn, 30));
 
 export function initStylesTab(ctx) {
-  const side = document.querySelector('#sidebar'), layers = document.querySelector('#layers'), title = side.querySelector('.pane-title');
-  const tabs = document.createElement('div');
-  tabs.className = 'side-tabs'; tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', 'Sidebar');
-  tabs.innerHTML = '<button type="button" role="tab" id="tab-layers" aria-selected="true" aria-controls="layers">Layers</button><button type="button" role="tab" id="tab-styles" aria-selected="false" aria-controls="styles" tabindex="-1">Styles</button>';
-  title.after(tabs); title.classList.add('sr-only');
+  const side = document.querySelector('#sidebar'), layers = document.querySelector('#layers'), tabs = side.querySelector('.side-tabs'); // (in the page from the first paint: nothing moves when this runs)
   const pane = document.createElement('div');
   pane.id = 'styles'; pane.hidden = true; pane.setAttribute('role', 'tabpanel'); pane.setAttribute('aria-labelledby', 'tab-styles');
   pane.innerHTML = '<div class="st-top"><input id="styles-filter" type="search" placeholder="find a rule or variable" aria-label="Find a rule or variable" spellcheck="false"></div><div id="styles-list"></div>';
