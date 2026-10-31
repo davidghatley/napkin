@@ -184,3 +184,72 @@ test('14. a gap is a gap and handed-out space is space; Alt+Shift measures the p
   } finally { await a.close(); }
 });
 void writeFileSync;
+
+test('11. V on a variable with a dark definition lists both; ticking both writes both', { timeout: 60000 }, async () => {
+  const a = await open();
+  try {
+    const note = await a.node(NOTE, (n) => /ss-note--rule/.test(n.attrs.class || ''));
+    await a.select(NOTE, note.node);
+    await a.typeIn('#pv-background', '#fafafa'); await sleep(200);
+    await a.q(`napkin.inspector.scope('variable')`);
+    await a.browser.waitFor(`document.querySelectorAll('#var-themes input').length === 2`, 8000);
+    assert.equal(await a.q(`document.querySelectorAll('#var-themes input:checked').length`), 1, 'the one in force here, by default');
+    await a.q(`document.querySelector('#var-themes input:not(:checked)').click()`); await sleep(300);
+    await a.q(`napkin.inspector.apply()`); await sleep(600);
+    const t = readFileSync(join(a.dir, 'tokens.css'), 'utf8');
+    assert.equal(t.match(/--paper: #fafafa/g).length, 2, t);
+  } finally { await a.close(); }
+});
+
+test('15. Apply keeps the keyboard on the value; Cmd-K contrast toggles; the chip names the folder; scrubbing says it is older; B B Esc keeps the selection', { timeout: 90000 }, async () => {
+  const a = await open();
+  try {
+    const tag = await a.node(NOTE, (n) => n.attrs.class === 'ss-note__tag');
+    await a.select(NOTE, tag.node);
+    assert.equal(await a.q(`document.querySelector('#folder').textContent`), a.dir.split('/').pop());
+    assert.equal(await a.q(`napkin.quick.search('contrast').some((i) => i.kind === 'property')`), false, 'contrast is the action, not the button');
+    await a.typeIn('#pv-letter-spacing', '.3em');
+    await a.browser.waitFor(`!!document.querySelector('#doc-staged .opt.on')`);
+    await a.io.key('Enter');
+    await a.browser.waitFor(`document.activeElement?.id === 'pv-letter-spacing' && !document.querySelector('#doc-staged .scope')`, 8000);
+    await sleep(800);
+    assert.notEqual(await a.q(`document.activeElement.tagName`), 'BODY', 'focus does not fall to the page');
+    await a.q(`document.querySelector('#stage').focus()`);
+    await a.io.key('h', { code: 'KeyH' });
+    await a.browser.waitFor(`napkin.time.state().tiles.length >= 2`, 8000);
+    await a.q(`napkin.time.pick(0)`);
+    await a.browser.waitFor(`!document.querySelector('#time-older').hidden`, 8000);
+    for (let i = 0; i < 4; i++) { await a.io.key('b', { code: 'KeyB' }); await sleep(250); }
+    await a.io.key('Escape'); await sleep(200);
+    assert.equal(await a.q(`document.querySelector('#time-older').hidden`), true);
+    assert.ok(await a.q(`!!napkin.state.selection`), 'the selection stays');
+    assert.ok(await a.q(`!!document.querySelector('#doc-skip')`));
+  } finally { await a.close(); }
+});
+
+test('6. a refused restore in the strip says what to do and offers the one file; 13. computed classes are said honestly', { timeout: 90000 }, async () => {
+  const a = await open({ files: { ...FILES, 'Btn.tsx': 'function cn(...a){return a.join(" ")}\nconst v=()=>"x";\nexport function Btn(){ return <button className={cn(v())}>Go {typeof process}</button> }\n' } });
+  try {
+    const b = 'Btn.tsx#Btn';
+    await a.browser.waitFor(`/Go object/.test(napkin.stage.sections.get(${JSON.stringify(b)})?.docFrame?.doc()?.body?.innerText ?? '')`, 15000);
+    await a.q(`napkin.select({ component: ${JSON.stringify(b)}, node: napkin.stage.rootNode(${JSON.stringify(b)}), variant: {} })`); await sleep(400);
+    assert.match(await a.q(`document.querySelector('#doc-values').innerText`), /worked out in code/);
+    const tag = await a.node(NOTE, (n) => n.attrs.class === 'ss-note__tag');
+    // a change of Pill's rule by hand, then Note's own edit; restoring Note's oldest version is refused
+    await a.q(`fetch('/api/component/' + encodeURIComponent(${JSON.stringify(NOTE)}) + '/film').then((r) => r.text())`);
+    await a.select(PILL, (await a.node(PILL, (n) => n.attrs.class === 'ss-pill')).node);
+    writeFileSync(join(a.dir, 'components.css'), css(a).replace('.ss-note__body { padding: 13px;', '.ss-note__body { padding: 14px;').replace('.ss-pill { display: inline-block;', '.ss-pill { display: block;')); await sleep(700);
+    await a.select(NOTE, tag.node);
+    await a.q(`napkin.time.open()`);
+    await a.browser.waitFor(`napkin.time.state().tiles.length >= 2`, 8000);
+    await a.q(`napkin.time.pick(0)`); await sleep(300);
+    await a.q(`napkin.time.restore()`);
+    await a.browser.waitFor(`!document.querySelector('#time-refusal').hidden`, 8000);
+    const say = await a.q(`document.querySelector('#time-refusal').innerText`);
+    assert.match(say, /Restore a newer version/); assert.match(say, /Restore only preview\.html/);
+    assert.doesNotMatch(say, /Next:/);
+    const before = css(a);
+    await a.q(`document.querySelector('#time-own').click()`); await sleep(500);
+    assert.equal(css(a), before, 'the shared sheet is not touched');
+  } finally { await a.close(); }
+});

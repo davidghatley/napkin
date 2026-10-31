@@ -427,3 +427,9 @@ What `test/stage/stage.test.js` and other lanes can rely on:
 - **Overlays:** below 45% zoom contrast and focus-order labels are drawn only for failures and the selected frame; the counts stay whole (`napkin.inspector.read()`).
 - **Restore:** a whole rule nothing draws, added since the version, stays in the file (`kept` in the reply); a value changed in a rule nothing draws is refused by name (409).
 - **Render pool:** the other pages of the pool open behind the first render.
+
+## Smoothing round 2
+- `POST /api/component/<id>/film/restore { frame, only: 'own' }` puts back only the component's own file. A sheet is restored by splicing the differing rules into the file as it is now (`spliceSheet` in `src/doc/history.js`); null refuses. `#time-refusal`, `#time-own`, `#time-older`.
+- `ctx.keyGuard`: an open picker has the keyboard (`legend.js`, registered first). Escape ends a staged edit wherever focus is. `dialog.ivask` is non-modal and previews.
+- `#var-themes input[data-def]`: which definitions of a variable a staged value goes to. `napkin.stage.rootNode(id)`, `napkin.stage.rearrange(id)`, `napkin.play.replay()`. Frames nobody placed make way for a frame changing width and return. `GET /api/files` carries `folder`.
+- Alt+Shift measures the parent; `.im-s` is space handed out by the layout, `.im-g` a gap the file sets. Layer tree of a file: open only on the path to the selection or by hand; runs of empty unnamed siblings are one row.
