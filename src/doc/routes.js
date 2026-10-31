@@ -57,7 +57,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
     const path = url.pathname, method = req.method;
     try {
       if (await time(req, res, url)) return true;
-      if (method === 'GET' && path === '/api/files') return json(res, 200, { files: engine.files(url.searchParams.get('kinds') ? { kinds: url.searchParams.get('kinds').split(',') } : {}) }), true;
+      if (method === 'GET' && path === '/api/files') return json(res, 200, { folder: engine.root.split('/').filter(Boolean).pop(), files: engine.files(url.searchParams.get('kinds') ? { kinds: url.searchParams.get('kinds').split(',') } : {}) }), true;
       if (path === '/api/styles') {
         if (method === 'GET') return json(res, 200, engine.styles()), true;
         if (method === 'POST') { const m = await body(req); who(req); return json(res, 200, engine.setStyles(m?.applied)), true; }

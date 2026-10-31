@@ -187,10 +187,6 @@ dialog.ivask .hint { margin: 8px 0 0; font-size: 11px; color: var(--nk-text-3); 
 #panel .vrow .pval input.val:hover { border-color: var(--nk-line-2); }
 #panel .vrow .pval input.val:focus { border-color: var(--nk-accent); background: var(--nk-chrome); }
 #panel .pmore { grid-column: 1 / -1; min-width: 0; }
-/* where the variable is defined is one click away: it opens on the value you are on */
-#panel .pmore { position: relative; }
-#panel .pmore .pfrom.pvar { position: absolute; left: 0; top: 0; width: 100%; background: var(--nk-chrome); clip-path: inset(50%); }
-#panel .vrow:focus-within .pmore .pfrom.pvar, #panel .vrow.editing .pmore .pfrom.pvar, #panel .vrow:hover .pmore .pfrom.pvar { clip-path: none; }
 #panel .pfrom .same-file { display: inline-block; width: 0; overflow: hidden; vertical-align: bottom; }
 #panel .hfile { margin-left: auto; font: 400 10.5px var(--nk-mono); }
 #panel .vrow .res.longv { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -245,3 +241,13 @@ dialog.ivask .hint { margin: 8px 0 0; font-size: 11px; color: var(--nk-text-3); 
 #panel .vs-type .ivchip .ivval { max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 #panel .ivchips[data-collapsed] { max-height: 51px; overflow: hidden; }
 #panel .vs-type .ivchips[data-collapsed] { max-height: 51px; }
+
+#panel .doc-skip { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); padding: 0; border: 0; }
+#panel .doc-skip:focus { position: static; display: block; width: 100%; height: 26px; clip-path: none; background: var(--nk-accent-soft); color: var(--nk-accent-text); font: 500 12px var(--nk-sans); }
+#panel .var-themes { display: grid; gap: 2px; margin: 0; padding: 0; border: 0; font: 11px var(--nk-sans); color: var(--nk-text-2); }
+#panel .var-themes legend { padding: 0; font: 600 11px var(--nk-sans); }
+#panel .var-themes label { display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 6px; align-items: center; cursor: pointer; }
+#panel .var-themes .vt-where { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .var-themes code { font: 10.5px var(--nk-mono); }
+dialog.ivask { position: fixed; inset: 60px 332px auto auto; margin: 0; z-index: 60; }
+#inspect-overlay .im-s { background: rgba(120, 90, 30, .92); }

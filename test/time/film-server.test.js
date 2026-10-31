@@ -605,3 +605,33 @@ test('restore: a value changed in a rule no component draws is refused by name, 
     assert.match(readFileSync(join(t.dir, 'pill.html'), 'utf8'), /Shipped/);
   } finally { t.stop(); }
 });
+
+test('restore: a hand comment and the place of a kept rule survive; only the differing rule goes back', async () => {
+  const start = `.pill { padding: 1px; }\n.note { padding: 2px; }\n`;
+  const t = await folderOf({ 'pill.html': page('pill'), 'note.html': page('note'), 'shared.css': start }, { git: true, commits: [
+    ['hand work', (d) => writeFileSync(join(d, 'shared.css'), `/* hand comment */\n.hand { color: red }\n.pill { padding: 9px; }\n.note { padding: 2px; }\n`)],
+  ] });
+  try {
+    const f = await t.film('pill.html');
+    const r = await t.post('/api/component/pill.html/film/restore', { frame: f.frames.at(-1).id });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    assert.deepEqual(r.kept, ['.hand']);
+    assert.equal(readFileSync(join(t.dir, 'shared.css'), 'utf8'), `/* hand comment */\n.hand { color: red }\n.pill { padding: 1px; }\n.note { padding: 2px; }\n`, 'comment and order as they were, one value back');
+  } finally { t.stop(); }
+});
+
+test('restore: refused for a shared rule, the way forward is one file; the sheet stays', async () => {
+  const t = await folderOf({ 'pill.html': page('pill'), 'note.html': page('note'), 'shared.css': SHARED }, { git: true, commits: [
+    ['note', (d) => writeFileSync(join(d, 'shared.css'), '.pill { padding: 1px 7px; }\n.note { padding: 12px; }\n')],
+    ['pill label', (d) => writeFileSync(join(d, 'pill.html'), page('pill', 'Shipped'))],
+  ] });
+  try {
+    const f = await t.film('pill.html'), frame = f.frames.at(-1).id, css = readFileSync(join(t.dir, 'shared.css'), 'utf8');
+    const no = await t.post('/api/component/pill.html/film/restore', { frame });
+    assert.equal(no.ok, false); assert.match(no.error, /Next: .*restore only this component's file/);
+    const yes = await t.post('/api/component/pill.html/film/restore', { frame, only: 'own' });
+    assert.equal(yes.ok, true, JSON.stringify(yes));
+    assert.doesNotMatch(readFileSync(join(t.dir, 'pill.html'), 'utf8'), /Shipped/);
+    assert.equal(readFileSync(join(t.dir, 'shared.css'), 'utf8'), css, 'the shared rule is protected');
+  } finally { t.stop(); }
+});

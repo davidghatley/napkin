@@ -148,6 +148,12 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     try { ro = new next.contentWindow.ResizeObserver(() => size()); ro.observe(next.contentDocument.documentElement); } catch { ro = null; }
     // keyboard focus never stays inside a frame while editing: the canvas's keys keep working
     next.contentWindow.addEventListener('focus', () => { if (!document.body.dataset.play) next.blur(); });
+    // in play the keyboard is inside the frame: Escape, and P outside a text field, still leave play
+    next.contentWindow.addEventListener('keydown', (ev) => {
+      if (!document.body.dataset.play || document.body.dataset.playHold) return;
+      const field = /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || ev.target.isContentEditable;
+      if (ev.key === 'Escape' || (ev.code === 'KeyP' && !field && !ev.ctrlKey && !ev.metaKey && !ev.altKey)) { ev.preventDefault(); ev.stopPropagation(); ctx.play.set(false); next.blur(); document.querySelector('#stage').focus({ preventScroll: true }); }
+    }, true);
     // while editing a frame has no scrollbars of its own: the canvas is what scrolls. Play gives them back (the file's own)
     const noBars = next.contentDocument.createElement('style'); noBars.setAttribute('data-napkin', ''); noBars.setAttribute('data-napkin-chrome', ''); noBars.textContent = 'html{scrollbar-width:none}html::-webkit-scrollbar{display:none}';
     if (!document.body.dataset.play) (next.contentDocument.head || next.contentDocument.documentElement).append(noBars);

@@ -19,6 +19,8 @@ const canHold = (n) => !holdsText(n) && !VOID.has(n.tag);
 export function initLayers(ctx, el) {
   const expanded = new Set();          // component ids showing their nodes
   const folded = new Set();            // "component|node" rows whose children are hidden
+  const opened = new Set();            // rows of a file's tree opened by hand (the rest open only on the path to the selection)
+  const keptOpen = new Set();          // files opened by hand: they stay open when the selection moves on
   let lastHtml = '', queued = false, renaming = null, dragging = null, reveal = false, focusKey = null; // focusKey: the row that keeps keyboard focus across a rebuild
   const rowKey = (r) => `${r.dataset.component}|${r.dataset.node ?? ''}`;
 
@@ -66,13 +68,29 @@ export function initLayers(ctx, el) {
   function htmlRows(c, rows, sel, prim) {
     const t = ctx.stage?.sections.get(c.component)?.docFrame?.tree();
     const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree);
-    for (const top of body ? body.children : t?.tree || []) (function walk(n, depth) {
-      if (['script', 'style', 'template', 'link', 'meta'].includes(n.tag)) return;
-      const k = `${c.component}|${n.node}`, kids = n.children.length, isFolded = folded.has(k);
-      const label = `${n.attrs?.id ? '#' + n.attrs.id : ''}${(n.attrs?.class || '').split(/\s+/).filter(Boolean).map((x) => '.' + x).join('')}` || n.text?.slice(0, 40) || n.tag;
-      rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}" title="${esc(n.tag)} · line ${n.line}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.node)}" data-kind="node" data-html="1" tabindex="-1" style="--nk-d:${depth}"><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${ICON.frame || ''}</span><span class="lname">${esc(label)}</span><span class="ltag">${esc(n.tag)}</span></div>`);
-      if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
-    })(top, 1);
+    // the rows on the way to the selection are open; everything else starts closed. An svg's shapes are one row until asked for.
+    const onPath = new Set();
+    const mark = (list) => { let hit = false; for (const n of list || []) { const self = sel.has(`${c.component}|${n.node}`), under = mark(n.children); if (under) onPath.add(n.node); hit ||= self || under; } return hit; };
+    mark(t?.tree);
+    const SKIP = ['script', 'style', 'template', 'link', 'meta'];
+    const nameOf = (n) => { const id = n.attrs?.id ? `#${n.attrs.id}` : '', cl = (n.attrs?.class || '').split(/\s+/).filter(Boolean); return `${id}${cl.slice(0, 2).map((x) => '.' + x).join('')}${cl.length > 2 ? ` +${cl.length - 2}` : ''}` || n.text?.trim().slice(0, 40) || (n.attrs?.['aria-label'] ? `${n.tag} “${n.attrs['aria-label']}”` : n.tag); };
+    const bare = (n) => !n.children.length && !n.attrs?.id && !n.attrs?.class && !n.text?.trim();
+    const walkList = (list, depth) => {
+      for (let i = 0; i < list.length; i++) {
+        const n = list[i];
+        if (SKIP.includes(n.tag)) continue;
+        // a run of the same empty, unnamed element (the cells of a pixel grid, the paths of an icon) is one row, unless the selection is in it
+        let run = 1; if (bare(n)) while (list[i + run]?.tag === n.tag && bare(list[i + run])) run++;
+        if (run <= 3 || list.slice(i, i + run).some((x) => sel.has(`${c.component}|${x.node}`))) run = 1;
+        const k = `${c.component}|${n.node}`, kids = n.children.filter((x) => !SKIP.includes(x.tag)).length;
+        const isFolded = kids > 0 && ((!onPath.has(n.node) && !opened.has(k)) || folded.has(k));
+        const label = `${nameOf(n)}${run > 1 ? ` ×${run}` : ''}${n.tag === 'svg' && kids ? ` · ${kids} shape${kids === 1 ? '' : 's'}` : ''}`;
+        rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${onPath.has(n.node) ? ' anc' : ''}" title="${esc(n.tag)} · line ${n.line}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.node)}" data-kind="node" tabindex="-1" style="--nk-d:${depth}"><span class="lgrip" aria-hidden="true"></span><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${ICON.frame}</span><span class="lname">${esc(label)}</span></div>`);
+        if (!isFolded) walkList(n.children, depth + 1);
+        i += run - 1;
+      }
+    };
+    walkList(body ? body.children : t?.tree || [], 1);
   }
   ctx.on('render', ({ component }) => { if (ctx.state.components.get(component)?.kind === 'html' && expanded.has(component)) schedule(); });
 
@@ -103,8 +121,8 @@ export function initLayers(ctx, el) {
     }
     if (ev.target.closest('.lmore')) { ev.stopPropagation(); pick(row); openMenu(ev.target.closest('.lmore')); return; }
     if (ev.target.closest('.twirl')) {
-      if (row.dataset.kind === 'component') { const id = row.dataset.component; expanded.has(id) ? expanded.delete(id) : expanded.add(id); }
-      else { const k = `${row.dataset.component}|${row.dataset.node}`; folded.has(k) ? folded.delete(k) : folded.add(k); }
+      if (row.dataset.kind === 'component') { const id = row.dataset.component; if (expanded.has(id)) { expanded.delete(id); keptOpen.delete(id); } else { expanded.add(id); keptOpen.add(id); } }
+      else { const k = `${row.dataset.component}|${row.dataset.node}`; if (row.getAttribute('aria-expanded') === 'true') { folded.add(k); opened.delete(k); } else { folded.delete(k); opened.add(k); } }
       draw(); return;
     }
     if (row.dataset.kind === 'component') expanded.add(row.dataset.component);
@@ -290,7 +308,8 @@ export function initLayers(ctx, el) {
   addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && dragging?.active) { dragging.row.classList.remove('dragging'); dragging = null; line.remove(); delete document.body.dataset.dragging; draw(); } }, true);
 
   // ---- keep in step ----
-  ctx.on('select', () => { for (const s of ctx.state.selections) expanded.add(s.component); reveal = true; schedule(); });
+  // the tree follows the selection: its component opens, the other files' trees close, unless you opened them by hand
+  ctx.on('select', () => { const sels = ctx.state.selections; if (sels.length && sels.every((x) => ctx.state.components.get(x.component)?.kind === 'html')) for (const id of [...expanded]) if (ctx.state.components.get(id)?.kind === 'html' && !sels.some((x) => x.component === id) && !keptOpen.has(id)) expanded.delete(id); for (const x of sels) expanded.add(x.component); reveal = true; schedule(); });
   for (const e of ['render', 'removed', 'added']) ctx.on(e, schedule);
   let seeded = false; // a small repo opens fully expanded, once
   ctx.on('render', () => { if (!seeded && ctx.state.components.size <= 8) { seeded = true; for (const id of ctx.state.components.keys()) expanded.add(id); } });

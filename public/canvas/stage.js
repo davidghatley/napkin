@@ -213,7 +213,7 @@ export function createStage(ctx, root, world, view) {
   // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
   async function renderDoc(id, c, sec, token) {
     if (!sec.docFrame) {
-      sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
       sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
       sec.el.dataset.kind = 'html';
       const path = sec.el.querySelector('.cmp-path'); path.textContent = (c.path || '').split('/').slice(-2).join('/'); path.title = c.path || ''; path.hidden = false;
@@ -321,7 +321,31 @@ export function createStage(ctx, root, world, view) {
     }
     return { out, width, bottom: y };
   }
+  // A frame that changes width keeps its place; the frames nobody placed make way, right for a neighbouring column and down for
+  // the one below, and go back as it shrinks. Worked out from where each was packed, so the canvas never drifts. Saved positions stay.
+  const home = new Map();
+  let rearrangeQueued = 0;
+  const rearrangeSoon = (id) => { if (!rearrangeQueued) rearrangeQueued = requestAnimationFrame(() => { rearrangeQueued = 0; rearrange(id); }); };
+  function rearrange(changed) {
+    if (!laidOut) return;
+    const z = view.get().z, gapX = MASONRY_GAP;
+    const list = [...sections].filter(([, s]) => s.pos).map(([id, s]) => { if (!home.has(id)) home.set(id, { ...s.pos }); return { id, s, h: home.get(id) }; }).sort((a, b) => a.h.x - b.h.x || a.h.y - b.h.y);
+    const done = []; let moved = false;
+    for (const { id, s, h } of list) {
+      let x = id === changed || !auto.has(id) ? s.pos.x : h.x, y = id === changed || !auto.has(id) ? s.pos.y : h.y;
+      const w = s.size.w, ht = s.size.h, top = headBox(s, z).top;
+      if (id !== changed && auto.has(id)) for (let tries = 0; tries < 40; tries++) {
+        const a = done.find((o) => x < o.x + o.w + 24 && x + w + 24 > o.x && y - 30 < o.y + o.h + o.pad && y + ht > o.y - 30); // (the title above; below the frame in hand, its caption too)
+        if (!a) break;
+        if (a.hx < h.x - 1) x = a.x + a.w + gapX; else y = a.y + a.h + a.pad + Math.min(top, 60);
+      }
+      if (x !== s.pos.x || y !== s.pos.y) { moveTo(id, x, y); moved = true; }
+      done.push({ x, y, w, h: ht, hx: h.x, pad: id === changed ? 26 : 0 });
+    }
+    if (moved) { refreshOverlays(); ctx.emit('layout', {}); }
+  }
   function layoutAll() {
+    home.clear();
     const ids = [...sections.keys()];
     // Frames placed one by one while the first renders were still on their way were placed by a placeholder size; now that
     // the sizes are known, the ones without a saved position are packed once, together (WPC-23: no overlaps after a reload).
@@ -820,7 +844,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

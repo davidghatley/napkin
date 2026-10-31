@@ -12,6 +12,11 @@ export function initLegend(ctx) {
     pop(name) { if (!stack.some((x) => x.name === name)) return; stack = stack.filter((x) => x.name !== name); paint(); },
     read: () => stack.at(-1)?.name ?? null,
   };
+  // Registered before every other key handler: a picker that is open has the keyboard to itself, and Escape ends a staged edit wherever the focus is
+  addEventListener('keydown', (ev) => {
+    if (ctx.keyGuard) { ev.stopImmediatePropagation(); ctx.keyGuard(ev); return; }
+    if (ev.key === 'Escape' && !ev.isComposing && ctx.inspector?.state?.() && !document.body.dataset.modal) { ev.preventDefault(); ev.stopImmediatePropagation(); ctx.inspector.cancel(); }
+  }, true);
   ctx.on('highlight', (h) => { if (h && !h.quiet) ctx.legend.push('highlight', [['Tab', 'next place'], ['⇧Tab', 'back'], ['Esc', 'done']]); else ctx.legend.pop('highlight'); });
   return ctx.legend;
 }

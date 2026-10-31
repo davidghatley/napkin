@@ -41,7 +41,7 @@ export function initDocs(ctx) {
 
   async function load() {
     const [files, layout, styles] = await Promise.all([getJson('/api/files?kinds=html,css,tsx,jsx'), getJson('/api/layout'), getJson('/api/styles')]);
-    api.files = files?.files || []; api.styles = styles;
+    api.files = files?.files || []; api.styles = styles; if (files?.folder) { const f = document.querySelector('#folder'); if (f) { f.textContent = files.folder; f.title = files.folder; } }
     api.skipped = api.files.filter((f) => f.noComponent).map((f) => ({ path: f.path, note: f.noComponent })); // files that export no component: no frame, but the layers list them
     api.enginePaths = new Set(api.files.filter((f) => f.kind === 'tsx' || f.kind === 'jsx').map((f) => f.path));
     learn();

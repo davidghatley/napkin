@@ -280,4 +280,7 @@ body[data-bp] #hint { bottom: 126px; }
 #overlay-select[data-tags="none"]::after, #overlay-select[data-tags="none"] .osize { display: none; }
 #layers .lcomp { margin-top: 0; }
 body[data-wipe] #grid { visibility: hidden; }
-#stage[data-zoom-band="far"] .cmp-title .cmp-path, #stage[data-zoom-band="far"] .cmp-title .cmp-note { display: none; }
+#stage[data-hdr="strip"] .cmp-title .cmp-path, #stage[data-hdr="strip"] .cmp-title .cmp-note { display: none; }
+/* the frame you are on is above its neighbours, with its grip */
+.cmp[data-sel] { z-index: 5; }
+.cmp:has(.doc-cell[data-resizing]) { z-index: 6; }

@@ -62,7 +62,9 @@ export function scopeOptions({ prop, typed, bound, comp, node, classes, matched,
   const hit = classTarget(matched, prop, classes);
   const wRule = winner?.source?.kind === 'rule' ? data.rules[winner.source.order] : null;
   // a value the element inherits is edited in the rule of the ancestor it comes from; a rule can also be named (to fix a value that does not show)
-  const rule = (forceRule !== null && data.rules[forceRule]) || (winner?.state === 'inherited' ? wRule : hit?.rule ?? wRule);
+  // and when the class's own rule would lose on this element, the default is the rule that paints it (a change must show where you are looking)
+  const hitLoses = hit?.rule && wRule && hit.rule !== wRule && (() => { const m0 = matched.find((x) => x.rule === hit.rule), d0 = hit.rule.decls.find((x) => x.prop.toLowerCase() === prop.toLowerCase()); return m0 ? wouldLose(m0, prop, !!d0?.important).length > 0 : false; })();
+  const rule = (forceRule !== null && data.rules[forceRule]) || (winner?.state === 'inherited' || hitLoses ? wRule : hit?.rule ?? wRule);
   if (rule) {
     const single = /^\.[\w-]+$/.test(rule === hit?.rule ? hit.part : rule.selector.trim());
     const d = rule.decls.find((x) => x.prop.toLowerCase() === prop.toLowerCase());

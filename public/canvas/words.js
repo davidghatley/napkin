@@ -17,6 +17,9 @@ export function plain(text) {
   return s || 'Something went wrong';
 }
 
+// A refusal's way forward, for a person: the part of the message after "Next:", as a sentence (empty when there is none).
+export function nextStep(text) { const m = /Next:\s*([\s\S]*)$/.exec(String(text ?? '')); if (!m) return ''; const t = m[1].trim().replace(/\.?$/, '.'); return t[0].toUpperCase() + t.slice(1); }
+
 // Inline errors in the panel keep the store's own wording ("invalid edit #0: ...") but never the agent-facing "Next: ..." tail.
 export const stripNext = (text) => plain(text); // inline messages beside a field: the same plain words as a toast
 

@@ -14,6 +14,7 @@ import { classify, offScale, bindExact, bindPieces, kindOfProp, parseColor, toke
 import { scopeOptions, defaultScope, normalizeTyped } from './inspector-scope.js';
 import { stripsHtml, wireStrips, askProp } from './inspector-vars.js';
 import { initMeasure } from './measure-overlay.js';
+import { usersOfVariable } from './stage-highlight.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const normSel = (t) => String(t).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\s*([,>+~])\s*/g, '$1').trim();
@@ -26,6 +27,7 @@ const usage = new Map();      // 'r:file:line' / 'v:--name' -> { count, where };
 let stamp = 0;
 export const docsChanged = () => { stamp++; usage.clear(); };
 
+let backTo = null;   // after Apply the keyboard stays on the value: { key, prop }, used by the redraw the edit causes
 let staged = null;   // the value being edited: { key, prop, text, typed, raw, scope }
 let live = null;     // the panel as last drawn: { selKey, ready, stage, ... }
 let lastProp = null; // the value field you were last in (a variable clicked in the strips goes there)
@@ -86,7 +88,7 @@ async function measureUse(ctx, kind, subject) {
   const key = kind === 'rule' ? `r:${subject.file}:${subject.line}` : `v:${subject}`;
   if (usage.has(key)) return usage.get(key);
   const comps = [...ctx.state.components.values()].filter((c) => c.kind === 'html');
-  let count = 0; const per = [], decls = new Set(); // for a variable: each declaration counts once, however many components share its stylesheet
+  let count = 0; const per = [];
   for (const c of comps) {
     let d; try { d = await rulesFor(c.component); } catch { continue; }
     if (kind === 'rule') {
@@ -96,15 +98,16 @@ async function measureUse(ctx, kind, subject) {
       let n = 0; try { n = doc.querySelectorAll(r.selector.replace(PSEUDO_EL, '').trim() || '*').length; } catch { /* invalid */ }
       if (n) { count += n; per.push({ name: c.name, n }); }
     } else {
-      let here = 0;
-      for (const r of d.rules) for (const x of r.decls) if (x.uses.includes(subject)) { here++; decls.add(`${r.file}:${x.start}`); }
-      if (here) per.push({ name: c.name, n: here });
+      // the same count the highlight gives: the places on the canvas that use it, not the rules that mention it
+      const doc = ctx.stage.sections.get(c.component)?.docFrame?.doc();
+      if (!doc) continue;
+      const u = usersOfVariable(doc, subject), here = u.direct.size + u.indirect.size;
+      if (here) { per.push({ name: c.name, n: here }); count += here; }
     }
   }
-  if (kind === 'var') count = decls.size;
   const where = kind === 'rule'
     ? (per.length === 1 ? (per[0].n > 1 ? `all ${WORDS[per[0].n] ?? per[0].n} in ${per[0].name}` : `in ${per[0].name}`) : per.length ? `${per.length} components` : '')
-    : (count ? `${count} rule${count === 1 ? '' : 's'}, ${per.length} of ${comps.length} components` : '');
+    : (count ? `${count} place${count === 1 ? '' : 's'} in ${per.length} component${per.length === 1 ? '' : 's'}` : '');
   const out = { count, where };
   usage.set(key, out);
   return out;
@@ -115,11 +118,13 @@ export function initInspector(ctx) {
   currentCtx = ctx;
   measure = initMeasure(ctx);
   pv = createPreview(ctx);
+  // Staging ends whenever the selection leaves the element: nothing stays drawn, and it is said (nothing was written).
+  ctx.on('select', (sel) => { if (!staged) return; const k = sel ? `${sel.component}|${sel.node}` : null; if (k !== staged.key) { const was = staged; dropStaged(ctx); ctx.hint(`Cancelled ${was.prop}: ${was.text}. Nothing was written.`); } });
   ctx.inspector = {
     scope: (id) => live?.setScope?.(id),            // 'element', 'class' or 'variable'
     toggleBound: () => live?.toggleBound?.(),
     apply: () => live?.apply?.(),
-    cancel: () => live?.cancel?.(),
+    cancel: () => { if (live?.cancel && staged?.key === live.selKey) live.cancel(); else dropStaged(ctx); },
     step: (d) => live?.step?.(d),
     stageValue: (prop, text) => live?.stage?.(prop, text),
     bindVariable: (at, name, group, value, prop) => bindTo(ctx, at, name, group, value, prop),
@@ -149,7 +154,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   if (el.dataset.full === key && focus) return; // a redraw would take the field from under the cursor
   el.dataset.full = key;
   const selKey = `${comp.component}|${sel.node}`;
-  if (staged && staged.key !== selKey) { staged = null; clearPreview(); lastProp = null; }
+  if (staged && staged.key !== selKey) { const was = staged; dropStaged(ctx); ctx.hint(`Cancelled ${was.prop}: ${was.text}. Nothing was written.`); }
   const me = live = { selKey };
   me.ready = Promise.resolve();
   const data = await rulesFor(comp.component).catch(() => ({ rules: [], sheets: [] }));
@@ -166,7 +171,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const explain = cas ? cas.explain(target) : { rules: [], inline: [], props: {}, vars: {}, inherited: [] };
   const classes = (node.attrs?.class || '').split(/\s+/).filter(Boolean);
   const textOnly = !node.children.length && node.text !== undefined;
-  const label = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.map((c) => '.' + c).join('')}`;
+  const label = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.map((c) => '.' + c).join('')}`, labelShort = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.slice(0, 2).map((c) => '.' + c).join('')}${classes.length > 2 ? ` +${classes.length - 2}` : ''}`;
+  const computed = /^\{/.test(node.attrs?.className ?? '') ? String(node.attrs.className).replace(/^\{|\}$/g, '').replace(/\s+/g, ' ').slice(0, 70) : null; // classes a React file works out in code
   const index = (r) => { // which of the same-selector rules in that file this is (contract ruling 7)
     const same = data.rules.filter((x) => x.file === r.file && x.kind === 'style' && normSel(x.selector) === normSel(r.selector) && normMedia(x.media.at(-1)) === normMedia(r.media.at(-1)));
     return same.indexOf(r);
@@ -255,19 +261,20 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const fold = (id, dflt) => ((openFolds.has(id) ? openFolds.get(id) : dflt) ? ' open' : '');
 
   el.innerHTML = `
+    <button type="button" class="doc-skip" id="doc-skip">Skip to your variables</button>
     <div class="selhead doc-head" data-node="${esc(sel.node)}">
-      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(label)}</span></div>
+      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(labelShort)}</span></div>
       <p class="hint mono doc-where"><span id="doc-source" title="${esc(comp.path)}:${node.line}">${esc(comp.path)}:${node.line}</span><button type="button" id="doc-frame-width" title="Frame width and breakpoints (B)">${frame.width} px <kbd>B</kbd></button></p>
     </div>
     <div class="doc-body">
       ${textOnly ? `<section class="dsec"><h3>Text</h3><textarea id="doc-text" data-key="text" rows="${Math.min(4, Math.max(1, Math.ceil(node.text.length / 38)))}" aria-label="Text">${esc(node.text)}</textarea></section>` : ''}
       ${node.runs?.length ? `<section class="dsec"><h3>Text <span class="where">${node.runs.length} run${node.runs.length === 1 ? '' : 's'} between its elements</span></h3>${node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join('')}</section>` : ''}
       <section class="dsec"><h3>Classes</h3>
-        <div class="doc-classes" id="doc-classes">${classes.map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
+        <div class="doc-classes" id="doc-classes">${classes.length > 12 ? `<span class="hint" title="${esc(classes.join(' '))}">first 12 of ${classes.length}</span>` : ''}${classes.slice(0, 12).map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
           <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>
       </section>
       <section class="dsec" id="doc-values"><h3>Where each value comes from${mainFile ? `<span class="where hfile">${esc(mainFile)}</span>` : ''}</h3>
-        ${props.length ? props.map(valueRow).join('') : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : '<p class="hint">Nothing styles this element yet.</p>'}
+        ${props.length ? props.map(valueRow).join('') : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : computed ? `<p class="hint">Its classes are worked out in code: <code>${esc(computed)}</code> at line ${node.line} of ${esc(base(comp.path))}. No stylesheet rule of this folder matches it here. Change them in that file.</p>` : '<p class="hint">Nothing styles this element yet.</p>'}
       </section>
       ${explain.inherited.length ? `<section class="dsec soft" id="doc-inherited" data-soft="inherited"${soft('inherited')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('inherited')}">Inherited <span class="where">${explain.inherited.length} from the elements around it</span></button></h3><div class="soft-b">${explain.inherited.map(inheritedRow).join('')}</div></section>` : ''}
       <details class="dsec fold" data-fold="inline"${fold('inline', inlineDecls.length > 0)}><summary><h3>Inline style <span class="where">${inlineDecls.length ? `${inlineDecls.length} set` : 'none yet'}</span></h3></summary>
@@ -303,6 +310,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     sec.querySelector('.soft-b').addEventListener('focusin', () => set(true));
   });
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
+  else if (backTo?.key === selKey) { el.querySelector(`.vrow input[data-prop="${CSS.escape(backTo.prop)}"]`)?.focus({ preventScroll: true }); backTo = null; }
   wireKeys(el);
 
   // ---------- edits ----------
@@ -351,6 +359,12 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   }
 
   el.querySelectorAll('[data-lit-sel], [data-lit-var]').forEach((b) => b.addEventListener('click', (ev) => { ev.preventDefault(); ev.stopPropagation(); ctx.stage?.highlight?.(b.dataset.litVar ? { variable: b.dataset.litVar } : { selector: b.dataset.litSel, file: b.dataset.litFile }); }));
+  el.querySelectorAll('[data-lit-sel], [data-lit-var]').forEach((b) => {
+    const spec = () => (b.dataset.litVar ? { variable: b.dataset.litVar } : { selector: b.dataset.litSel, file: b.dataset.litFile });
+    b.addEventListener('pointerenter', () => { if (!staged) light(spec()); }); b.addEventListener('pointerleave', () => { if (!staged) light(null); });
+    b.addEventListener('focus', () => { if (!staged) light(spec()); }); b.addEventListener('blur', () => { if (!staged) light(null); });
+  });
+  el.querySelector('#doc-skip')?.addEventListener('click', () => { const c = el.querySelector('#doc-vars .ivchip'); c?.scrollIntoView({ block: 'center' }); c?.focus({ preventScroll: true }); });
   el.querySelector('#doc-frame-width')?.addEventListener('click', () => ctx.breakpoints?.open?.());
 
   // ---------- the staged value: scope, the change, Apply ----------
@@ -379,12 +393,17 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     } catch { /* no animations to read */ }
     return null;
   }
+  // A variable with a definition per theme: the designer picks which definitions the value goes to; the one in force here by default.
+  const themeDefs = (opt) => { if (opt?.id !== 'variable') return []; const defs = (data.vars?.[opt.edit.name] || []).filter((x) => !x.inline); return defs.length > 1 ? defs : []; };
+  const defEdit = (opt, d) => { const bucket = (data.vars[opt.edit.name] || []).filter((x) => !x.inline && x.file === d.file && normMedia(x.media.at(-1)) === normMedia(d.media.at(-1))); return { op: 'var', file: d.file, name: opt.edit.name, value: opt.edit.value, media: d.media.at(-1) ?? '', index: Math.max(0, bucket.indexOf(d)) }; };
+  const editsOf = (opt) => { const defs = themeDefs(opt); if (!defs.length || !staged?.defs) return [opt.edit]; const chosen = defs.filter((d, i) => staged.defs.has(i)); return chosen.length ? chosen.map((d) => defEdit(opt, d)) : [opt.edit]; };
+  const defLabel = (d) => (d.media?.length ? `@media ${d.media.at(-1)}` : d.selector && !/^:root$/.test(d.selector.trim()) ? d.selector : 'default');
   async function preview(opt) {
     const tok = ++pvTok;
     if (!opt || !target || staged?.invalid) { pvKey = null; pv.clear(); return; }
-    const key = JSON.stringify(opt.edit);
+    const key = JSON.stringify(editsOf(opt));
     if (key === pvKey) return;
-    const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: comp.component, baseRevision: comp.revision, edits: [opt.edit], dryRun: true }) });
+    const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: comp.component, baseRevision: comp.revision, edits: editsOf(opt), dryRun: true }) });
     const j = await r.json().catch(() => ({ ok: false, error: `the preview failed (${r.status})` }));
     if (tok !== pvTok || !staged) return;
     if (!j.ok) { pvKey = null; pv.clear(); showError(plain(j.error)); return; }
@@ -472,7 +491,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     }
     const one = (o) => `<button type="button" role="radio" class="opt${o.id === staged.scope ? ' on' : ''}" aria-checked="${o.id === staged.scope}" tabindex="${o.id === staged.scope ? 0 : -1}" data-scope="${o.id}"${o.disabled ? ' aria-disabled="true"' : ''} title="${esc(o.disabled ? o.why : o.sub)}${o.warn ? ` · ${esc(o.warn)}` : ''}">
       <kbd>${o.key}</kbd><span class="otxt"><b>${o.title}${o.code && !o.disabled ? ` <code>${esc(o.code)}</code>` : ''}</b><span class="osub">${o.id === 'element' ? `inline style · ${esc(base(comp.path))}:${node.line}` : o.disabled ? 'not here' : esc(o.sub || '')}</span></span><span class="ocount">${o.countText ? esc(o.countText) : ''}</span></button>`;
-    const fx = staged.invalid ? { invalid: true } : chosen ? staged.fx?.[JSON.stringify(chosen.edit)] : null, not = whyNot(chosen, fx);
+    const fx = staged.invalid ? { invalid: true } : chosen ? staged.fx?.[JSON.stringify(editsOf(chosen))] : null, not = whyNot(chosen, fx);
     const applyBtn = el.querySelector('#doc-apply'); if (applyBtn) { applyBtn.disabled = !!staged.invalid; applyBtn.title = staged.invalid ? `Not a value ${staged.prop} accepts` : ''; }
     const n = chosen?.diff.lines.some((l) => l.kind === 'del') ? 1 : chosen?.diff.lines.length ?? 0;
     const where = chosen ? chosen.sub : (opts.find((o) => o.id === staged.scope)?.why ?? '');
@@ -480,6 +499,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       <h3><code>${esc(staged.prop)}</code> <span class="where">${exact && !staged.raw && chosen?.id !== 'variable' ? `on your scale: <code>${esc(rawList)}</code> → <code>${esc(varList)}</code> <button type="button" class="linkish" id="doc-raw">keep <kbd>B</kbd></button>` : exact && staged.raw ? `plain value <button type="button" class="linkish" id="doc-raw">use <code>${esc(varList)}</code> <kbd>B</kbd></button>` : chosen && chosen.id !== 'element' ? 'previewing on the canvas' : 'this element only'}</span></h3>
       <div class="scope" role="radiogroup" aria-label="Where this change goes">${opts.map(one).join('')}</div>
       <p class="scopenote${not ? ' bad' : ''}" title="${esc(not ? not.text : where)}">${not ? `<em>${esc(not.text)}</em>${not.fix ? ` <button type="button" class="linkish" id="doc-fix">${esc(not.fix.label)}</button>` : ''}` : esc(where)}</p>
+      ${(() => { const defs = themeDefs(chosen); if (!defs.length) return ''; if (!staged.defs) { const here = defs.findIndex((d) => JSON.stringify(defEdit(chosen, d)) === JSON.stringify(chosen.edit)); staged.defs = new Set([Math.max(0, here)]); } return `<fieldset class="var-themes" id="var-themes"><legend>Write to</legend>${defs.map((d, i) => `<label><input type="checkbox" data-def="${i}"${staged.defs.has(i) ? ' checked' : ''}><span class="vt-where" title="${esc(d.file)}:${d.line}">${esc(defLabel(d))}</span><code title="now ${esc(d.value)}">${esc(d.value)}</code></label>`).join('')}</fieldset>`; })()}
       <div class="diff" id="doc-diff" aria-label="The change, ${n} line">${(chosen?.diff.lines ?? []).map((l) => `<div class="${l.kind === 'del' ? 'd' : 'a'}" title="${esc(l.text)}"><i>${l.line}</i><u>${l.kind === 'del' ? '−' : '+'}</u><span>${esc(diffText(l, chosen.diff.lines))}</span></div>`).join('')}</div>
     </section>`;
     const first = dock.hidden;
@@ -487,6 +507,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     // the dock covers the bottom of the panel instead of pushing the values down; the value being edited is kept above it
     if (first) { el.style.setProperty('--dock', `${dock.offsetHeight + 8}px`); el.querySelector('.vrow.editing')?.scrollIntoView({ block: 'nearest' }); }
     host.querySelectorAll('[data-scope]').forEach((b) => b.addEventListener('click', () => setScope(b.dataset.scope)));
+    host.querySelectorAll('#var-themes input').forEach((c) => c.addEventListener('change', () => { const i = Number(c.dataset.def); if (c.checked) staged.defs.add(i); else if (staged.defs.size > 1) staged.defs.delete(i); else c.checked = true; renderStaged(); }));
     host.querySelector('#doc-raw')?.addEventListener('click', toggleBound);
     host.querySelector('#doc-fix')?.addEventListener('click', () => { staged.forceRule = not.fix.rule ?? null; setScope(not.fix.scope); });
     if (had) (host.querySelector(`[data-scope="${had}"]`) || host.querySelector(`#${had}`))?.focus({ preventScroll: true });
@@ -549,8 +570,9 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (!chosen) return null;
     if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur();
     preview(null);
-    const j = await send([chosen.edit]);
-    if (j.ok) { staged = null; renderStaged(); light(null); } else renderStaged();
+    const refocus = staged.prop;
+    const j = await send(editsOf(chosen));
+    if (j.ok) { staged = null; renderStaged(); light(null); backTo = { key: selKey, prop: refocus }; el.querySelector(`.vrow input[data-prop="${CSS.escape(refocus)}"]`)?.focus({ preventScroll: true }); } else renderStaged();
     return j;
   }
   el.querySelectorAll('.vrow input.val').forEach((inp) => {
@@ -576,7 +598,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   // ---------- variables as instruments ----------
   const setHere = (group) => props.map(([p]) => p).filter((p) => kindOfProp(p) === group);
   async function bindHere(name, group, value, prop = null, drop = false) { // a variable onto this element: the value you are on, else ask which
-    if (!prop) prop = lastProp && kindOfProp(lastProp) === group && winners[lastProp] ? lastProp : await askProp({ name, group, value, setHere: setHere(group), target: label, hint: classHint() });
+    if (!prop) prop = lastProp && kindOfProp(lastProp) === group && winners[lastProp] ? lastProp : await askProp({ ctx, name, group, value, setHere: setHere(group), target: label, hint: classHint(),
+      show: async (p) => { if (!p) { pv.clear(); return; } const j = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: comp.component, baseRevision: comp.revision, edits: [{ op: 'style', node: sel.node, prop: p, value: `var(${name})` }], dryRun: true }) }).then((r) => r.json()).catch(() => null); if (j?.ok) await pv.apply(j.files || []); } });
     if (!prop) return false;
     if (!winners[prop]) winners[prop] = { value: '', source: { kind: 'none' }, important: false }; // nothing sets it yet: it can still be staged
     const w = winners[prop], parts = tokens(w.value);
@@ -594,7 +617,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     el.querySelector('#chk-contrast')?.setAttribute('aria-pressed', String(m.contrast));
     el.querySelector('#chk-order')?.setAttribute('aria-pressed', String(m.order));
     const sum = el.querySelector('#chk-sum');
-    if (sum) sum.textContent = [m.contrast && s.contrast ? `${s.contrast.total} text elements, ${s.contrast.fail} below AA` : '', m.order && s.order ? `${s.order.total} tab stops` : '', (m.contrast || m.order) && (ctx.view?.get().z ?? 1) < 0.45 ? 'zoom in to read each one' : ''].filter(Boolean).join(' · ');
+    if (sum) sum.textContent = [m.contrast && s.contrast ? `${s.contrast.total} text elements, ${s.contrast.fail} below AA, in the frames in view` : '', m.order && s.order ? `${s.order.total} tab stops` : '', (m.contrast || m.order) && (ctx.view?.get().z ?? 1) < 0.45 ? 'zoom in to read each one' : ''].filter(Boolean).join(' · ');
   };
   el.querySelector('#chk-contrast')?.addEventListener('click', () => { measure.toggle('contrast'); syncChecks(); });
   el.querySelector('#chk-order')?.addEventListener('click', () => { measure.toggle('order'); syncChecks(); });
@@ -608,5 +631,14 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   } else if (staged) { staged = null; clearPreview(); }
 }
 
+// However staging ends: no preview, no outlines, no chip, no legend, no dock, and the field says what the file says.
+function dropStaged(ctx) {
+  staged = null; lastProp = null; clearPreview();
+  ctx.stage?.lightQuiet?.(null); ctx.stage?.setEditNote?.(null); ctx.legend?.pop('staged');
+  const panel = document.querySelector('#panel');
+  panel?.querySelectorAll('.vrow.editing').forEach((r) => { r.classList.remove('editing'); const i = r.querySelector('input.val'); if (i) i.value = i.defaultValue; });
+  const dock = panel?.querySelector('#doc-dock'); if (dock) dock.hidden = true;
+  const host = panel?.querySelector('#doc-staged'); if (host) host.innerHTML = '';
+}
 // The staged change shows on the canvas before it is written; this takes it away again.
 function clearPreview() { pv?.clear(); }

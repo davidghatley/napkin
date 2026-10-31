@@ -288,8 +288,8 @@ export function initHighlight(ctx) {
       <p class="hl-explain">${explain}</p>
       <div class="hl-list">${spec.variable ? `${group(direct, `Used directly · ${direct.length}`)}${group(indirect, `Through other variables · ${indirect.length}`)}` : group(direct, '')}${places.length ? '' : '<p class="hl-more">Nothing on the canvas uses this.</p>'}</div></section>
       ${change ? `<section class="hl-change hl-sec"><header><h3>The change</h3><span>${plural(change.lines.length, 'line')}</span></header>
-        <div class="hl-diff">${change.lines.map((l) => `${l.was !== null ? `<div class="del"><i>${l.n}</i>− ${esc(l.was.trim())}</div>` : ''}${l.now !== null ? `<div class="add"><i>${l.n}</i>+ ${esc(l.now.trim())}</div>` : ''}`).join('')}</div>
-        <p class="hl-explain">Change all together: this edit already applies to all ${plural(counts.places, 'place')}.</p></section>` : ''}`;
+        <div class="hl-diff">${change.lines.slice(0, 6).map((l) => `${l.was !== null ? `<div class="del"><i>${l.n}</i>− ${esc(l.was.trim())}</div>` : ''}${l.now !== null ? `<div class="add"><i>${l.n}</i>+ ${esc(l.now.trim())}</div>` : ''}`).join('')}</div>${change.lines.length > 6 ? `<p class="hl-more">and ${change.lines.length - 6} more changed lines in ${esc(change.path.split('/').pop())}</p>` : ''}
+        <p class="hl-explain">${change.lines.length > 1 ? `${plural(change.lines.length, 'line')} changed, each in its own rule. <code>${esc(label)}</code> reaches ${plural(counts.places, 'place')}; the other rules reach their own.` : `This edit already applies to all ${plural(counts.places, 'place')}.`}</p></section>` : ''}`;
     const foot = side.querySelector('#hl-foot');
     const keepFocus = foot.contains(document.activeElement) ? document.activeElement.id : null;
     foot.innerHTML = change ? '<button type="button" id="hl-keep" class="primary">Keep <kbd>↵</kbd></button><button type="button" id="hl-revert">Revert</button>' : '';
@@ -335,17 +335,18 @@ export function initHighlight(ctx) {
   }
   function diffLines(was, now) {
     const a = was.split('\n'), b = now.split('\n'), out = [];
+    let e = 0; while (e < a.length && e < b.length && a[a.length - 1 - e] === b[b.length - 1 - e]) e++; // the end both share is no change
+    const A = a.length - e, B = b.length - e;
     let i = 0, j = 0;
-    while (i < a.length || j < b.length) {
-      if (a[i] === b[j]) { i++; j++; continue; }
+    while (i < A || j < B) {
+      if (i < A && j < B && a[i] === b[j]) { i++; j++; continue; }
       // resync on the next line both sides share, within a short window
       let k = 1, hit = null;
-      for (; k <= 8 && !hit; k++) { if (a[i + k] !== undefined && a[i + k] === b[j]) hit = [k, 0]; else if (b[j + k] !== undefined && b[j + k] === a[i]) hit = [0, k]; else if (a[i + k] !== undefined && a[i + k] === b[j + k]) hit = [k, k]; }
-      const [da, db] = hit ?? [a.length - i, b.length - j];
+      for (; k <= 8 && !hit; k++) { if (i + k < A && a[i + k] === b[j]) hit = [k, 0]; else if (j + k < B && b[j + k] === a[i]) hit = [0, k]; else if (i + k < A && j + k < B && a[i + k] === b[j + k]) hit = [k, k]; }
+      const [da, db] = hit ?? [A - i, B - j];
       const n = Math.max(da, db);
       for (let q = 0; q < n; q++) out.push({ n: j + q + 1, was: q < da ? a[i + q] : null, now: q < db ? b[j + q] : null });
       i += da; j += db;
-      if (out.length > 6) break;
     }
     return out;
   }

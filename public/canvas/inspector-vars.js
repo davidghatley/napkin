@@ -102,7 +102,7 @@ export function wireStrips(env) {
 }
 
 // "Which property?": a small modal list, native <dialog> so Tab, Escape and focus return are the browser's.
-export function askProp({ name, group, value, setHere, target, hint = '' }) {
+export function askProp({ ctx, name, group, value, setHere, target, hint = '', show = () => {} }) {
   return new Promise((resolve) => {
     const props = [...new Set([...setHere, ...propsFor(group, value)])];
     const d = document.createElement('dialog');
@@ -110,8 +110,20 @@ export function askProp({ name, group, value, setHere, target, hint = '' }) {
     d.innerHTML = `<form method="dialog"><h2>Use <code>${esc(name)}</code> on <code>${esc(target)}</code></h2>
       <div class="ivopts">${props.map((p, i) => `<button type="submit" value="${esc(p)}"${i === 0 ? ' autofocus' : ''}>${esc(p)}${setHere.includes(p) ? '<span class="ivset">set here</span>' : ''}</button>`).join('')}</div>
       <p class="hint">${esc(hint)}</p><p class="hint">Esc to cancel</p></form>`;
-    d.addEventListener('close', () => { const v = d.returnValue || null; d.remove(); resolve(v); });
-    document.body.append(d); d.showModal();
+    // A picker beside the inspector, not over the canvas: the option under the pointer or the keyboard previews on the element,
+    // and while it is open it has the keyboard to itself (ctx.keyGuard), so Escape closes it and nothing behind it.
+    const finish = () => { if (ctx) ctx.keyGuard = null; delete document.body.dataset.modal; show(null); };
+    d.addEventListener('close', () => { const v = d.returnValue || null; finish(); d.remove(); resolve(v); });
+    document.body.append(d); d.show();
+    document.body.dataset.modal = 'ivask';
+    const opts = [...d.querySelectorAll('.ivopts button')];
+    opts[0]?.focus(); show(opts[0]?.value);
+    d.addEventListener('pointerover', (ev) => { const b = ev.target.closest?.('.ivopts button'); if (b) show(b.value); });
+    d.addEventListener('focusin', (ev) => { const b = ev.target.closest?.('.ivopts button'); if (b) show(b.value); });
+    if (ctx) ctx.keyGuard = (ev) => {
+      if (ev.key === 'Escape') { ev.preventDefault(); d.close(''); return; }
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') { ev.preventDefault(); const i = opts.indexOf(document.activeElement); opts[(i + (ev.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length].focus(); }
+    };
   });
 }
 export { kindOfProp };

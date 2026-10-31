@@ -107,7 +107,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
         stdin: { contents, resolveDir: folder, loader: 'jsx', sourcefile: 'napkin-view.jsx' }, bundle: true, format: 'iife', jsx: 'automatic', write: false, logLevel: 'silent',
         nodePaths: [join(folder, 'node_modules'), join(ROOT, 'node_modules')],
         alias: { react: join(modDir, 'react'), 'react-dom': join(modDir, 'react-dom') },
-        define: { 'process.env.NODE_ENV': '"production"' }, loader: { '.svg': 'dataurl', '.png': 'dataurl' },
+        define: { 'process.env.NODE_ENV': '"production"' }, banner: { js: 'var process=globalThis.process||{env:{NODE_ENV:"production"}};' }, loader: { '.svg': 'dataurl', '.png': 'dataurl' },
         ...(over && { plugins: [{ name: 'napkin-version', setup(b) { const mine = new Map([...over].map(([p, buf]) => [engine.abs(p), buf])); const LOADER = { '.tsx': 'tsx', '.jsx': 'jsx', '.ts': 'ts', '.js': 'js', '.css': 'css' }; b.onLoad({ filter: /\.(tsx|jsx|ts|js|css)$/ }, (a) => (mine.has(a.path) ? { contents: mine.get(a.path).toString('utf8'), loader: LOADER[extname(a.path)], resolveDir: dirname(a.path) } : undefined)); } }] }),
       });
       out = { code: r.outputFiles[0].text };

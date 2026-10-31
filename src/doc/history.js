@@ -16,6 +16,7 @@ import { removeInState } from './state-rm.js';
 import { describe, cssTouched, touchKey, touchWords } from './film-diff.js';
 import { relevanceOf } from './film-relevance.js';
 import { parseCss } from './css.js';
+import { fromL } from './source.js';
 
 const KEEP = 200;               // napkin frames kept per component
 const MAX_BYTES = 2_000_000;    // a file bigger than this is not kept
@@ -26,6 +27,42 @@ const sha1 = (b) => createHash('sha1').update(b).digest('hex');
 export const oidOf = (bytes) => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
 const keysOf = (files) => Object.keys(files).sort().join('|');
 const sigOf = (files) => Object.entries(files).sort(([a], [b]) => (a < b ? -1 : 1)).map(([p, o]) => `${p}:${o}`).join('|');
+
+// The rules of a stylesheet with where they are: { sel, key, start, end, text }. A key is its at-rules, selector and which one of that name.
+function styleRules(text) {
+  const seen = new Map();
+  return parseCss(text).rules.map((r) => {
+    const sel = fromL(r.selector ?? '').replace(/\s+/g, ' ').trim(), ctxt = (r.context || []).map((c) => `@${c.name} ${fromL(c.prelude)}`).join(' ');
+    const base = `${r.kind}|${ctxt}|${sel}`, n = (seen.set(base, (seen.get(base) ?? -1) + 1), seen.get(base));
+    const start = r.selStart, end = r.close + 1;
+    return { sel, key: `${base}#${n}`, ctxt, start, end, text: Number.isInteger(start) ? text.slice(start, end) : null };
+  });
+}
+// `now` with its differing rules put back as `version` has them; rules in `keep` stay. Null when that would lose something: a comment
+// inside a rule being replaced, a rule whose place cannot be found. The result is checked against the version before it is used.
+export function spliceSheet(now, version, keep = new Set()) {
+  const N = styleRules(now), V = styleRules(version), nk = new Map(N.map((r) => [r.key, r])), vk = new Map(V.map((r) => [r.key, r]));
+  if ([...N, ...V].some((r) => r.text === null)) return null;
+  const same = (a, b) => a.replace(/\s+/g, ' ') === b.replace(/\s+/g, ' ');
+  const edits = [];
+  for (const r of N) {
+    const v = vk.get(r.key);
+    if (!v) { if (keep.has(r.sel)) continue; const nl = now[r.end] === '\n' ? 1 : 0; edits.push([r.start, r.end + nl, '']); }
+    else if (!same(r.text, v.text)) { if (/\/\*/.test(r.text) && !r.text.match(/\/\*[\s\S]*?\*\//g).every((c) => v.text.includes(c))) return null; edits.push([r.start, r.end, v.text]); }
+  }
+  V.forEach((v, i) => {
+    if (nk.has(v.key)) return;
+    let after = null; for (let j = i - 1; j >= 0 && !after; j--) if (V[j].ctxt === v.ctxt && nk.has(V[j].key)) after = nk.get(V[j].key);
+    if (after) edits.push([after.end, after.end, `\n${v.text}`]);
+    else if (!v.ctxt) edits.push([now.length, now.length, `${now.endsWith('\n') ? '' : '\n'}${v.text}\n`]);
+    else edits.push(null);
+  });
+  if (edits.includes(null)) return null;
+  let out = now;
+  for (const [a, b, t] of edits.map((e, i) => [...e, i]).sort((x, y) => y[0] - x[0] || y[3] - x[3]).map((e) => e.slice(0, 3))) out = out.slice(0, a) + t + out.slice(b);
+  const left = cssTouched(version, out).filter((t) => !(keep.has(t.sel) && !t.prop));
+  return left.length ? null : out;
+}
 
 export class FilmError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 
@@ -348,9 +385,10 @@ export function createFilm(engine) {
   // whoever last changed them since that version (napkin's ledger). One made by this component is its own to undo; one made by
   // anybody else, or by nobody napkin saw (git commits, an editor, napkin not running), is refused when another component uses it.
   // Where the sheets differ only in comments or white space, the current file is left as it is.
-  function restorePlan(id, frameId) {
-    const { comp, frame, files } = snapshotOf(id, frameId), write = [], kept = [];
+  function restorePlan(id, frameId, { ownOnly = false } = {}) {
+    const { comp, frame, files } = snapshotOf(id, frameId), write = [], kept = [], keep = new Set();
     for (const [p, bytes] of files) {
+      if (ownOnly && p !== comp.path) continue; // the shared sheets are left exactly as they are, so nothing of theirs can be undone
       let now = null; try { now = engine.read(p).buf; } catch { /* gone: the version brings it back */ }
       if (now && now.equals(bytes)) continue;
       if (p !== comp.path && now && /\.css$/i.test(p)) {
@@ -368,6 +406,7 @@ export function createFilm(engine) {
         const users = foreign.length ? [...new Set([...usersOf(p), ...usersEver(p)])].filter((u) => u !== comp.id) : [];
         if (foreign.length && !users.length && !(p in snapshot(comp))) throw new FilmError(`${p} is not applied now, and ${touchWords(foreign[0])} changed in it after this version${editor.has(touchKey(foreign[0])) && editor.get(touchKey(foreign[0])) ? ` while you worked on ${editor.get(touchKey(foreign[0]))}` : ' outside napkin or in git'}. Napkin cannot tell who uses it, and restoring would undo that.. Next: apply the stylesheet again, or restore a newer version`, 409);
         const names = []; let hit = null;
+        const isNew = (t) => !t.at && !t.prop && styleRules(now.toString('latin1')).some((r) => r.sel === t.sel) && !styleRules(bytes.toString('latin1')).some((r) => r.sel === t.sel);
         for (const u of users) {
           let other; try { other = engine.component(u); } catch { continue; }
           const rel = relevanceOf(engine, other), mine = foreign.filter((t) => rel.related(t));
@@ -380,27 +419,27 @@ export function createFilm(engine) {
           const self = relevanceOf(engine, comp), drawn = new Set();
           for (const u of users) { let other; try { other = engine.component(u); } catch { continue; } const rel = relevanceOf(engine, other); for (const t of foreign) if (rel.related(t)) drawn.add(t); }
           const unseen = foreign.filter((t) => !drawn.has(t) && !self.related(t));
-          const nowS = now.toString('latin1'), top = (text) => parseCss(text).rules.filter((r) => r.kind === 'style' && !r.context.length);
-          const norm = (r, text) => text.slice(r.selStart, r.selEnd).replace(/\s+/g, ' ').trim();
-          const inVersion = new Set(top(bytes.toString('latin1')).map((r) => norm(r, bytes.toString('latin1')))), nowRules = top(nowS);
-          const whole = (t) => !t.at && !t.prop && !inVersion.has(t.sel) && nowRules.some((r) => norm(r, nowS) === t.sel);
-          const gone = (t) => !t.at && !t.prop && inVersion.has(t.sel) && !nowRules.some((r) => norm(r, nowS) === t.sel); // it comes back: nothing is lost
+          const nowRules = styleRules(now.toString('latin1')), verRules = styleRules(bytes.toString('latin1'));
+          const has = (rules, sel) => rules.some((r) => r.sel === sel);
+          const whole = (t) => !t.at && !t.prop && !has(verRules, t.sel) && has(nowRules, t.sel);
+          const gone = (t) => !t.at && !t.prop && has(verRules, t.sel) && !has(nowRules, t.sel); // it comes back: nothing is lost
           const blocked = unseen.filter((t) => !whole(t) && !gone(t));
           if (blocked.length) { const w = editor.get(touchKey(blocked[0])); throw new FilmError(`${p}: ${touchWords(blocked[0])}${blocked.length > 1 ? ` and ${blocked.length - 1} more` : ''} changed after this version${w ? ` while you worked on ${engine.has(w) ? engine.component(w).name : w}` : ' outside napkin or in git'}. No component draws it, so you would not see it go.. Next: restore a newer version, or change it in ${p} directly`, 409); }
-          const adds = unseen.filter(whole);
-          if (adds.length) {
-            const text = adds.map((t) => { const r = nowRules.find((x) => norm(x, nowS) === t.sel); return nowS.slice(r.selStart, r.close + 1); }).join('\n');
-            const head = bytes.toString('latin1');
-            kept.push(...adds.map((t) => t.sel));
-            write.push({ path: p, bytes: Buffer.from(`${head}${head.endsWith('\n') ? '' : '\n'}${text}\n`, 'latin1') });
-            continue;
-          }
+          for (const t of unseen.filter(whole)) { keep.add(t.sel); kept.push(t.sel); }
         }
         if (hit) {
           const who = editor.get(touchKey(hit[0]));
           const by = who ? ` while you worked on ${engine.has(who) ? engine.component(who).name : who}` : ' outside napkin or in git';
-          throw new FilmError(`${p} is shared: ${touchWords(hit[0])}${hit.length > 1 ? ` and ${hit.length - 1} more` : ''} changed after this version${by}, and ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} draw${names.length === 1 ? 's' : ''} it. Restoring would undo that.. Next: restore a newer version, or change the rule in ${p} directly`, 409);
+          throw new FilmError(`${p} is shared: ${touchWords(hit[0])}${hit.length > 1 ? ` and ${hit.length - 1} more` : ''} ${isNew(hit[0]) && hit.length === 1 ? 'was added' : 'changed'} after this version${by}, and ${names.slice(0, 3).join(', ')}${names.length > 3 ? ` and ${names.length - 3} more` : ''} draw${names.length === 1 ? 's' : ''} it. Restoring would undo that.. Next: restore a newer version, restore only this component's file, or change the rule in ${p} directly`, 409);
         }
+      }
+      // A stylesheet: only the rules that differ go back, inside the file as it is now. Comments and rules of the file stay where they are.
+      if (p !== comp.path && now && /\.css$/i.test(p)) {
+        const merged = spliceSheet(now.toString('latin1'), bytes.toString('latin1'), keep);
+        if (merged === null) throw new FilmError(`${p}: a comment or a nested rule was added inside something this version changes, and putting the version back would lose it.. Next: restore only this component's file, or change the rule in ${p} directly`, 409);
+        const out = Buffer.from(merged, 'latin1');
+        if (!out.equals(now)) write.push({ path: p, bytes: out });
+        continue;
       }
       write.push({ path: p, bytes });
     }

@@ -1,5 +1,5 @@
 /* The film strip (moment 9, time-strip.js) and the quiet pieces around Copy gives real code. Canvas tokens only (canvas.css). */
-#time { container-type: inline-size; position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; min-width: 0; border-top: 1px solid var(--nk-line); display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head acts" "track track"; gap: 6px 10px; align-items: center; padding: 6px 14px 8px; background: var(--nk-chrome); color: var(--nk-text); font: 12px/1.4 var(--nk-sans); }
+#time { container-type: inline-size; position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; min-width: 0; border-top: 1px solid var(--nk-line); display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head acts" "note note" "track track"; gap: 6px 10px; align-items: center; padding: 6px 14px 8px; background: var(--nk-chrome); color: var(--nk-text); font: 12px/1.4 var(--nk-sans); }
 #time[hidden] { display: none; }
 body[data-time-open] #hint { bottom: 184px; }
 .tm-head { grid-area: head; display: flex; min-width: 0; align-items: center; gap: 12px; min-height: 28px; }
@@ -52,3 +52,9 @@ body[data-time-open] #hint { bottom: 184px; }
 #time-cue.narrow.above .tc-pill { right: auto; left: 6px; }
 /* a boundary: the files the component draws from changed here (a stylesheet applied or removed); versions are never compared across it */
 .tm-boundary { flex: none; width: 124px; align-self: stretch; display: grid; align-items: center; padding: 0 6px; border-left: 1px dashed var(--nk-line-2); border-right: 1px dashed var(--nk-line-2); color: var(--nk-text-2); font: 500 10.5px/1.35 var(--nk-sans); text-align: center; }
+
+.tm-refusal { grid-area: note; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: var(--nk-chrome-2); box-shadow: inset 3px 0 0 var(--nk-measure); }
+.tm-refusal[hidden] { display: none; }
+.tm-refusal p { flex: 1; margin: 0; min-width: 0; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+#time-older { position: sticky; top: 0; z-index: 4; margin: 0; padding: 6px 14px; background: var(--nk-accent-soft); color: var(--nk-accent-text); font: 500 11.5px/1.4 var(--nk-sans); }
+#time-older[hidden] { display: none; }

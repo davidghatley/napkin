@@ -47,11 +47,11 @@ export const ACTIONS = [
   action('contrast', 'Show text contrast on the canvas', 'Cmd-K "contrast" · Check in the inspector', [], [], (c) => c.inspector?.toggle('contrast'), 'view'),
   action('focus-order', 'Show focus order on the canvas', 'Cmd-K "focus order" · Check in the inspector', [], [], (c) => c.inspector?.toggle('order'), 'view'),
   action('variable-strip', 'Variables: move between the chips of a strip', '← → ↑ ↓ · Home · End (one Tab stop per strip) · Enter uses it', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'], refs('inspector-vars', 'keydown')),
-  action('measure-box', 'Box model of the hovered element (margin, padding, gap)', 'Hold Alt', ['Alt'], refs('measure-overlay', 'keydown', 'keyup')),
+  action('measure-box', 'Box model of the hovered element (margin, padding, gap); add Shift for its parent', 'Hold Alt · Alt+Shift', ['Alt', 'Shift'], refs('measure-overlay', 'keydown', 'keyup')),
   action('font', 'Font menu: move / choose / close', '↑ ↓ · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('panel', 'keydown')),
   action('native', 'Controls: move focus / activate / expand section', 'Tab · Shift+Tab · Enter · Space', [], refs('panel', 'keydown')),
   action('play', 'Play mode: cells become live components you can click and type into', 'P', ['KeyP'], refs('play', 'keydown'), (c) => c.play.toggle(), 'view'),
-  action('play-exit', 'Leave play mode', 'Escape (or P again)', ['Escape'], refs('play', 'keydown')),
+  action('play-exit', 'Leave play mode, also from inside a frame', 'Escape (or P again, outside a text field)', ['Escape', 'KeyP'], [...refs('play', 'keydown'), ...refs('doc-frames', 'keydown')]),
   action('play-hold', 'Play while you hold it: the component runs, you let go and you are editing again', 'Hold Space, then P', ['KeyP', 'Space'], refs('stage-live', 'keydown', 'keyup')),
   action('highlight-rule', 'Highlight a rule or variable on every frame…', 'Alt+H', ['KeyH'], refs('stage-highlight', 'keydown'), (c) => c.highlight.pick(), 'view'),
   action('styles-tab', 'Show the folder\'s rules and variables in the sidebar', 'Cmd-K "styles" · ← → on the tabs · ↑ ↓ in the list', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'], refs('styles-tab', 'keydown'), (c) => c.stylesTab.show('styles'), 'view'),
@@ -64,6 +64,7 @@ export const ACTIONS = [
   action('frame-narrower', 'Frame: next narrower breakpoint of the selected component', 'Cmd-K "narrower"', [], [], (c) => c.widths.step(-1), 'view'),
   action('frame-reset-width', 'Frame: back to 640 px', 'Double-click the frame grip · Cmd-K "640"', [], [], (c) => c.widths.reset(), 'view'),
   action('breakpoints', 'Breakpoints of the selected frame: the file\'s @media rules, and the frame at other widths', 'B · Cmd-K "breakpoints"', ['KeyB'], refs('stage-breakpoints', 'keydown'), (c) => c.breakpoints.toggle(), 'view'),
+  action('key-guard', 'A picker or a staged edit keeps the keyboard: move / close / put back', '↑ ↓ · Escape', ['ArrowUp', 'ArrowDown', 'Escape'], refs('legend', 'keydown')),
   action('frame-width-field', 'Frame width field: nudge / set / put back', '↑ ↓ · Shift ×10 · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('stage-breakpoints', 'keydown')),
   action('rule-field', 'A value of the lit rule: write it / put it back', 'Enter · Escape', ['Enter', 'Escape'], refs('stage-highlight', 'keydown')),
   action('frame-grip', 'Frame width grip (selected frame): move it with the keyboard', 'Tab to the grip · ← → 1 px · Shift 10 px · Page Up / Page Down next breakpoint · Home 640 px', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home'], refs('doc-frames', 'keydown'), (c) => { const f = c.widths.target(); if (f) f.grip.focus(); else c.hint('Select an HTML or JSX component first'); }, 'view'),
@@ -101,6 +102,6 @@ export const ACTIONS = [
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 1, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 1, 'measure-overlay.js:keyup': 1, 'nav.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
+  'colorpop.js:keydown': 2, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run).map((a) => ({ ...a, run: () => a.run(ctx) }));

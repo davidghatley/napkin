@@ -84,7 +84,7 @@ export function initBreakpoints(ctx) {
       return { m, px, kind: wc[0].kind, strict: !!wc[0].strict, match, mine, other };
     }).sort((a, b) => a.px - b.px);
     const here = rows.filter((r) => r.mine.length), elsewhere = rows.flatMap((r) => r.other.map((x) => ({ r, x })));
-    const file = [...new Set(rules.filter((r) => (r.media || []).length).map((r) => r.file))][0];
+    const file = [...new Set(rules.filter((r) => (r.media || []).some((m) => widthConditions(m).length)).map((r) => r.file))].map((f) => f.split('/').pop()).join(', ');
     const sel = (r) => String(r.selector).replace(/\s+/g, ' ');
     const on_ = here.filter((r) => r.match).flatMap((r) => r.mine.map((x) => ({ x, r }))), off_ = here.filter((r) => !r.match).flatMap((r) => r.mine.map((x) => ({ x, r })));
     const kindText = (r) => (r.kind === 'max' ? (r.strict ? 'under' : 'and under') : (r.strict ? 'over' : 'and up'));

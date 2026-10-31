@@ -112,7 +112,8 @@ function pairItems(r, d, pathName) {
   for (const h of hunks(tokens(r), tokens(d))) {
     const xs = h.x, ys = h.y, tagX = xs.some(isTag), tagY = ys.some(isTag);
     if (!tagX && !tagY) {
-      const [wa, wb] = wordDiff(xs.join(' ').trim(), ys.join(' ').trim());
+      const quote = (t) => t.replace(/^["'`{(]+|["'`})]+$/g, ''); // a word cut out of a class list carries no stray quote
+      const [wa, wb] = wordDiff(xs.join(' ').trim(), ys.join(' ').trim()).map(quote);
       items.push({ text: !wa ? `Added ${clip(wb)}` : !wb ? `Removed ${clip(wa)}` : `${clip(wa)}${ARROW}${clip(wb)}`, where: pathName, key: `text:${nameOf(tokens(d).find(isTag)) ?? 'text'}` });
     } else if (!xs.length && wholeElements(ys)) { const w = wholeElements(ys); items.push({ text: `Added ${clip(w.join(''), 64)}`, where: pathName, key: `add:${nameOf(w[0])}` }); }
     else if (!ys.length && wholeElements(xs)) { const w = wholeElements(xs); items.push({ text: `Removed ${clip(w.join(''), 64)}`, where: pathName, key: `del:${nameOf(w[0])}` }); }

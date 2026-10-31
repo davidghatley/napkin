@@ -6,7 +6,7 @@
 // after its change. Restore puts every file of the version back as ONE new edit through the engine's write path, so one undo
 // gives the newest text back; it refuses with a reason when a shared stylesheet changed since in a way that would undo other work.
 //   initTimeStrip(ctx) -> ctx.time = { open(), close(), toggle(), restore(), pick(index|'now'), flip(), fit(), state() }
-import { plain } from './words.js';
+import { plain, nextStep } from './words.js';
 import { thumbs, THUMB_W, THUMB_H } from './time-thumbs.js';
 
 const enc = encodeURIComponent;
@@ -35,6 +35,7 @@ export function initTimeStrip(ctx) {
   el.innerHTML = `<header class="tm-head"><h2 class="tm-title">Versions <span class="tm-file" id="time-file"></span></h2>
     <span class="tm-cue" id="time-cue-chip" hidden>Earlier version</span><span class="tm-info" id="time-info" role="status" aria-live="polite"></span>
     </header>
+    <div class="tm-refusal" id="time-refusal" role="alert" hidden></div>
     <div class="tm-track" id="time-track" role="listbox" tabindex="0" aria-label="Versions, oldest first. Left and right move, Enter restores"></div>
     <div class="tm-acts"><button type="button" id="time-flip" class="tm-btn" aria-pressed="false" title="Flip between the version before this change and after it (B)" disabled>Before</button>
     <button type="button" id="time-fit" class="tm-btn" title="Bring the component into view above the strip">Fit</button>
@@ -85,9 +86,14 @@ export function initTimeStrip(ctx) {
   }
 
   // ---------- the preview on the canvas ----------
+  // the inspector reads the files as they are; while an older version is on the canvas it says so
+  const olderNote = document.createElement('p'); olderNote.id = 'time-older'; olderNote.hidden = true; olderNote.setAttribute('role', 'status');
+  olderNote.textContent = 'The canvas is showing an older version. These values are the files as they are now.';
+  document.querySelector('#inspector').prepend(olderNote);
+  const older = (on) => { olderNote.hidden = !on; };
   function clearPreview() {
     S.gen++; clearTimeout(pick.t);          // a version still loading is dropped, not shown late
-    S.preview?.remove(); S.preview = null; cue.hidden = true; chip.hidden = true;
+    S.preview?.remove(); S.preview = null; cue.hidden = true; chip.hidden = true; older(false);
     document.querySelectorAll('[data-time-previewing]').forEach((c) => { delete c.dataset.timePreviewing; });
   }
   function showPreview(version) {
@@ -105,7 +111,7 @@ export function initTimeStrip(ctx) {
       next.dataset.ready = '1';
       S.preview?.remove(); S.preview = next; // the old one goes when the new one is drawn: scrubbing does not flash
       fr.cell.dataset.timePreviewing = '1'; // the live frame hides only now, so there is never a blank frame between
-      chip.hidden = false; placeCue();
+      chip.hidden = false; placeCue(); older(true);
     }, { once: true });
     next.src = `/view/${enc(S.id)}?version=${enc(version)}&width=${w}`;
     fr.cell.append(next);
@@ -208,12 +214,29 @@ export function initTimeStrip(ctx) {
     show(t);
   }
 
+  // A refused restore says why and what to do, in full, and offers what can safely go back: this component's own file. The shared sheet is not touched.
+  function refusal(why, next, t) {
+    const box = el.querySelector('#time-refusal');
+    box.hidden = !why; if (!why) { box.replaceChildren(); return; }
+    box.innerHTML = `<p><b>Not restored.</b> ${esc(why)}${why.endsWith('.') ? '' : '.'} ${esc(next)}</p><button type="button" id="time-own" class="tm-btn">Restore only ${esc(compOf(S.id)?.path.split('/').pop() ?? 'this file')}</button><button type="button" id="time-refusal-x" class="tm-btn">Dismiss</button>`;
+    box.querySelector('#time-refusal-x').onclick = () => { refusal(null); track.focus({ preventScroll: true }); };
+    box.querySelector('#time-own').onclick = async () => {
+      const r = await ctx.fetch(`/api/component/${enc(S.id)}/film/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ frame: t.version, only: 'own' }) });
+      const x = await r.json().catch(() => ({ ok: false, error: `Restore failed (${r.status})` }));
+      if (!x.ok) { refusal(plain(x.error), nextStep(x.error), t); return; }
+      refusal(null); clearPreview();
+      ctx.hint(x.noop ? "This file already equals that version; the shared stylesheet is what differs." : `Restored ${compOf(S.id)?.path.split('/').pop()} from ${clock(t.at)}. The shared stylesheet stayed as it is. Cmd-Z puts the newer text back.`);
+      S.at = -1; await load();
+    };
+    box.querySelector('#time-own').focus({ preventScroll: true });
+  }
   async function restore() {
     const t = S.tiles[S.at];
     if (!t || t.now || t.same || S.side === 'before') return null;
     const r = await ctx.fetch(`/api/component/${enc(S.id)}/film/restore`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ frame: t.version }) });
     const j = await r.json().catch(() => ({ ok: false, error: `Restore failed (${r.status})` }));
-    if (!j.ok) { ctx.hint(`Could not restore: ${plain(j.error)}`); info.textContent = plain(j.error); return j; }
+    if (!j.ok) { refusal(plain(j.error), nextStep(j.error), t); return j; }
+    refusal(null);
     clearPreview();
     ctx.hint(`Restored the version from ${clock(t.at)}${j.changed?.length > 1 ? ` (${j.changed.length} files)` : ''}.${j.kept?.length ? ` ${j.kept.slice(0, 2).join(', ')}${j.kept.length > 2 ? ` and ${j.kept.length - 2} more` : ''} stayed in the file: nothing draws ${j.kept.length === 1 ? 'it' : 'them'} yet.` : ''} Cmd-Z puts the newer text back.`);
     S.at = -1; await load();
@@ -235,7 +258,7 @@ export function initTimeStrip(ctx) {
   // Closing leaves the selection and the view alone.
   function close() {
     if (!S.open) return;
-    S.open = false; el.hidden = true; delete document.body.dataset.timeOpen; S.gen++; ctx.legend?.pop('versions');
+    refusal(null); S.open = false; el.hidden = true; delete document.body.dataset.timeOpen; S.gen++; ctx.legend?.pop('versions');
     clearPreview(); thumbsOf.reset();
   }
   const toggle = () => (S.open ? close() : open());

@@ -122,10 +122,12 @@ export function initMeasure(ctx) {
     add(m[2], { x: mo.x, y: mo.y + mo.h - m[2] * z, w: mo.w, h: m[2] * z }, 'im-m'); add(m[3], { x: mo.x, y: mo.y, w: m[3] * z, h: mo.h }, 'im-m');
     add(p[0], { x: pb.x, y: pb.y, w: pb.w, h: p[0] * z }, 'im-p'); add(p[1], { x: pb.x + pb.w - p[1] * z, y: pb.y, w: p[1] * z, h: pb.h }, 'im-p');
     add(p[2], { x: pb.x, y: pb.y + pb.h - p[2] * z, w: pb.w, h: p[2] * z }, 'im-p'); add(p[3], { x: pb.x, y: pb.y, w: p[3] * z, h: pb.h }, 'im-p');
-    for (const gp of gapBands) add(gp.v, gp, 'im-g');
+    // a gap the file sets, and space the layout hands out (justify-content and the like), are different things and say so
+    const cg = px(cs.columnGap), rg = px(cs.rowGap), isGap = (gp) => Math.abs(gp.v - cg) < 0.6 || Math.abs(gp.v - rg) < 0.6;
+    for (const gp of gapBands) add(gp.v, gp, isGap(gp) ? 'im-g' : 'im-s');
     const fmt = (a) => (a.every((v) => v === a[0]) ? String(r1(a[0])) : a[0] === a[2] && a[1] === a[3] ? `${r1(a[0])} ${r1(a[1])}` : a.map(r1).join(' ')); // as CSS shorthand
     const name = `${el.localName}${el.id ? '#' + el.id : ''}${[...el.classList].map((c) => '.' + c).join('')}`;
-    return { numbers: nums, summary: { name, margin: m, padding: p, border: b, size: [R.w / z, R.h / z], gap: gaps[0]?.v ?? 0 }, readout: `${name}  ${r1(R.w / z)} × ${r1(R.h / z)}  margin ${fmt(m)}  padding ${fmt(p)}${gaps.length ? `  gap ${r1(gaps[0].v)}` : ''}` };
+    return { numbers: nums, summary: { name, margin: m, padding: p, border: b, size: [R.w / z, R.h / z], gap: gaps[0]?.v ?? 0 }, readout: `${name}  ${r1(R.w / z)} × ${r1(R.h / z)}  margin ${fmt(m)}  padding ${fmt(p)}${/flex|grid/.test(cs.display) && (cg || rg) ? `  gap ${rg === cg ? r1(cg) : `${r1(rg)} ${r1(cg)}`}` : ''}${gapBands.some((g) => !isGap(g)) ? `  space ${r1(gapBands.find((g) => !isGap(g)).v)}` : ''}` };
   }
 
   // ---------- contrast ----------
@@ -220,7 +222,7 @@ export function initMeasure(ctx) {
     for (const l of labels) place(label(l.cls, l.text, l.title), l.anchor);
     if (state.alt) {
       const t = state.hover, sel = ctx.state.selection;
-      const draw1 = (at, opts) => { const f = ctx.stage?.sections?.get(at.component)?.docFrame, el = f?.element(at.node)?.el, iframe = f?.iframe(); return el?.isConnected && iframe && inView(iframe, base) ? boxModel(iframe, el, base, opts) : null; };
+      const draw1 = (at, opts) => { const f = ctx.stage?.sections?.get(at.component)?.docFrame, iframe = f?.iframe(); let el = f?.element(at.node)?.el; if (!opts.dim && state.shift && el?.parentElement && el.parentElement.localName !== 'html') el = el.parentElement; return el?.isConnected && iframe && inView(iframe, base) ? boxModel(iframe, el, base, opts) : null; };
       if (sel && !(t && sel.component === t.component && sel.node === t.node)) draw1(sel, { dim: true });
       const bm = t ? draw1(t, {}) : null;
       if (bm) {
@@ -239,6 +241,9 @@ export function initMeasure(ctx) {
 
   addEventListener('keydown', (ev) => { if (ev.key === 'Alt' && !state.alt) { state.alt = true; redraw(); } });
   addEventListener('keyup', (ev) => { if (ev.key === 'Alt' && state.alt) { state.alt = false; redraw(); } });
+  // Alt+Shift: the parent of what is under the pointer, for a box its children cover
+  addEventListener('keydown', (ev) => { if (ev.key === 'Shift' && state.alt) { state.shift = true; redraw(); } });
+  addEventListener('keyup', (ev) => { if (ev.key === 'Shift' && state.shift) { state.shift = false; redraw(); } });
   addEventListener('blur', () => { if (state.alt) { state.alt = false; redraw(); } });
   ctx.on('hover', (h) => { state.hover = h || null; redraw(); });
   for (const e of ['view', 'viewsettle', 'layout', 'render', 'overlays', 'select', 'doc-change']) ctx.on(e, redraw);
