@@ -282,3 +282,4 @@ body[data-bp] #hint { bottom: 126px; }
 #overlay-select[data-tags="none"]::after, #overlay-select[data-tags="none"] .osize { display: none; }
 #layers .lcomp { margin-top: 0; }
 body[data-wipe] #grid { visibility: hidden; }
+#stage[data-zoom-band="far"] .cmp-title .cmp-path, #stage[data-zoom-band="far"] .cmp-title .cmp-note { display: none; }

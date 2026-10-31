@@ -294,7 +294,7 @@ export function createStage(ctx, root, world, view) {
     const out = new Map();
     // Frames of files only: they vary in height, so they stack in columns (shortest first) as wide as the canvas shows, and read at a larger zoom
     if (!taken.length && ids.length > 2 && ids.every((id) => sections.get(id).el.dataset.kind === 'html')) {
-      const sb = view.stageBox(), colW = Math.max(...ids.map((id) => boxes.get(id).w)) + MASONRY_GAP;
+      const sb = view.stageBox(), colW = Math.max(...ids.map((id) => sections.get(id).size.w)) + MASONRY_GAP; // (far out a title drops its path, so it fits its column)
       const stack = (n) => { const heights = Array(n).fill(0), at = new Map(); for (const id of ids) { const c = heights.indexOf(Math.min(...heights)), top = boxes.get(id).top; at.set(id, { x: c * colW, y: heights[c] + top }); heights[c] += top + sections.get(id).size.h; } return { heights, at }; };
       // as many columns as read largest on the canvas you have
       const zoomOf = (n, heights) => Math.min((sb.width - 144) / (n * colW), (sb.height - 144) / Math.max(1, Math.max(...heights)));
