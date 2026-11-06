@@ -1,0 +1,16 @@
+SCN-3  S3 Napkin to app. repo3 = init + fixtures Button (Welcome removed), git committed.
+1. N, typed "ProfileCard", Enter -> empty root (already flex column, gap 8, padding 16). s3-01
+   New frame placed overlapping/adjacent to the Button frame; cell label "default" overlaps the "32 x 32" size badge.
+2. Size W: Fixed, typed 280; Radius 12; Fill "+" (default #d9d9d9). Layout section shows Flex/Column/Gap 8/Padding 16 (auto layout). s3-03
+3. T, clicked inside root, typed "Ada Lovelace", Enter -> span text1 written. s3-04
+4. Panel "Make setting" -> "Setting name" field -> "title", Enter -> interface `title?: string`, default 'Ada Lovelace', `{title}` in JSX. s3-06
+5. Selected root, Composition > "＋ Button" -> `<Button data-n="button" />` + import line; set instance label "Follow". s3-08, s3-09
+6. Inspect drawer > "Copy usage" -> clipboard: `<ProfileCard title="Ada Lovelace" />` (JSX only; no import line, no CSS/reset guidance).
+   No user doc explains how to put it in an app (examples/consumer-app exists but README never mentions it). Built my own plain React app:
+   app/App.tsx imports ../repo3/components/ProfileCard, esbuild bundle, no CSS, served on 127.0.0.1:4899.
+7. Pixel compare (element clip, scale 1, canvas at 100%):
+   canvas cell 280x95  vs app 312x95 -> 5,612 of 29,640 px differ. s3-canvas-cell.png vs s3-app-cell.png
+   CAUSE 1: canvas forces box-sizing:border-box on cells (computed border-box); plain app = content-box -> "Fixed 280" renders 312 wide in the app.
+   CAUSE 2: cells inherit the editor chrome text colour rgb(28,31,39); app text is rgb(0,0,0). Inspect even labels it "color rgb(28, 31, 39) browser default" (false).
+   Even with an app-side `*{box-sizing:border-box}` reset: 1,831 of 26,600 px differ (s3-app-reset-cell.png); canvas clip also shows a dark 2-3 px band at the bottom edge.
+VERDICT: NOT DONE. App is not pixel-identical (6.9%-19% pixels differ); the width differs by 32 px in a plain app.

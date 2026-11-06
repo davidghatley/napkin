@@ -1,0 +1,450 @@
+Re-run: npm test
+
+
+> napkin@0.0.0 test
+> node --test --test-concurrency=1 test/
+
+✔ load and save with no edits is byte-identical (36.748787ms)
+✔ setting padding once is a one-line diff (22.907015ms)
+✔ the proving demo: David and an agent edit one Button at once; an app imports the result (1288.3818ms)
+✔ rename changes one id, its variant overrides and nothing else (26.141713ms)
+✔ rename through the store is one revision and a small diff (root: base key, variants, data-n, s()) (44.707158ms)
+▶ CAN-01 pan and zoom: every binding works, the point under the cursor stays put, 5% to 800%
+  ✔ Ctrl-wheel zooms to the cursor: drift <= 1 px per step, in and out (555.897667ms)
+  ✔ the limits are 5% and 800% (2160.393675ms)
+  ✔ Shift+1 fits everything, Shift+0 is 100% (806.182946ms)
+  ✔ wheel and trackpad scroll pan (Shift turns vertical into horizontal) (101.109491ms)
+  ✔ Space-drag and middle-drag pan; a pan never selects (183.360505ms)
+  ✔ + and - zoom in steps of 1.25 at the cursor; Shift+2 fits the selection (1325.403376ms)
+  ✔ touch pinch zooms and a one-finger drag on empty canvas pans (517.652386ms)
+✔ CAN-01 pan and zoom: every binding works, the point under the cursor stays put, 5% to 800% (6792.836072ms)
+ℹ 15 zoom steps, worst drift 0.000 px
+▶ FEEL-04 nothing jumps when an edit lands elsewhere, and the selection overlay is never behind
+  ✔ an agent edit in Button leaves every other frame where it was: layout shift 0 (539.544001ms)
+  ✔ changing the selection (variant nodes included) shifts nothing: CLS stays 0 (997.898617ms)
+  ✔ the selection overlay matches its element on every frame while panning and zooming (1491.98939ms)
+✔ FEEL-04 nothing jumps when an edit lands elsewhere, and the selection overlay is never behind (4586.571143ms)
+ℹ CLS since load: 0 (Button now at revision 4)
+ℹ 89 frames sampled, worst overlay offset 0.015 px
+✔ CAN-03 fuzzy search over 200 components stays under 50 ms (p95) (149.229009ms)
+ℹ 2204 items, 104 queries, p95 2.71 ms, max 8.87 ms
+▶ canvas frames, quick open, layers, multi-select, measure, focus
+  ✔ CAN-02 dragging a frame by its title moves it; only the sidecar changes (<= 2 lines) (270.244587ms)
+  ✔ CAN-02 an empty part of the frame drags it too, and the .tsx stays byte-identical (883.028561ms)
+  ✔ CAN-03 Ctrl+K: fuzzy search, Enter flies there in <= 300 ms; none with reduced motion (1124.650924ms)
+  ✔ CAN-03 results come in < 50 ms on 200 components in the page too (91.563645ms)
+  ✔ CAN-04 the layers tree mirrors the JSX and selection syncs both ways (482.98016ms)
+  ✔ CAN-04 rename is one edit (one revision, a 2-line diff); the selection follows (292.536005ms)
+  ✔ CAN-04 dragging a layer to a new place is one move (one revision) (302.810752ms)
+  ✔ CAN-05 shift-click multi-select shows Mixed; one change is one revision (372.676587ms)
+  ✔ CAN-05 a marquee on the empty canvas selects what it covers (105.71057ms)
+  ✔ CAN-07 hold Alt: the distance to the hovered node matches getBoundingClientRect (+-0.5 px) (304.283428ms)
+  ✔ CAN-08 Enter focuses a component, Esc comes back; #Component/node deep-links; a reload restores it (2607.590021ms)
+  ✔ CAN-05 Delete with several selected is one batch (1057.143429ms)
+✔ canvas frames, quick open, layers, multi-select, measure, focus (9227.85559ms)
+ℹ sidecar lines changed: 2; position {"x":0,"y":540} -> {"x":281,"y":704} at 43%
+ℹ flight: 15 frames, 256 ms
+ℹ in the page: 60 queries over 2,200 items, p95 2.10 ms
+ℹ marquee selected: card, body, image
+ℹ z=1.50: y 12 (expected 12.00), x  (expected )
+ℹ z=2.34: y 12 (expected 12.00), x  (expected )
+ℹ z=0.96: y 12 (expected 12.00), x  (expected )
+ℹ focus view before reload {"x":88,"y":-2625.9127516778526,"z":1.167785234899329}, after {"x":88,"y":-2625.9127516778526,"z":1.167785234899329}
+✔ FEEL-03 axe-core: no serious or critical violations in light or dark chrome (3617.257278ms)
+ℹ light, nothing selected: 0 findings, 0 serious or critical
+ℹ light, a node selected (design panel open): 0 findings, 0 serious or critical
+ℹ light, quick open showing: 0 findings, 0 serious or critical
+ℹ dark, nothing selected: 0 findings, 0 serious or critical
+ℹ dark, a node selected (design panel open): 0 findings, 0 serious or critical
+ℹ dark, quick open showing: 0 findings, 0 serious or critical
+✔ FEEL-03 axe-core also passes on an empty workspace, the new-component form, the Advanced list and a rename in progress (1409.677944ms)
+ℹ empty workspace: 0 findings, 0 serious or critical
+ℹ new-component form open: 0 findings, 0 serious or critical
+ℹ Advanced list with the add-property form open: 0 findings, 0 serious or critical
+ℹ a layer being renamed: 0 findings, 0 serious or critical
+✔ CAN-06 the 4x4x4 Chip matrix: axes across and down, a third as groups, headers legible at fit (1281.628817ms)
+ℹ fit at 57%: smallest header text on screen 10.8 / 10.9 / 11.0 px (cols / rows / group chips)
+﹣ evidence screenshots (EVIDENCE_OUT=docs/evidence) (0.247968ms) # SKIP
+▶ the design panel reads like a design tool and every control is one small edit
+  ✔ labels are human words, in sections, with units (3.26034ms)
+  ✔ dragging a label scrubs the number: DOM preview while dragging, one edit on release (324.017042ms)
+  ✔ Escape during a scrub cancels it (284.579522ms)
+  ✔ arrow keys nudge a number and a pause commits one edit (886.524965ms)
+  ✔ segmented controls and the 3x3 alignment matrix (653.165078ms)
+  ✔ Hug / Fill / Fixed (336.191908ms)
+  ✔ a colour swatch picks a colour and writes one property (271.189333ms)
+  ✔ Advanced: all CSS lists everything the design controls do not cover, and still edits (302.317571ms)
+  ✔ override dots and Reset work from the design controls (277.778379ms)
+✔ the design panel reads like a design tool and every control is one small edit (4476.777213ms)
+✔ POST /canvas refuses null, strings and NaN; a good write leaves valid JSON and no temp file (274.19905ms)
+▶ round 2: compound controls, layer menu, hints
+  ✔ Stroke: width, style and colour are one border line; opacity goes into the hex (480.279875ms)
+  ✔ Stroke sides write one side property (315.964351ms)
+  ✔ Fill: alpha is part of the hex, the eye hides it, minus removes it, plus brings it back (606.035053ms)
+  ✔ Shadow: x, y, blur, spread and colour are one boxShadow line (349.014609ms)
+  ✔ Padding per side and radius per corner write the shorthand (635.099332ms)
+  ✔ one colour field (swatch | hex | %) with the eye and minus after it; swatches have an outline (2.127675ms)
+  ✔ absent fill, stroke and shadow are chips in one Add row, not empty sections (234.000132ms)
+  ✔ one unit convention: a px string shows as a number plus px, and keeps its spelling (558.97886ms)
+  ✔ equal field heights and scrub labels advertise themselves (1.512034ms)
+  ✔ width and height are one row each, and "Auto" has no unit (1.038891ms)
+  ✔ the scope is one compact row; the explanation hides behind an info button (43.980619ms)
+  ✔ fonts read as a name, and a picked family keeps the fallback stack (490.300386ms)
+  ✔ layers: a click keeps keyboard focus, so F2 renames at once; a taken id says so plainly (867.257428ms)
+  ✔ layers: the eye hides a node with one visibility line and a hidden node stays marked (128.179754ms)
+  ✔ layers: rows are 28 px, the menu says why an item is disabled, the grip shows on hover (73.599914ms)
+  ✔ layers: the row menu renames, duplicates and deletes (155.413043ms)
+  ✔ selection: shift-click in another component says the selection stays within one; a link to a missing node leaves no phantom (997.677808ms)
+  ✔ far zoom: a compact axis strip replaces the headers and stays at least 10 px (305.364206ms)
+✔ round 2: compound controls, layer menu, hints (7643.876763ms)
+✔ wrap puts siblings in a new frame; unwrap lifts them back out (file round-trips) (66.703046ms)
+✔ duplicate makes a deep copy with fresh ids right after the original (28.443073ms)
+✔ duplicate copies variant overrides; paste carries a subtree between components with fresh ids (30.817341ms)
+✔ bad wrap, unwrap, duplicate and paste are refused with a reason (13.701785ms)
+✔ undo and redo (the history lane) reverse wrap, unwrap, duplicate and paste byte for byte (87.513983ms)
+✔ pasted images go through the shared assets route: assets/<sha8>.<ext>, served back, scripts refused (308.445984ms)
+✔ preview widths go to the sidecar through the identity-checked route and never touch the .tsx (236.546424ms)
+✔ applyEdits: set, insert, move and delete work on a copy (33.147789ms)
+✔ a rejected batch makes no change to the file and names the edit (16.76878ms)
+✔ an edit against an old revision of the same property returns stale revision (24.236334ms)
+✔ two edits to different properties from the same revision both land (33.963576ms)
+▶ LAY-02: 12 cases, every Hug / Fill / Fixed lands at the expected size, and Fill is written the right way for its parent
+  ✔ row parent, width: hug (383.204618ms)
+  ✔ row parent, width: fill (375.358404ms)
+  ✔ row parent, width: fixed (371.477481ms)
+  ✔ row parent, height: hug (382.467108ms)
+  ✔ row parent, height: fill (370.980265ms)
+  ✔ row parent, height: fixed (356.706067ms)
+  ✔ column parent, width: hug (345.767397ms)
+  ✔ column parent, width: fill (336.21046ms)
+  ✔ column parent, width: fixed (332.692511ms)
+  ✔ column parent, height: hug (342.025107ms)
+  ✔ column parent, height: fill (333.114814ms)
+  ✔ column parent, height: fixed (336.704441ms)
+  ✔ a block parent and the root use 100%; min and max clamp (631.731369ms)
+✔ LAY-02: 12 cases, every Hug / Fill / Fixed lands at the expected size, and Fill is written the right way for its parent (5860.98505ms)
+▶ LAY-04: 8 cases, a pinned child follows its parent like a Figma constraint
+  ✔ horizontal pin: min (751.675396ms)
+  ✔ horizontal pin: max (650.385835ms)
+  ✔ horizontal pin: both (658.915217ms)
+  ✔ horizontal pin: center (687.118034ms)
+  ✔ vertical pin: min (647.290501ms)
+  ✔ vertical pin: max (668.502095ms)
+  ✔ vertical pin: both (665.553377ms)
+  ✔ vertical pin: center (658.553751ms)
+✔ LAY-04: 8 cases, a pinned child follows its parent like a Figma constraint (6179.879618ms)
+✔ LAY-04: an odd-sized child keeps its place through min -> centre -> min (no half-pixel drift) (2629.099241ms)
+▶ LAY-05: resize, padding, gap and reorder gestures: one revision each, small diffs
+  ✔ resize: dragging the south-east handle writes width and height in one revision (185.899334ms)
+  ✔ Shift keeps the proportions while resizing (225.861857ms)
+  ✔ padding handle: dragging the top band changes padding in one line (306.139871ms)
+  ✔ gap handle: dragging between two children changes gap in one line (305.423638ms)
+  ✔ reorder: dragging a layer shows an insertion line and lands as one move (150.125785ms)
+  ✔ Escape cancels a gesture and writes nothing (481.429822ms)
+✔ LAY-05: resize, padding, gap and reorder gestures: one revision each, small diffs (2636.046486ms)
+LAY-05: resize drag, 90 pointer moves at ~8 ms, headless Chromium (software rendering), 1440x900, zoom 100%
+frames observed: 89
+frame interval  p50 16.7 ms  p95 16.7 ms  (bar: p95 <= 16.7 ms; a vsync tick is 16.7 ms, so one missed tick reads as 33 ms)
+work per frame  p95 1.20 ms  max 1.50 ms  (main-thread time of the gesture's own frame callback)
+gesture frames: 88
+verify: EVIDENCE=1 node --test --test-force-exit test/21-layout-gestures.test.js
+
+✔ LAY-05 performance: p95 of the frame interval and of the work per frame during a drag (2471.465745ms)
+▶ LAY-06: smart guides and snapping on an absolute layer; Shift locks the axis
+  ✔ a layer within 4 screen px of a sibling edge snaps to it, and a guide shows while dragging (181.841751ms)
+  ✔ a layer 6 px from the edge does not snap (348.857509ms)
+  ✔ an unmodified drag lands on multiples of 8 in the file, wherever the view is panned (940.076351ms)
+  ✔ without Alt a dragged position rounds to the grid at every zoom (8 px, 4 px from 200%) (3316.529356ms)
+  ✔ Shift moves along one axis only (272.810031ms)
+✔ LAY-06: smart guides and snapping on an absolute layer; Shift locks the axis (5878.316396ms)
+✔ LAY-03: dragging a child into a grid cell writes one placement line (1202.793222ms)
+✔ LAY-11: dragging a cell's width reflows it, the width lives in the sidecar, the .tsx is untouched (1079.003788ms)
+▶ LAY-09: duplicate, wrap and unwrap from the keyboard; copy and paste between components renders pixel-identical
+  ✔ Ctrl+D duplicates the selection with fresh ids, one revision (393.92915ms)
+  ✔ Ctrl+Alt+G wraps in a frame, Ctrl+Shift+G unwraps (305.502181ms)
+  ✔ copy the Card root, paste into another component: fresh ids, 0 px difference (1137.954455ms)
+✔ LAY-09: duplicate, wrap and unwrap from the keyboard; copy and paste between components renders pixel-identical (2789.64473ms)
+▶ LAY-10: paste an image (PNG, SVG) into assets/ by hash; HTML that fits becomes nodes, HTML that does not is refused
+  ✔ a PNG from the clipboard becomes an image node and a content-hash file in assets/ (228.06261ms)
+  ✔ SVG text on the clipboard becomes an .svg file (219.011553ms)
+  ✔ an HTML snippet that fits becomes dialect nodes (233.170573ms)
+  ✔ an HTML snippet that does not fit is refused with the reason, and nothing is written (402.528169ms)
+✔ LAY-10: paste an image (PNG, SVG) into assets/ by hash; HTML that fits becomes nodes, HTML that does not is refused (2070.302927ms)
+✔ LAY-07: inline text editing works with an IME (composition is not committed early) (1256.885413ms)
+▶ LAY-08: the colour picker writes the file's own colour format; hex, rgb and oklch; the eyedropper where there is one
+  ✔ the picker opens from the swatch, starting in rgb because the file uses rgb() (6.395242ms)
+  ✔ editing a channel keeps rgb() (87.257448ms)
+  ✔ switching tabs writes nothing; the next real edit is written in the tab's format; alpha is part of the value (979.009975ms)
+  ✔ the eyedropper picks a colour when the browser has one, and is disabled otherwise (113.386979ms)
+  ✔ a new fill, stroke or shadow follows the file's format (609.082257ms)
+✔ LAY-08: the colour picker writes the file's own colour format; hex, rgb and oklch; the eyedropper where there is one (2760.910421ms)
+✔ LAY-01 and LAY-03 controls: wrap, space-between and grid tracks are one line each (1533.672513ms)
+✔ LAY-08: a colour-only edit keeps the alpha the file had, exactly (1428.494951ms)
+▶ the panel at default width: no truncated labels, clear hierarchy, quiet inherited values
+  ✔ no label, value or heading is cut off, on six different nodes (1690.719228ms)
+  ✔ section titles are clearly heavier than field labels, and secondary text keeps its contrast (129.815793ms)
+  ✔ an editable value is never italic; an inherited one is only a different grey, with a hint line (127.977478ms)
+  ✔ Min / Max sits behind a toggle; W and H stay prominent (819.287897ms)
+  ✔ the alignment matrix is large, its axis arrow follows the direction, and Auto is explained as space between (152.198258ms)
+  ✔ common nodes scan in one screen; the richest stay within 1.2 screens; the order follows the node kind (2716.797357ms)
+  ✔ a section the person opens or closes stays that way, across selections and a reload (739.909246ms)
+  ✔ the axis arrow sits inside the matrix frame (126.467312ms)
+  ✔ Text is not offered on a frame with no text, but is on text and on nodes that set type (388.162666ms)
+✔ the panel at default width: no truncated labels, clear hierarchy, quiet inherited values (7894.895509ms)
+✔ FEEL-02: a very dark swatch keeps a visible outline in dark chrome (1020.764393ms)
+✔ scripted MCP client: list, read (with source), apply_edits changes the file (469.947133ms)
+✔ add_variant adds a size with overrides; dryRun returns the source and writes nothing (F19) (353.091768ms)
+▶ live sync between canvas socket, MCP agent and the file
+  ✔ agent edit reaches the canvas socket in under 1 s (27.095568ms)
+  ✔ canvas edit reaches the agent as a change notice with the new revision in under 1 s (17.835156ms)
+  ✔ git restore shows on the canvas socket within 1 s (23.887039ms)
+✔ live sync between canvas socket, MCP agent and the file (405.913441ms)
+ℹ agent -> canvas: 21.7 ms
+ℹ canvas -> agent: 8.2 ms
+ℹ git restore -> canvas: 23.6 ms
+[  219 ms] napkin  server up at http://127.0.0.1:46179/ watching components/*.tsx
+[  261 ms] agent   MCP connected: napkin
+[  709 ms] canvas  headless Chromium opened the canvas, last drawn revision 1, Button grid shows 6 variants
+[  750 ms] person  clicked the Card: panel shows Card | › | card <article> | Variant | default | Base
+[  753 ms] agent   read_component Card -> revision 1, title.fontWeight 400
+[  753 ms] person  types 28px into Padding
+[  753 ms] agent   apply_edits title.fontWeight = 600 at base revision 1
+[  770 ms] agent   apply_edits ok -> revision 2
+[  879 ms] canvas  shows padding 28px and title weight 600 (revision 3, settled 105 ms after both edits)
+[  879 ms] agent   change notice: revision 3 by you [{"op":"set","path":"card.padding","value":"28px"}]
+[  904 ms] file    git diff components/Card.tsx:
+            diff --git i/components/Card.tsx w/components/Card.tsx
+            index afe38d6..ed0d81d 100644
+            --- i/components/Card.tsx
+            +++ w/components/Card.tsx
+            @@ -10,7 +10,7 @@ const base: Record<string, CSSProperties> = {
+                 flexDirection: 'column',
+                 gap: '12px',
+                 width: '320px',
+            -    padding: '16px',
+            +    padding: '28px',
+                 borderRadius: '12px',
+                 border: '2px solid #1f2a44',
+                 background: '#fffdf7',
+            @@ -25,7 +25,7 @@ const base: Record<string, CSSProperties> = {
+               title: {
+                 margin: '0',
+                 fontSize: '22px',
+            -    fontWeight: 400,
+            +    fontWeight: 600,
+               },
+               body: {
+                 margin: '0',
+[  907 ms] result  PASS: both edits are on the canvas and in the file
+✔ person on the canvas and agent over MCP edit the Card together (1116.854192ms)
+✔ load then save with no edits is byte-identical (Card, Button, a new component) (36.170702ms)
+✔ one base property change is a one-line diff, and the result is still the same component (32.28636ms)
+✔ one variant override change is a one-line diff (22.424866ms)
+✔ a base change reaches every variant without an override, and overrides keep their value (2.303134ms)
+✔ a rejected batch changes nothing; a stale edit is refused; edits to different keys from one base both land (30.18561ms)
+✔ a file outside the dialect opens read-only and is never rewritten (21.837579ms)
+✔ the sidecar keeps a stable component id across reopen (F09) (23.74076ms)
+✔ 200 random edits keep the file parseable, in the dialect, and equal to the model (719.257607ms)
+✔ setDefault changes a default in place: one-line diff, prop order kept, enum base guarded (23.840032ms)
+✔ esbuild bundles both fixtures and a fresh component; a rebuild is well under 100 ms (474.257472ms)
+ℹ Card: first build ok, rebuild median 20.4 ms (runs: 20, 21, 20, 20, 23)
+ℹ Button: first build ok, rebuild median 20.6 ms (runs: 20, 20, 24, 22, 21)
+ℹ Badge: first build ok, rebuild median 21.1 ms (runs: 19, 23, 20, 22, 21)
+▶ the canvas follows the files: grid, live edits, broken edits, branch switch, add/remove, read-only
+  ✔ every component draws, and Button shows its full 6-variant grid with labels (6.692554ms)
+  ✔ hover outlines, click selects and the panel names component, node and variant (41.740805ms)
+  ✔ an external file write shows in the DOM within 1 s and keeps the selection (100.668317ms)
+  ✔ a broken hand edit keeps the last good render and reports the line (116.980234ms)
+  ✔ a branch switch reloads changed components and a stale in-flight edit is rejected (337.919355ms)
+  ✔ a file added or removed while running appears and disappears (143.579279ms)
+  ✔ a read-only file renders with its badge and refuses edits (15.785948ms)
+✔ the canvas follows the files: grid, live edits, broken edits, branch switch, add/remove, read-only (1784.450242ms)
+ℹ external write -> DOM: 78 ms
+ℹ branch switch -> DOM: 170 ms
+ℹ new file -> DOM: 109 ms
+▶ the panel edits base, variants, text settings, props and axes through the store
+  ✔ (a) base borderRadius reaches all 6 cells with a one-line diff (552.389385ms)
+  ✔ (b) an override in size=sm changes only the sm cells; dot and Reset to base (265.634112ms)
+  ✔ override mode is unavailable on an all-base cell, and a two-axis cell lets you pick the axis (295.241786ms)
+  ✔ (c) adding the size value xl grows the grid to 8 cells (257.858797ms)
+  ✔ + axis adds an axis with base "default" (220.818918ms)
+  ✔ (d) Make setting on the Card body creates a body prop and binds it (181.846234ms)
+  ✔ props can be added and removed; a prop in use refuses with the error inline (153.824383ms)
+  ✔ (e) refused edits show the error inline and leave the file unchanged (120.06318ms)
+✔ the panel edits base, variants, text settings, props and axes through the store (2980.233028ms)
+▶ draw a Card2 from nothing (N, F, T, I), reopen it identically, and render it
+  ✔ N asks for a name inline and the new component appears selected (160.238616ms)
+  ✔ F drags a frame into the root with the dragged size, then returns to Select (175.818648ms)
+  ✔ T adds text into the frame and offers inline editing; Hello is saved (213.407767ms)
+  ✔ I adds a 64x64 image slot into the frame (311.084053ms)
+An empty string ("") was passed to the src attribute. This may cause the browser to download the whole page again over the network. To fix this, either do not render the element at all or pass null to src instead of an empty string.
+  ✔ (b) the file bundles and renders with react-dom/server like the screen does (41.366324ms)
+  ✔ (a) closing the server and reopening the folder gives the identical model; the .tsx re-reads cleanly (421.353935ms)
+✔ draw a Card2 from nothing (N, F, T, I), reopen it identically, and render it (1988.268176ms)
+▶ (c)(d)(e) Delete, Alt+Down, a taken name, and shortcuts while typing
+  ✔ (c) Alt+Down and Alt+Up reorder siblings; Delete removes a node but never the root (629.197214ms)
+  ✔ (d) creating an existing name is refused with an error and no file change (52.243949ms)
+  ✔ (e) shortcuts do not fire while typing in an input (45.095797ms)
+✔ (c)(d)(e) Delete, Alt+Down, a taken name, and shortcuts while typing (1699.086817ms)
+﹣ agent eval: the guided arm completes >= 80% of the tasks with only the napkin MCP (0.489794ms) # set AGENT_EVAL=1 to run (spends model budget)
+✔ AGT-05: every revision is attributed (david, agent names, file) and the history endpoint lists them (524.914587ms)
+✔ AGT-05 in the store: a commit without a real name is refused, so no revision is unattributed (56.827704ms)
+✔ AGT-09: every apply reaches SSE listeners within 200 ms with by, component and summary (882.683068ms)
+✔ AGT-10: a same-property clash error carries both values (theirs that landed, yours that did not), who, and the revision (33.753206ms)
+✔ AGT-06: 100 races, each recovered with exactly one retry built from the stale error (1384.679224ms)
+✔ anonymous callers fail closed on every write route; reads and dry-runs stay open (317.618291ms)
+✔ spoofing: a read-only agent cannot become someone else by writing a name in the body, or take a name that has a token (311.474263ms)
+✔ MCP identity: NAPKIN_TOKEN gets the configured name; the wrong or missing token for a protected name is refused (512.874382ms)
+✔ create, rename and delete are attributed: history, SSE frames and the activity log carry by and a summary (467.438772ms)
+✔ propose-only agents cannot accept or reject proposals; the person can (383.871165ms)
+✔ amendment: with an agents key, unlisted names (and "you") get "*" (default read); with no agents key everyone writes (1065.043287ms)
+✔ amendment: session names "unknown", empty and missing are refused with 400 (239.834103ms)
+✔ amendment: Host must be loopback with the server port and Origin (if sent) the canvas origin, on every route (265.80646ms)
+✔ propose: held in memory, listed over HTTP, announced over SSE; reject leaves the file byte-identical (367.187136ms)
+✔ accept lands through store.apply, attributed to the agent; the same file bytes as a direct apply (363.75179ms)
+✔ a stale accept is refused with the changed keys; the file keeps the other writer; the proposal can still be rejected (506.875657ms)
+✔ an invalid proposal is refused like an invalid edit and not held; dryRun wins over propose (365.215979ms)
+✔ AGT-11 permissions: read refuses writes, propose turns every apply into a proposal, unlisted writes (908.657824ms)
+✔ parse and format round-trip every format the file may use (1.713924ms)
+✔ oklch is a faithful round trip, and hex to rgb to oklch agree (4.469243ms)
+✔ a file that uses rgb() keeps rgb(): new colours follow the file (1.352564ms)
+✔ an alpha nobody touched is written back exactly; a changed alpha has two decimals (0.520284ms)
+✔ Fill is flex:1 along the main axis, stretch across it, 100% elsewhere (1.55367ms)
+✔ leaving Fill removes the fill lines; Hug is auto; Fixed is px (0.509589ms)
+✔ pins write inset CSS; centre uses 50% and a translate (4.44332ms)
+✔ grid: a placement is one line; cells come from track sizes (0.473875ms)
+✔ a centre pin keeps an odd size exactly where it was (halves are kept), and min -> centre -> min is stable (0.162007ms)
+✔ round 3 exactness: white space inside inline elements, quoted <, legacy references (2.80848ms)
+✔ round 3: an attribute value keeps a legacy reference literal before = or a letter (HTML spec) (0.624054ms)
+✔ round 2 exactness: HTML5 references, windows-1252 numerics, nbsp text, HTML parsing rules, data URIs (0.747916ms)
+✔ exactness: entities, non-breaking spaces, braces and unitless values (66.993919ms)
+✔ 10-snippet corpus: fits are converted exactly, the rest refused with the reason (0.81205ms)
+✔ 0 approximations: every converted style value is the snippet's own text, and the result is accepted by the model (2.34554ms)
+✔ a value with ; inside url() or quotes survives the model, the writer and the reader (23.455919ms)
+✔ a space inside an inline element survives the writer and the reader (26.453812ms)
+✔ snaps to a sibling edge within the threshold and not beyond it (1.004375ms)
+✔ threshold is 4 screen px at any zoom (0.840953ms)
+✔ snaps centres and right edges, and to parent edges and the parent centre (0.16769ms)
+✔ the grid is a quantization: it rounds to the nearest step however far off, and edges within the threshold win over it (0.277524ms)
+✔ falls back to a 4 or 8 px grid, and the closest line wins (0.14018ms)
+✔ Shift constrains to the dominant axis (0.542808ms)
+✔ the grid is measured from the origin you give, so panning the view never changes where things land (0.237346ms)
+✔ AST-01/04: a dropped image is copied to assets/<sha8>.<ext>, src is one changed line, and twice is one file (202.302547ms)
+✔ AST-01: the exported helper, its limits, and the identity rules (60.827158ms)
+✔ AST-02: the asset list holds every image and SVG in the repo, and serves them (166.808736ms)
+✔ jsdoc: the component description and per-prop descriptions are read from the comments (1.375802ms)
+✔ INS-04: napkin docs writes a read-only, self-contained catalog with a playground and a usage line per cell (5369.602863ms)
+✔ HIS-05: git checkout, restore and a branch switch are attributed to git; a hand edit stays file (527.52026ms)
+✔ HIS-05: changed-since-HEAD list, diff against HEAD, and 0 commits made by napkin (292.00043ms)
+✔ HIS-05: git stash and stash pop are git; a hand edit right after checkout -b, git status or a commit is file (289.773099ms)
+▶ history on the page
+  ✔ HIS-01: Ctrl+Z undoes your edit as a new revision by you; Shift+Ctrl+Z redoes it (711.490405ms)
+  ✔ HIS-01: an agent's edit is not undone by your Ctrl+Z (229.662543ms)
+  ✔ HIS-02: when an agent changed the same property afterwards, undo is refused naming who and which revision (440.52358ms)
+  ✔ HIS-01: five quick Ctrl+Z presses make five undos, and a refused step can be skipped from the toast (993.389237ms)
+  ✔ HIS-01: a field with text you have not committed keeps its own undo (416.811246ms)
+  ✔ HIS-03: the History tab lists who, what and when; scrubbing previews read-only; Restore is one revision (2007.654451ms)
+  ✔ HIS-05: a dot on changed components, the line diff and before/after pictures of changed cells only (1202.918516ms)
+✔ history on the page (7475.222264ms)
+▶ code strip, inspect, usage and assets on the page
+  ✔ INS-01: the strip shows the live TSX, highlights the selected node, and a click on a line selects its node (248.32849ms)
+  ✔ INS-01: the strip follows every edit within 100 ms (whole page: send, write, frame, strip) (1261.798385ms)
+  ✔ INS-02: inspect shows the computed CSS of any cell, matching getComputedStyle 100%, with where each value comes from (2067.595408ms)
+  ✔ INS-03: Copy usage gives the JSX for the cell, and pasted into a consumer app it renders that cell (pixel diff 0) (12898.063408ms)
+  ✔ AST-01/04: dropping an image file on an image slot copies it to assets/<sha8>.<ext> and changes one line; twice is one file (949.484642ms)
+  ✔ AST-02: the Assets tab lists every image in the repo and an asset dragged onto the canvas becomes an <img> (111.150168ms)
+  ✔ AST-03: a missing asset shows a badge with its path, and nothing crashes (423.039205ms)
+✔ code strip, inspect, usage and assets on the page (19249.218532ms)
+ℹ code strip after an edit: end to end median 20.0 ms, max 24.0 ms; frame to painted median 0.30 ms, max 0.40 ms
+ℹ inspect: 216 rows over 12 node/cell pairs, 0 differ from getComputedStyle
+ℹ consumer cell vs napkin render: 20/20 identical (1176 bytes)
+✔ HIS-01: undo and redo are your own edits, as new attributed revisions, and the file goes back byte for byte (235.382253ms)
+✔ HIS-01: nobody undoes someone else's edit, a file change, or a git change (145.256588ms)
+✔ HIS-01: undo restores the file exactly after "set base style" (216.16744ms)
+✔ HIS-01: undo restores the file exactly after "set text" (208.511403ms)
+✔ HIS-01: undo restores the file exactly after "insert a node" (181.309511ms)
+✔ HIS-01: undo restores the file exactly after "delete a node" (178.322056ms)
+✔ HIS-01: undo restores the file exactly after "move a node" (191.7301ms)
+✔ HIS-01: undo restores the file exactly after "rename a node" (181.66445ms)
+✔ HIS-01: undo restores the file exactly after "make a setting" (188.902973ms)
+✔ HIS-01: undo restores the file exactly after "add a prop" (184.502956ms)
+✔ HIS-01: undo restores the file exactly after "add a variant" (176.27446ms)
+✔ HIS-01: undo restores the file exactly after "variant override" (201.596293ms)
+✔ HIS-01: undo restores the file exactly after "remove a variant override" (195.607187ms)
+✔ HIS-01: undo restores the file exactly after "remove a variant value" (181.061244ms)
+✔ HIS-01: undo restores the file exactly after "change a default" (167.05928ms)
+✔ HIS-01: undo restores the file exactly after "delete a node with overrides" (166.262609ms)
+✔ HIS-02: undo is refused when someone else changed one of the same keys afterwards: 100% of 30 races (2567.756302ms)
+✔ HIS-02: a change to a different property does not block undo, and keeps the other writer's change (131.475237ms)
+✔ HIS-03: restore makes ONE new revision that brings back an older document (178.166227ms)
+✔ history records who approved an accepted proposal (93.462408ms)
+✔ HIS-01: a sibling someone else adds does not block undoing your insert, nor trap the older steps below it (297.04441ms)
+✔ HIS-01: a refused step can be skipped, so the stack is never trapped (207.062294ms)
+✔ HIS-03: restore-preview names whose later work a restore would take back (174.391418ms)
+✔ INS-05: only the cells that changed are listed, each with a before and an after image (1889.568911ms)
+✔ static: only src/commit.js writes component files; other fs writers in src/ are listed and justified (4.933545ms)
+✔ runtime: every .tsx write, create, move and remove made by edits, create, rename, delete and accepted proposals comes from src/commit.js (544.893541ms)
+✔ create_component, rename_component and delete_component change the folder and the list (490.185782ms)
+✔ search finds components and nodes by name, id, tag and text (345.273246ms)
+✔ subscribe returns what someone else changed, with who and a summary; waitMs waits for it (753.870857ms)
+✔ apply_edits: stale errors from MCP are structured JSON with the changed keys (398.122913ms)
+✔ with no server, edits land through the in-process store; a canvas started later shows them (1198.984273ms)
+✔ the lock admits one live holder; a stale lock from a dead process is taken over (112.233961ms)
+✔ propose is refused in fallback mode: with no canvas there is nobody to review it (254.948515ms)
+✔ the canvas server takes the same lock: it refuses to start while a fallback MCP holds the folder, naming the PID (708.898224ms)
+✔ stale-lock takeover is race-free: 8 processes find a dead holder at once and exactly one wins (2243.239251ms)
+✔ render_component over MCP returns an image content block for a variant, and errors for bad input (1312.698418ms)
+✔ 50 renders: p95 < 500 ms, and the pixels match the canvas cell (9037.370257ms)
+✔ the edit item schema is a oneOf with one entry per op; good edits validate, typos and missing fields do not (2.149025ms)
+✔ every op example in the guide parses as JSON and validates; the schema agrees with the model (the ops it accepts are the ops applyEdits knows) (27.464258ms)
+✔ tools/list exposes the oneOf schema on apply_edits.edits items (309.134229ms)
+✔ tools/list lists every tool with an object input schema and a description; apply_edits has dryRun and propose (282.410922ms)
+✔ the guide is served as a resource and as a prompt, and covers ops, propose mode and stale handling (277.07087ms)
+✔ ONB-04: every explicit thrown/returned error in src has an actionable rule (117.263003ms)
+ℹ 289 explicit error expressions audited; typed constructors and return boundaries checked
+✔ ONB-04: real parse, read-only and stale failures name the file and preserve prefixes (19.575732ms)
+✔ OPN-01/04: scan reports every blocking construct at its own line and counts files (10.314291ms)
+✔ OPN-03: faithful defaults and literal styles convert cleanly; refusal names real causes (22.901633ms)
+✔ OPN-03: accepting adoption independently invalidates the existing bundle (78.989716ms)
+✔ OPN-02: build errors stay within measured frames; duplicate names include paths (1022.735297ms)
+✔ OPN big repo: address precedes scan and arrives within two seconds; progress streams (356.207231ms)
+✔ OPN: offscreen previews bundle on reveal, and refreshed errors keep real frame bounds (1279.531164ms)
+✔ OPN-03: the live canvas fetches a fresh bundle after adoption Accept (996.611508ms)
+✔ OPN-01: every nested TSX classified, opening and bundling writes zero repository bytes (541.302841ms)
+✔ OPN-03: MCP adoption proposes source, reject preserves SHA; accept uses store.apply, stale and read-only guards hold (1052.070412ms)
+✔ OPN-03: unsupported behavior is never approximated; external source changes invalidate adoption (170.280065ms)
+✔ OPN-03: adoption obeys identity and permissions; only acceptance calls store.apply (142.325904ms)
+✔ S1 / invariants: 40 editable files open without writes, 40 no-op saves are byte-identical, radius edit changes one line (2090.508835ms)
+✔ adoption prints a complete file with two-space indentation and no empty styles (40.080501ms)
+﹣ prettier with singleQuote leaves the converted file unchanged when installed (0.594711ms) # prettier is not installed
+✔ adoption names a string constant and gives syntax errors their own next step (1.925365ms)
+✔ scan explains where foreign styling starts and caps each construct independently (2.81552ms)
+✔ build failures preserve esbuild import names, dependency paths, source lines and all errors (170.105569ms)
+✔ ONB-01/05: README quickstart runs in a clean clone; npm ci to first render within 60s (1812.915181ms)
+ℹ npm ci → first render: 1535ms; npx resolved locally; snippet parsed
+✔ ONB-01: occupied requested port falls forward; init refuses existing files (358.375903ms)
+✔ ONB-03: 100% of keyboard handlers and every compared key/code have registry entries (135.939375ms)
+ℹ 30/30 keyboard handlers documented; every key/code comparison covered
+✔ ONB-02/03: empty canvas teaches five actions; ? opens the registry sheet, traps focus and returns focus (883.508549ms)
+✔ OPN-02: read-only default render, missing import, CSS and missing context errors are isolated (1120.751394ms)
+✔ TOK-02: plain consumer-app imports token CSS; bound Button is pixel-identical (2565.624122ms)
+ℹ 3/3 PNGs byte-identical; ordinary CSS variables, no napkin runtime
+✔ S5: names, every off-token dot, searchable picker, one-line bind/snap, every cell theme, token source editing (1405.638622ms)
+✔ TOK-01: every JSON token has modes, group, type, usage; references and typography are readable (8.431478ms)
+✔ TOK-01/05: CSS modes including media dark, exact no-op and one-line edit (3.203272ms)
+✔ TOK-05: atomic attributed source + generated CSS line, stale/invalid/refused writes never mutate (8.114123ms)
+✔ TOK-03: OKLab colour and absolute length nearest; every off-token fixture value flagged (3.023105ms)
+✔ TOK-01/05: HTTP and MCP parity, authenticated permission guard, disk reload, activity (300.461802ms)
+✔ TOK-01: CSS negative light selector inside dark media does not overwrite light; third mode works (0.282053ms)
+✔ TOK-05: token writes cannot follow a source symlink outside the project (1.568137ms)
+✔ TOK-05: runtime fs spy sees source/CSS renames only through commit.writeTokens (4.539608ms)
+✔ TOK-03: named colours and alpha participate in nearest colour matching (0.294745ms)
+✔ TOK-01: CSS may omit the last semicolon and use a dark class (0.200922ms)
+ℹ tests 335
+ℹ suites 0
+ℹ pass 332
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 3
+ℹ todo 0
+ℹ duration_ms 223907.819185

@@ -1,0 +1,60 @@
+/* The film strip (moment 9, time-strip.js) and the quiet pieces around Copy gives real code. Canvas tokens only (canvas.css). */
+#time { container-type: inline-size; position: absolute; z-index: 7; left: 0; right: 0; bottom: 0; min-width: 0; border-top: 1px solid var(--nk-line); display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head acts" "note note" "track track"; gap: 6px 10px; align-items: center; padding: 6px 14px 8px; background: var(--nk-chrome); color: var(--nk-text); font: 12px/1.4 var(--nk-sans); }
+#time[hidden] { display: none; }
+body[data-time-open] #hint { bottom: 184px; }
+.tm-head { grid-area: head; display: flex; min-width: 0; align-items: center; gap: 12px; min-height: 28px; }
+.tm-title { margin: 0; font: 600 12.5px var(--nk-sans); white-space: nowrap; }
+.tm-file { font: 400 11px var(--nk-mono); color: var(--nk-text-3); margin-left: 6px; display: inline-block; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; direction: rtl; text-align: left; }
+.tm-info { flex: 1; min-width: 0; color: var(--nk-text-2); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tm-info:empty { flex: 1; }
+.tm-keys { color: var(--nk-text-3); font-size: 11px; white-space: nowrap; display: none; }
+@container (max-width: 800px) { .tm-file { display: none; } }
+@container (min-width: 1180px) { .tm-keys { display: inline; } }
+.tm-restore { height: 26px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--nk-accent); background: var(--nk-accent); color: var(--nk-on-accent); font: 500 12px var(--nk-sans); cursor: pointer; }
+.tm-restore:disabled { background: var(--nk-chrome-2); border-color: var(--nk-line); color: var(--nk-text-3); cursor: default; }
+.tm-close { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: var(--nk-text-2); font-size: 18px; line-height: 1; cursor: pointer; }
+.tm-close:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
+#time button:focus-visible { outline: 2px solid var(--nk-select); outline-offset: 2px; }
+.tm-track:focus-visible { outline: none; }
+.tm-track:focus-visible .tm-tile[aria-selected="true"] .tm-thumb { box-shadow: 0 0 0 2px var(--nk-accent), 0 0 0 5px var(--nk-accent-soft); }
+.tm-acts { grid-area: acts; display: flex; align-items: center; gap: 8px; }
+.tm-track { grid-area: track; display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 4px 4px 6px; scrollbar-width: thin; border-radius: 6px; cursor: grab; user-select: none; touch-action: pan-x; }
+.tm-track:active { cursor: grabbing; }
+.tm-tile { flex: none; width: 140px; display: grid; gap: 3px; padding: 0; border-radius: 6px; }
+.tm-thumb { position: relative; width: 140px; height: 72px; overflow: hidden; border-radius: 5px; background: var(--nk-frame); box-shadow: inset 0 0 0 1px var(--nk-line-2); }
+.tm-thumb iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: var(--nk-frame); pointer-events: none; opacity: 0; transition: opacity .12s; }
+.tm-thumb iframe[data-ready] { opacity: 1; }
+.tm-tile[aria-selected="true"] .tm-thumb { box-shadow: 0 0 0 2px var(--nk-accent); }
+.tm-tile[aria-selected="true"] .tm-time { color: var(--nk-accent-text); font-weight: 600; }
+.tm-tile[data-source="now"] .tm-thumb { box-shadow: inset 0 0 0 1px var(--nk-line-2), 0 0 0 1px var(--nk-line); }
+.tm-meta { display: flex; align-items: baseline; gap: 6px; font-size: 11.5px; }
+.tm-time { font: 500 11.5px var(--nk-sans); font-variant-numeric: tabular-nums; }
+.tm-git { font: 10px var(--nk-mono); color: var(--nk-git, #7a4fd6); }
+.tm-what { font-size: 11px; line-height: 1.3; color: var(--nk-text-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; min-height: 2.6em; }
+.tm-count { margin-left: auto; font: 500 10.5px var(--nk-sans); color: var(--nk-text-2); white-space: nowrap; }
+.tm-btn { height: 26px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--nk-line-2); background: var(--nk-chrome-2); color: var(--nk-text); font: 500 12px var(--nk-sans); cursor: pointer; white-space: nowrap; }
+.tm-btn:hover:not(:disabled) { background: var(--nk-chrome-3); }
+.tm-btn:disabled { opacity: .5; cursor: default; }
+.tm-btn[aria-pressed="true"] { background: var(--nk-accent-soft); border-color: var(--nk-accent); color: var(--nk-accent-text); }
+.tm-cue { flex: none; padding: 2px 9px; border-radius: 999px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 11px/1.4 var(--nk-sans); white-space: nowrap; }
+.tm-cue[hidden] { display: none; }
+/* the cue on the canvas, in screen pixels: an outline round the frame and a label that stays one size at any zoom */
+#time-cue { position: absolute; z-index: 6; pointer-events: none; border: 2px solid var(--nk-accent); border-radius: 4px; box-sizing: border-box; }
+#time-cue[hidden] { display: none; }
+#time-cue .tc-pill { position: absolute; right: -2px; bottom: calc(100% + 4px); padding: 3px 9px; border-radius: 999px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 11.5px/1.4 var(--nk-sans); white-space: nowrap; }
+#time-cue.above .tc-pill { bottom: auto; top: 6px; right: 6px; }
+@media (prefers-reduced-motion: reduce) { .tm-thumb iframe { transition: none; } }
+
+/* the frame on the canvas while a version is scrubbed: the old version is drawn over the live one, which waits underneath */
+.doc-cell iframe.time-preview { position: absolute; left: 0; top: 0; z-index: 2; display: block; border: 0; pointer-events: none; background: var(--nk-frame); }
+.doc-cell[data-time-previewing] > iframe.doc-frame { visibility: hidden; }
+#time-cue.narrow .tc-pill { right: auto; left: -2px; }
+#time-cue.narrow.above .tc-pill { right: auto; left: 6px; }
+/* a boundary: the files the component draws from changed here (a stylesheet applied or removed); versions are never compared across it */
+.tm-boundary { flex: none; width: 124px; align-self: stretch; display: grid; align-items: center; padding: 0 6px; border-left: 1px dashed var(--nk-line-2); border-right: 1px dashed var(--nk-line-2); color: var(--nk-text-2); font: 500 10.5px/1.35 var(--nk-sans); text-align: center; }
+
+.tm-refusal { grid-area: note; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; background: var(--nk-chrome-2); box-shadow: inset 3px 0 0 var(--nk-measure); }
+.tm-refusal[hidden] { display: none; }
+.tm-refusal p { flex: 1; margin: 0; min-width: 0; font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+#time-older { position: sticky; top: 0; z-index: 4; margin: 0; padding: 6px 14px; background: var(--nk-accent-soft); color: var(--nk-accent-text); font: 500 11.5px/1.4 var(--nk-sans); }
+#time-older[hidden] { display: none; }

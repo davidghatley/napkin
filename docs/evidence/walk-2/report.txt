@@ -1,0 +1,15 @@
+Whole-product walk 2, feat/core 60dbdfb, 2026-10-29. Fresh Opus critic (AI); fresh clone; 1440x900 and 1280x720, dark and light chrome.
+Raw evidence (screenshots, diffs, logs) stayed in the critic's scratch folder outside the repo.
+
+Scenes: SCN-1 pass (all cells 572 ms; Cmd-K Badge selects root; radius edit = 1-line diff; keyboard-only works).
+SCN-2 pass (propose-mode agent create + 4 edits; 3 accepted, 1 rejected never reached disk; presence shown).
+SCN-3 pass (PromoCard built on canvas, used in an esbuild app; 1 pixel differs by 1/255 on a 116x95 cell).
+SCN-4 pass with defects (broken file keeps last good render; edits refused; 40-file branch switch 691 ms; stale agent error; undo only yours; 0 lost edits).
+SCN-5 pass (token names, off-token snap, theme switch 144/144 nodes in 11 ms).
+
+Fixed since walk 1: no sidecars on open; Cmd-K selects root; propose-mode create; README permission modes; S3 pixel match;
+plain undo toast; tokens panel docs; dark component theme; keyboard-only S1; stray "r" in top bar.
+Remains: Chip filter panel size and dark island; serif default text; syntax error names parser stop line (62 for 61); MCP error text points at /api/guide.
+
+New gaps filed as WPC-23..37 (see docs/progress.md), ranked by harm. UNVERIFIABLE: agent told of rejection (not checked via subscribe);
+opening $HOME-sized folder; one unreproduced empty-canvas jump after branch switch.

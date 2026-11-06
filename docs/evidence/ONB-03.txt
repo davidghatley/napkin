@@ -1,0 +1,35 @@
+Re-run: EVIDENCE=1 node --test test/onboarding/shortcuts.test.js
+20/20 keyboard listeners documented. All key/code comparisons and delegated tool keys covered.
+Fit all: Shift+1
+Fit selection: Shift+2
+Zoom to 100%: Shift+0
+Zoom in: + or =
+Zoom out: − or _
+Pan canvas: Space + drag · wheel · middle drag
+Zoom at cursor: Ctrl/Cmd + wheel · pinch
+Focus selected component: Enter
+Leave focus / clear selection: Escape
+New component: N
+Frame tool: F
+Text tool: T
+Image slot tool: I
+Select tool: V
+Delete selection: Delete / Backspace
+Reorder selection: Alt + ↑ / ↓
+Cancel drawing, new component or text edit: Escape
+Finish text edit: Enter
+Measure to hovered node: Hold Alt
+Add / remove selection: Shift/Ctrl/Cmd + click · drag marquee
+Quick open: Ctrl/Cmd+K
+Quick open: move / go / close: ↑ ↓ · Enter · Escape · Ctrl/Cmd+K · Tab stays in search
+Rename layer: F2 · double click
+Layers: select / expand / collapse / focus: ↑ ↓ ← → · Enter
+Layer menu: Shift+F10 / Menu key
+Layer menu: move / close: ↑ ↓ · Escape
+Finish / cancel layer rename or reorder: Enter / Escape
+Nudge number field: ↑ ↓ · Shift ×10 · Alt ×0.1
+Cancel field edit or scrub: Escape
+Font menu: move / choose / close: ↑ ↓ · Enter · Escape
+Controls: move focus / activate / expand section: Tab · Shift+Tab · Enter · Space
+Keyboard shortcuts: ?
+Switch light or dark chrome: Click the theme button

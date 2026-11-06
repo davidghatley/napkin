@@ -1,0 +1,16 @@
+SCN-1  S1 Open 40  (walk 2026-10-22, checkout napkin-walk @36daf60, Chromium headless 1440x900, real CDP input)
+Setup (newcomer): no 40-component repo ships with the docs. Built one: `node src/cli.js init` + bench/corpus.js --size 35 + fixtures Button/Card/Chip
+  + Badge copied verbatim from docs/dialect.md "A complete component" (+borderRadius/background) = 40 .tsx, git committed.
+1. node src/cli.js open repo40 -> report printed. FINDING: Badge.tsx (the dialect doc's own example) is READ-ONLY:
+   "line 42: <b> is not a supported element". docs/dialect.md's sample component uses <b>, which the dialect's own element list forbids.
+   Fixed by hand (<b> -> <strong>), commit; canvas hot-reloaded Badge to editable, 2 cells (tone info/warn). Screens s1-04, s1-05.
+2. Cold open timing (2nd run, warm OS cache): spawn -> URL printed 211 ms; navigate -> all 272 cells drawn 620 ms; total ~836 ms (<=1.5 s bar). 
+   First screen s1-01-open.png: zoom readout says "5%" while frame labels are legible (labels counter-scaled).
+3. Ctrl+K, typed "Badge", Enter: ~1.6 s scripted incl. waits; result list "COMPONENT | Badge". Flies to Badge at 150%.
+   Nothing selected after the jump (panel "Nothing selected"); need a click. s1-02-cmdk.png, s1-03-badge.png
+4. Click cell -> selects text node; clicked layer "root" in tree; panel Appearance > Radius 4.
+5. Dragged the "Radius" label 60 px right -> 34 (0.5/px). Both cells (info, warn) re-rendered round. s1-07-radius.png
+6. git diff: exactly 1 line changed (borderRadius: 4 -> 34). s1-gitdiff.txt
+   BUT git status: 40 untracked components/*.napkin.json sidecars written merely by opening (all canvas {x:0,y:0}), before any move.
+VERDICT: DONE (after hand-fixing the doc's example to make Badge editable). diff=1 line. timing holds.
+Caveat: "all cells follow" only exercised on 2 cells (Badge has 1 axis).

@@ -1,0 +1,4 @@
+Command: EVIDENCE=1 node --test test/onboarding/readme.test.js
+README commands: ["npm ci","node src/cli.js init ./my-napkin","node src/cli.js open ./my-napkin"]
+npm ci to first render: 2522 ms
+Local npx command and absolute MCP snippet validated.

@@ -1,0 +1,2 @@
+Re-run: EVIDENCE=1 node --test test/tokens/source.test.js
+20/20 JSON fixture tokens; both light/dark values for every token; group, type and usage present. HTTP/MCP parity and disk reload asserted by this test file. CSS root, dark media, negative light selector and third mode covered.

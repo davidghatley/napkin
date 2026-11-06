@@ -1,0 +1,4 @@
+Re-run: EVIDENCE=1 node --test test/onboarding/open.test.js
+40/40 files editable; opening writes zero paths.
+40/40 no-op saves byte-identical. Badge base radius edit: exactly 1 existing line changed.
+This is a file/API check; the full pointer-driven S1 walk is not claimed.

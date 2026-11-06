@@ -1,0 +1,32 @@
+FEEL-01 blind judging, 2026-10-29, feat/core 55f6802. napkin vs Paper (window chrome cropped), 1440x900. Prompt: prompt.txt below. Codex high effort; Sonnet one agent, all four folders.
+
+You are judging two screenshots, A and B, of two different design-canvas applications (tools for laying out and editing UI on an infinite canvas). The documents open in each are different; ignore what the user's content depicts. Judge only the tool's own interface: the panels, toolbar, status bar, typography, spacing, hierarchy, how the canvas presents its contents (frames, labels, selection), polish and craft.
+
+Which tool's interface looks better designed? Answer with exactly one line first: "**A better.**", "**B better.**" or "**Tie.**". Then give the 3 most important reasons, one line each.
+
+Round 1 (napkin nothing selected) Codex:
+run-light-1: **A better.**
+run-light-2: **B better.**
+run-dark-1: **A better.**
+run-dark-2: **B better.**
+(napkin is A in *-1, B in *-2)
+Round 1 Sonnet: run-light-1 Paper; run-dark-2 Paper.
+
+Round 2 (napkin Card selected) Codex:
+sel-light-1: **A better.**
+sel-light-2: **B better.**
+sel-dark-1: **A better.**
+sel-dark-2: **B better.**
+Round 2 Sonnet: Paper in all four (sel-light-1 B, sel-light-2 A, sel-dark-1 B, sel-dark-2 A).
+
+Result: Codex napkin 8/8 (order-stable); Sonnet Paper 6/6 (order-stable). Judges disagree: split, treated as not yet a clear tie. Sonnet's top fixes: canvas label collisions (selection tag over frame title; look pills on Chip grid edge); dark theme white cards glare, Chip panel blends; calmer inspector (fewer bordered controls, dim empty sections); crowded bottom bar; heavy layer tree and toolbar.
+
+Round 3 (after polish, area/keys 379fa69, napkin Card selected; napkin is A in *-1, B in *-2) Codex:
+r2-light-1: **A better.**
+r2-light-2: **B better.**
+r2-dark-1: **A better.**
+r2-dark-2: **B better.**
+Round 3 Sonnet: r2-light-1 A, r2-light-2 B (napkin both orders); r2-dark-1 B, r2-dark-2 A (Paper both orders).
+
+Result: light: napkin wins with both judges, order-stable. Dark: Codex napkin, Sonnet Paper, a split = tie.
+Bar "wins or ties Paper": met in both themes. Sonnet's remaining dark-theme note: the Chip filter panel is a dark island among white frames; frame meta text small and gray.

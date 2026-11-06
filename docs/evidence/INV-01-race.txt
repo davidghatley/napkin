@@ -1,0 +1,3 @@
+✔ INV-01: a hand edit with a syntax error is never overwritten: store, HTTP, MCP, rename and delete all refuse (419.190354ms)
+INV-01 race: 500 trials, 0 hand saves lost (6621 edits applied, 28727 refused)
+✔ INV-01: 500 hand saves racing a stream of edits: 0 lost (106425.043541ms)

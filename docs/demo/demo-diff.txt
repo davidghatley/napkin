@@ -1,0 +1,56 @@
+diff --git i/components/Button.tsx w/components/Button.tsx
+index 8136d74..070da41 100644
+--- i/components/Button.tsx
++++ w/components/Button.tsx
+@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
+ 
+ export interface ButtonProps {
+   label?: string;
+-  size?: 'md' | 'sm' | 'lg';
++  size?: 'md' | 'sm' | 'lg' | 'xl';
+   state?: 'default' | 'hover';
+ }
+ 
+@@ -12,7 +12,7 @@ const base: Record<string, CSSProperties> = {
+     alignItems: 'center',
+     gap: 8,
+     padding: '8px 16px',
+-    borderRadius: 6,
++    borderRadius: 12,
+     border: '2px solid #16181d',
+     background: '#2236b0',
+     color: '#f9f9f5',
+@@ -23,6 +23,12 @@ const base: Record<string, CSSProperties> = {
+   label: {
+     fontWeight: 600,
+   },
++  image1: {
++    display: 'block',
++    width: 64,
++    height: 64,
++    backgroundColor: '#e4dccb',
++  },
+ };
+ 
+ const variants: Record<string, Record<string, Record<string, CSSProperties>>> = {
+@@ -39,6 +45,12 @@ const variants: Record<string, Record<string, Record<string, CSSProperties>>> =
+         fontSize: 18,
+       },
+     },
++    xl: {
++      root: {
++        padding: '14px 28px',
++        fontSize: 20,
++      },
++    },
+   },
+   state: {
+     hover: {
+@@ -60,6 +72,7 @@ export function Button({ label = 'Button', size = 'md', state = 'default' }: But
+   return (
+     <button data-n="root" style={s('root', v)}>
+       <span data-n="label" style={s('label', v)}>{label}</span>
++      <img data-n="image1" style={s('image1', v)} src="" alt="" />
+     </button>
+   );
+ }

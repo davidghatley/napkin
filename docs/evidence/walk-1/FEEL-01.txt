@@ -1,0 +1,5 @@
+FEEL-01 capture (not judged). repo6 = Badge, Button, Card, Chip, ProfileCard, Tooltip (all editable). Fresh open, click empty canvas, Esc, Shift+1, mouse parked bottom-right.
+feel01-dark.png = default (dark chrome); feel01-light.png = after the top-right theme button ("Switch to light chrome"). Zoom 36%.
+Ugly notes: Chip's variant filter bar is wider than its frame and runs under the inspector edge ("line" clipped); fit leaves ~270 px empty at right
+while cells are tiny (36%); frame titles carry hash revisions ("ree0b772") as noise; Card/ProfileCard/Tooltip text in browser-default Times;
+"look plain/soft/solid/line" pills overlap the group chevrons; inspector empty state occupies the whole right column.

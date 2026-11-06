@@ -1,0 +1,12 @@
+[  135 ms] napkin  canvas at http://127.0.0.1:33437/, folder components/ (Button.tsx)
+[  179 ms] agent   MCP connected: napkin 0.1.0
+[  469 ms] canvas  "agent connected"; 6 Button variants on the grid
+[  527 ms] agent   read Button at revision 1
+[  566 ms] agent   add_variant size=xl (padding 14px 28px, fontSize 20) from revision 1 → revision 2
+[  572 ms] canvas  presence: "agent: editing Button / size=xl"
+[  630 ms] david   panel: Button root borderRadius 6 → 12 (base)
+[  720 ms] david   tool I: image slot "image1" drawn into the button
+[  737 ms] canvas  8 variants; xl cell inherits radius 12px
+[  784 ms] git     diff --numstat: 15	2	components/Button.tsx
+[  865 ms] app     consumer app (plain React, no napkin runtime) renders 8 Buttons; "Pay xl" padding 14px 28px, radius 12px, icon slot present
+[  904 ms] result  PASS: both edits landed in Button.tsx and a separate app imports it

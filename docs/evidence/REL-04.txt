@@ -1,0 +1,7 @@
+REL-04
+PASS: 1800.193 s, 3660 edits (includes 100 warmup), 0 errors, peak RSS growth 12.411%, 6200 successful file parses.
+
+Re-run: node bench/soak.js --duration 1800 --size 200 --interval 1000 --seed 1729
+Measured: 2026-10-22T06:13:26.247Z
+v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
+Raw samples and method: docs/evidence/REL-04.json

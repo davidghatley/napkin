@@ -1,0 +1,146 @@
+/* Secret Sauce — generated from tokens.json by build.py. Do not edit by hand. */
+/* Fonts: <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:ital,opsz,wght@1,6..72,400&family=Jacquarda+Bastarda+9&display=swap"> */
+:root, [data-theme="light"] {
+  --paper: #eeede7;
+  --sheet: #f9f9f5;
+  --ink: #16181d;
+  --ink-muted: #555a61;
+  --rule: #c9c9c0;
+  --rule-faint: #e0e0d8;
+  --cobalt: #2236b0;
+  --cobalt-text: #2236b0;
+  --on-cobalt: #f9f9f5;
+  --cobalt-tint: #dde1f2;
+  --vermilion: #ee5228;
+  --vermilion-text: #b8300c;
+  --on-vermilion: #16181d;
+  --vermilion-tint: #f7dcd2;
+  --sun: #f2c81b;
+  --on-sun: #16181d;
+  --sun-tint: #f6ebbd;
+  --teal: #2f8f9d;
+  --teal-text: #1d6c77;
+  --on-teal: #16181d;
+  --phosphor: #9cbc2c;
+  --phosphor-text: #4f6512;
+  --on-phosphor: #16181d;
+  --press-edge: #16181d;
+  --focus: var(--cobalt-text);
+  --shadow-press: 0 3px 0 var(--press-edge);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+  --paper: #121417;
+  --sheet: #1b1e22;
+  --ink: #ecebe4;
+  --ink-muted: #a2a7ad;
+  --rule: #3a3e44;
+  --rule-faint: #25282d;
+  --cobalt: #4a60db;
+  --cobalt-text: #9fb0ff;
+  --on-cobalt: #f9f9f5;
+  --cobalt-tint: #1e2444;
+  --vermilion: #ff6a3d;
+  --vermilion-text: #ff8a63;
+  --on-vermilion: #16181d;
+  --vermilion-tint: #3b1e15;
+  --sun: #f5cf2a;
+  --on-sun: #16181d;
+  --sun-tint: #36301a;
+  --teal: #3fb0bd;
+  --teal-text: #6cc8d3;
+  --on-teal: #16181d;
+  --phosphor: #b8d84c;
+  --phosphor-text: #b8d84c;
+  --on-phosphor: #16181d;
+  --press-edge: #3a3e44;
+  --focus: var(--cobalt-text);
+  --shadow-press: 0 3px 0 var(--press-edge);
+  color-scheme: dark;
+  }
+}
+[data-theme="dark"], .ss-game:not([data-theme="light"]) {
+  --paper: #121417;
+  --sheet: #1b1e22;
+  --ink: #ecebe4;
+  --ink-muted: #a2a7ad;
+  --rule: #3a3e44;
+  --rule-faint: #25282d;
+  --cobalt: #4a60db;
+  --cobalt-text: #9fb0ff;
+  --on-cobalt: #f9f9f5;
+  --cobalt-tint: #1e2444;
+  --vermilion: #ff6a3d;
+  --vermilion-text: #ff8a63;
+  --on-vermilion: #16181d;
+  --vermilion-tint: #3b1e15;
+  --sun: #f5cf2a;
+  --on-sun: #16181d;
+  --sun-tint: #36301a;
+  --teal: #3fb0bd;
+  --teal-text: #6cc8d3;
+  --on-teal: #16181d;
+  --phosphor: #b8d84c;
+  --phosphor-text: #b8d84c;
+  --on-phosphor: #16181d;
+  --press-edge: #3a3e44;
+  --focus: var(--cobalt-text);
+  --shadow-press: 0 3px 0 var(--press-edge);
+  color-scheme: dark;
+}
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --radius-none: 0px;
+  --radius-hair: 2px;
+  --radius-hardware: 10px;
+  --radius-disc: 999px;
+  --stretch-condensed: 62%;
+  --stretch-normal: 100%;
+  --stretch-expanded: 125%;
+  --line-hair: 1px;
+  --line-draw: 1.5px;
+  --line-heavy: 3px;
+  --font-display: "Hoop", system-ui, sans-serif;
+  --font-sans: "Hoop", system-ui, sans-serif;
+  --font-text: "Hoop", system-ui, sans-serif;
+  --font-condensed: "Spire", "Hoop", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --font-serif: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-pixel: "Stem 7", "IBM Plex Mono", ui-monospace, monospace;
+  --font-poster: "Jacquarda Bastarda 9", "Newsreader", Georgia, serif;
+  --dur-cell: 70ms;
+  --ease-step: steps(1, end);
+  --dur-move: 240ms;
+  --ease-move: cubic-bezier(.2, .8, .2, 1);
+  --dur-hold: 1200ms;
+}
+@media (prefers-reduced-motion: reduce) { :root { --dur-cell: 0ms; --dur-move: 0ms; --dur-hold: 0ms; } }
+@font-face { font-family: "Stem 7"; src: url("fonts/Stem7-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "Stem 7"; src: url("fonts/Stem7-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
+@font-face { font-family: "Stem 7 Grid"; src: url("fonts/Stem7-Grid.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "Hoop"; src: url("fonts/Hoop-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+@font-face { font-family: "Hoop"; src: url("fonts/Hoop-Bold.woff2") format("woff2"); font-weight: 700; font-style: normal; font-display: block; }
+@font-face { font-family: "Spire"; src: url("fonts/Spire-Regular.woff2") format("woff2"); font-weight: 400; font-style: normal; font-display: block; }
+:root {
+  --type-display-xl: 700 120px/104px var(--font-display);
+  --type-display-l: 700 72px/64px var(--font-display);
+  --type-display-m: 700 48px/48px var(--font-display);
+  --type-h1: 700 32px/36px var(--font-sans);
+  --type-h2: 700 25px/28px var(--font-sans);
+  --type-h3: 700 20px/24px var(--font-sans);
+  --type-lead: 400 20px/28px var(--font-text);
+  --type-body: 400 16px/24px var(--font-text);
+  --type-small: 400 13px/20px var(--font-text);
+  --type-label: 500 11px/16px var(--font-mono);
+  --type-data: 400 13px/20px var(--font-mono);
+  --type-callout: 600 11px/22px var(--font-mono);
+  --type-caption: italic 400 16px/24px var(--font-serif);
+}

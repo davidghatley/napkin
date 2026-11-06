@@ -1,0 +1,541 @@
+[
+ {
+  "name": "pct-width",
+  "html": "<div style=\"width:50%;height:20px;background:red\">x</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "vw-width",
+  "html": "<div style=\"width:50vw;height:10px;background:red\"></div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> w 600 (canvas) vs 550 (plain)",
+   "B": "<div> w 720 (canvas) vs 550 (plain)",
+   "C": "<div> w 720 (canvas) vs 550 (plain)"
+  }
+ },
+ {
+  "name": "auto-margin",
+  "html": "<div style=\"margin:0 auto;width:100px;height:10px;background:red\"></div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "float",
+  "html": "<div style=\"float:left;width:50px;height:50px;background:red\"></div><div style=\"height:20px\">after</",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "parent height 50 (canvas) vs 20 (plain)",
+   "C": "parent height 50 (canvas) vs 20 (plain)"
+  }
+ },
+ {
+  "name": "abs",
+  "html": "<div style=\"position:absolute;top:0;left:0\">abs</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style bottom: 2px vs -18px | inset-block-end: 2px vs -18px | scrollbar-width: thin vs auto",
+   "B": "<div> y -10 (canvas) vs 0 (plain)",
+   "C": "<div> y -20 (canvas) vs 0 (plain)"
+  }
+ },
+ {
+  "name": "fixed",
+  "html": "<div style=\"position:fixed;top:5px;left:5px\">fx</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> x -50 (canvas) vs 5 (plain)",
+   "B": "<div> x -50 (canvas) vs 5 (plain)",
+   "C": "<div> x -50 (canvas) vs 5 (plain)"
+  }
+ },
+ {
+  "name": "abs-right-bottom",
+  "html": "<div style=\"position:absolute;right:0;bottom:0\">rb</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> y 2 (canvas) vs -18 (plain)",
+   "B": "<div> y -8 (canvas) vs -18 (plain)",
+   "C": "<div> style inset-block-start: -4px vs -24px | scrollbar-width: thin vs auto | top: -4px vs -24px"
+  }
+ },
+ {
+  "name": "firstline",
+  "html": "<p style=\"margin:0\"><span>first line of a longer paragraph that wraps in narrow parents </span><span",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "em-line",
+  "html": "<p style=\"margin:0;font-size:2em;line-height:1.5em\">em</p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "rem-cc",
+  "html": "<div style=\"width:10rem;padding:1rem;border:1px solid currentColor\">rem currentColor</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> w 160 (canvas) vs 194 (plain)",
+   "B": "<div> w 160 (canvas) vs 194 (plain)",
+   "C": "<div> w 160 (canvas) vs 194 (plain)"
+  }
+ },
+ {
+  "name": "cc-span",
+  "html": "<span style=\"border-bottom:2px solid currentColor\">cc</span>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "transform-ls",
+  "html": "<div style=\"text-transform:uppercase;letter-spacing:3px\"><span>ab</span><span>cd</span></div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "ls-span",
+  "html": "<span style=\"letter-spacing:5px\">ab</span>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "rtl",
+  "html": "<p style=\"direction:rtl;margin:0\">שלום עולם hello</p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "vertical",
+  "html": "<p style=\"writing-mode:vertical-rl;margin:0\">vertical</p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "broken-img-sized",
+  "html": "<img src=\"nonexistent-xyz.png\" alt=\"broken alt text\" style=\"width:80px;height:40px\">",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "broken-img",
+  "html": "<img src=\"nonexistent-xyz.png\" alt=\"broken\">",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<img> w 110 (canvas) vs 110.5 (plain)"
+  }
+ },
+ {
+  "name": "data-png",
+  "html": "<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAE",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "data-svg",
+  "html": "<img src=\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='100'",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "img-pct",
+  "html": "<img src=\"data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='100'",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<img> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "long-nospace",
+  "html": "<p style=\"margin:0\">aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "long-words",
+  "html": "<p style=\"margin:0\">Lorem ipsum dolor sit amet consectetur Lorem ipsum dolor sit amet consectetur Lo",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "combining",
+  "html": "<p style=\"margin:0\">é ạ̈ ñ</p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "zwj",
+  "html": "<p style=\"margin:0\">👨‍👩‍👧‍👦 🏳️‍🌈</p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "u2028",
+  "html": "<p style=\"margin:0\">a b</p>",
+  "accepted": true,
+  "oracle": "the text differs (\"a b\" vs \"a b\")",
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "nested-inline",
+  "html": "<div><span style=\"color:red;font-weight:700\"><span style=\"font-style:italic\">a</span></span></div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "counters",
+  "html": "<ul style=\"counter-reset:c;list-style:none;padding:0\"><li style=\"counter-increment:c\">a</li></ul>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<ul> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "parent height 50 (canvas) vs 18 (plain)",
+   "C": "parent height 64 (canvas) vs 24 (plain)"
+  }
+ },
+ {
+  "name": "h1",
+  "html": "<h1>Title</h1>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<h1> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "parent height 80 (canvas) vs 37 (plain)",
+   "C": "parent height 101.5 (canvas) vs 48 (plain)"
+  }
+ },
+ {
+  "name": "ul",
+  "html": "<ul><li>a</li><li>b</li></ul>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<ul> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "parent height 68 (canvas) vs 36 (plain)",
+   "C": "parent height 88 (canvas) vs 48 (plain)"
+  }
+ },
+ {
+  "name": "button",
+  "html": "<button>Go</button>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "parent height 24 (canvas) vs 21 (plain)",
+   "B": "parent height 24 (canvas) vs 21 (plain)",
+   "C": "parent height 30 (canvas) vs 25 (plain)"
+  }
+ },
+ {
+  "name": "boxsizing",
+  "html": "<div style=\"width:100px;padding:10px;border:2px solid red;height:30px\">box</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "parent height 30 (canvas) vs 54 (plain)",
+   "B": "parent height 30 (canvas) vs 54 (plain)",
+   "C": "parent height 30 (canvas) vs 54 (plain)"
+  }
+ },
+ {
+  "name": "bigspan",
+  "html": "<p style=\"margin:0;line-height:1\"><span>small</span><span style=\"font-size:40px\">T</span></p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "flex-kids",
+  "html": "<div style=\"display:flex\"><span style=\"flex:1\">a</span><span style=\"flex:2\">b</span></div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "maxcontent",
+  "html": "<div style=\"width:max-content;height:10px;background:red\">x</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "nowrap",
+  "html": "<span style=\"white-space:nowrap\">a long piece of text that should not wrap at all in a narrow contai",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "ellipsis",
+  "html": "<div style=\"overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">a long piece of text that sho",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "grid-autofit",
+  "html": "<div style=\"display:grid;grid-template-columns:repeat(auto-fit,minmax(60px,1fr))\"><span>a</span><spa",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "pct-font",
+  "html": "<p style=\"margin:0;font-size:80%\">pct font</p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "indent-justify",
+  "html": "<p style=\"margin:0;text-indent:2em;text-align:justify\">Lorem ipsum dolor sit amet consectetur Lorem ",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "a-underline",
+  "html": "<a style=\"text-decoration:underline\">link</a>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<a> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<a> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<a> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "calc-grad",
+  "html": "<div style=\"height:20px;background:linear-gradient(red,blue);width:calc(100% - 20px)\"></div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "inherit-all",
+  "html": "<div style=\"line-height:inherit;font:inherit;color:inherit\">inherit</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "height-pct",
+  "html": "<div style=\"height:50%;background:red\">x</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "all-initial",
+  "html": "<div style=\"all:initial\">x</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style caret-color: rgb(255, 255, 255) vs rgb(0, 0, 0) | color: rgb(255, 255, 255) vs rgb(0, 0, 0) | column-rule-color: rgb(255, 255, 255) vs rgb(0, 0, 0)",
+   "B": "<div> style caret-color: rgb(255, 255, 255) vs rgb(0, 0, 0) | color: rgb(255, 255, 255) vs rgb(0, 0, 0) | column-rule-color: rgb(255, 255, 255) vs rgb(0, 0, 0)",
+   "C": "<div> style caret-color: rgb(255, 255, 255) vs rgb(0, 0, 0) | color: rgb(255, 255, 255) vs rgb(0, 0, 0) | column-rule-color: rgb(255, 255, 255) vs rgb(0, 0, 0)"
+  }
+ },
+ {
+  "name": "block-span-pct",
+  "html": "<span style=\"display:block;width:50%\">half</span>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "em-nested",
+  "html": "<span style=\"font-size:1.5em\"><span>nested em</span></span>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<span> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "plain-text-p",
+  "html": "<p>plain paragraph with default margins</p>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<p> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "parent height 50 (canvas) vs 18 (plain)",
+   "C": "parent height 64 (canvas) vs 24 (plain)"
+  }
+ },
+ {
+  "name": "plain-div",
+  "html": "<div>plain div</div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ },
+ {
+  "name": "plain-spans",
+  "html": "<div><span>a</span><span>b</span></div>",
+  "accepted": true,
+  "oracle": null,
+  "ctx": {
+   "A": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "B": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto",
+   "C": "<div> style scrollbar-width: thin vs auto | user-select: none vs auto | -webkit-locale: \"en\" vs auto"
+  }
+ }
+]

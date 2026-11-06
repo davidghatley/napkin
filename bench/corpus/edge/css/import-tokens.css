@@ -1,0 +1,6 @@
+:root {
+  --edge-ground: #f4f1ea;
+  --edge-ink:    #1d1f24;   /* aligned on purpose */
+  --edge-muted: #5f636b;
+  --edge-accent: #ee5228;
+}

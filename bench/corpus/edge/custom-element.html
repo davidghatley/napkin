@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge: custom element</title>
+<style>body { margin: 0; padding: 20px; font: 15px/22px system-ui, sans-serif; background: #ffffff; color: #16181d; }</style>
+<script>
+customElements.define('edge-badge', class extends HTMLElement {
+  connectedCallback() {
+    if (this.shadowRoot) return;
+    const root = this.attachShadow({ mode: 'open' });
+    root.innerHTML = '<style>:host{display:inline-block;padding:4px 10px;margin-right:6px;border-radius:999px;background:var(--badge-bg,#dcfce7);color:#166534;font:600 12px/16px system-ui,sans-serif}</style><slot></slot>';
+  }
+});
+</script>
+</head>
+<body>
+<p>Status: <edge-badge>Published</edge-badge><edge-badge style="--badge-bg:#fde68a">Draft</edge-badge></p>
+<edge-badge id="lonely" data-kind="plain">Unstyled host attribute</edge-badge>
+</body>
+</html>

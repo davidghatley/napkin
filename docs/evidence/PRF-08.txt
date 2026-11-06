@@ -1,0 +1,7 @@
+PRF-08
+PASS: typing to pixels p50 38.4 ms, p95 46.7 ms (bar <= 50 ms); 1131 cells; 0/30 timeouts.
+
+Re-run: node bench/perf.js --id PRF-08
+Measured: 2026-10-22T08:42:09.860Z
+v26.8.2; Chromium 152.0.7977.82 Arch Linux; CPU only
+Raw samples and method: docs/evidence/PRF-08.json

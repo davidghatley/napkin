@@ -1,0 +1,13 @@
+REL-04, first measurement (kept: it is why the fixes exist)
+
+FAIL: 1800.187 s, 3664 edits (includes 100 warmup), 0 errors, peak RSS growth 35.457% (baseline 148.6 MB, peak 201.3 MB), 6200 file parses.
+Code: area/engine2 at the commit before "smaller young generation". Re-run (on that commit): node bench/soak.js --duration 1800 --size 200 --interval 1000 --seed 1729
+
+What the growth was made of (node bench/soak.js --duration 600 --diagnose, same commit; the server's V8 collects each minute):
+  after a forced collection the live heap rose 21.3 -> 26.8 MB in 10 minutes and RSS 117 -> 125 MB: revision history (every revision kept its
+  document and text in full: about 5 KB per edit until a component has 8 of them, then compressed text only);
+  before the collection RSS sat 30 to 40 MB above that floor and swung by up to 45 MB between collections: V8's default 16 MB semi-space
+  (committed heap 43..71 MB while 28..36 MB was in use).
+Fixes: history keeps 3 revisions per component in full, older ones deflated in exact-size buffers (src/store.js); the server runs with
+--max-semi-space-size=2 (src/node-flags.js). A 5-minute --diagnose soak with the flag peaked at +2.9% (without: +10.3%).
+Final result: docs/evidence/REL-04.txt.

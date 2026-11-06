@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge: media queries</title>
+<style>
+:root { --edge-gutter: 24px; --edge-panel: #ffffff; }
+body { margin: 0; font: 15px/22px system-ui, sans-serif; background: #eef0f3; color: #16181d; }
+.row { display: flex; gap: var(--edge-gutter); padding: var(--edge-gutter); }
+.panel { flex: 1; padding: 16px; background: var(--edge-panel); border: 1px solid #c9ccd2; border-radius: 6px; }
+@media (max-width: 600px) {
+  .row { flex-direction: column; gap: 8px; padding: 12px; }
+  .panel { border-radius: 0; }
+}
+@media (min-width: 900px) { .panel--wide { flex: 2 } }
+@media (prefers-color-scheme: dark) {
+  body { background: #121417; color: #ecebe4; }
+  .panel { background: #1b1e22; border-color: #3a3e44; }
+}
+</style>
+</head>
+<body>
+<div class="row">
+  <section class="panel panel--wide"><h3>Wide</h3><p>Two parts of the row above 900 px, stacked under 600 px.</p></section>
+  <section class="panel"><h3>Narrow</h3><p>Dark when the scheme is dark.</p></section>
+</div>
+</body>
+</html>

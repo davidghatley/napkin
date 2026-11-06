@@ -1,0 +1,1157 @@
+<title>napkin Dream</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="napkin as finished software: scenes, feature areas, pass/fail dream criteria, what needs David, and the gauntlet plan. Draft for review.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@1,6..72,400&display=swap">
+<style>
+/* napkin Dream: the anime-pipeline technical-manual system (manual.css), adapted.
+   Layout: one 46rem reading column; plates and criteria tables run to 62rem; parts open on an inverted band.
+   Group colours encode feature-area families everywhere: surface, components, agents, engine, needs-David. */
+:root {
+  --paper: #f2f3ef; --sheet: #fbfbf8; --ink: #1b1e23; --muted: #5a6068; --rule: #c8cbc3; --faint: #e3e5df;
+  --accent: #2c4a86;
+  --g-surface: #3567ad; --g-comp: #2b7a70; --g-agent: #7450a3; --g-engine: #a8731a; --g-david: #b0453a; --g-inv: #1b1e23;
+  --ok: #2f7d43; --warn: #a8731a; --bad: #b0453a;
+  --f-sans: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --f-serif: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --col: 46rem; --wide: 62rem;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #15181c; --sheet: #1b1f24; --ink: #e6e7e3; --muted: #9aa1a9; --rule: #3a4048; --faint: #262b31;
+    --accent: #8fa9e0; --g-surface: #7ca4e3; --g-comp: #5fb5a9; --g-agent: #a98bd6; --g-engine: #d9a547; --g-david: #e07f72; --g-inv: #e6e7e3;
+    --ok: #6cc183; --warn: #d9a547; --bad: #e07f72; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #15181c; --sheet: #1b1f24; --ink: #e6e7e3; --muted: #9aa1a9; --rule: #3a4048; --faint: #262b31;
+  --accent: #8fa9e0; --g-surface: #7ca4e3; --g-comp: #5fb5a9; --g-agent: #a98bd6; --g-engine: #d9a547; --g-david: #e07f72; --g-inv: #e6e7e3;
+  --ok: #6cc183; --warn: #d9a547; --bad: #e07f72; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.6 var(--f-sans); margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 4rem; }
+main { max-width: var(--wide); margin: 0 auto; }
+.col { max-width: var(--col); }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, kbd, .mono { font-family: var(--f-mono); font-size: .86em; }
+code { background: var(--faint); padding: .05em .3em; border-radius: 3px; overflow-wrap: anywhere; }
+kbd { border: 1px solid var(--rule); border-bottom-width: 2px; padding: 0 .3em; border-radius: 3px; background: var(--sheet); }
+pre { font: 12.5px/1.55 var(--f-mono); background: var(--sheet); border: 1px solid var(--rule); padding: .8rem 1rem; overflow-x: auto; margin: 0; }
+img { max-width: 100%; height: auto; display: block; }
+strong { font-weight: 600; }
+
+.runhead { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; max-width: var(--wide); margin: 0 auto;
+  padding-block: 1.2rem .6rem; border-bottom: 1px solid var(--rule); font: 500 11px/1.4 var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.runhead b { color: var(--ink); font-weight: 600; }
+
+.cover { padding-block: 1.6rem 2rem; border-bottom: 1px solid var(--rule); margin-bottom: 1rem; }
+.cover h1 { font: 700 clamp(2.3rem, 6vw, 3.6rem)/1.02 var(--f-sans); letter-spacing: -.02em; margin: 1rem 0 .3rem; text-wrap: balance; }
+.cover .sub { font: italic 400 1.5rem/1.25 var(--f-serif); color: var(--accent); margin: 0 0 1rem; max-width: 40rem; }
+.legend { display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; font: 500 11px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); list-style: none; padding: 0; margin: .6rem 0 0; }
+.legend li::before { content: ""; display: inline-block; width: .6rem; height: .6rem; border-radius: 50%; margin-right: .4rem; background: var(--dot, var(--ink)); vertical-align: -.02rem; }
+
+.part { background: var(--ink); color: var(--paper); padding: 2rem 1.6rem; margin: 3.5rem 0 1.5rem; }
+.part .no { font: 500 11px var(--f-mono); letter-spacing: .2em; text-transform: uppercase; opacity: .7; }
+.part h2 { font: 600 2rem/1.1 var(--f-sans); margin: .4rem 0; color: var(--paper); }
+.part p { font: italic 1.15rem/1.35 var(--f-serif); margin: 0; opacity: .85; max-width: 38rem; }
+
+section.ch { margin-top: 3rem; }
+.num { font: 600 12px var(--f-mono); color: var(--accent); letter-spacing: .1em; }
+h2 { font: 650 1.85rem/1.15 var(--f-sans); letter-spacing: -.01em; margin: .2rem 0 .3rem; text-wrap: balance; }
+.deck { font: italic 1.2rem/1.35 var(--f-serif); color: var(--muted); margin: 0 0 1.4rem; padding-bottom: 1rem; border-bottom: 1px solid var(--rule); max-width: 40rem; }
+h3 { font: 600 1.15rem/1.3 var(--f-sans); margin: 2.4rem 0 .3rem; text-wrap: balance; display: flex; align-items: baseline; gap: .6rem; flex-wrap: wrap; }
+h3 .sec { font: 600 12px var(--f-mono); color: var(--grp, var(--accent)); letter-spacing: .08em; }
+h3 .chip { font: 600 10px/1 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--grp); border: 1px solid var(--grp); padding: .25rem .4rem; border-radius: 2px; }
+h4 { font: 600 11px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); margin: 1.4rem 0 .3rem; }
+p, ul, ol { margin: .5rem 0 .8rem; }
+li { margin: .25rem 0; }
+.dream { font: italic 1.08rem/1.45 var(--f-serif); max-width: 44rem; margin: .2rem 0 .8rem; }
+
+.tw { overflow-x: auto; margin: .8rem 0 1.4rem; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+th { font: 500 10.5px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); text-align: left; padding: .45rem .6rem .45rem 0; border-bottom: 1px solid var(--ink); vertical-align: bottom; }
+td { padding: .55rem .6rem .55rem 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+td.k { font-family: var(--f-mono); font-size: 12px; white-space: nowrap; }
+td.ev { font-size: 12px; color: var(--muted); min-width: 10rem; }
+td.bar { min-width: 11rem; }
+table.crit { min-width: 860px; }
+table.crit td:nth-child(2) { min-width: 15rem; }
+.pill { display: inline-block; font: 600 9.5px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: .26rem .4rem; border-radius: 2px; border: 1px solid currentColor; white-space: nowrap; margin: 0 .3rem .25rem 0; }
+.pill.num { color: var(--g-engine); } .pill.blind { color: var(--g-agent); } .pill.test { color: var(--g-comp); } .pill.walk { color: var(--g-surface); }
+.pill.david { color: var(--g-david); } .pill.d0004 { color: var(--g-david); border-style: dashed; }
+.pill.ok { color: var(--ok); } .pill.bad { color: var(--bad); } .pill.info { color: var(--accent); }
+tr.gated td { background: color-mix(in srgb, var(--g-david) 5%, transparent); }
+
+.note { border: 1px solid var(--rule); border-left: 3px solid var(--c, var(--accent)); background: var(--sheet); padding: .75rem 1rem; margin: 1.2rem 0; max-width: var(--col); }
+.note > b:first-child { display: block; font: 600 10.5px var(--f-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--c, var(--accent)); margin-bottom: .25rem; }
+.note.rule { --c: var(--g-david); } .note.tip { --c: var(--ok); } .note.trap { --c: var(--warn); }
+.note p:last-child, .note ul:last-child { margin-bottom: 0; }
+
+.plate { border: 1px solid var(--rule); background: var(--sheet); margin: 1.4rem 0 2rem; padding: .9rem 1rem 1rem; }
+.plate > header { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font: 500 11px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding-bottom: .6rem; margin-bottom: .8rem; border-bottom: 1px solid var(--rule); }
+.plate > header b { color: var(--accent); font-weight: 600; }
+.plate .body { display: grid; grid-template-columns: minmax(0, 1fr) 13rem; gap: 1.2rem; }
+.plate .body.solo { grid-template-columns: minmax(0, 1fr); }
+.plate .cap { font: italic .98rem/1.4 var(--f-serif); color: var(--muted); margin-top: .7rem; }
+.svgwrap { overflow-x: auto; min-width: 0; }
+.plate svg { display: block; width: 100%; height: auto; }
+@media (max-width: 700px) { .plate svg { min-width: 600px; } }
+.key { border-left: 1px solid var(--rule); padding-left: .9rem; font-size: 12.5px; min-width: 0; }
+.key h5 { font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--muted); margin: 0 0 .5rem; }
+.key ol { list-style: none; margin: 0; padding: 0; counter-reset: k; }
+.key li { counter-increment: k; display: grid; grid-template-columns: 1.5rem 1fr; gap: .2rem .4rem; margin: 0 0 .55rem; line-height: 1.35; }
+.key li::before { content: counter(k); width: 1.25rem; height: 1.25rem; border: 1px solid var(--ink); border-radius: 50%; font: 10px/1.2rem var(--f-mono); text-align: center; }
+.key li b { font: 600 10.5px var(--f-mono); letter-spacing: .1em; text-transform: uppercase; display: block; }
+@media (max-width: 760px) { .plate .body { grid-template-columns: minmax(0, 1fr); } .key { border-left: 0; border-top: 1px solid var(--rule); padding: .8rem 0 0; } }
+
+.strip { display: grid; grid-template-columns: 3fr 2fr; gap: .8rem; }
+.strip figure { margin: 0; min-width: 0; }
+.strip img { width: 100%; border: 1px solid var(--rule); }
+.strip figcaption { font: 500 10.5px/1.4 var(--f-mono); letter-spacing: .04em; color: var(--muted); margin-top: .35rem; }
+@media (max-width: 640px) { .strip { grid-template-columns: minmax(0, 1fr); } }
+
+.scenes { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: 1rem; margin: 1rem 0; }
+.scene { border-top: 2px solid var(--grp, var(--ink)); padding-top: .6rem; min-width: 0; }
+.scene h4 { margin: 0 0 .2rem; color: var(--grp); }
+.scene .q { font: italic 1.05rem/1.35 var(--f-serif); margin: 0 0 .4rem; }
+.scene ol { padding-left: 1.1rem; font-size: 13.5px; margin: 0; }
+.scene .beauty { font-size: 12.5px; color: var(--muted); margin-top: .5rem; }
+
+/* svg drawing vocabulary */
+svg text { font-family: var(--f-mono); fill: var(--ink); }
+svg .t { font-size: 12px; } svg .ts { font-size: 10px; fill: var(--muted); }
+svg .tl { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; fill: var(--muted); }
+svg .th { font-family: var(--f-sans); font-size: 13px; font-weight: 600; }
+svg .ti { font-family: var(--f-serif); font-style: italic; font-size: 12px; fill: var(--muted); }
+svg .bx { fill: var(--sheet); stroke: var(--ink); stroke-width: 1; }
+svg .ln { fill: none; stroke: var(--ink); stroke-width: 1; }
+svg .lm { fill: none; stroke: var(--muted); stroke-width: 1; }
+svg .dash { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 3; }
+svg .fl { fill: var(--faint); stroke: none; }
+svg .call circle { fill: var(--sheet); stroke: var(--ink); }
+svg .call text { font-size: 10px; text-anchor: middle; dominant-baseline: central; }
+svg .z-surface { fill: color-mix(in srgb, var(--g-surface) 11%, var(--sheet)); stroke: var(--g-surface); }
+svg .z-comp { fill: color-mix(in srgb, var(--g-comp) 11%, var(--sheet)); stroke: var(--g-comp); }
+svg .z-agent { fill: color-mix(in srgb, var(--g-agent) 11%, var(--sheet)); stroke: var(--g-agent); }
+svg .z-engine { fill: color-mix(in srgb, var(--g-engine) 12%, var(--sheet)); stroke: var(--g-engine); }
+svg .z-david { fill: color-mix(in srgb, var(--g-david) 9%, var(--sheet)); stroke: var(--g-david); stroke-dasharray: 5 3; }
+svg .z-inv { fill: var(--sheet); stroke: var(--ink); stroke-width: 2; }
+svg .z-ink { fill: var(--ink); stroke: var(--ink); }
+svg text.inv { fill: var(--paper); }
+svg .k-surface { fill: var(--g-surface); } svg .k-comp { fill: var(--g-comp); } svg .k-agent { fill: var(--g-agent); }
+svg .k-engine { fill: var(--g-engine); } svg .k-david { fill: var(--g-david); } svg .k-inv { fill: var(--g-inv); }
+svg .s-agent { stroke: var(--g-agent); } svg .s-david { stroke: var(--g-david); } svg .s-ok { stroke: var(--ok); } svg .s-comp { stroke: var(--g-comp); } svg .s-surface { stroke: var(--g-surface); }
+svg .f-ok { fill: var(--ok); } svg .f-bad { fill: var(--bad); } svg .f-muted { fill: var(--muted); } svg .f-faint { fill: var(--faint); } svg .f-sheet { fill: var(--sheet); } svg .f-accent { fill: var(--accent); }
+svg .c-agent { fill: var(--g-agent); } svg .c-david { fill: var(--g-david); } svg .c-ok { fill: var(--ok); } svg .c-comp { fill: var(--g-comp); } svg .c-surface { fill: var(--g-surface); }
+
+/* review controls */
+.rv { display: flex; flex-direction: column; gap: .3rem; min-width: 9.5rem; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 3px; overflow: hidden; }
+.seg button { font: 600 10px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase; background: var(--sheet); color: var(--muted); border: 0; border-right: 1px solid var(--rule); padding: .42rem .5rem; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button:hover { color: var(--ink); }
+.seg button[aria-pressed="true"][data-m="keep"], .seg button[aria-pressed="true"][data-m="yes"], .seg button[aria-pressed="true"][data-m="go"] { background: var(--ok); color: var(--paper); }
+.seg button[aria-pressed="true"][data-m="change"], .seg button[aria-pressed="true"][data-m="talk"] { background: var(--warn); color: var(--paper); }
+.seg button[aria-pressed="true"][data-m="cut"], .seg button[aria-pressed="true"][data-m="no"], .seg button[aria-pressed="true"][data-m="wait"] { background: var(--bad); color: var(--paper); }
+.rv textarea, .gobox textarea { font: 12px/1.4 var(--f-sans); color: var(--ink); background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; padding: .3rem .4rem; resize: vertical; min-height: 2rem; width: 100%; }
+.rv textarea[hidden] { display: none; }
+
+.reviewbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--paper); border-bottom: 1px solid var(--rule); max-width: var(--wide); margin: 0 auto;
+  display: flex; gap: .6rem 1.2rem; flex-wrap: wrap; align-items: center; padding-block: .5rem; font: 500 11px var(--f-mono); letter-spacing: .06em; color: var(--muted); }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--paper); }
+.reviewbar b { color: var(--ink); }
+.reviewbar .meter { flex: 1 1 8rem; height: 6px; background: var(--faint); border-radius: 3px; overflow: hidden; display: flex; min-width: 6rem; }
+.reviewbar .meter i { display: block; height: 100%; }
+.reviewbar #save { margin-left: auto; }
+.reviewbar a { color: var(--muted); }
+
+.toc { columns: 2 16rem; column-gap: 2rem; font-size: 13.5px; margin: 1rem 0 0; padding: 0; list-style: none; }
+.toc li { break-inside: avoid; }
+.toc a { color: var(--ink); text-decoration: none; display: flex; gap: .5rem; }
+.toc a:hover { color: var(--accent); }
+.toc a span { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); min-width: 2.4rem; }
+
+.needs { display: grid; gap: .8rem; margin: 1rem 0; }
+.need { display: grid; grid-template-columns: minmax(0, 1fr) 15rem; gap: 1rem; border: 1px solid var(--rule); border-left: 3px solid var(--g-david); background: var(--sheet); padding: .8rem 1rem; }
+.need h4 { margin: 0 0 .2rem; color: var(--g-david); }
+.need p { margin: .2rem 0; font-size: 13.5px; }
+.need .blocks { font: 500 11px var(--f-mono); color: var(--muted); }
+@media (max-width: 680px) { .need { grid-template-columns: minmax(0, 1fr); } }
+
+.never { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: .4rem 1.4rem; list-style: none; padding: 0; }
+.never li { padding-left: 1.4rem; position: relative; }
+.never li::before { content: "×"; position: absolute; left: 0; top: -.05rem; font: 600 1rem var(--f-mono); color: var(--g-david); }
+
+.gobox { border: 2px solid var(--ink); background: var(--sheet); padding: 1rem 1.2rem; max-width: var(--col); margin: 1.4rem 0; display: grid; gap: .6rem; }
+.gobox h4 { margin: 0; color: var(--ink); }
+
+.difftbl td.n { text-align: right; font-family: var(--f-mono); }
+.del { color: var(--bad); } .add { color: var(--ok); }
+.changelog dt { font: 600 12px var(--f-mono); margin-top: .8rem; }
+.changelog dd { margin: .2rem 0 0 0; }
+.foot { max-width: var(--wide); margin: 4rem auto 0; padding-top: .8rem; border-top: 1px solid var(--rule); font: 500 10.5px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="runhead"><span><b>napkin</b> · The Dream</span><span>Edition 0.2 · approved · 2026-10-21 · feat/core @ 96a0528</span></div>
+<div class="reviewbar" role="status">
+  <span>Reviewed <b id="rv-done">0</b> / <b id="rv-total">0</b></span>
+  <span class="meter" aria-hidden="true"><i id="m-keep" style="background:var(--ok)"></i><i id="m-change" style="background:var(--warn)"></i><i id="m-cut" style="background:var(--bad)"></i></span>
+  <span><b id="rv-keep">0</b> keep · <b id="rv-change">0</b> change · <b id="rv-cut">0</b> cut</span>
+  <span>Needs David <b id="rv-needs">0</b>/<b id="rv-needs-total">0</b></span>
+  <a href="#go">Go / no go</a>
+  <span id="save">Connecting…</span>
+</div>
+
+<main>
+
+<section class="cover">
+  <h1>The napkin dream</h1>
+  <p class="sub">napkin as finished software: the canvas a design engineer would pick over Paper and over Figma's variants to build a component library with agents. Each piece of it comes with the test a stranger could use to check it.</p>
+  <div class="col">
+    <p>I (Claude, Opus 5.5) drafted this on 2026-10-21 from your gauntlet prompt (<code>docs/prompts/dream-gauntlet.md</code>), after reading INTENT, FEATURES, the README, decisions 0001–0003, <code>test/CONTRACT.md</code> and the demo log. <strong>None of it is decided.</strong> Mark each criterion <em>Keep</em>, <em>Change</em> or <em>Cut</em>, answer the eight <a href="#needs">Needs David</a> items, then say go or not yet at the <a href="#go">end</a>. Your marks are saved with the page, and I read them back to build the Phase 2 ledger.</p>
+  </div>
+  <ul class="legend">
+    <li style="--dot:var(--g-inv)">Invariants</li>
+    <li style="--dot:var(--g-surface)">Surface</li>
+    <li style="--dot:var(--g-comp)">Components &amp; files</li>
+    <li style="--dot:var(--g-agent)">Agents &amp; history</li>
+    <li style="--dot:var(--g-engine)">Engine</li>
+    <li style="--dot:var(--g-david)">Needs David</li>
+  </ul>
+
+  <div class="plate" style="margin-top:1.4rem">
+    <header><span><b>Plate I</b> · The whole product on one page</span><span>16 areas · <tspan data-total></tspan></span></header>
+    <div class="body solo">
+      <div class="svgwrap">
+        <svg viewBox="0 0 860 430" role="img" aria-label="Map of napkin's sixteen areas. At the centre, the component files on disk, framed by the six invariants. Surface areas on the left, components and files on the right, agents and history above, engine below, and the two areas that need David's decision at the bottom, dashed.">
+          <defs><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="f-muted"/></marker></defs>
+          <!-- centre -->
+          <rect x="290" y="128" width="280" height="160" class="z-inv" rx="2"/>
+          <text x="430" y="146" class="tl" text-anchor="middle">4.1 invariants · every criterion</text>
+          <rect x="340" y="164" width="180" height="70" class="z-ink"/>
+          <text x="430" y="192" class="th inv" text-anchor="middle" style="fill:var(--paper)">components/*.tsx</text>
+          <text x="430" y="212" class="ts" text-anchor="middle" style="fill:var(--paper);opacity:.8">the file is the truth</text>
+          <text x="430" y="254" class="ts" text-anchor="middle">no-op save = same bytes · 1 prop = 1 line</text>
+          <text x="430" y="270" class="ts" text-anchor="middle">one commit path · no napkin runtime</text>
+          <!-- left: surface -->
+          <g>
+            <rect x="20" y="40" width="200" height="56" class="z-surface"/><text x="32" y="62" class="th">Canvas &amp; navigation</text><text x="32" y="82" class="ts">4.2 · <tspan data-count="CAN"></tspan></text>
+            <rect x="20" y="120" width="200" height="56" class="z-surface"/><text x="32" y="142" class="th">Drawing &amp; layout</text><text x="32" y="162" class="ts">4.3 · <tspan data-count="LAY"></tspan></text>
+            <rect x="20" y="200" width="200" height="56" class="z-surface"/><text x="32" y="222" class="th">Onboarding</text><text x="32" y="242" class="ts">4.13 · <tspan data-count="ONB"></tspan></text>
+            <rect x="20" y="280" width="200" height="56" class="z-surface"/><text x="32" y="302" class="th">Look &amp; feel</text><text x="32" y="322" class="ts">4.15 · <tspan data-count="FEEL"></tspan></text>
+            <path d="M220 68C262 68 262 170 290 180M220 148H290M220 228H290M220 308C262 308 262 250 290 240" class="lm" marker-end="url(#ar)"/>
+          </g>
+          <!-- right: components -->
+          <g>
+            <rect x="640" y="40" width="200" height="56" class="z-comp"/><text x="652" y="62" class="th">Components</text><text x="652" y="82" class="ts">4.4 · <tspan data-count="CMP"></tspan></text>
+            <rect x="640" y="120" width="200" height="56" class="z-comp"/><text x="652" y="142" class="th">File format &amp; diffs</text><text x="652" y="162" class="ts">4.12 · <tspan data-count="FMT"></tspan></text>
+            <rect x="640" y="200" width="200" height="56" class="z-comp"/><text x="652" y="222" class="th">Inspect &amp; handoff</text><text x="652" y="242" class="ts">4.10 · <tspan data-count="INS"></tspan></text>
+            <rect x="640" y="280" width="200" height="56" class="z-comp"/><text x="652" y="302" class="th">Assets</text><text x="652" y="322" class="ts">4.9 · <tspan data-count="AST"></tspan></text>
+            <path d="M640 68C598 68 598 170 570 180M640 148H570M640 228H570M640 308C598 308 598 250 570 240" class="lm" marker-end="url(#ar)"/>
+          </g>
+          <!-- top: agents -->
+          <rect x="290" y="20" width="132" height="56" class="z-agent"/><text x="302" y="42" class="th">Agents</text><text x="302" y="62" class="ts">4.7 · <tspan data-count="AGT"></tspan></text>
+          <rect x="438" y="20" width="132" height="56" class="z-agent"/><text x="450" y="42" class="th">History &amp; undo</text><text x="450" y="62" class="ts">4.8 · <tspan data-count="HIS"></tspan></text>
+          <path d="M356 76V126M504 76V126" class="lm" marker-end="url(#ar)"/>
+          <!-- bottom: engine -->
+          <rect x="290" y="306" width="132" height="50" class="z-engine"/><text x="302" y="326" class="th">Performance</text><text x="302" y="344" class="ts">4.11 · <tspan data-count="PRF"></tspan></text>
+          <rect x="438" y="306" width="132" height="50" class="z-engine"/><text x="450" y="326" class="th">Reliability</text><text x="450" y="344" class="ts">4.14 · <tspan data-count="REL"></tspan></text>
+          <path d="M356 306V290M504 306V290" class="lm"/>
+          <!-- needs David -->
+          <rect x="140" y="370" width="200" height="50" class="z-david"/><text x="152" y="390" class="th">Tokens &amp; themes</text><text x="152" y="408" class="ts">4.5 · <tspan data-count="TOK"></tspan> · Needs David</text>
+          <rect x="520" y="370" width="200" height="50" class="z-david"/><text x="532" y="390" class="th">Open existing repos</text><text x="532" y="408" class="ts">4.6 · <tspan data-count="OPN"></tspan> · Needs David</text>
+          <path d="M340 395H372M520 395H488" class="dash"/>
+          <text x="430" y="391" class="ti" text-anchor="middle">INTENT: "not (yet)"</text>
+          <text x="430" y="407" class="ts" text-anchor="middle">4.16 scenes walk all of it</text>
+        </svg>
+      </div>
+    </div>
+    <p class="cap">Every area writes to the same files through the same commit path. The six invariants frame the centre because every criterion in every area has to keep them true.</p>
+  </div>
+
+  <ol class="toc" aria-label="Contents">
+    <li><a href="#ch1"><span>1</span>How this dream is judged</a></li>
+    <li><a href="#ch2"><span>2</span>Scenes</a></li>
+    <li><a href="#ch3"><span>3</span>Today, and the dream canvas</a></li>
+    <li><a href="#ch4"><span>4</span>Dream criteria by area</a></li>
+    <li><a href="#needs"><span>5</span>Needs David</a></li>
+    <li><a href="#ch7"><span>6</span>Phase 2: the gauntlet plan</a></li>
+    <li><a href="#go"><span>7</span>Go / no go</a></li>
+    <li><a href="#appA"><span>A</span>References for blind comparisons</a></li>
+    <li><a href="#appB"><span>B</span>Changelog</a></li>
+  </ol>
+</section>
+
+<!-- ============ 1 ============ -->
+<section class="ch" id="ch1">
+  <div class="num">CHAPTER 1</div>
+  <h2>How this dream is judged</h2>
+  <p class="deck">Every criterion is pass or fail, names its evidence and sets a bar. A critic who never saw the code must be able to check it.</p>
+
+  <div class="col">
+    <p>Each row in chapter 4 has four parts:</p>
+    <ul>
+      <li><strong>Criterion.</strong> One thing a user can see or do.</li>
+      <li><strong>Evidence.</strong> What the critic looks at: a named test, a screenshot, a timing log, a <code>git diff</code>. The critic never reads the builder's reasoning.</li>
+      <li><strong>Bar.</strong> Either a <span class="pill num">number</span> the critic measures itself, a <span class="pill blind">blind</span> comparison against a named reference that can be fetched (captured the same way, labels and logos stripped, win or tie), a <span class="pill test">test</span> that must pass, or a <span class="pill walk">walk</span>, an end-to-end scene run by the whole-product critic.</li>
+      <li><strong>Gate.</strong> Most rows can be built now. <span class="pill david">Needs David</span> rows wait for your answer in chapter 5. <span class="pill d0004">0004</span> rows need a new dialect decision first.</li>
+    </ul>
+  </div>
+
+  <div class="note rule"><b>Rule · the six invariants</b>
+    <p>These hold in every criterion. A builder's work that breaks one fails, even if its own bar passes. They are criteria too (4.1), with their own tests that run on every merge.</p>
+    <ol>
+      <li>Files are the truth.</li>
+      <li>A save with no change is byte-identical.</li>
+      <li>Small edits give small diffs.</li>
+      <li>Out-of-dialect files open read-only and are never silently rewritten.</li>
+      <li>There is one commit path, with revisions and stale rejection.</li>
+      <li>Components have no runtime dependency on napkin.</li>
+    </ol>
+  </div>
+
+  <div class="plate">
+    <header><span><b>Fig. 1.1</b> · The gauntlet loop for one criterion</span><span>Phase 2</span></header>
+    <div class="body">
+      <div class="svgwrap">
+        <svg viewBox="0 0 860 250" role="img" aria-label="Loop: a dream criterion becomes a ledger row; a builder in its own worktree produces evidence; a fresh blind critic judges it; a fail goes back to the builder; a pass is merged into feat/core by the lead after the full suite runs; every few rounds a whole-product critic files new criteria into the ledger.">
+          <defs><marker id="ar2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="f-muted"/></marker></defs>
+          <rect x="10" y="40" width="110" height="64" class="bx"/><text x="65" y="66" class="th" text-anchor="middle">criterion</text><text x="65" y="84" class="ts" text-anchor="middle">you approve</text>
+          <rect x="145" y="40" width="110" height="64" class="bx"/><text x="200" y="66" class="th" text-anchor="middle">ledger row</text><text x="200" y="84" class="ts" text-anchor="middle">progress.md</text>
+          <rect x="280" y="40" width="130" height="64" class="z-comp"/><text x="345" y="66" class="th" text-anchor="middle">builder</text><text x="345" y="84" class="ts" text-anchor="middle">worktree · tests first</text>
+          <rect x="435" y="40" width="110" height="64" class="bx"/><text x="490" y="66" class="th" text-anchor="middle">evidence</text><text x="490" y="84" class="ts" text-anchor="middle">files, not reasons</text>
+          <rect x="570" y="40" width="130" height="64" class="z-agent"/><text x="635" y="66" class="th" text-anchor="middle">critic</text><text x="635" y="84" class="ts" text-anchor="middle">fresh · blind · harsh</text>
+          <rect x="725" y="40" width="125" height="64" class="z-ink"/><text x="787" y="66" class="th inv" text-anchor="middle" style="fill:var(--paper)">merge</text><text x="787" y="84" class="ts" text-anchor="middle" style="fill:var(--paper);opacity:.8">full suite green</text>
+          <path d="M120 72h25M255 72h25M410 72h25M545 72h25M700 72h25" class="ln" marker-end="url(#ar2)"/>
+          <text x="712" y="64" class="ts" text-anchor="middle">pass</text>
+          <path d="M635 104V150H345V106" class="ln s-david" marker-end="url(#ar2)" style="stroke:var(--g-david)"/>
+          <text x="490" y="143" class="ts" text-anchor="middle" style="fill:var(--g-david)">fail → concrete gaps → next task</text>
+          <rect x="690" y="176" width="160" height="56" class="bx"/><text x="770" y="200" class="th" text-anchor="middle">whole-product critic</text><text x="770" y="218" class="ts" text-anchor="middle">walks the scenes</text>
+          <path d="M787 104V174" class="ln" marker-end="url(#ar2)"/>
+          <path d="M690 204H200V106" class="dash" marker-end="url(#ar2)"/>
+          <text x="420" y="198" class="ts" text-anchor="middle">new gaps become new rows</text>
+          <text x="65" y="28" class="tl" text-anchor="middle">Opus</text>
+          <text x="345" y="28" class="tl" text-anchor="middle">Sonnet · Codex</text>
+          <text x="635" y="28" class="tl" text-anchor="middle">Sonnet · Opencode free</text>
+          <text x="787" y="28" class="tl" text-anchor="middle">Opus</text>
+          <text x="770" y="246" class="tl" text-anchor="middle">Opus</text>
+        </svg>
+      </div>
+      <div class="key"><h5>Key</h5><ol>
+        <li><span><b>Builder</b>its own git worktree <code>napkin-&lt;area&gt;</code>, branched from feat/core.</span></li>
+        <li><span><b>Critic</b>sees the running app, files, diff and evidence only. It measures numbers itself.</span></li>
+        <li><span><b>Merge</b>a merge that breaks an earlier criterion reopens it.</span></li>
+        <li><span><b>Models</b>along the top. Free Opencode models only measure numbers, never give taste verdicts alone.</span></li>
+      </ol></div>
+    </div>
+  </div>
+
+  <div class="plate">
+    <header><span><b>Fig. 1.2</b> · Criteria per area</span><span id="fig12-total"></span></header>
+    <div class="body solo"><div class="svgwrap" id="fig12"></div></div>
+    <p class="cap">Solid bars can be built as soon as you say go. Hatched bars wait on a Needs David answer or the 0004 dialect decision. Counts come from the tables in chapter 4.</p>
+  </div>
+
+  <div class="note trap"><b>Trap · "wowed" is soft</b>
+    <p>A critic's "genuinely wowed" can't be checked, so in the ledger it counts only together with a blind win or tie, or the numbers holding. A criterion that no one can check is logged <em>unverifiable</em>, never <em>pass</em>.</p>
+  </div>
+</section>
+
+<!-- ============ 2 ============ -->
+<section class="ch" id="ch2">
+  <div class="num">CHAPTER 2</div>
+  <h2>Scenes</h2>
+  <p class="deck">Five moments of using finished napkin. The whole-product critic walks each one end to end (criteria SCN-1 to SCN-5).</p>
+
+  <div class="plate">
+    <header><span><b>Fig. 2.1</b> · Storyboard</span><span>one frame per scene</span></header>
+    <div class="body solo"><div class="svgwrap">
+      <svg viewBox="0 0 860 180" role="img" aria-label="Five storyboard frames: a canvas with forty component frames and a quick-open box; an agent's purple outline on a Tooltip with an accept and reject tray; a Card drawn with auto layout flowing into an app; a file with a broken line kept safe; a theme split light and dark, dashed because it needs David.">
+        <!-- S1 -->
+        <rect x="6" y="10" width="160" height="120" class="bx"/>
+        <g class="fl">
+          <rect x="16" y="20" width="14" height="10"/><rect x="34" y="20" width="14" height="10"/><rect x="52" y="20" width="14" height="10"/><rect x="70" y="20" width="14" height="10"/><rect x="88" y="20" width="14" height="10"/><rect x="106" y="20" width="14" height="10"/><rect x="124" y="20" width="14" height="10"/><rect x="142" y="20" width="14" height="10"/>
+          <rect x="16" y="36" width="14" height="10"/><rect x="34" y="36" width="14" height="10"/><rect x="52" y="36" width="14" height="10"/><rect x="70" y="36" width="14" height="10"/><rect x="88" y="36" width="14" height="10"/><rect x="106" y="36" width="14" height="10"/><rect x="124" y="36" width="14" height="10"/><rect x="142" y="36" width="14" height="10"/>
+          <rect x="16" y="92" width="14" height="10"/><rect x="34" y="92" width="14" height="10"/><rect x="52" y="92" width="14" height="10"/><rect x="70" y="92" width="14" height="10"/><rect x="88" y="92" width="14" height="10"/><rect x="106" y="92" width="14" height="10"/><rect x="124" y="92" width="14" height="10"/><rect x="142" y="92" width="14" height="10"/>
+          <rect x="16" y="108" width="14" height="10"/><rect x="34" y="108" width="14" height="10"/><rect x="52" y="108" width="14" height="10"/><rect x="70" y="108" width="14" height="10"/><rect x="88" y="108" width="14" height="10"/><rect x="106" y="108" width="14" height="10"/><rect x="124" y="108" width="14" height="10"/><rect x="142" y="108" width="14" height="10"/>
+        </g>
+        <rect x="30" y="54" width="112" height="28" class="bx" style="stroke:var(--g-surface);stroke-width:1.5"/>
+        <text x="38" y="72" class="ts">⌘K  badge▌</text>
+        <!-- S2 -->
+        <rect x="178" y="10" width="160" height="120" class="bx"/>
+        <rect x="196" y="30" width="56" height="22" rx="4" class="z-comp"/><rect x="264" y="30" width="56" height="22" rx="4" class="z-comp"/>
+        <rect x="196" y="62" width="124" height="26" class="fl"/>
+        <rect x="192" y="58" width="132" height="34" class="lm s-agent" style="stroke-width:1.5;stroke-dasharray:3 2"/>
+        <rect x="270" y="49" width="54" height="11" class="c-agent"/><text x="273" y="57" style="font-size:7.5px;fill:var(--paper)">Claude ✎</text>
+        <rect x="190" y="102" width="136" height="20" class="bx"/><text x="196" y="116" class="ts">4 proposals</text>
+        <text x="290" y="116" style="font-size:11px" class="c-ok">✓</text><text x="306" y="116" style="font-size:11px" class="c-david">✕</text>
+        <!-- S3 -->
+        <rect x="350" y="10" width="160" height="120" class="bx"/>
+        <rect x="362" y="24" width="82" height="92" class="bx" style="stroke:var(--g-surface)"/>
+        <rect x="368" y="30" width="70" height="34" class="fl"/><rect x="368" y="70" width="58" height="7" class="fl"/><rect x="368" y="82" width="40" height="7" class="fl"/>
+        <rect x="368" y="96" width="40" height="13" rx="3" class="z-comp"/>
+        <path d="M444 70H470" class="ln" marker-end="url(#ar)"/>
+        <rect x="472" y="44" width="30" height="52" class="z-ink"/><text x="487" y="74" class="ts" text-anchor="middle" style="fill:var(--paper)">app</text>
+        <!-- S4 -->
+        <rect x="522" y="10" width="160" height="120" class="bx"/>
+        <rect x="536" y="24" width="64" height="92" class="bx"/>
+        <rect x="542" y="34" width="44" height="5" class="fl"/><rect x="542" y="46" width="50" height="5" class="fl"/>
+        <rect x="540" y="57" width="56" height="9" class="c-david" opacity=".25"/><rect x="542" y="59" width="40" height="5" class="c-david"/>
+        <rect x="542" y="72" width="38" height="5" class="fl"/><rect x="542" y="84" width="48" height="5" class="fl"/>
+        <text x="604" y="64" class="ts" style="fill:var(--g-david)">line 14</text>
+        <path d="M642 82l14 6v14c0 10-7 16-14 18c-7-2-14-8-14-18v-14z" class="lm s-ok" style="stroke:var(--ok);stroke-width:1.5"/>
+        <text x="642" y="106" class="c-ok" text-anchor="middle" style="font-size:11px">✓</text>
+        <!-- S5 -->
+        <rect x="694" y="10" width="160" height="120" class="z-david"/>
+        <rect x="704" y="22" width="68" height="96" class="f-sheet" style="stroke:var(--rule)"/>
+        <rect x="776" y="22" width="68" height="96" class="z-ink"/>
+        <rect x="714" y="56" width="48" height="16" rx="3" class="z-comp"/><rect x="786" y="56" width="48" height="16" rx="3" style="fill:var(--g-comp);opacity:.6"/>
+        <!-- captions -->
+        <text x="86" y="150" class="th" text-anchor="middle">S1 · Open 40</text><text x="86" y="166" class="ts" text-anchor="middle">find, tune, one line</text>
+        <text x="258" y="150" class="th" text-anchor="middle">S2 · Agent beside me</text><text x="258" y="166" class="ts" text-anchor="middle">see it, accept it</text>
+        <text x="430" y="150" class="th" text-anchor="middle">S3 · Napkin to app</text><text x="430" y="166" class="ts" text-anchor="middle">draw, compose, import</text>
+        <text x="602" y="150" class="th" text-anchor="middle">S4 · A bad morning</text><text x="602" y="166" class="ts" text-anchor="middle">nothing is lost</text>
+        <text x="774" y="150" class="th" text-anchor="middle">S5 · Tokens day</text><text x="774" y="166" class="ts" text-anchor="middle">Needs David</text>
+      </svg>
+    </div></div>
+  </div>
+
+  <div class="scenes">
+    <div class="scene" style="--grp:var(--g-surface)">
+      <h4>S1 · I open a repo of 40 components</h4>
+      <p class="q">"I type <code>napkin open</code> in my ui-kit and everything is just there."</p>
+      <ol>
+        <li>The canvas fits all 40 components, each with its full variant matrix, in about a second.</li>
+        <li><kbd>⌘K</kbd> "badge", Enter: the view flies to Badge, a matrix with axis headers (size across, tone down).</li>
+        <li>I drag the corner radius on the base. All 12 cells change as I drag, and the file is written once, when I let go.</li>
+        <li><code>git diff</code>: one line.</li>
+      </ol>
+      <p class="beauty">Beautiful because: calm chrome, the components are the brightest things on screen, and nothing waits.</p>
+    </div>
+    <div class="scene" style="--grp:var(--g-agent)">
+      <h4>S2 · The agent builds a Tooltip while I tune the Button</h4>
+      <p class="q">"I can see where it's working and decide what lands."</p>
+      <ol>
+        <li>In Claude Code: "make a Tooltip with top/bottom placement, propose only". A purple outline labelled "Claude" moves across the new Tooltip.</li>
+        <li>Meanwhile I change Button's padding. Our edits never collide, and I never wait.</li>
+        <li>A tray shows "4 proposals" as ghost before/after cells. I accept 3 and reject 1. The rejected one never touched the file.</li>
+      </ol>
+      <p class="beauty">Beautiful because: the agent's presence is felt, never in the way, and review takes seconds.</p>
+    </div>
+    <div class="scene" style="--grp:var(--g-comp)">
+      <h4>S3 · From napkin to app</h4>
+      <p class="q">"A Card from nothing, with my Button inside, imported by my app."</p>
+      <ol>
+        <li><kbd>N</kbd> "Card". I draw a frame and set it to vertical auto layout, gap 12, padding 16.</li>
+        <li>Image, title and body text. "Make setting" on the title. I drop in a Button instance and set its label to "Buy".</li>
+        <li>Copy usage → <code>&lt;Card title="…" /&gt;</code>, pasted into the app. It renders the same, pixel for pixel.</li>
+      </ol>
+      <p class="beauty">Beautiful because: the layout controls feel like Figma's, but the result is code I'd write myself.</p>
+    </div>
+    <div class="scene" style="--grp:var(--g-engine)">
+      <h4>S4 · A bad morning</h4>
+      <p class="q">"I broke a file, switched branches and undid things, and nothing was lost."</p>
+      <ol>
+        <li>A typo in my editor: the canvas keeps the last good Card and names line 14. When I fix it, it's back.</li>
+        <li>I switch branches: all 40 reload, and the agent's in-flight edit returns <code>stale revision</code>, then retries.</li>
+        <li><kbd>⌘Z</kbd> undoes my last edit only, never the agent's, as one new revision.</li>
+      </ol>
+      <p class="beauty">Beautiful because: errors are calm and specific, and recovery is boring.</p>
+    </div>
+    <div class="scene" style="--grp:var(--g-david)">
+      <h4>S5 · Tokens day (Needs David)</h4>
+      <p class="q">"I switch to dark and see every component in it."</p>
+      <ol>
+        <li>Panel values show <code>space-4</code>, not <code>16px</code>. Off-token values have an orange dot, and one click snaps them to the nearest token.</li>
+        <li>A theme switch re-renders every cell in dark mode, from the token file's modes.</li>
+      </ol>
+      <p class="beauty">Blocked: INTENT says "no token panel yet". See N1.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="ch" id="ch3">
+  <div class="num">CHAPTER 3</div>
+  <h2>Today, and the dream canvas</h2>
+  <p class="deck">The first build works end to end. The dream keeps its core and redraws everything you touch.</p>
+
+  <div class="plate">
+    <header><span><b>Fig. 3.1</b> · Today: the proving demo</span><span>feat/core @ f345dc3 · 52 tests</span></header>
+    <div class="strip">
+      <figure><img src="assets/today.jpg" alt="Today's canvas: the Button component with 8 variants in a flat grid, an agent-connected badge and presence line in the top bar, and a side panel of raw CSS property inputs."><figcaption>docs/demo/demo-3-after.png. 8 Button cells after the agent's xl and your radius and icon slot. The panel lists raw camelCase CSS fields.</figcaption></figure>
+      <figure><img src="assets/draw-card.jpg" alt="A Card drawn from nothing in headless Chromium with the frame, text and image tools."><figcaption>docs/demo/draw-card.png. Test 9 draws a Card from nothing (N, F, T, I) and the file reopens identically.</figcaption></figure>
+    </div>
+    <p class="cap">Measured today (decision 0002, one Card): agent → canvas 0.7 ms p50, canvas → agent 1.1 ms p50, edit cost flat at 0.03 ms after 2,000 edits. The demo diff was 15 lines added and 2 removed for three edits.</p>
+  </div>
+
+  <div class="plate">
+    <header><span><b>Fig. 3.2</b> · The dream canvas, anatomy</span><span>wireframe · not a mockup of pixels</span></header>
+    <div class="body">
+      <div class="svgwrap">
+        <svg viewBox="0 0 860 470" role="img" aria-label="Wireframe of the dream canvas: top bar with quick open and presence; layers tree on the left; a variant matrix with axis headers in the centre, one cell outlined by the agent; a design panel on the right with layout, size, corner radius and fill sections; a code strip and a proposals tray along the bottom.">
+          <rect x="0" y="0" width="860" height="470" class="f-faint"/>
+          <!-- top bar -->
+          <rect x="0" y="0" width="860" height="40" class="bx"/>
+          <text x="14" y="25" class="th">napkin</text><text x="74" y="25" class="ts">ui-kit · 40 components</text>
+          <rect x="300" y="9" width="260" height="22" rx="3" class="f-faint" style="stroke:var(--rule)"/><text x="312" y="24" class="ts">⌘K  Find a component, node or action</text>
+          <circle cx="760" cy="20" r="9" class="c-surface"/><text x="760" y="24" class="ts" text-anchor="middle" style="fill:var(--paper)">D</text>
+          <circle cx="780" cy="20" r="9" class="c-agent"/><text x="780" y="24" class="ts" text-anchor="middle" style="fill:var(--paper)">C</text>
+          <text x="796" y="24" class="ts">2 here</text>
+          <!-- layers -->
+          <rect x="0" y="40" width="170" height="350" class="bx"/>
+          <text x="12" y="60" class="tl">Layers · Button</text>
+          <text x="12" y="82" class="ts">▾ root  button</text><text x="26" y="100" class="ts">▸ icon  slot</text>
+          <rect x="18" y="108" width="146" height="16" class="c-surface" opacity=".15"/><text x="26" y="120" class="t" style="font-size:10px">  label  text ⟨label⟩</text>
+          <text x="12" y="146" class="tl">Props</text>
+          <text x="12" y="166" class="ts">label   string  "Pay"</text><text x="12" y="182" class="ts">size    sm | md | lg</text><text x="12" y="198" class="ts">tone    neutral | danger</text><text x="12" y="214" class="ts">icon    boolean</text>
+          <!-- canvas -->
+          <text x="200" y="66" class="th">Button</text><text x="258" y="66" class="ts">3 × 2 · 1 override</text>
+          <text x="300" y="90" class="tl" text-anchor="middle">sm</text><text x="420" y="90" class="tl" text-anchor="middle">md</text><text x="550" y="90" class="tl" text-anchor="middle">lg</text>
+          <text x="196" y="132" class="tl">neutral</text><text x="196" y="202" class="tl">danger</text>
+          <rect x="268" y="114" width="64" height="26" rx="6" class="z-comp"/><rect x="380" y="110" width="80" height="32" rx="6" class="z-comp"/><rect x="502" y="106" width="96" height="40" rx="6" class="z-comp"/>
+          <rect x="268" y="184" width="64" height="26" rx="6" class="z-david" style="stroke-dasharray:none"/><rect x="380" y="180" width="80" height="32" rx="6" class="z-david" style="stroke-dasharray:none"/><rect x="502" y="176" width="96" height="40" rx="6" class="z-david" style="stroke-dasharray:none"/>
+          <circle cx="600" cy="176" r="3.5" class="c-surface"/>
+          <rect x="374" y="174" width="92" height="44" class="lm s-agent" style="stroke-width:1.5;stroke-dasharray:3 2"/>
+          <rect x="374" y="218" width="78" height="14" class="c-agent"/><text x="379" y="228" style="font-size:8.5px;fill:var(--paper)">Claude · padding</text>
+          <path d="M240 98H630M240 160H630" class="lm" opacity=".5"/>
+          <!-- second component -->
+          <text x="200" y="272" class="th">Card</text><text x="242" y="272" class="ts">uses Button</text>
+          <rect x="200" y="282" width="150" height="96" class="bx"/><rect x="208" y="290" width="134" height="40" class="fl"/><rect x="208" y="336" width="90" height="7" class="fl"/><rect x="208" y="352" width="54" height="16" rx="4" class="z-comp"/>
+          <rect x="380" y="282" width="150" height="96" class="bx"/><rect x="388" y="290" width="134" height="40" class="fl"/><rect x="388" y="336" width="90" height="7" class="fl"/><rect x="388" y="352" width="54" height="16" rx="4" class="z-comp"/>
+          <!-- measure -->
+          <path d="M332 127H380" class="ln s-david" style="stroke:var(--g-david)"/><text x="356" y="122" class="ts" text-anchor="middle" style="fill:var(--g-david)">48</text>
+          <!-- design panel -->
+          <rect x="650" y="40" width="210" height="350" class="bx"/>
+          <text x="662" y="60" class="tl">Base · tone=danger</text>
+          <text x="662" y="84" class="tl">Layout</text>
+          <rect x="662" y="92" width="54" height="40" class="f-faint" style="stroke:var(--rule)"/>
+          <g class="f-muted"><circle cx="672" cy="102" r="2"/><circle cx="689" cy="102" r="2"/><circle cx="706" cy="102" r="2"/><circle cx="672" cy="112" r="2"/><circle cx="706" cy="112" r="2"/><circle cx="672" cy="122" r="2"/><circle cx="689" cy="122" r="2"/><circle cx="706" cy="122" r="2"/></g>
+          <rect x="684" y="108" width="10" height="8" class="f-accent"/>
+          <text x="726" y="104" class="ts">→ Horizontal</text><text x="726" y="120" class="ts">Gap  space-2</text>
+          <text x="662" y="152" class="tl">Size</text>
+          <rect x="662" y="158" width="58" height="18" class="f-faint" style="stroke:var(--rule)"/><text x="668" y="171" class="ts">W Hug</text>
+          <rect x="726" y="158" width="58" height="18" class="f-faint" style="stroke:var(--rule)"/><text x="732" y="171" class="ts">H 36</text>
+          <text x="662" y="198" class="tl">Corner radius</text>
+          <rect x="662" y="204" width="122" height="18" class="f-faint" style="stroke:var(--rule)"/><text x="668" y="217" class="ts">⟷ 12</text>
+          <text x="662" y="244" class="tl">Fill</text>
+          <rect x="662" y="250" width="18" height="18" class="c-david"/><text x="688" y="263" class="ts">danger-600</text><circle cx="790" cy="259" r="3.5" class="c-surface"/>
+          <text x="798" y="263" class="ts">reset</text>
+          <text x="662" y="292" class="tl">Text</text><text x="662" y="310" class="ts">Inter · 14 · 600</text>
+          <!-- code strip + tray -->
+          <rect x="0" y="390" width="560" height="80" class="bx"/>
+          <text x="12" y="408" class="tl">Button.tsx</text>
+          <text x="12" y="426" class="ts">12    padding: '8px 16px',</text>
+          <rect x="8" y="432" width="300" height="15" class="c-surface" opacity=".15"/>
+          <text x="12" y="443" class="t" style="font-size:10px">13    borderRadius: 12,</text>
+          <text x="12" y="460" class="ts">14    background: 'var(--danger-600)',</text>
+          <rect x="560" y="390" width="300" height="80" class="z-agent"/>
+          <text x="574" y="410" class="tl">Proposals · Claude</text>
+          <text x="574" y="432" class="t">4 edits to Tooltip</text>
+          <rect x="574" y="442" width="76" height="20" class="c-ok"/><text x="612" y="456" class="ts" text-anchor="middle" style="fill:var(--paper)">Accept all</text>
+          <rect x="658" y="442" width="58" height="20" class="bx"/><text x="687" y="456" class="ts" text-anchor="middle">Review</text>
+          <!-- callouts -->
+          <g class="call">
+            <circle cx="300" cy="9" r="9"/><text x="300" y="9">1</text>
+            <circle cx="12" cy="44" r="9"/><text x="12" y="44">2</text>
+            <circle cx="240" cy="92" r="9"/><text x="240" y="92">3</text>
+            <circle cx="374" cy="174" r="9"/><text x="374" y="174">4</text>
+            <circle cx="650" cy="44" r="9"/><text x="650" y="44">5</text>
+            <circle cx="790" cy="248" r="9"/><text x="790" y="248">6</text>
+            <circle cx="8" cy="394" r="9"/><text x="8" y="394">7</text>
+            <circle cx="566" cy="394" r="9"/><text x="566" y="394">8</text>
+            <circle cx="200" cy="282" r="9"/><text x="200" y="282">9</text>
+          </g>
+        </svg>
+      </div>
+      <div class="key"><h5>Key</h5><ol>
+        <li><span><b>Quick open</b>components, nodes, actions (CAN-03).</span></li>
+        <li><span><b>Layers + props</b>mirrors the JSX (CAN-04, CMP-01).</span></li>
+        <li><span><b>Axis matrix</b>headers on rows and columns (CAN-06).</span></li>
+        <li><span><b>Agent presence</b>colour, name, field (AGT-03).</span></li>
+        <li><span><b>Design panel</b>human labels, scrub fields (FEEL-02, LAY-01).</span></li>
+        <li><span><b>Override dot</b>with reset (CMP-03).</span></li>
+        <li><span><b>Code strip</b>the real file, live (INS-01).</span></li>
+        <li><span><b>Proposals</b>review agent edits (AGT-04).</span></li>
+        <li><span><b>Composition</b>Card uses Button (CMP-06, 0004).</span></li>
+      </ol></div>
+    </div>
+    <p class="cap">The panel shows token names (<code>space-2</code>, <code>danger-600</code>) only if you open the tokens area (N1). Without it, the same controls show values.</p>
+  </div>
+</section>
+
+<!-- ============ 4 ============ -->
+<div class="part" id="ch4">
+  <div class="no">Chapter 4</div>
+  <h2>Dream criteria by area</h2>
+  <p>Sixteen areas. Each opens with the dream in one sentence, then its rows. Mark each one Keep, Change or Cut. A note is optional for Keep and expected for Change.</p>
+</div>
+
+<section class="area" data-area="INV" style="--grp:var(--g-inv)">
+  <h3><span class="sec">4.1</span> Invariants <span class="chip">every merge</span></h3>
+  <p class="dream">The six promises hold under fuzzing, crashes and every writer, and a test proves each one on every merge.</p>
+  <div class="tw"><div data-crit="INV"></div></div>
+</section>
+
+<section class="area" data-area="CAN" style="--grp:var(--g-surface)">
+  <h3><span class="sec">4.2</span> Canvas &amp; navigation <span class="chip">surface</span></h3>
+  <p class="dream">An infinite, quiet canvas where 40 components and every variant are one keystroke away, and nothing moves unless you move it.</p>
+  <div class="tw"><div data-crit="CAN"></div></div>
+</section>
+
+<section class="area" data-area="LAY" style="--grp:var(--g-surface)">
+  <h3><span class="sec">4.3</span> Drawing &amp; layout <span class="chip">surface</span></h3>
+  <p class="dream">Auto layout, grids and pins that feel like Figma's and Framer's, and write the flexbox and grid CSS you'd write by hand, one property per gesture.</p>
+  <div class="tw"><div data-crit="LAY"></div></div>
+</section>
+
+<section class="area" data-area="CMP" style="--grp:var(--g-comp)">
+  <h3><span class="sec">4.4</span> Components: props, variants, slots, instances <span class="chip">components</span></h3>
+  <p class="dream">Props, a variant matrix with visible inheritance, slots and real composition. The library is built from itself, and every piece is a file an app imports.</p>
+  <div class="plate">
+    <header><span><b>Fig. 4.4</b> · Where a value comes from, and who uses whom</span><span>base + overrides (0003) · composition (0004)</span></header>
+    <div class="body solo"><div class="svgwrap">
+      <svg viewBox="0 0 860 210" role="img" aria-label="Left: a style value resolves from base, then the size axis override, then the tone axis override, into one cell. Right: Card and Toolbar import Button; Toolbar also imports IconButton; changing Button's base updates both parents.">
+        <defs><marker id="ar4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="f-muted"/></marker></defs>
+        <text x="10" y="20" class="tl">Resolve borderRadius for size=lg · tone=danger</text>
+        <rect x="10" y="34" width="120" height="58" class="bx"/><text x="20" y="56" class="th">base</text><text x="20" y="76" class="ts">radius 6 → 12</text>
+        <rect x="150" y="34" width="120" height="58" class="bx"/><text x="160" y="56" class="th">size=lg</text><text x="160" y="76" class="ts">(no radius)</text>
+        <rect x="290" y="34" width="120" height="58" class="z-david" style="stroke-dasharray:none"/><text x="300" y="56" class="th">tone=danger</text><text x="300" y="76" class="ts">radius 4 ●</text>
+        <path d="M130 63h20M270 63h20" class="ln" marker-end="url(#ar4)"/>
+        <rect x="150" y="118" width="260" height="48" class="z-comp"/><text x="160" y="138" class="th">cell → radius 4</text><text x="160" y="156" class="ts">dot shows the override · Reset · Move to base</text>
+        <path d="M350 92V118" class="ln" marker-end="url(#ar4)"/>
+        <text x="10" y="190" class="ti">Axes merge in prop order. A base edit is one line and reaches every cell without an override.</text>
+        <!-- composition -->
+        <text x="500" y="20" class="tl">Composition · needs 0004</text>
+        <rect x="500" y="34" width="110" height="44" class="bx"/><text x="555" y="61" class="th" text-anchor="middle">Card</text>
+        <rect x="660" y="34" width="110" height="44" class="bx"/><text x="715" y="61" class="th" text-anchor="middle">Toolbar</text>
+        <rect x="560" y="122" width="110" height="44" class="z-comp"/><text x="615" y="149" class="th" text-anchor="middle">Button</text>
+        <rect x="720" y="122" width="120" height="44" class="z-comp"/><text x="780" y="149" class="th" text-anchor="middle">IconButton</text>
+        <path d="M555 78L600 120M700 78L640 120M735 78L770 120" class="dash" marker-end="url(#ar4)"/>
+        <text x="500" y="190" class="ti">import + JSX instance with props · edit Button, both parents update in &lt;100 ms</text>
+      </svg>
+    </div></div>
+  </div>
+  <div class="tw"><div data-crit="CMP"></div></div>
+</section>
+
+<section class="area" data-area="TOK" style="--grp:var(--g-david)">
+  <h3><span class="sec">4.5</span> Tokens &amp; themes <span class="chip">Needs David · N1</span></h3>
+  <p class="dream">Token names instead of numbers, synced both ways with the codebase's token file, and every cell previewed in every theme.</p>
+  <div class="note rule"><b>Rule · not built without your yes</b><p>INTENT says "no token panel yet". These rows are drafted so you can judge them, but the loop won't build them until N1 is answered.</p></div>
+  <div class="tw"><div data-crit="TOK"></div></div>
+</section>
+
+<section class="area" data-area="OPN" style="--grp:var(--g-david)">
+  <h3><span class="sec">4.6</span> Opening existing repos <span class="chip">Needs David · N2</span></h3>
+  <p class="dream">Point napkin at any React repo: what fits the dialect is editable, the rest renders read-only and says why, and adopting a file is a diff you review.</p>
+  <div class="note rule"><b>Rule · not built without your yes</b><p>INTENT says "not (yet) a way to open arbitrary existing components from other repos".</p></div>
+  <div class="tw"><div data-crit="OPN"></div></div>
+</section>
+
+<section class="area" data-area="AGT" style="--grp:var(--g-agent)">
+  <h3><span class="sec">4.7</span> Agents: MCP, presence, review <span class="chip">agents</span></h3>
+  <p class="dream">Agents see what they make, show where they work, and can be told to propose instead of write. Accepting a proposal is one click through the same commit path.</p>
+  <div class="plate">
+    <header><span><b>Fig. 4.7</b> · Propose, review, accept</span><span>proposals live in memory, never in the file</span></header>
+    <div class="body solo"><div class="svgwrap">
+      <svg viewBox="0 0 860 170" role="img" aria-label="An agent calls apply_edits in propose mode. The server dry-runs it and holds a proposal in memory. The canvas shows ghost before and after cells. Accept sends it through store.apply into the file; reject discards it and the file stays byte-identical.">
+        <defs><marker id="ar5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L8 4L0 8z" class="f-muted"/></marker></defs>
+        <rect x="10" y="40" width="110" height="56" class="z-agent"/><text x="65" y="64" class="th" text-anchor="middle">agent</text><text x="65" y="82" class="ts" text-anchor="middle">mode: propose</text>
+        <rect x="150" y="40" width="130" height="56" class="bx"/><text x="215" y="64" class="th" text-anchor="middle">dry run</text><text x="215" y="82" class="ts" text-anchor="middle">same validator</text>
+        <rect x="310" y="40" width="130" height="56" class="bx" style="stroke-dasharray:4 3"/><text x="375" y="64" class="th" text-anchor="middle">proposal</text><text x="375" y="82" class="ts" text-anchor="middle">base rev · edits</text>
+        <rect x="470" y="40" width="140" height="56" class="bx"/><text x="540" y="64" class="th" text-anchor="middle">ghost cells</text><text x="540" y="82" class="ts" text-anchor="middle">before | after</text>
+        <path d="M120 68h30M280 68h30M440 68h30" class="ln" marker-end="url(#ar5)"/>
+        <rect x="650" y="14" width="200" height="50" class="z-ink"/><text x="750" y="36" class="th" text-anchor="middle" style="fill:var(--paper)">Accept → store.apply</text><text x="750" y="54" class="ts" text-anchor="middle" style="fill:var(--paper);opacity:.8">stale rules apply · attributed</text>
+        <rect x="650" y="84" width="200" height="50" class="bx"/><text x="750" y="106" class="th" text-anchor="middle">Reject</text><text x="750" y="124" class="ts" text-anchor="middle">file sha unchanged</text>
+        <path d="M610 60L648 42M610 76L648 106" class="ln" marker-end="url(#ar5)"/>
+        <text x="10" y="156" class="ti">Write mode skips the proposal step, as today. Which agents may write directly is G6 (N6).</text>
+      </svg>
+    </div></div>
+  </div>
+  <div class="tw"><div data-crit="AGT"></div></div>
+</section>
+
+<section class="area" data-area="HIS" style="--grp:var(--g-agent)">
+  <h3><span class="sec">4.8</span> History &amp; undo <span class="chip">agents · part N5</span></h3>
+  <p class="dream">Undo is yours alone, it is a new revision rather than time travel, and history shows who changed what without you leaving the canvas.</p>
+  <div class="plate">
+    <header><span><b>Fig. 4.8</b> · Undo as a new revision</span><span>salvage: transaction model, guarded history</span></header>
+    <div class="body solo"><div class="svgwrap">
+      <svg viewBox="0 0 860 150" role="img" aria-label="Three lanes, you, agent and file, across revisions 41 to 46. You set radius at 41, the agent adds xl at 42, git restore lands at 43. Your undo at 44 reverts only your radius. A second undo at 46 is refused because the agent changed the same property at 45.">
+        <text x="10" y="40" class="tl">you</text><text x="10" y="80" class="tl">agent</text><text x="10" y="120" class="tl">file</text>
+        <path d="M70 36H850M70 76H850M70 116H850" class="lm" opacity=".45"/>
+        <text x="130" y="16" class="ts" text-anchor="middle">r41</text><text x="250" y="16" class="ts" text-anchor="middle">r42</text><text x="370" y="16" class="ts" text-anchor="middle">r43</text><text x="490" y="16" class="ts" text-anchor="middle">r44</text><text x="620" y="16" class="ts" text-anchor="middle">r45</text><text x="760" y="16" class="ts" text-anchor="middle">r46?</text>
+        <circle cx="130" cy="36" r="7" class="c-surface"/><text x="130" y="56" class="ts" text-anchor="middle">radius 6→12</text>
+        <circle cx="250" cy="76" r="7" class="c-agent"/><text x="250" y="96" class="ts" text-anchor="middle">add xl</text>
+        <circle cx="370" cy="116" r="7" class="f-muted"/><text x="370" y="136" class="ts" text-anchor="middle">git restore Card</text>
+        <circle cx="490" cy="36" r="7" class="c-surface"/><text x="490" y="56" class="ts" text-anchor="middle">⌘Z: radius 12→6</text>
+        <path d="M137 30Q310 -6 483 30" class="dash"/>
+        <circle cx="620" cy="76" r="7" class="c-agent"/><text x="620" y="96" class="ts" text-anchor="middle">padding 8→10</text>
+        <circle cx="760" cy="36" r="7" class="f-sheet" style="stroke:var(--g-david);stroke-width:1.5"/><text x="760" y="56" class="ts" text-anchor="middle" style="fill:var(--g-david)">⌘Z refused: agent</text><text x="760" y="70" class="ts" text-anchor="middle" style="fill:var(--g-david)">changed padding (r45)</text>
+      </svg>
+    </div></div>
+  </div>
+  <div class="tw"><div data-crit="HIS"></div></div>
+</section>
+
+<section class="area" data-area="AST" style="--grp:var(--g-comp)">
+  <h3><span class="sec">4.9</span> Assets <span class="chip">components</span></h3>
+  <p class="dream">Images and icons come from the repo and go back into the repo. Drop one in and you get a file and a one-line diff.</p>
+  <div class="tw"><div data-crit="AST"></div></div>
+</section>
+
+<section class="area" data-area="INS" style="--grp:var(--g-comp)">
+  <h3><span class="sec">4.10</span> Inspection &amp; handoff <span class="chip">components</span></h3>
+  <p class="dream">There's no handoff, because the file is the deliverable. You can still read it, inspect any cell, copy a usage line, and see before/after for every change.</p>
+  <div class="tw"><div data-crit="INS"></div></div>
+</section>
+
+<section class="area" data-area="PRF" style="--grp:var(--g-engine)">
+  <h3><span class="sec">4.11</span> Performance <span class="chip">engine</span></h3>
+  <p class="dream">At 200 components and a thousand cells, every edit lands before you notice, and the canvas never drops a frame while you pan.</p>
+  <div class="tw"><div data-crit="PRF"></div></div>
+  <div class="note tip"><b>Tip · how timings are taken</b><p>All timings come from headless Chromium via <code>test/helpers/cdp.js</code> on this machine (CPU only, GPU untouched), using a generated 200-component corpus (<code>bench/corpus-200</code>). p95 is over 50 runs unless a row says otherwise. The critic re-runs them itself.</p></div>
+</section>
+
+<section class="area" data-area="FMT" style="--grp:var(--g-comp)">
+  <h3><span class="sec">4.12</span> File format &amp; diffs <span class="chip">components</span></h3>
+  <p class="dream">The files read like a careful person wrote them, merge cleanly in git, and every kind of edit has a known, small diff.</p>
+  <div class="plate">
+    <header><span><b>Fig. 4.12</b> · Diff budget per edit</span><span>real: docs/demo/demo-diff.txt</span></header>
+    <div class="body">
+      <div style="min-width:0">
+<pre><span class="mono">@@ -12,7 +12,7 @@ const base = {</span>
+     padding: '8px 16px',
+<span class="del">-    borderRadius: 6,</span>
+<span class="add">+    borderRadius: 12,</span>
+     border: '2px solid #16181d',</pre>
+        <p class="cap">Your base radius edit in the proving demo: one line out, one line in. The whole demo (three edits) was +15 / −2.</p>
+      </div>
+      <div class="key"><h5>Budget (FMT-02)</h5>
+        <div class="tw" style="margin:0"><table class="difftbl"><tr><th>Edit</th><th class="n">± lines</th></tr>
+          <tr><td>set style / text</td><td class="n">1 / 1</td></tr>
+          <tr><td>setDefault</td><td class="n">1 / 1</td></tr>
+          <tr><td>addVariant value</td><td class="n">+1 union · + block</td></tr>
+          <tr><td>override</td><td class="n">+ 1 per prop (+ wrappers)</td></tr>
+          <tr><td>rename prop / value</td><td class="n">only lines naming it</td></tr>
+          <tr><td>move node</td><td class="n">its JSX lines</td></tr>
+          <tr><td>canvas position</td><td class="n">sidecar only</td></tr>
+        </table></div>
+      </div>
+    </div>
+  </div>
+  <div class="tw"><div data-crit="FMT"></div></div>
+</section>
+
+<section class="area" data-area="ONB" style="--grp:var(--g-surface)">
+  <h3><span class="sec">4.13</span> Onboarding <span class="chip">surface</span></h3>
+  <p class="dream">From a clean clone to your first component on the canvas with an agent connected in under a minute, with the README as the only guide.</p>
+  <div class="tw"><div data-crit="ONB"></div></div>
+</section>
+
+<section class="area" data-area="REL" style="--grp:var(--g-engine)">
+  <h3><span class="sec">4.14</span> Reliability <span class="chip">engine</span></h3>
+  <p class="dream">Kill it, break the file, switch branches, run it for an hour: the file is always whole and the canvas always tells the truth.</p>
+  <div class="tw"><div data-crit="REL"></div></div>
+</section>
+
+<section class="area" data-area="FEEL" style="--grp:var(--g-surface)">
+  <h3><span class="sec">4.15</span> Look &amp; feel <span class="chip">surface</span></h3>
+  <p class="dream">A tool you'd choose for how it feels. Calm chrome, human words, a panel that reads like a design tool, and the components as the brightest thing on screen.</p>
+  <div class="tw"><div data-crit="FEEL"></div></div>
+</section>
+
+<section class="area" data-area="SCN" style="--grp:var(--g-inv)">
+  <h3><span class="sec">4.16</span> Scenes, walked whole <span class="chip">whole-product critic</span></h3>
+  <p class="dream">Each scene in chapter 2, run cold by a fresh agent with only the README and the running app.</p>
+  <div class="tw"><div data-crit="SCN"></div></div>
+</section>
+
+<!-- ============ 5 ============ -->
+<section class="ch" id="needs">
+  <div class="num">CHAPTER 5</div>
+  <h2>Needs David</h2>
+  <p class="deck">Things the dream wants that INTENT rules out, or that an open decision leaves to you. Nothing here gets built until you answer.</p>
+  <div class="needs" id="needs-list"></div>
+</section>
+
+<!-- ============ 7 ============ -->
+<section class="ch" id="ch7">
+  <div class="num">CHAPTER 6</div>
+  <h2>Phase 2: the gauntlet plan</h2>
+  <p class="deck">How the loop would run once you say go: two waves, at most four builders at once, and models matched to each job.</p>
+
+  <div class="plate">
+    <header><span><b>Fig. 7.1</b> · Waves</span><span>proposed · you decide</span></header>
+    <div class="body solo"><div class="svgwrap">
+      <svg viewBox="0 0 860 200" role="img" aria-label="Wave 1, buildable on go: invariants, file format, performance, reliability, then canvas, layout, look and feel, onboarding, agents, inspect, assets, history parts. Wave 2 after your answers: composition with dialect 0004, undo, clash rule, permissions, tokens, open repos.">
+        <text x="10" y="20" class="tl">Wave 1 · buildable on go · four worktrees at a time</text>
+        <g>
+          <rect x="10" y="30" width="96" height="40" class="z-inv" style="stroke-width:1"/><text x="58" y="55" class="t" text-anchor="middle">INV</text>
+          <rect x="114" y="30" width="96" height="40" class="z-comp"/><text x="162" y="55" class="t" text-anchor="middle">FMT</text>
+          <rect x="218" y="30" width="96" height="40" class="z-engine"/><text x="266" y="55" class="t" text-anchor="middle">PRF</text>
+          <rect x="322" y="30" width="96" height="40" class="z-engine"/><text x="370" y="55" class="t" text-anchor="middle">REL</text>
+          <text x="430" y="55" class="ts">round 1: the floor everything stands on</text>
+          <rect x="10" y="80" width="96" height="40" class="z-surface"/><text x="58" y="105" class="t" text-anchor="middle">CAN</text>
+          <rect x="114" y="80" width="96" height="40" class="z-surface"/><text x="162" y="105" class="t" text-anchor="middle">LAY</text>
+          <rect x="218" y="80" width="96" height="40" class="z-surface"/><text x="266" y="105" class="t" text-anchor="middle">FEEL</text>
+          <rect x="322" y="80" width="96" height="40" class="z-agent"/><text x="370" y="105" class="t" text-anchor="middle">AGT</text>
+          <rect x="426" y="80" width="96" height="40" class="z-comp"/><text x="474" y="105" class="t" text-anchor="middle">INS · AST</text>
+          <rect x="530" y="80" width="96" height="40" class="z-surface"/><text x="578" y="105" class="t" text-anchor="middle">ONB</text>
+          <rect x="634" y="80" width="96" height="40" class="z-agent"/><text x="682" y="105" class="t" text-anchor="middle">HIS-04/05</text>
+          <text x="740" y="105" class="ts">round 2+</text>
+        </g>
+        <text x="10" y="148" class="tl">Wave 2 · after your answers in chapter 5</text>
+        <rect x="10" y="158" width="130" height="36" class="z-david"/><text x="75" y="181" class="t" text-anchor="middle">CMP 0004</text>
+        <rect x="150" y="158" width="130" height="36" class="z-david"/><text x="215" y="181" class="t" text-anchor="middle">HIS undo (G5)</text>
+        <rect x="290" y="158" width="130" height="36" class="z-david"/><text x="355" y="181" class="t" text-anchor="middle">AGT G2 · G6</text>
+        <rect x="430" y="158" width="130" height="36" class="z-david"/><text x="495" y="181" class="t" text-anchor="middle">TOK (N1)</text>
+        <rect x="570" y="158" width="130" height="36" class="z-david"/><text x="635" y="181" class="t" text-anchor="middle">OPN (N2)</text>
+      </svg>
+    </div></div>
+  </div>
+
+  <h4>Who does what</h4>
+  <div class="tw"><table>
+    <tr><th>Role</th><th>Runs on</th><th>Why</th></tr>
+    <tr><td>Lead: ledger, merges, full suite</td><td>Opus (this session)</td><td>Your prompt: Opus for the lead and merges.</td></tr>
+    <tr><td>Builders, most areas</td><td>Claude Sonnet subagents in worktrees</td><td>Your budget rule.</td></tr>
+    <tr><td>Builders, 2–3 engine areas (PRF, REL, FMT)</td><td>Codex CLI 0.162.1 (<code>codex exec</code>) in its own worktree</td><td>A second builder family. Decision 0002 found Codex's take useful as an independent design.</td></tr>
+    <tr><td>Taste critics (blind comparisons)</td><td>Sonnet, fresh context; a second opinion from Codex on disputed rows</td><td>Two model families make a blind tie harder to fake.</td></tr>
+    <tr><td>Number critics (timings, diff counts, error-string audits, cold README run)</td><td>Opencode 1.19.0 free models (e.g. <code>opencode/nemotron-3-ultra-free</code>)</td><td>Cheap, and the critic measures, so taste doesn't matter. Their verdicts never pass a row alone: the lead re-runs the number.</td></tr>
+    <tr><td>Whole-product critic</td><td>Opus, fresh, every ~3 rounds</td><td>Your prompt.</td></tr>
+  </table></div>
+
+  <div class="note trap"><b>Trap · found while planning</b>
+    <ul>
+      <li><code>ccusage</code> isn't installed. Logging spend needs <code>npx ccusage@&lt;pinned&gt;</code> (a small download) or your OK to install it. See N7.</li>
+      <li>Paper and Figma need accounts. A critic can't capture the real apps the same way it captures napkin, only their public pages and imagery. See N7.</li>
+      <li>Codex and the free Opencode models send repo code to OpenAI and to Opencode's model hosts, and free models may keep prompts. See N7.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 8 ============ -->
+<section class="ch" id="go">
+  <div class="num">CHAPTER 7</div>
+  <h2>Go / no go</h2>
+  <p class="deck">When you've marked what you want, say go here (or in the terminal). I'll turn the kept and changed rows into docs/progress.md and start wave 1.</p>
+  <div class="gobox" data-id="GO">
+    <h4>Phase 2</h4>
+    <div class="seg" role="group" aria-label="Go or not yet"><button type="button" data-m="go" aria-pressed="false">Go</button><button type="button" data-m="wait" aria-pressed="false">Not yet</button></div>
+    <label for="note-GO" class="mono" style="color:var(--muted);font-size:11px">Anything else before I start</label>
+    <textarea id="note-GO" rows="3" placeholder="e.g. start with CAN and FEEL; skip Codex for now"></textarea>
+  </div>
+</section>
+
+<!-- ============ A ============ -->
+<section class="ch" id="appA">
+  <div class="num">APPENDIX A</div>
+  <h2>References for blind comparisons</h2>
+  <p class="deck">Every blind bar names one of these. The critic records the exact page and date it captured.</p>
+  <div class="tw"><table>
+    <tr><th>Reference</th><th>Used by</th><th>How it's captured</th><th>Strength</th></tr>
+    <tr><td>Paper canvas · <a href="https://paper.design">paper.design</a></td><td>FEEL-01, ONB-02</td><td>Public site, docs and launch imagery, cropped to the canvas</td><td><span class="pill warn" style="color:var(--warn)">weak until N7</span></td></tr>
+    <tr><td>Figma variants, auto layout, design panel, layers · <a href="https://help.figma.com">help.figma.com</a></td><td>CAN-04, CAN-06, LAY-01, LAY-07, LAY-08, CMP-03, FEEL-02</td><td>Figures from Figma's help articles, rebuilt at napkin's viewport where possible</td><td><span class="pill warn" style="color:var(--warn)">weak until N7</span></td></tr>
+    <tr><td>Framer layout controls · <a href="https://www.framer.com/help/">framer.com/help</a></td><td>LAY-01</td><td>Help-centre figures</td><td><span class="pill warn" style="color:var(--warn)">imagery</span></td></tr>
+    <tr><td>Storybook Controls and Autodocs · <a href="https://storybook.js.org">storybook.js.org</a></td><td>CMP-01, INS-04</td><td>A public Storybook, captured live in headless Chromium at the same viewport</td><td><span class="pill ok">same capture</span></td></tr>
+    <tr><td>Figma multiplayer cursors</td><td>AGT-03</td><td>Public imagery</td><td><span class="pill warn" style="color:var(--warn)">imagery</span></td></tr>
+  </table></div>
+</section>
+
+<!-- ============ B ============ -->
+<section class="ch" id="appB">
+  <div class="num">APPENDIX B</div>
+  <h2>Changelog</h2>
+  <dl class="changelog">
+    <dt>0.2 · 2026-10-21</dt>
+    <dd>Approved by David: every criterion kept, N1–N8 yes, go for Phase 2. Chapter 6 ("What napkin will never be") removed at his request. Decisions recorded in INTENT.md, 0004 and 0005; the ledger is docs/progress.md.</dd>
+    <dt>0.1 · 2026-10-21</dt>
+    <dd>First draft by Claude (Opus 5.5) from <code>docs/prompts/dream-gauntlet.md</code>, Phase 1. Made as a review page with saved marks instead of <code>docs/DREAM.md</code>, at your request. Nothing has been decided by you yet.</dd>
+  </dl>
+</section>
+</main>
+<div class="foot">napkin · The Dream · Edition 0.2 · 2026-10-21 · source docs/dream/dream.html</div>
+
+<script>
+// [id, criterion, evidence, bar, kind(num|blind|test|walk), gate(build|david|0004)]
+const CRIT = {
+INV: [
+ ["INV-01","Files are the truth: after a kill at any moment and a restart, the canvas shows exactly what is on disk. Only the sidecar (id, position) and in-memory revisions live elsewhere.","test/invariants/truth.test.js","100/100 random kill points","test","build"],
+ ["INV-02","Open and save with no change gives the same bytes, for every fixture and a 40-component corpus.","test/invariants/noop.test.js · sha256 before/after","40/40 identical","test","build"],
+ ["INV-03","Every edit type stays within its diff budget (Fig. 4.12).","200-op fuzz · git diff --numstat per op","0 ops over budget","num","build"],
+ ["INV-04","Out-of-dialect files open read-only with the reason and line, and every write path refuses them.","50-file out-of-dialect corpus · every tool tried","sha256 unchanged 50/50","test","build"],
+ ["INV-05","One commit path: panel, tools, MCP, HTTP, undo and accepting a proposal all write through <code>store.apply</code>, with revisions and stale rejection.","fs-write spy in test/invariants/one-path.test.js","0 component writes outside apply","test","build"],
+ ["INV-06","Components need nothing from napkin at run time.","examples/consumer-app build · grep imports · tsc --strict","0 napkin imports; build + typecheck pass","test","build"]
+],
+CAN: [
+ ["CAN-01","Pan (space-drag, wheel, trackpad) and zoom to the cursor (⌘/Ctrl-wheel, pinch, + / −) from 5% to 800%. <kbd>⇧1</kbd> fits all, <kbd>⇧2</kbd> fits the selection.","test/canvas/nav.test.js (CDP input)","point under cursor drifts ≤ 1 px per step; every binding works","test","build"],
+ ["CAN-02","Each component is a frame you can drag on the canvas. Its position is saved in the sidecar only.","test + git diff after a drag",".tsx byte-identical; sidecar ≤ 2 lines","test","build"],
+ ["CAN-03","Quick open (<kbd>⌘K</kbd>): fuzzy search over components, nodes and actions, then Enter flies there.","timing on bench/corpus-200","results < 50 ms p95; flight ≤ 300 ms (none with reduced motion)","num","build"],
+ ["CAN-04","A layers tree mirrors the JSX. Selection syncs both ways; rename and drag-reorder are one edit each.","screenshot pair, blind","wins or ties Figma's layers panel","blind","build"],
+ ["CAN-05","Multi-select (shift-click, marquee). The panel shows mixed values; one change is one batch.","test: revision count","1 revision per multi-edit","test","build"],
+ ["CAN-06","The variant grid is a matrix: one axis across, one down, a third as groups, with axis headers.","screenshot pair, blind; 4×4×4 fixture","wins or ties Figma's variant set; every caption legible at fit","blind","build"],
+ ["CAN-07","Hold <kbd>Alt</kbd> to measure the distance between the selection and the hovered node.","test vs getBoundingClientRect","within 0.5 px","test","build"],
+ ["CAN-08","Focus a component (Enter) and come back (Esc). The view deep-links (#Button/label) and a reload restores it.","test/canvas/focus.test.js","view restored after reload","test","build"]
+],
+LAY: [
+ ["LAY-01","Auto layout: direction, gap, padding (linked or per side), the 3×3 alignment matrix and wrap, written as flexbox.","screenshot pair, blind · diff per control","wins or ties Figma auto layout and Framer stacks; 1 line per control","blind","build"],
+ ["LAY-02","Hug / Fill / Fixed per child, plus min/max, written as width:auto / flex:1 / px.","12-case render matrix test","12/12 render to the expected size","test","build"],
+ ["LAY-03","Grid: columns, rows and gap in fr/px. Dragging a child into a cell sets gridColumn/gridRow.","test + diff","1 line per placement","test","build"],
+ ["LAY-04","Absolute children with pins (left/right/top/bottom/centre) written as inset CSS. They behave like Figma constraints when the parent resizes.","8-case constraint test","8/8","test","build"],
+ ["LAY-05","Direct manipulation: resize handles, on-canvas padding and gap handles, drag-reorder with an insertion line.","CDP trace during drags · revision count","1 revision per gesture; p95 frame ≤ 16.7 ms","num","build"],
+ ["LAY-06","Smart guides and snapping to siblings, parent edges and a 4/8 px grid; <kbd>⇧</kbd> constrains.","test/canvas/snap.test.js","snaps within 4 screen px","test","build"],
+ ["LAY-07","Type controls: font from the repo, size, weight, line height, tracking, alignment, colour; inline editing that works with IME.","screenshot pair, blind · IME test","wins or ties Figma's text section","blind","build"],
+ ["LAY-08","Fill, border, per-corner radius, shadow, opacity, with a colour picker (hex, rgb, oklch) and eyedropper. Values are written in the format the file already uses.","screenshot pair, blind · format test","wins or ties Figma fill & effects","blind","build"],
+ ["LAY-09","Wrap in frame (<kbd>⌘⌥G</kbd>), unwrap, duplicate (<kbd>⌘D</kbd>), copy and paste nodes between components with fresh ids.","pixel diff of pasted subtree","0 px difference","test","build"],
+ ["LAY-10","Paste in: SVG or PNG from the clipboard becomes an image; an HTML snippet becomes dialect nodes if it fits, otherwise it's refused with the reason.","10-snippet corpus","fits converted, others refused, 0 approximations","test","build"],
+ ["LAY-11","Drag a cell's width to watch it reflow. Preview widths live in the sidecar.","test + sha",".tsx unchanged","test","build"]
+],
+CMP: [
+ ["CMP-01","Props editor: add, remove, rename and reorder string, boolean and enum props, with defaults and descriptions (JSDoc). A rename updates every reference in one edit.","screenshot pair, blind · rename diff","wins or ties Storybook Controls; rename = 1 revision","blind","build"],
+ ["CMP-02","Variant axes: add an axis; add, rename, reorder or remove values. A rename changes only the lines that name the value.","test + diff","0 unrelated lines","test","build"],
+ ["CMP-03","Each property shows where its value comes from (base or axis=value), with an override dot, Reset, and Move to base.","screenshot pair, blind","wins or ties Figma's override display","blind","build"],
+ ["CMP-04","Boolean props show or hide a node (<code>{icon &amp;&amp; …}</code>).","test + consumer app","renders both states in the app","test","0004"],
+ ["CMP-05","Slots: <code>children</code> and named ReactNode props appear as drop zones. Preview content lives in the sidecar.","test + sha",".tsx has no preview content","test","0004"],
+ ["CMP-06","Composition: a component renders another by import. The nested instance is selectable and its props edit as JSX attributes.","timing on Card ⊃ Button · diff","a Button base edit shows in every Card < 100 ms; 1 line in Button.tsx only","num","0004"],
+ ["CMP-07","Swap an instance (Button → IconButton) and keep the props both share.","test","matching props kept","test","0004"],
+ ["CMP-08","Extract component: select a subtree, and get a new file plus an instance in its place.","consumer-app pixel diff before/after","0 px difference","test","0004"],
+ ["CMP-09","Play mode (<kbd>P</kbd>): cells become live React you can click and type into, without leaving the canvas.","timing","toggle < 100 ms","num","build"],
+ ["CMP-10","Large matrices (4×4×4 = 64 cells) collapse and filter by axis value.","critic task","any cell reached in ≤ 2 actions","walk","build"]
+],
+TOK: [
+ ["TOK-01","Read tokens from a configured file (secret-sauce tokens.json or CSS custom properties). <code>list_tokens</code> over MCP.","test","every token listed with value and mode","test","david"],
+ ["TOK-02","Bind a property to a token: it writes <code>var(--space-4)</code> and the panel shows <code>space-4</code>.","diff · consumer app","1 line; app renders with plain CSS vars","test","david"],
+ ["TOK-03","Off-token values get an orange dot and a \"snap to nearest token\" action.","screenshot + test","100% of off-token values flagged","test","david"],
+ ["TOK-04","A theme switch previews every cell in each token mode.","timing at 200 components","switch < 300 ms","num","david"],
+ ["TOK-05","Edit a token's value: the token file changes by one line, and every bound cell updates.","diff · timing","1 line; < 100 ms","num","david"]
+],
+OPN: [
+ ["OPN-01","<code>napkin open &lt;repo&gt;</code> classifies every .tsx as editable or read-only with the reason, and prints a report.","report on a pinned repo","every file classified, 0 files written","test","david"],
+ ["OPN-02","Read-only components still render on the canvas with their default props.","screenshot","renders or names the build error","test","david"],
+ ["OPN-03","Adopt into the dialect: an agent proposes a rewrite as a diff you review. It is never applied silently.","proposal flow test","sha unchanged until Accept","test","david"],
+ ["OPN-04","Coverage on shadcn/ui at a pinned commit: the share of components that open editable.","report","bar set by you","num","david"]
+],
+AGT: [
+ ["AGT-01","The MCP surface is complete: list, read, apply (dryRun, propose), add_variant, create, rename, delete, render, search and subscribe, each with a schema and a contract test.","test/mcp/*.test.js · MCP inspector","every tool tested and listed","test","build"],
+ ["AGT-02","<code>render_component</code> returns a PNG of any cell, so agents can see.","timing · pixel compare to canvas","< 500 ms p95; matches the canvas cell","num","build"],
+ ["AGT-03","Presence: each agent has a colour, a name and an outline on the node it's editing. Two agents at once are told apart. It clears when they're done.","screenshot pair, blind · timing","wins or ties Figma cursors; clears ≤ 1 s","blind","build"],
+ ["AGT-04","Review mode: proposals show as ghost before/after cells. Accept or reject each one, or all. Accept goes through apply; reject leaves the file untouched.","test/agents/propose.test.js · critic walk","reject → sha unchanged; critic wowed","walk","build"],
+ ["AGT-05","Attribution: every revision records who made it (you, an agent's name, file, git).","test","100% of revisions attributed","test","build"],
+ ["AGT-06","A stale error lists the changed keys and their current values, so an agent can retry once and succeed.","scripted agent, 100 races","100/100 recover in 1 retry","num","build"],
+ ["AGT-07","Agents learn the dialect from napkin itself: the MCP serves a guide as a resource and a prompt.","agent eval: fresh Sonnet, only the MCP, 10 tasks","≥ 8/10 tasks done","num","build"],
+ ["AGT-08","MCP works with no canvas running: it falls back to its own store with a single-writer lock (0002's noted fallback).","test","edits land; a canvas started later shows them","test","build"],
+ ["AGT-09","Activity feed: a live list of agent actions. Click one to focus its node.","screenshot + test","every apply listed ≤ 200 ms","test","build"],
+ ["AGT-10","Same-property clash rule (G2).","test once defined","defined by you","test","david"],
+ ["AGT-11","Agent permissions: read-only, propose-only or write, per agent (G6).","test once defined","defined by you","test","david"]
+],
+HIS: [
+ ["HIS-01","<kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd> undo and redo your own edits as new, attributed revisions. They never undo an agent's.","test · diff","the reverse diff of the original","test","david"],
+ ["HIS-02","Undo is refused, with who and when, if someone else changed the same property afterwards.","salvage test idea, rebuilt","refused 100% in the race test","test","david"],
+ ["HIS-03","History panel: a timeline of revisions (who, what, when). Scrub to preview; Restore makes a new revision.","screenshot + test","restore = 1 revision","test","david"],
+ ["HIS-04","Revisions are content hashes, so they survive a server restart (0002's note, borrowed from B).","test","a pre-restart revision commits if the file is unchanged","test","build"],
+ ["HIS-05","Git awareness: a dot for components changed since HEAD, and a diff view. napkin never commits on its own.","test","0 commits made by napkin","test","build"]
+],
+AST: [
+ ["AST-01","Drop an image on an image slot: it's copied into the configured assets folder under a content-hash name, and src is set.","diff","1 line + 1 new file","test","build"],
+ ["AST-02","An asset browser lists the repo's images and SVGs, and you can drag them onto the canvas.","test","every asset listed","test","build"],
+ ["AST-03","A missing asset shows a badge with the path. Nothing crashes.","test","badge shown; 0 errors","test","build"],
+ ["AST-04","The same image dropped twice is stored once.","test","1 file","test","build"]
+],
+INS: [
+ ["INS-01","Code strip: the live TSX beside the canvas, with the selected node's lines highlighted. Click a line to select its node.","timing · test","updates < 100 ms after any edit","num","build"],
+ ["INS-02","Inspect: the computed CSS of a node in any cell, with where each value comes from.","test vs getComputedStyle","100% match","test","build"],
+ ["INS-03","Copy usage gives <code>&lt;Button size=\"sm\" label=\"Pay\" /&gt;</code> for the cell; pasted into the consumer app, it renders that cell.","pixel diff","0 px difference","test","build"],
+ ["INS-04","<code>napkin docs</code> writes a local static catalog: props table, variant grid, usage lines.","screenshot pair, blind","wins or ties Storybook Autodocs","blind","build"],
+ ["INS-05","Visual diff: before/after images of every cell, for the working tree against HEAD.","test","every changed cell shown, unchanged hidden","test","build"]
+],
+PRF: [
+ ["PRF-01","Cold open of a 40-component repo until every cell is drawn.","CDP timing, 5 runs","≤ 1.5 s p50","num","build"],
+ ["PRF-02","At 200 components (≥ 1,000 cells), a panel edit reaches the pixels quickly.","CDP: input → next paint","< 100 ms p95","num","build"],
+ ["PRF-03","At 200 components, an agent edit reaches the pixels quickly. (Today: 0.7 ms p50 to the socket, one Card.)","CDP + MCP client","< 100 ms p95","num","build"],
+ ["PRF-04","Panning and zooming at 200 components stays smooth.","CDP trace, scripted 5 s pan","p95 frame ≤ 16.7 ms","num","build"],
+ ["PRF-05","Rebuild after an edit (esbuild, per component).","bundle.js timings","≤ 50 ms p95","num","build"],
+ ["PRF-06","Edit cost stays flat over a long session. (Today: 0.03 ms after 2,000 edits, store only.)","bench","edit #2000 ≤ 2× edit #1","num","build"],
+ ["PRF-07","Memory at 200 components.","RSS · JS heap","server ≤ 500 MB, page ≤ 400 MB","num","build"],
+ ["PRF-08","Typing into a panel field.","CDP input → paint","≤ 50 ms p95","num","build"]
+],
+FMT: [
+ ["FMT-01","docs/dialect.md lists every construct, each with a test. A reader can write a valid component from it alone.","critic writes one cold","opens editable on the first try","walk","build"],
+ ["FMT-02","Every edit type has a diff budget (Fig. 4.12), checked per op.","table test","0 over budget","test","build"],
+ ["FMT-03","Files napkin creates or edits pass prettier (default config) in the regions it wrote, plus <code>tsc --strict</code> and eslint react rules.","CI script","0 findings","test","build"],
+ ["FMT-04","Git-merge friendly: two branches that change different properties merge without conflict.","20 branch pairs","20/20 clean merges","test","build"],
+ ["FMT-05","A 2,000-edit fuzz keeps every file parseable, in the dialect, and round-tripping. (Today: 200.)","fuzz test","2,000/2,000","test","build"],
+ ["FMT-06","The sidecar is minimal and stable: sorted keys, only id, position and preview data.","test","moving a component = sidecar diff only","test","build"],
+ ["FMT-07","A hand edit in your editor while the canvas is open becomes a revision. No canvas edit is lost.","test","shows ≤ 1 s; 0 lost edits","num","build"]
+],
+ONB: [
+ ["ONB-01","<code>napkin init</code> in an empty folder writes napkin.json and components/ with a starter, then prints the canvas address and a ready-to-paste .mcp.json snippet.","cold critic run, timed","first render ≤ 60 s from the README alone","walk","build"],
+ ["ONB-02","The empty canvas teaches the first actions (N, F, T, I, ⌘K).","screenshot pair, blind","wins or ties Paper's new-file state","blind","build"],
+ ["ONB-03","A shortcut sheet (<kbd>?</kbd>) and the command palette list every action.","audit script","100% of actions listed","test","build"],
+ ["ONB-04","Every error names the file, the line and what to do next.","audit of all error strings","100% pass","num","build"],
+ ["ONB-05","The README quickstart runs as written on a clean clone (<code>npm ci</code>).","cold critic run","0 deviations","walk","build"]
+],
+REL: [
+ ["REL-01","Kill -9 during writes: the file holds either the old bytes or the new ones, never a partial write.","200 trials","200/200 whole","test","build"],
+ ["REL-02","A second server on the same folder refuses to start, with a clear message.","test","refused, message names the PID","test","build"],
+ ["REL-03","After a server restart the page reconnects. In-flight edits get stale, never silently lost.","test","reconnect ≤ 2 s; 0 silent losses","num","build"],
+ ["REL-04","A 30-minute soak (canvas plus two scripted agents making random edits).","soak log","0 errors; RSS growth ≤ 20%; files valid","num","build"],
+ ["REL-05","A branch switch with 40 components reloads all of them.","timing","≤ 2 s","num","build"]
+],
+FEEL: [
+ ["FEEL-01","The whole canvas, with the same 6 components loaded, at 1440×900.","screenshot pair, blind","wins or ties Paper","blind","build"],
+ ["FEEL-02","The design panel reads like a design tool: sections, human labels (\"Corner radius\", not <code>borderRadius</code>), scrubbable numbers, units. Today it's raw CSS fields (Fig. 3.1).","screenshot pair, blind","wins or ties Figma's design panel","blind","build"],
+ ["FEEL-03","Light and dark chrome, both accessible.","axe-core (test-only dependency)","0 serious or critical violations","test","build"],
+ ["FEEL-04","Nothing jumps when an edit lands somewhere else, and the selection overlay keeps up.","CDP layout-shift · frame trace","CLS 0; overlay ≤ 1 frame behind","num","build"],
+ ["FEEL-05","S1 can be done with the keyboard alone.","critic walk, no mouse","completed","walk","build"]
+],
+SCN: [
+ ["SCN-1","S1 · Open 40: find, tune, one line.","whole-product critic run + log","done cold; timings hold; diff = 1 line","walk","build"],
+ ["SCN-2","S2 · The agent beside me: presence, proposals, accept 3 / reject 1.","whole-product critic run + log","done; rejected edit never in file","walk","build"],
+ ["SCN-3","S3 · From napkin to app: draw, compose, import.","whole-product critic run + log","done; app pixel-identical","walk","0004"],
+ ["SCN-4","S4 · A bad morning: broken file, branch switch, undo.","whole-product critic run + log","done; 0 lost edits","walk","david"],
+ ["SCN-5","S5 · Tokens day.","whole-product critic run + log","done","walk","david"]
+]};
+
+const AREA_NAMES = {INV:"Invariants",CAN:"Canvas & navigation",LAY:"Drawing & layout",CMP:"Components",TOK:"Tokens & themes",OPN:"Open existing repos",AGT:"Agents",HIS:"History & undo",AST:"Assets",INS:"Inspect & handoff",PRF:"Performance",FMT:"File format & diffs",ONB:"Onboarding",REL:"Reliability",FEEL:"Look & feel",SCN:"Scenes"};
+const AREA_GROUP = {INV:"inv",CAN:"surface",LAY:"surface",ONB:"surface",FEEL:"surface",CMP:"comp",FMT:"comp",INS:"comp",AST:"comp",AGT:"agent",HIS:"agent",PRF:"engine",REL:"engine",TOK:"david",OPN:"david",SCN:"inv"};
+
+const NEEDS = [
+ ["N1","Tokens & themes (area 4.5)","INTENT: \"no token panel yet\", but also \"reads/writes … design tokens (from secret-sauce)\". The dream wants token binding, off-token marks, theme preview and editing tokens in place.","Blocks TOK-01..05, SCN-5, and the token names in Fig. 3.2."],
+ ["N2","Opening existing repos' components (area 4.6)","INTENT: \"not (yet) a way to open arbitrary existing components\". The dream wants classify, read-only render, and agent-assisted adopt as a reviewed diff.","Blocks OPN-01..04. S1 assumes a repo already in the dialect."],
+ ["N3","Widen the dialect: decision 0004","0003 (which you accepted) keeps the dialect narrow: no conditionals, maps or imports. Slots, booleans that hide nodes, and composition (Card uses Button) all need it widened. I'd draft 0004 as proposed for you to accept.","Blocks CMP-04..08 and SCN-3."],
+ ["N4","Same-property clash rule (G2)","Today the rule is \"stale revision\" and retry. Proposal: keep that, and show a clash chip with both values so you pick one.","Blocks AGT-10."],
+ ["N5","In-app undo (G5)","The README says \"use git\". Proposal: ⌘Z undoes only your own edits, as a new attributed revision, refused on conflict (Fig. 4.8).","Blocks HIS-01..03 and SCN-4."],
+ ["N6","Agent permissions (G6)","Proposal: per-agent read-only, propose-only or write, set in napkin.json, with write as the default (as today).","Blocks AGT-11; shapes AGT-04."],
+ ["N7","Outside services for the loop","(a) Codex and free Opencode models get repo code: OK? Free models may keep prompts. (b) Paper and Figma need accounts for true same-way captures: use public imagery only (weaker bars), or will you provide captures or a login? (c) Run ccusage via npx with a pinned version?","Affects all blind bars against Paper and Figma, and spend logging."],
+ ["N8","Hosting & multiplayer between people","INTENT: local, one person and their agents. The dream never builds these. Listed so the loop doesn't wander. No answer needed unless you want to change INTENT.","Never built."]
+];
+
+const KIND = {num:"number",blind:"blind",test:"test",walk:"walk"};
+const allIds = [];
+function esc(s){return String(s).replace(/&(?!(amp|lt|gt|quot);)/g,"&amp;");}
+function segHTML(id, opts){
+  return '<div class="seg" role="group" aria-label="Review '+id+'">'+opts.map(([m,l])=>'<button type="button" data-m="'+m+'" aria-pressed="false">'+l+'</button>').join("")+'</div>';
+}
+for (const [area, rows] of Object.entries(CRIT)) {
+  const host = document.querySelector('[data-crit="'+area+'"]');
+  if (!host) continue;
+  let h = '<table class="crit"><tr><th>ID</th><th>Criterion</th><th>Evidence</th><th>Bar</th><th>Your review</th></tr>';
+  for (const [id, text, ev, bar, kind, gate] of rows) {
+    allIds.push(id);
+    const g = gate === "david" ? '<br><span class="pill david">Needs David</span>' : gate === "0004" ? '<br><span class="pill d0004">0004</span>' : "";
+    h += '<tr data-id="'+id+'"'+(gate!=="build"?' class="gated"':'')+'><td class="k">'+id+g+'</td><td>'+text+'</td><td class="ev">'+ev+'</td><td class="bar"><span class="pill '+kind+'">'+KIND[kind]+'</span>'+bar+'</td>'
+       + '<td><div class="rv">'+segHTML(id,[["keep","Keep"],["change","Change"],["cut","Cut"]])
+       + '<textarea id="note-'+id+'" rows="2" aria-label="Note on '+id+'" placeholder="What to change" hidden></textarea></div></td></tr>';
+  }
+  host.innerHTML = h + '</table>';
+}
+// counts in Plate I
+const total = allIds.length;
+document.querySelectorAll("[data-count]").forEach(el=>{ const n=(CRIT[el.dataset.count]||[]).length; el.textContent = n+" criteria"; });
+document.querySelectorAll("[data-total]").forEach(el=>{ el.textContent = total+" criteria"; });
+document.querySelector(".plate header span:last-child tspan")?.replaceWith(document.createTextNode(total+" criteria"));
+document.getElementById("rv-total").textContent = total;
+
+// Fig 1.2 chart
+(function(){
+  const areas = Object.keys(CRIT);
+  const max = Math.max(...areas.map(a=>CRIT[a].length));
+  const unit = 34, left = 170, rowH = 22, top = 24;
+  const w = left + max*unit + 60, hgt = top + areas.length*rowH + 30;
+  let s = '<svg viewBox="0 0 '+w+' '+hgt+'" role="img" aria-label="Bar chart of criteria per area, split into buildable now and gated."><defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" class="f-sheet"/><line x1="0" y1="0" x2="0" y2="6" style="stroke:var(--g-david);stroke-width:2"/></pattern></defs>';
+  for (let i=0;i<=max;i+=2){ const x=left+i*unit; s+='<line x1="'+x+'" y1="'+(top-6)+'" x2="'+x+'" y2="'+(top+areas.length*rowH)+'" style="stroke:var(--faint)"/><text x="'+x+'" y="'+(top-10)+'" class="ts" text-anchor="middle">'+i+'</text>'; }
+  areas.forEach((a,i)=>{
+    const y = top + i*rowH; const rows = CRIT[a];
+    const b = rows.filter(r=>r[5]==="build").length, gd = rows.length-b;
+    s += '<text x="'+(left-10)+'" y="'+(y+14)+'" class="t" text-anchor="end" style="font-size:11px">'+AREA_NAMES[a]+'</text>';
+    if (b) s += '<rect x="'+left+'" y="'+(y+4)+'" width="'+(b*unit)+'" height="14" class="k-'+AREA_GROUP[a]+'"/>';
+    if (gd) s += '<rect x="'+(left+b*unit)+'" y="'+(y+4)+'" width="'+(gd*unit)+'" height="14" fill="url(#hatch)" style="stroke:var(--g-david)"/>';
+    s += '<text x="'+(left+rows.length*unit+6)+'" y="'+(y+15)+'" class="ts">'+rows.length+(gd?' ('+gd+' gated)':'')+'</text>';
+  });
+  s += '</svg>';
+  document.getElementById("fig12").innerHTML = s;
+  const gated = Object.values(CRIT).flat().filter(r=>r[5]!=="build").length;
+  document.getElementById("fig12-total").textContent = total+" criteria · "+(total-gated)+" buildable · "+gated+" gated";
+})();
+
+// Needs David
+(function(){
+  const host = document.getElementById("needs-list");
+  host.innerHTML = NEEDS.map(([id,title,body,blocks])=>
+    '<div class="need" data-id="'+id+'"><div><h4>'+id+' · '+esc(title)+'</h4><p>'+esc(body)+'</p><p class="blocks">'+esc(blocks)+'</p></div>'
+    +'<div class="rv">'+segHTML(id,[["yes","Yes"],["talk","Talk first"],["no","Not now"]])
+    +'<textarea id="note-'+id+'" rows="3" aria-label="Note on '+id+'" placeholder="Your answer or conditions"></textarea></div></div>').join("");
+  document.getElementById("rv-needs-total").textContent = NEEDS.length;
+})();
+
+// review state
+const marks = {};
+let db = null, mode = "local";
+const saveEl = document.getElementById("save");
+function setSave(t){ saveEl.textContent = t; }
+function lsGet(){ try { return JSON.parse(localStorage.getItem("napkin-dream-marks")||"{}"); } catch(e){ return {}; } }
+function lsSet(){ try { localStorage.setItem("napkin-dream-marks", JSON.stringify(marks)); } catch(e){} }
+
+function render(){
+  document.querySelectorAll("[data-id]").forEach(row=>{
+    const id = row.dataset.id, m = marks[id] || {};
+    row.querySelectorAll(".seg button").forEach(b=>b.setAttribute("aria-pressed", String(b.dataset.m===m.mark)));
+    const ta = row.querySelector("textarea");
+    if (ta) {
+      if (document.activeElement !== ta) ta.value = m.note || "";
+      if (row.tagName === "TR") ta.hidden = !(m.mark==="change" || m.mark==="cut" || (m.note||"").length);
+    }
+  });
+  let k=0,c=0,x=0; allIds.forEach(id=>{ const m=(marks[id]||{}).mark; if(m==="keep")k++; else if(m==="change")c++; else if(m==="cut")x++; });
+  const done=k+c+x;
+  document.getElementById("rv-done").textContent=done;
+  document.getElementById("rv-keep").textContent=k; document.getElementById("rv-change").textContent=c; document.getElementById("rv-cut").textContent=x;
+  document.getElementById("m-keep").style.width=(100*k/total)+"%"; document.getElementById("m-change").style.width=(100*c/total)+"%"; document.getElementById("m-cut").style.width=(100*x/total)+"%";
+  document.getElementById("rv-needs").textContent = NEEDS.filter(n=>(marks[n[0]]||{}).mark).length;
+}
+
+const timers = {};
+function persist(id){
+  marks[id].at = new Date().toISOString();
+  lsSet();
+  if (!db) return;
+  clearTimeout(timers[id]);
+  timers[id] = setTimeout(()=>{
+    setSave("Saving…");
+    db.doc("review/"+id).set(marks[id]).then(()=>setSave("Saved")).catch(e=>setSave("Not saved: "+(e && e.message || "error")+". Kept in this browser."));
+  }, 500);
+}
+document.addEventListener("click", e=>{
+  const b = e.target.closest(".seg button"); if (!b) return;
+  const row = b.closest("[data-id]"); const id = row.dataset.id;
+  const cur = marks[id] || {}; const next = cur.mark === b.dataset.m ? "" : b.dataset.m;
+  marks[id] = { mark: next, note: cur.note || "" };
+  render(); persist(id);
+  if ((next==="change"||next==="cut") && row.tagName==="TR") row.querySelector("textarea")?.focus();
+});
+document.addEventListener("input", e=>{
+  const ta = e.target.closest("textarea"); if (!ta) return;
+  const id = ta.closest("[data-id]").dataset.id;
+  marks[id] = { mark: (marks[id]||{}).mark || "", note: ta.value };
+  persist(id); render();
+});
+
+Object.assign(marks, lsGet());
+render();
+(async ()=>{
+  try { db = window.claude && window.claude.use ? await window.claude.use("db") : null; } catch(e){ db = null; }
+  if (!db) { setSave("Saving to the page is unavailable here. Marks stay in this browser."); return; }
+  setSave("Loading saved marks…");
+  db.collection("review").onSnapshot(snap=>{
+    snap.docs.forEach(d=>{ const v=d.data(); if (v) marks[d.id] = v; });
+    lsSet(); render(); setSave("Saved marks loaded");
+  }, err=>setSave("Couldn't load saved marks ("+(err && err.code || "error")+"). Marks stay in this browser."));
+})();
+</script>
