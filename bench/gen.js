@@ -13,7 +13,7 @@ import {
   evidence,
 } from "./lib3/runtime.mjs";
 import { mockComfy } from "./lib3/comfy.mjs";
-import { reviewEvidence } from "./lib3/reviews.mjs";
+import { createHash, randomInt } from "node:crypto";
 import { writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 export async function measure() {
@@ -21,7 +21,7 @@ export async function measure() {
   try {
     return await run(
       "D6",
-      async ({ book, f, s, browser }) => {
+      async ({ book, f, s, browser, restart }) => {
         let listed, error, stream, workflow, job, first, outputItem;
         const seed = f.seed;
         try {
@@ -55,6 +55,166 @@ export async function measure() {
               "backend schema never discovered",
             );
             return { ok: true, value: { controls: controls.map((c) => c.id) } };
+          },
+        );
+        await book.check(
+          "workflow.schema-random",
+          "a custom node invented at bench time becomes instruments with exactly its min, max, step, default and options",
+          async () => {
+            assert(!error, error);
+            const tag = nonce().slice(0, 6),
+              lo = randomInt(2, 20),
+              hi = lo + randomInt(30, 400),
+              dflt = lo + randomInt(1, 20),
+              step = [1, 2, 5][randomInt(0, 3)],
+              opts = Array.from(
+                { length: 3 },
+                () => "mode-" + nonce().slice(0, 4),
+              ),
+              scale = +(0.1 + randomInt(0, 80) / 100).toFixed(2);
+            const src = "Probe" + tag,
+              sink = "Sink" + tag;
+            mock.addNode(
+              src,
+              {
+                ["strength_" + tag]: [
+                  "INT",
+                  { default: dflt, min: lo, max: hi, step },
+                ],
+                ["scale_" + tag]: [
+                  "FLOAT",
+                  { default: scale, min: 0, max: 2, step: 0.01 },
+                ],
+                ["mode_" + tag]: [opts],
+                ["flag_" + tag]: ["BOOLEAN", { default: false }],
+              },
+              ["IMAGE"],
+            );
+            mock.addNode(
+              sink,
+              {
+                images: ["IMAGE"],
+                filename_prefix: ["STRING", { default: "p" }],
+              },
+              [],
+              true,
+            );
+            const graph = {
+              1: {
+                class_type: src,
+                inputs: {
+                  ["strength_" + tag]: dflt,
+                  ["scale_" + tag]: scale,
+                  ["mode_" + tag]: opts[0],
+                  ["flag_" + tag]: false,
+                },
+              },
+              2: {
+                class_type: sink,
+                inputs: { images: ["1", 0], filename_prefix: "probe-" + tag },
+              },
+            };
+            const path = "probe-" + tag + ".json";
+            writeFileSync(join(f.folder, path), JSON.stringify(graph));
+            const wf = await waitUntil(async () =>
+              (await items(s)).find((x) => x.path === path),
+            );
+            const schema = await request(
+              s,
+              "/api/controls/" + encodeURIComponent(wf.id),
+            );
+            const controls = schema.sections?.flatMap((x) => x.controls) || [];
+            const find = (n) =>
+              controls.find((c) =>
+                (c.id + " " + c.label).includes(n + "_" + tag),
+              );
+            const st = find("strength"),
+              sc = find("scale"),
+              mo = find("mode"),
+              fl = find("flag");
+            assert(
+              st && sc && mo && fl,
+              "controls for the invented node are missing: " +
+                controls.map((c) => c.id),
+            );
+            assert(
+              st.min === lo &&
+                st.max === hi &&
+                (st.step ?? step) === step &&
+                st.value === dflt,
+              `strength control does not mirror the schema (${JSON.stringify(st)})`,
+            );
+            assert(
+              sc.min === 0 && sc.max === 2 && sc.value === scale,
+              "scale control does not mirror the schema",
+            );
+            const got = (mo.options || []).map((o) => o.value ?? o);
+            assert(
+              canonical(got) === canonical(opts),
+              "mode options differ from the schema: " + got,
+            );
+            assert(typeof fl.value === "boolean", "flag is not boolean");
+            const before = mock.prompts.length;
+            let rejected = false;
+            try {
+              const r = await request(s, "/api/generate", {
+                workflow: wf.id,
+                inputs: { ["1.strength_" + tag]: hi + 1 },
+              });
+              rejected = !r.job;
+            } catch {
+              rejected = true;
+            }
+            await sleep(300);
+            assert(
+              rejected || mock.prompts.length === before,
+              "an out-of-range value was queued",
+            );
+            assert(
+              mock.prompts.length === before,
+              "an out-of-range value reached the backend",
+            );
+            return { ok: true, value: { lo, hi, step, opts: opts.length } };
+          },
+        );
+        await book.check(
+          "negative.invalid-prompt",
+          "a workflow the backend rejects shows an error and queues nothing",
+          async () => {
+            assert(!error, error);
+            const path = "bad-" + nonce() + ".json";
+            writeFileSync(
+              join(f.folder, path),
+              JSON.stringify({
+                1: {
+                  class_type: "SaveImage",
+                  inputs: { images: 42, filename_prefix: "x" },
+                },
+              }),
+            );
+            const wf = await waitUntil(async () =>
+              (await items(s)).find((x) => x.path === path),
+            );
+            const before = mock.prompts.length;
+            let r;
+            try {
+              r = await request(s, "/api/generate", {
+                workflow: wf.id,
+                inputs: {},
+              });
+            } catch {
+              r = { rejected: true };
+            }
+            await sleep(300);
+            assert(
+              r.rejected || r.ok === false || !r.job,
+              "an invalid workflow was accepted as a job",
+            );
+            assert(
+              mock.prompts.length === before,
+              "an invalid workflow was queued",
+            );
+            return { ok: true, value: { rejected: true } };
           },
         );
         await book.check(
@@ -112,6 +272,35 @@ export async function measure() {
               stages.length >= 3,
               "not enough matching queued/progress/completed events",
             );
+            const pid = mock.prompts[0].id;
+            const sent = mock.progress.filter(
+              (x) => x.type === "progress" && x.data.prompt_id === pid,
+            );
+            const forwarded = new Set();
+            const walk = (v) => {
+              if (Array.isArray(v)) return v.forEach(walk);
+              if (v && typeof v === "object") {
+                if (typeof v.value === "number" && typeof v.max === "number")
+                  forwarded.add(`${v.node ?? ""}:${v.value}/${v.max}`);
+                Object.values(v).forEach(walk);
+              } else if (typeof v === "string") {
+                try {
+                  walk(JSON.parse(v));
+                } catch {}
+              }
+            };
+            stream.events.forEach((e) => walk(e.value));
+            const want = sent.map(
+              (x) => `${x.data.node}:${x.data.value}/${x.data.max}`,
+            );
+            const hit = want.filter(
+              (w) =>
+                forwarded.has(w) || forwarded.has(w.replace(/^[^:]*:/, ":")),
+            );
+            assert(
+              want.length >= mock.steps && hit.length >= want.length * 0.6,
+              `progress is not forwarded from the backend websocket (${hit.length} of ${want.length} backend steps of ${mock.steps} seen)`,
+            );
             assert(
               new Set(
                 stages.map(
@@ -142,6 +331,20 @@ export async function measure() {
             assert(
               p.workflow && p.inputs,
               "workflow and inputs absent from provenance",
+            );
+            assert(
+              p.inputs?.["2.filename_prefix"] ===
+                first.prompt["2"].inputs.filename_prefix,
+              "provenance inputs differ from what was generated",
+            );
+            // A fresh process must rebuild the request from the output's own file/metadata.
+            s = await restart();
+            const again = (await items(s)).find(
+              (x) => x.path === outputItem.path,
+            );
+            assert(
+              again?.meta?.provenance,
+              "provenance is lost across a restart",
             );
             const count = mock.prompts.length;
             await request(s, "/api/generate", {
@@ -220,21 +423,47 @@ export async function measure() {
               (await items(s)).find((x) => x.path === path),
             );
             const at = mock.prompts.length;
+            const seeds = [seed, seed + 1 + randomInt(0, 50)],
+              cfgs = [
+                +(1.5 + randomInt(0, 9) / 10).toFixed(1),
+                +(3 + randomInt(0, 9) / 10).toFixed(1),
+              ];
             await request(s, "/api/generate", {
               workflow: wf.id,
-              inputs: { "3.seed": [seed, seed + 1], "3.cfg": [1.5, 2.5] },
+              inputs: { "3.seed": seeds, "3.cfg": cfgs },
             });
             await waitUntil(() => mock.prompts.length === at + 4);
-            const prompts = mock.prompts.slice(at);
+            await sleep(400);
             assert(
-              new Set(
-                prompts.map(
-                  (x) =>
-                    `${x.body.prompt["3"].inputs.seed}:${x.body.prompt["3"].inputs.cfg}`,
-                ),
-              ).size === 4,
-              "grid missing a Cartesian combination",
+              mock.prompts.length === at + 4,
+              "the grid queued more than 4 jobs",
             );
+            const prompts = mock.prompts.slice(at);
+            const pairs = prompts
+              .map(
+                (x) =>
+                  `${x.body.prompt["3"].inputs.seed}:${x.body.prompt["3"].inputs.cfg}`,
+              )
+              .sort();
+            const wantPairs = seeds
+              .flatMap((a) => cfgs.map((c) => `${a}:${c}`))
+              .sort();
+            assert(
+              canonical(pairs) === canonical(wantPairs),
+              `grid is ${pairs} not ${wantPairs}`,
+            );
+            for (const x of prompts) {
+              const rest = structuredClone(x.body.prompt);
+              delete rest["3"].inputs.seed;
+              delete rest["3"].inputs.cfg;
+              const base = structuredClone(graph);
+              delete base["3"].inputs.seed;
+              delete base["3"].inputs.cfg;
+              assert(
+                canonical(rest) === canonical(base),
+                "a grid cell changed something other than the two swept inputs",
+              );
+            }
             await waitUntil(async () => {
               const a = await items(s);
               return (
@@ -309,9 +538,25 @@ export async function measure() {
                     !before.has(x.id) && x.kind === kind && x.meta?.provenance,
                 ),
               );
+              const src = {
+                flac: "tone.flac",
+                mp4: "orbit.mp4",
+                glb: "triangle.glb",
+              }[kind];
+              const want = createHash("sha256")
+                .update(
+                  readFileSync(new URL("./corpus3/" + src, import.meta.url)),
+                )
+                .digest("hex");
               assert(
-                readFileSync(join(f.folder, item.path)).length > 100,
-                "empty multimedia output",
+                createHash("sha256")
+                  .update(readFileSync(join(f.folder, item.path)))
+                  .digest("hex") === want,
+                `${kind} output bytes are not the backend's /view bytes`,
+              );
+              assert(
+                JSON.stringify(item.meta.provenance).includes(path),
+                "provenance does not name the workflow",
               );
               results.push(kind);
             }
@@ -319,17 +564,18 @@ export async function measure() {
           },
           ["dream"],
         );
-        await book.check(
+        await book.attest(
           "real.gpu-smoke",
-          "real ComfyUI workflow → result with provenance through shared lock",
-          () => {
-            const e = reviewEvidence("generation");
-            return {
-              ok:
-                e.locked === true && e.queued === true && e.provenance === true,
-              value: e,
-            };
-          },
+          "one real ComfyUI workflow through the shared GPU lock: queued, history output, result bytes and provenance matching",
+          "generation",
+          (e) =>
+            /gpu_run/.test(e.lockInvocation || "") &&
+            /^[0-9a-f-]{36}$/.test(e.promptId || "") &&
+            /^[0-9a-f]{64}$/.test(e.outputSha256 || "") &&
+            e.outputSha256 === e.resultFileSha256 &&
+            e.provenanceRequestSha256 === e.reopenRequestSha256 &&
+            e.nvidiaSmiBefore &&
+            e.historyStatus === "success",
         );
         await stream?.close();
       },

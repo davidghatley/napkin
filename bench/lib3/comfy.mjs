@@ -48,6 +48,8 @@ export async function mockComfy() {
     requests = [],
     progress = [],
     served = [];
+  // Progress length differs every run, so a client cannot invent plausible stage events.
+  const steps = 3 + Math.floor(Math.random() * 5);
   let number = 0,
     queue = [],
     running = [],
@@ -128,6 +130,41 @@ export async function mockComfy() {
     { file: ["COMBO", { options: ["orbit.mp4"], video_upload: true }] },
     ["VIDEO"],
   );
+  // Shape of the real server's SaveVideo (GET /object_info/SaveVideo): VIDEO in and out, a
+  // container choice whose branches nest a codec choice, and `codec` also listed as optional.
+  const codec = {
+    options: [
+      { key: "auto", inputs: { required: {} } },
+      {
+        key: "h264",
+        inputs: {
+          required: {},
+          optional: {
+            encoding: [
+              "COMFY_DYNAMICCOMBO_V3",
+              {
+                options: [
+                  { key: "auto", inputs: { required: {} } },
+                  {
+                    key: "re-encode",
+                    inputs: {
+                      required: {
+                        crf: [
+                          "FLOAT",
+                          { default: 18, min: 0, max: 51, step: 1 },
+                        ],
+                      },
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+      { key: "av1", inputs: { required: {} } },
+    ],
+  };
   objectInfo.SaveVideo = info(
     "SaveVideo",
     {
@@ -136,25 +173,21 @@ export async function mockComfy() {
       format: [
         "COMFY_DYNAMICCOMBO_V3",
         {
-          options: [
-            {
-              key: "auto",
-              inputs: {
-                required: {
-                  codec: [
-                    "COMFY_DYNAMICCOMBO_V3",
-                    { options: [{ key: "auto", inputs: { required: {} } }] },
-                  ],
-                },
-              },
-            },
-          ],
+          options: ["auto", "mp4", "mkv", "webm"].map((key) => ({
+            key,
+            inputs: { required: { codec: ["COMFY_DYNAMICCOMBO_V3", codec] } },
+          })),
         },
       ],
     },
-    [],
+    ["VIDEO"],
     true,
   );
+  objectInfo.SaveVideo.output_name = ["video"];
+  objectInfo.SaveVideo.input.optional = {
+    codec: ["COMFY_DYNAMICCOMBO_V3", codec],
+  };
+  objectInfo.SaveVideo.input_order.optional = ["codec"];
   objectInfo.Load3D = info(
     "Load3D",
     {
@@ -232,11 +265,11 @@ export async function mockComfy() {
     for (const node of executionOrder(prompt, outputs)) {
       if (closed) return;
       send("executing", { node, prompt_id: id }, client);
-      for (let value = 1; value <= 3; value++) {
+      for (let value = 1; value <= steps; value++) {
         await sleep(45);
         if (closed) return;
-        send("progress", { value, max: 3, prompt_id: id, node }, client);
-        if (value === 2) {
+        send("progress", { value, max: steps, prompt_id: id, node }, client);
+        if (value === 2 || value === steps) {
           const header = Buffer.alloc(8);
           header.writeUInt32BE(1, 0); // BinaryEventTypes.PREVIEW_IMAGE
           header.writeUInt32BE(2, 4); // PNG
@@ -285,6 +318,10 @@ export async function mockComfy() {
         completed: true,
         messages: [
           ["execution_start", { prompt_id: id, timestamp: Date.now() - 300 }],
+          [
+            "execution_cached",
+            { nodes: [], prompt_id: id, timestamp: Date.now() - 200 },
+          ],
           ["execution_success", { prompt_id: id, timestamp: Date.now() }],
         ],
       },
@@ -411,6 +448,14 @@ export async function mockComfy() {
             node_errors: {},
           });
         const errors = {};
+        const PRIMS = new Set([
+          "INT",
+          "FLOAT",
+          "STRING",
+          "BOOLEAN",
+          "COMBO",
+          "COMFY_DYNAMICCOMBO_V3",
+        ]);
         for (const [id, node] of Object.entries(prompt)) {
           const info = objectInfo[node.class_type];
           if (!info) {
@@ -422,75 +467,92 @@ export async function mockComfy() {
             };
             continue;
           }
-          for (const [name, [type, options = {}]] of Object.entries(
-            info.input.required,
-          )) {
-            const value = node.inputs?.[name];
-            if (value === undefined)
-              errors[id] = {
-                errors: [
-                  {
-                    type: "required_input_missing",
-                    message: `Required input ${name}`,
-                  },
-                ],
-                class_type: node.class_type,
-              };
+          const fail = (type, message) => {
+            (errors[id] ??= {
+              errors: [],
+              class_type: node.class_type,
+            }).errors.push({ type, message });
+          };
+          const validate = (prefix, name, spec, required) => {
+            const [type, options = {}] = spec,
+              value = node.inputs?.[prefix + name],
+              label = prefix + name;
+            if (value === undefined) {
+              if (required)
+                fail(
+                  "required_input_missing",
+                  `Required input is missing: ${label}`,
+                );
+              return;
+            }
             const linked =
               Array.isArray(value) &&
               typeof value[0] === "string" &&
               Number.isInteger(value[1]);
-            const invalid = (message) => {
-              errors[id] = {
-                class_type: node.class_type,
-                errors: [{ type: "value_not_in_list", message }],
-              };
-            };
-            if (value !== undefined && !linked) {
-              const choices = Array.isArray(type)
-                ? type
-                : type === "COMBO"
-                  ? options.options
-                  : type === "COMFY_DYNAMICCOMBO_V3"
-                    ? options.options.map((x) => x.key)
-                    : null;
-              if (choices && !choices.includes(value))
-                invalid(`Invalid ${name}`);
-              if (
-                ["INT", "FLOAT"].includes(type) &&
-                (typeof value !== "number" ||
-                  !Number.isFinite(value) ||
-                  (type === "INT" && !Number.isInteger(value)) ||
-                  value < (options.min ?? -Infinity) ||
-                  value > (options.max ?? Infinity))
-              )
-                invalid(`Invalid numeric ${name}`);
-              if (type === "STRING" && typeof value !== "string")
-                invalid(`Invalid string ${name}`);
-            }
-            if (linked && prompt[value[0]]) {
+            const primitive = Array.isArray(type) || PRIMS.has(type);
+            if (!primitive && !linked)
+              return fail(
+                "bad_linked_input",
+                `Bad linked input, must be a length-2 list of [node_id, slot_index]: ${label}`,
+              );
+            if (linked) {
+              if (!prompt[value[0]])
+                return fail(
+                  "bad_linked_input",
+                  `Missing linked node for ${label}`,
+                );
               const sourceType =
                 objectInfo[prompt[value[0]].class_type]?.output?.[value[1]];
               if (
                 !sourceType ||
                 (typeof type === "string" &&
+                  primitive === false &&
                   !type.split(",").includes(sourceType))
               )
-                invalid(`Incompatible link ${name}`);
+                return fail(
+                  "return_type_mismatch",
+                  `Incompatible link ${label}`,
+                );
+              return;
             }
+            const choices = Array.isArray(type)
+              ? type
+              : type === "COMBO"
+                ? options.options
+                : type === "COMFY_DYNAMICCOMBO_V3"
+                  ? options.options.map((x) => x.key)
+                  : null;
+            if (choices && !choices.includes(value))
+              return fail("value_not_in_list", `Value not in list: ${label}`);
             if (
-              Array.isArray(value) &&
-              typeof value[0] === "string" &&
-              typeof value[1] === "number" &&
-              !prompt[value[0]]
+              ["INT", "FLOAT"].includes(type) &&
+              (typeof value !== "number" ||
+                !Number.isFinite(value) ||
+                (type === "INT" && !Number.isInteger(value)) ||
+                value < (options.min ?? -Infinity) ||
+                value > (options.max ?? Infinity))
             )
-              errors[id] = {
-                errors: [
-                  { type: "bad_linked_input", message: "Missing linked node" },
-                ],
-                class_type: node.class_type,
-              };
-          }
+              return fail("value_smaller_than_min", `Invalid numeric ${label}`);
+            if (type === "STRING" && typeof value !== "string")
+              return fail("invalid_input_type", `Invalid string ${label}`);
+            if (type === "BOOLEAN" && typeof value !== "boolean")
+              return fail("invalid_input_type", `Invalid boolean ${label}`);
+            if (type === "COMFY_DYNAMICCOMBO_V3") {
+              const branch = options.options.find((o) => o.key === value);
+              for (const [n, sp] of Object.entries(
+                branch.inputs?.required || {},
+              ))
+                validate(label + ".", n, sp, true);
+              for (const [n, sp] of Object.entries(
+                branch.inputs?.optional || {},
+              ))
+                validate(label + ".", n, sp, false);
+            }
+          };
+          for (const [name, spec] of Object.entries(info.input.required))
+            validate("", name, spec, true);
+          for (const [name, spec] of Object.entries(info.input.optional || {}))
+            validate("", name, spec, false);
         }
         const outputs = Object.keys(prompt).filter(
           (id) => objectInfo[prompt[id].class_type]?.output_node,
@@ -601,6 +663,10 @@ export async function mockComfy() {
     progress,
     served,
     objectInfo,
+    steps,
+    addNode: (name, input, output, output_node = false) => {
+      objectInfo[name] = info(name, input, output, output_node);
+    },
     close: async () => {
       closed = true;
       for (const s of sockets) s.destroy();
