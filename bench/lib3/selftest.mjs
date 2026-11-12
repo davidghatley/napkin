@@ -225,7 +225,9 @@ test("ComfyUI protocol: validate, queue, WS progress, history, bytes, serial exe
       2,
     );
     await waitUntil(() => m.history[a.prompt_id] && m.history[b.prompt_id]);
-    assert.ok(events.some((x) => x.type === "progress" && x.data.max === 3));
+    assert.ok(
+      events.some((x) => x.type === "progress" && x.data.max === m.steps),
+    );
     assert.ok(
       events.some((x) => x.type === "executing" && x.data.node === null),
     );
@@ -394,3 +396,75 @@ test(
     }
   },
 );
+
+test("cheats are rejected and honest work passes: focus ring, causal scrub, lead attestation", async () => {
+  const { createServer } = await import("node:http");
+  const { focusVisible } = await import("./runtime.mjs");
+  const { scrubWalk } = await import("./pixels.mjs");
+  const { leadAttested, buildHash, signAttestation } =
+    await import("./reviews.mjs");
+  const { writeFileSync } = await import("node:fs");
+  const pages = {
+    none: `<input id=i style="outline:none;box-shadow:none;caret-color:transparent"><script>i.focus()</script>`,
+    ring: `<input id=i style="outline:3px solid #e00;outline-offset:1px"><script>i.focus()</script>`,
+    unrelated: `<input id=r type=range min=0 max=10 value=5 aria-label=time><canvas id=c width=200 height=100 style="display:block"></canvas><script>const x=c.getContext('2d');let t=0;(function f(){x.fillStyle='hsl('+(t++*7%360)+',80%,50%)';x.fillRect(0,0,200,100);requestAnimationFrame(f)})();r.focus()</script>`,
+    random: `<input id=r type=range min=0 max=10 value=5 aria-label=time><canvas id=c width=200 height=100 style="display:block"></canvas><script>const x=c.getContext('2d');addEventListener('keydown',()=>{x.fillStyle='hsl('+Math.floor(Math.random()*360)+',80%,50%)';x.fillRect(0,0,200,100)});r.focus()</script>`,
+    honest: `<input id=r type=range min=0 max=10 value=5 aria-label=time><canvas id=c width=200 height=100 style="display:block"></canvas><script>const x=c.getContext('2d');const d=()=>{x.fillStyle='hsl('+(r.value*30)+',80%,50%)';x.fillRect(0,0,200,100)};r.addEventListener('input',d);d();r.focus()</script>`,
+  };
+  const srv = createServer((q, r) => {
+    r.writeHead(200, { "content-type": "text/html" });
+    r.end("<body>" + (pages[q.url.slice(1)] || ""));
+  }).listen(0, "127.0.0.1");
+  const base = "http://127.0.0.1:" + srv.address().port + "/";
+  const b = await launchChromium();
+  try {
+    await b.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    await b.goto(base + "none");
+    assert.equal(
+      await focusVisible(b),
+      false,
+      "a suppressed focus indicator must not count",
+    );
+    await b.goto(base + "ring");
+    assert.equal(await focusVisible(b), true);
+    for (const name of ["unrelated", "random"]) {
+      await b.goto(base + name);
+      await assert.rejects(
+        scrubWalk(b, { selector: "canvas", steps: 10 }),
+        /by itself|differs between visits/,
+      );
+    }
+    await b.goto(base + "honest");
+    assert.equal(
+      (await scrubWalk(b, { selector: "canvas", steps: 10 })).length,
+      10,
+    );
+  } finally {
+    await b.close();
+    srv.close();
+  }
+  const dir = mkdtempSync(join(tmpdir(), "napkin-d3-attest-")),
+    file = join(dir, "a.json"),
+    h = buildHash(),
+    entry = { attestedBy: "lead", at: "2026-11-12" };
+  try {
+    process.env.NAPKIN_LEAD_ATTEST = file;
+    process.env.NAPKIN_LEAD_KEY = "lead";
+    const put = (mac) =>
+      writeFileSync(
+        file,
+        JSON.stringify({ sourceHash: h, k: { ...entry, mac } }),
+      );
+    put(undefined);
+    assert.throws(() => leadAttested("k"), /signature/);
+    put(signAttestation("builder-guess", h, "k", entry));
+    assert.throws(() => leadAttested("k"), /signature/);
+    put(signAttestation("lead", h, "k", entry));
+    assert.equal(leadAttested("k").attestedBy, "lead");
+    delete process.env.NAPKIN_LEAD_ATTEST;
+    assert.throws(() => leadAttested("k"), /PENDING LEAD ATTESTATION/);
+  } finally {
+    delete process.env.NAPKIN_LEAD_KEY;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
