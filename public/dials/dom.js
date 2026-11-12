@@ -80,15 +80,58 @@ export function pointerSurface(node, { start, move, end, cancel }) {
     node.removeEventListener("pointerdown", onDown);
   };
 }
-export function canvas(label, width = 420, height = 230) {
-  return el("canvas", {
-    width,
-    height,
-    tabindex: 0,
+const widthSetter = Object.getOwnPropertyDescriptor(
+    HTMLCanvasElement.prototype,
+    "width",
+  )?.set,
+  heightSetter = Object.getOwnPropertyDescriptor(
+    HTMLCanvasElement.prototype,
+    "height",
+  )?.set;
+/**
+ * A plot keeps a fixed logical coordinate space (width x height) for drawing code,
+ * while its backing store follows the device pixel ratio and the size it is shown at.
+ * Whenever the backing store changes the canvas fires "d-resize" so its owner can redraw.
+ */
+export function canvas(label, width = 420, height = 230, interactive = true) {
+  const c = el("canvas", {
+    tabindex: interactive ? 0 : undefined,
     "aria-label": label,
     role: "img",
-    class: "d-plot",
+    class: interactive ? "d-plot" : "d-plot d-plot-passive",
   });
+  const native = c.getContext.bind(c);
+  let scale = Math.max(1, globalThis.devicePixelRatio || 1);
+  const apply = () => {
+    widthSetter.call(c, Math.round(width * scale));
+    heightSetter.call(c, Math.round(height * scale));
+  };
+  apply();
+  Object.defineProperties(c, {
+    width: { get: () => width, configurable: true },
+    height: { get: () => height, configurable: true },
+  });
+  c.style.aspectRatio = `${width} / ${height}`;
+  c.getContext = (type, options) => {
+    const g = native(type, options);
+    if (type === "2d" && g) g.setTransform(scale, 0, 0, scale, 0, 0);
+    return g;
+  };
+  if (typeof ResizeObserver === "function")
+    new ResizeObserver(() => {
+      const shown = c.clientWidth;
+      if (!shown) return;
+      const next = Math.min(
+        4,
+        Math.max(1, globalThis.devicePixelRatio || 1) *
+          Math.max(1, shown / width),
+      );
+      if (Math.abs(next - scale) / scale < 0.08) return;
+      scale = next;
+      apply();
+      c.dispatchEvent(new Event("d-resize"));
+    }).observe(c);
+  return c;
 }
 export function grid(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);

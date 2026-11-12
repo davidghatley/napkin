@@ -1,20 +1,6 @@
 import { Dials, registerControl, registerFigure } from "./dials.js";
 import { samples, gallery } from "./schemas.js";
 import { el } from "./dom.js";
-const direction = ["a", "b", "c"].includes(
-  new URL(location.href).searchParams.get("dir"),
-)
-  ? new URL(location.href).searchParams.get("dir")
-  : "a";
-document.body.dataset.direction = direction;
-document
-  .querySelector(`[data-dir=${direction}]`)
-  .setAttribute("aria-current", "page");
-document.querySelector("#direction-label").textContent = {
-  a: "A / INSTRUMENT",
-  b: "B / WORKSHOP",
-  c: "C / SPECIMEN",
-}[direction];
 const panels = [],
   events = [];
 window.dialsDemo = {
@@ -27,32 +13,27 @@ window.dialsDemo = {
   gallery,
 };
 const eventOut = document.querySelector("#event");
-for (const [i, sample] of samples.entries()) {
+for (const sample of samples) {
   const card = el(
     "article",
     { class: "study", id: `sample-${sample.id}` },
     el(
       "div",
       { class: "study-head" },
-      el("span", {
-        class: "study-number",
-        text: String(i + 1).padStart(2, "0"),
-      }),
       el(
         "div",
         {},
         el("h2", { text: sample.title }),
         el("p", { text: sample.file }),
       ),
-      el("span", { class: "kind", text: sample.kind }),
     ),
   );
   const mount = el("div", { class: "study-mount" });
-  card.append(mount, el("p", { class: "study-note", text: sample.note }));
+  card.append(mount);
   document.querySelector("#studies").append(card);
   const panel = new Dials(mount, {
-    direction,
     theme: "light",
+    studio: "viewport",
     label: sample.title,
     onDepth: (id, depth) => card.classList.toggle("is-studio", depth === 3),
     onChange: (event) => {
@@ -100,7 +81,6 @@ catalogue.sections[0].controls.push({
   figure: "pulse",
 });
 const galleryPanel = new Dials(document.querySelector("#gallery"), {
-  direction,
   theme: "light",
 }).render(catalogue);
 window.dialsDemo.galleryPanel = galleryPanel;

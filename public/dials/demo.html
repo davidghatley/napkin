@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dials · instrument studies</title>
+    <title>Dials</title>
     <link rel="stylesheet" href="./dials.css" />
     <link rel="stylesheet" href="./demo.css" />
   </head>
@@ -20,47 +20,28 @@
           /></svg
         >napkin <span>/ dials</span></a
       >
-      <nav aria-label="Visual direction">
-        <a href="?dir=a" data-dir="a">A <span>Instrument</span></a
-        ><a href="?dir=b" data-dir="b">B <span>Workshop</span></a
-        ><a href="?dir=c" data-dir="c">C <span>Specimen</span></a>
-      </nav>
-      <button id="theme" type="button">Dark</button>
+            <button id="theme" type="button">Dark</button>
     </header>
     <main>
-      <div class="intro">
-        <div>
-          <p class="eyebrow">INSTRUMENT STUDIES / 01</p>
-          <h1>Small controls.<br />Room to go deep.</h1>
-        </div>
-        <div class="intro-note">
-          <p>Six kinds of work. One language of instruments.</p>
-          <p>Scrub a label. Type an expression. Open a studio.</p>
-          <button id="help" type="button">Keyboard map <kbd>?</kbd></button>
-        </div>
-      </div>
       <div class="workspace-bar">
-        <span id="direction-label">A / INSTRUMENT</span>
+        <h1>Instruments</h1>
         <div class="depth-all" role="group" aria-label="Set all section depths">
           <button type="button" data-depth="1">All dials</button
           ><button type="button" data-depth="2">All benches</button>
         </div>
-        <span class="live"><i></i> Live values</span>
+        <button id="help" type="button">Keyboard map <kbd>?</kbd></button>
       </div>
       <div id="studies" class="studies"></div>
       <details class="catalog">
         <summary>
-          Control catalogue
-          <span>13 more instruments · plugin example · schema source</span>
+          Catalogue
+          <span>More controls, a plugin, schema source</span>
         </summary>
         <div class="catalog-body">
           <div id="gallery"></div>
           <div>
-            <h2>One document, every depth.</h2>
-            <p>
-              The demo runs without a framework, build step or network
-              connection. Every sample below is the document used by its panel.
-            </p>
+            <h2>Schema</h2>
+            <p>Each panel is rendered from the JSON document shown here.</p>
             <label for="schema-select">Inspect a schema</label
             ><select id="schema-select"></select>
             <pre
@@ -75,11 +56,7 @@
       </details>
     </main>
     <footer>
-      <span
-        ><kbd>⇧</kbd> fine <span class="sep">/</span> <kbd>Alt</kbd> coarse
-        <span class="sep">/</span> <kbd>R</kbd> reset</span
-      ><output id="event" aria-live="polite">Ready to tune.</output
-      ><span>Local · ES modules · zero dependencies</span>
+      <output id="event" aria-live="polite">Ready.</output>
     </footer>
     <script type="module" src="./demo.js"></script>
   </body>

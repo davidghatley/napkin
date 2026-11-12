@@ -84,7 +84,7 @@ export class Dials extends EventTarget {
     this.disposed = false;
     this.root = el("div", {
       class: "dials",
-      "data-direction": options.direction || "a",
+      "data-studio-mode": options.studio === "viewport" ? "viewport" : "inline",
       "aria-label": options.label || "Instruments",
     });
     if (options.theme) this.root.dataset.theme = options.theme;
@@ -795,9 +795,13 @@ export class Dials extends EventTarget {
   resizeStudio(id, width, height) {
     const s = this.sections.get(id);
     if (!s || s.depth !== 3) return;
-    const maxWidth = s.node.parentElement.clientWidth;
+    const viewport = this.root.dataset.studioMode === "viewport",
+      maxWidth = viewport
+        ? document.documentElement.clientWidth
+        : s.node.parentElement.clientWidth,
+      maxHeight = viewport ? innerHeight : innerHeight * 0.9;
     s.node.style.width = `${clamp(width, Math.min(360, maxWidth), maxWidth)}px`;
-    s.node.style.height = `${clamp(height, Math.min(520, innerHeight * 0.9), innerHeight * 0.9)}px`;
+    s.node.style.height = `${clamp(height, Math.min(520, maxHeight), maxHeight)}px`;
     this.announce(
       `Studio ${s.node.offsetWidth} by ${s.node.offsetHeight} pixels`,
     );

@@ -78,7 +78,8 @@ export interface Options {
     Record<"increase" | "decrease" | "reset" | "studio" | "help", string[]>
   >;
   label?: string;
-  direction?: "a" | "b" | "c";
+  /** "viewport": a studio takes over the window; "inline": it stays in the host (default). */
+  studio?: "viewport" | "inline";
   theme?: "light" | "dark";
   history?: boolean;
   onChange?(event: ValueEvent): void;

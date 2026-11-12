@@ -15,8 +15,6 @@ export const samples = [
     id: "color",
     title: "Color",
     file: "brand.css",
-    kind: "CSS",
-    note: "A color is a relationship.",
     schema: section("pigment", "Pigment", [
       c("ink", "color", "Accent", "oklch(58% .21 265)", {
         default: "#3459e2",
@@ -48,8 +46,6 @@ export const samples = [
     id: "typography",
     title: "Typography",
     file: "specimen.woff2",
-    kind: "FONT",
-    note: "Read the setting in the letters.",
     schema: section("type", "Type", [
       c(
         "typeface",
@@ -82,8 +78,6 @@ export const samples = [
     id: "motion",
     title: "Motion",
     file: "entrance.css",
-    kind: "WAAPI",
-    note: "A curve you can feel and measure.",
     schema: section("time", "Time", [
       c(
         "ease",
@@ -124,8 +118,6 @@ export const samples = [
     id: "image",
     title: "Image",
     file: "still-life.png",
-    kind: "PNG",
-    note: "Look at the pixels, then the curve.",
     schema: section("darkroom", "Darkroom", [
       c(
         "levels",
@@ -161,8 +153,6 @@ export const samples = [
     id: "data",
     title: "Data",
     file: "observations.csv",
-    kind: "CSV",
-    note: "Put fields where you can see them.",
     schema: section("shelf", "Encoding", [
       c(
         "channels",
@@ -205,8 +195,6 @@ export const samples = [
     id: "generation",
     title: "Generation",
     file: "portrait.workflow.json",
-    kind: "COMFY",
-    note: "Keep the path back to the result.",
     schema: section("sampler", "Sampler", [
       c(
         "sampling",

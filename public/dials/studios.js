@@ -17,7 +17,15 @@ import {
   ramp,
   paletteFromPixels,
 } from "./color.js";
-import { motionAt, curvePoints, keyframeAt } from "./motion.js";
+import {
+  motionAt,
+  curvePoints,
+  keyframeAt,
+  analyze,
+  toEasing,
+  toTransition,
+  toWaapi,
+} from "./motion.js";
 import { schedule } from "./figures.js";
 const accent = (node) =>
   getComputedStyle(node).getPropertyValue("--d-accent").trim() || "#3459e2";
@@ -410,6 +418,7 @@ function colorStudio(ctx, host) {
   raster.width = 192;
   raster.height = 120;
   const rasterContext = raster.getContext("2d");
+  plane.addEventListener("d-resize", () => draw());
   function draw() {
     frame = 0;
     if (dead) return;
@@ -593,16 +602,61 @@ function motionStudio(ctx, host) {
       damping: 20,
       mass: 1,
       velocity: 0,
+      range: [0, 1],
       ...rawContext.get(),
     }),
   };
   host.append(heading("Motion study", "Response, not just a curve"));
   const plot = canvas(
-      "Motion curve. Tab to bezier handle controls to edit the curve.",
-      400,
-      210,
+      "Motion curve. Use the handle fields to edit the curve.",
+      600,
+      220,
+      false,
     ),
-    ghost = canvas("Ghost trail showing positions through the motion", 400, 66),
+    ghost = canvas(
+      "Ghost trail: the current response above, the pinned earlier response below",
+      600,
+      84,
+      false,
+    ),
+    lanes = () => {
+      const v = ctx.get();
+      return [
+        {
+          id: "response",
+          label: "Response",
+          min: -0.5,
+          max: 1.5,
+          unit: "",
+          keys: v.keyframes || [
+            { time: 0, value: 0 },
+            { time: 1, value: 1 },
+          ],
+        },
+        ...laneControls.map((c) => {
+          const now = ctx.panel.get(c.id);
+          return {
+            id: c.id,
+            label: c.label || c.id,
+            min: c.min ?? Math.min(0, now),
+            max: c.max ?? Math.max(100, now),
+            unit: c.unit || "",
+            keys: v.tracks?.[c.id] || [
+              { time: 0, value: now },
+              { time: 1, value: now },
+            ],
+          };
+        }),
+      ];
+    },
+    laneControls = (ctx.section?.controls || []).filter(
+      (c) => c.id !== ctx.control.id && ["number", "angle"].includes(c.type),
+    ),
+    timeline = canvas(
+      "Timeline with a loop range and one lane of keys per instrument. Arrow keys move the playhead, [ and ] set the loop range, K adds a key.",
+      600,
+      24 + 34 * (1 + laneControls.length),
+    ),
     track = el("input", {
       type: "range",
       min: 0,
@@ -611,7 +665,8 @@ function motionStudio(ctx, host) {
       "aria-label": "Timeline playhead",
     }),
     time = el("output", { class: "d-note" });
-  let playhead = 0,
+  let reference = clone(ctx.get()),
+    playhead = 0,
     playing = false,
     start = 0,
     raf = 0,
@@ -652,9 +707,12 @@ function motionStudio(ctx, host) {
     playing = !playing;
     play.textContent = playing ? "Pause" : "Play";
     if (playing) {
+      const v = ctx.get(),
+        [r0, r1] = v.range || [0, 1];
+      if (playhead < r0 || playhead >= r1) playhead = r0;
       start =
         performance.now() -
-        playhead * (ctx.get().duration + ctx.get().delay || 1000);
+        (playhead - r0) * ((v.duration || 1000) + (v.delay || 0));
       raf = requestAnimationFrame(tick);
     } else cancelAnimationFrame(raf);
   });
@@ -674,10 +732,75 @@ function motionStudio(ctx, host) {
       frames.sort((a, b) => a.time - b.time);
       ctx.set({ ...v, keyframes: frames });
     });
-  const exportCode = el("output", { class: "d-export d-studio-only" });
-  host.append(
-    el("div", { class: "d-tools" }, mode, play),
+  const pin = button(
+    "Pin as before",
+    "Keep the current response as the before ghost",
+    () => {
+      reference = clone(ctx.get());
+      draw();
+      renderCompare(ctx.get());
+    },
+  );
+  const rangeFields = fields(ctx, [
+    ["Loop in", ["range", 0], 0, 1, 0.01],
+    ["Loop out", ["range", 1], 0, 1, 0.01],
+  ]);
+  const compare = el("div", { class: "d-compare", role: "table", "aria-label": "Response measurements" });
+  const applyTracks = button(
+    "Apply at playhead",
+    "Set the other instruments to their values at the playhead",
+    () => {
+      for (const lane of lanes().slice(1)) {
+        const at = keyframeAt(playhead, lane.keys);
+        ctx.panel.transact(lane.id, at);
+      }
+    },
+  );
+  const readouts = el("output", { class: "d-note d-lane-values" });
+  const outputs = el("div", { class: "d-studio-only d-exports" });
+  const exportSpecs = [
+    ["CSS easing", (v) => toEasing(v)],
+    ["CSS transition", (v) => toTransition(v)],
+    [
+      "Web Animations",
+      (v) => {
+        const tracks = {};
+        for (const lane of lanes().slice(1))
+          tracks[lane.id] = lane.keys.map((k) => ({ ...k, unit: lane.unit === "deg" ? "deg" : lane.unit }));
+        return toWaapi(v, v.tracks ? tracks : {}, "element");
+      },
+    ],
+  ].map(([label, make]) => {
+    const code = el("code", {
+      class: "d-export",
+      tabindex: 0,
+      role: "group",
+      "aria-label": label + " code",
+    });
+    const copy = button("Copy", "Copy " + label, async () => {
+      try {
+        await navigator.clipboard.writeText(code.textContent);
+        copy.textContent = "Copied";
+      } catch {
+        copy.textContent = "Select and copy";
+      }
+      setTimeout(() => (copy.textContent = "Copy"), 1400);
+    });
+    outputs.append(
+      el(
+        "div",
+        { class: "d-export-block" },
+        el("div", { class: "d-export-head" }, el("span", { text: label }), copy),
+        code,
+      ),
+    );
+    return { code, make };
+  });
+  const main = el(
+    "div",
+    { class: "d-motion-main" },
     el("div", { class: "d-motion-plots" }, plot, ghost),
+    el("div", { class: "d-timeline-wrap d-studio-only" }, heading("Timeline", "Loop range, keys, one lane per instrument"), timeline),
     el(
       "div",
       { class: "d-track" },
@@ -686,19 +809,34 @@ function motionStudio(ctx, host) {
       el("span", { text: "1" }),
     ),
     time,
+  );
+  const bezierOnly = el(
+      "div",
+      { class: "d-motion-block" },
+      heading("Bezier handles", "The same handles as the curve"),
+      handles.node,
+    );
+  const side = el(
+    "div",
+    { class: "d-motion-side" },
     presets,
     numbers.node,
     el(
       "div",
       { class: "d-studio-only d-motion-details" },
-      heading("Bezier handles", "The same handles as the curve"),
-      handles.node,
+      el("div", { class: "d-compare-head" }, heading("Measured", "Settle within 2 percent of the end"), pin),
+      compare,
+      heading("Loop", "Playback repeats inside this range"),
+      rangeFields.node,
+      bezierOnly,
       heading("Keyframes", "Time is normalized from 0 to 1"),
       add,
       keyframes,
+      readouts,
+      applyTracks,
     ),
-    exportCode,
   );
+  host.append(el("div", { class: "d-tools" }, mode, play), main, side, outputs);
   track.addEventListener("input", () => {
     playhead = Number(track.value) / 1000;
     draw();
@@ -733,11 +871,15 @@ function motionStudio(ctx, host) {
     end: () => ctx.commit(),
     cancel: () => ctx.cancel(),
   });
+  for (const cv of [plot, ghost, timeline])
+    cv.addEventListener("d-resize", () => draw());
   function tick(now) {
     if (dead || !playing) return;
     const v = ctx.get(),
-      total = (v.duration || 1000) + (v.delay || 0);
-    playhead = ((now - start) % total) / total;
+      total = (v.duration || 1000) + (v.delay || 0),
+      [r0, r1] = v.range || [0, 1],
+      span = Math.max(0.01, r1 - r0);
+    playhead = r0 + (((now - start) / total) % span);
     track.value = playhead * 1000;
     draw();
     raf = requestAnimationFrame(tick);
@@ -751,6 +893,16 @@ function motionStudio(ctx, host) {
       a = accent(host);
     grid(g, w, h);
     const xy = ([x, y]) => [x * w, h * (0.84 - y * 0.68)];
+    g.beginPath();
+    curvePoints(reference).forEach((p, i) => {
+      const [x, y] = xy(p);
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    });
+    g.strokeStyle = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
+    g.lineWidth = 1.5;
+    g.setLineDash([5, 4]);
+    g.stroke();
+    g.setLineDash([]);
     g.beginPath();
     curvePoints(v).forEach((p, i) => {
       const [x, y] = xy(p);
@@ -790,18 +942,270 @@ function motionStudio(ctx, host) {
     g.setLineDash([]);
     const gg = ghost.getContext("2d");
     grid(gg, ghost.width, ghost.height);
+    const gx = (p) => 14 + clamp(p, -0.1, 1.25) * (ghost.width - 56);
     for (let i = 0; i <= 14; i++) {
-      const p = motionAt(i / 14, v);
       gg.globalAlpha = 0.08 + (i / 14) * 0.22;
       gg.fillStyle = a;
-      gg.fillRect(14 + clamp(p, -0.05, 1.1) * (ghost.width - 50), 18, 16, 30);
+      gg.fillRect(gx(motionAt(i / 14, v)), 16, 16, 24);
     }
     gg.globalAlpha = 1;
     gg.fillStyle = a;
-    gg.fillRect(14 + clamp(value, -0.05, 1.1) * (ghost.width - 50), 18, 16, 30);
+    gg.fillRect(gx(value), 16, 16, 24);
     gg.strokeStyle = a;
-    gg.strokeRect(14 + clamp(key, -0.05, 1.1) * (ghost.width - 50), 8, 16, 10);
+    gg.strokeRect(gx(key), 6, 16, 8);
+    gg.strokeStyle = getComputedStyle(ghost).getPropertyValue("--d-muted").trim() || "#777";
+    gg.setLineDash([3, 3]);
+    for (let i = 0; i <= 14; i++)
+      gg.strokeRect(gx(motionAt(i / 14, reference)), 54, 16, 24);
+    gg.setLineDash([]);
+    gg.fillStyle = gg.strokeStyle;
+    gg.fillRect(gx(motionAt(t, reference)), 54, 16, 24);
+    drawTimeline(v);
     time.textContent = `${Math.round(playhead * ((v.duration || 1000) + (v.delay || 0)))} ms · response ${value.toFixed(3)} · keyframe ${key.toFixed(3)}`;
+  }
+  const W = 600,
+    RULER = 24,
+    LANE = 34,
+    PAD = 12;
+  const tx = (t) => PAD + t * (W - 2 * PAD),
+    xt = (x) => clamp((x - PAD) / (W - 2 * PAD), 0, 1);
+  const laneY = (i) => RULER + i * LANE;
+  const laneValueY = (lane, i, value) =>
+    laneY(i) + LANE - 7 - clamp((value - lane.min) / (lane.max - lane.min || 1), 0, 1) * (LANE - 15);
+  function drawTimeline(v) {
+    const g = timeline.getContext("2d"),
+      H = timeline.height,
+      css = getComputedStyle(timeline),
+      a = accent(host),
+      muted = css.getPropertyValue("--d-muted").trim() || "#666",
+      line = css.getPropertyValue("--d-line").trim() || "#ccc",
+      text = css.getPropertyValue("--d-text").trim() || "#111",
+      total = (v.duration || 1000) + (v.delay || 0),
+      [r0, r1] = v.range || [0, 1],
+      list = lanes();
+    g.clearRect(0, 0, W, H);
+    g.font = "9px ui-monospace, monospace";
+    g.textBaseline = "middle";
+    g.fillStyle = a;
+    g.globalAlpha = 0.1;
+    g.fillRect(tx(r0), 0, tx(r1) - tx(r0), H);
+    g.globalAlpha = 1;
+    g.strokeStyle = line;
+    g.lineWidth = 1;
+    for (let i = 0; i <= 10; i++) {
+      const x = Math.round(tx(i / 10)) + 0.5;
+      g.beginPath();
+      g.moveTo(x, i % 5 ? 16 : 10);
+      g.lineTo(x, H);
+      g.stroke();
+      if (i % 2 === 0) {
+        g.fillStyle = muted;
+        g.textAlign = i === 0 ? "left" : i === 10 ? "right" : "center";
+        g.fillText(`${Math.round((i / 10) * total)}`, x, 6);
+      }
+    }
+    g.fillStyle = a;
+    for (const [t, dir] of [[r0, 1], [r1, -1]]) {
+      g.beginPath();
+      g.moveTo(tx(t), 20);
+      g.lineTo(tx(t) + dir * 8, 20);
+      g.lineTo(tx(t), 12);
+      g.closePath();
+      g.fill();
+      g.fillRect(tx(t) - 0.5, 12, 1.5, H);
+    }
+    list.forEach((lane, i) => {
+      const top = laneY(i);
+      g.strokeStyle = line;
+      g.beginPath();
+      g.moveTo(0, top + 0.5);
+      g.lineTo(W, top + 0.5);
+      g.stroke();
+      g.fillStyle = css.getPropertyValue("--d-surface").trim() || "#fff";
+      g.globalAlpha = 0.85;
+      g.fillRect(PAD - 3, top + 2, lane.label.length * 5.6 + 8, 12);
+      g.globalAlpha = 1;
+      g.fillStyle = muted;
+      g.textAlign = "left";
+      g.fillText(lane.label, PAD, top + 8);
+      const sorted = [...lane.keys].sort((p, q) => p.time - q.time);
+      g.beginPath();
+      for (let k = 0; k <= 80; k++) {
+        const t = k / 80,
+          y = laneValueY(lane, i, keyframeAt(t, sorted));
+        k ? g.lineTo(tx(t), y) : g.moveTo(tx(t), y);
+      }
+      g.strokeStyle = a;
+      g.lineWidth = 1.5;
+      g.stroke();
+      g.lineWidth = 1;
+      for (const k of lane.keys) {
+        const x = tx(k.time),
+          y = laneValueY(lane, i, k.value);
+        g.beginPath();
+        g.moveTo(x, y - 5);
+        g.lineTo(x + 5, y);
+        g.lineTo(x, y + 5);
+        g.lineTo(x - 5, y);
+        g.closePath();
+        g.fillStyle = text;
+        g.fill();
+        g.strokeStyle = a;
+        g.stroke();
+      }
+    });
+    g.fillStyle = text;
+    g.fillRect(tx(playhead) - 0.75, 0, 1.5, H);
+  }
+  function hit(e) {
+    const r = timeline.getBoundingClientRect(),
+      x = ((e.clientX - r.left) / r.width) * W,
+      y = ((e.clientY - r.top) / r.height) * timeline.height,
+      v = ctx.get(),
+      [r0, r1] = v.range || [0, 1];
+    if (y < RULER) {
+      if (Math.abs(x - tx(r0)) < 9 && Math.abs(x - tx(r0)) <= Math.abs(x - tx(r1)))
+        return { kind: "range", index: 0, x, y };
+      if (Math.abs(x - tx(r1)) < 9) return { kind: "range", index: 1, x, y };
+      return { kind: "scrub", x, y };
+    }
+    const i = clamp(Math.floor((y - RULER) / LANE), 0, laneControls.length),
+      lane = lanes()[i];
+    let best = -1,
+      bestD = 11;
+    lane.keys.forEach((k, j) => {
+      const d = Math.hypot(tx(k.time) - x, laneValueY(lane, i, k.value) - y);
+      if (d < bestD) {
+        best = j;
+        bestD = d;
+      }
+    });
+    return best >= 0 ? { kind: "key", lane: i, index: best, x, y } : { kind: "scrub", lane: i, x, y };
+  }
+  let gesture = null;
+  ctx.surface(timeline, {
+    start: (e) => {
+      gesture = hit(e);
+      if (gesture.kind !== "scrub") ctx.begin("timeline-" + gesture.kind);
+    },
+    move: (e) => {
+      if (!gesture) return;
+      const r = timeline.getBoundingClientRect(),
+        x = ((e.clientX - r.left) / r.width) * W,
+        y = ((e.clientY - r.top) / r.height) * timeline.height,
+        v = ctx.get();
+      if (gesture.kind === "scrub") {
+        playhead = xt(x);
+        track.value = playhead * 1000;
+        draw();
+      } else if (gesture.kind === "range") {
+        const range = [...(v.range || [0, 1])],
+          t = Number(xt(x).toFixed(3));
+        range[gesture.index] = gesture.index ? Math.max(t, range[0] + 0.02) : Math.min(t, range[1] - 0.02);
+        ctx.change({ ...v, range });
+      } else {
+        const list = lanes(),
+          lane = list[gesture.lane],
+          keys = clone(lane.keys),
+          key = keys[gesture.index],
+          norm = clamp(1 - (y - laneY(gesture.lane) - 7) / (LANE - 15), 0, 1);
+        key.time = Number(xt(x).toFixed(3));
+        key.value = Number((lane.min + norm * (lane.max - lane.min)).toFixed(3));
+        ctx.change(laneWrite(lane, keys, v));
+      }
+    },
+    end: () => {
+      if (gesture && gesture.kind === "key") {
+        const lane = lanes()[gesture.lane],
+          keys = clone(lane.keys).sort((p, q) => p.time - q.time);
+        ctx.change(laneWrite(lane, keys, ctx.get()));
+      }
+      if (gesture && gesture.kind !== "scrub") ctx.commit();
+      gesture = null;
+    },
+    cancel: () => {
+      if (gesture && gesture.kind !== "scrub") ctx.cancel();
+      gesture = null;
+    },
+  });
+  const laneWrite = (lane, keys, v) =>
+    lane.id === "response"
+      ? { ...v, keyframes: keys }
+      : { ...v, tracks: { ...(v.tracks || {}), [lane.id]: keys } };
+  timeline.addEventListener("dblclick", (e) => {
+    const h = hit(e);
+    if (h.lane === undefined && h.kind !== "key") return;
+    const list = lanes(),
+      lane = list[h.lane];
+    if (h.kind === "key") {
+      if (lane.keys.length > 2)
+        ctx.set(laneWrite(lane, lane.keys.filter((_, j) => j !== h.index), ctx.get()));
+      return;
+    }
+    addKey(h.lane, xt(h.x));
+  });
+  function addKey(laneIndex, t) {
+    const lane = lanes()[laneIndex],
+      v = ctx.get(),
+      value =
+        laneIndex === 0 ? motionAt(t, v) : keyframeAt(t, lane.keys),
+      keys = [...lane.keys, { time: Number(t.toFixed(3)), value: Number(value.toFixed(3)) }].sort(
+        (p, q) => p.time - q.time,
+      );
+    ctx.set(laneWrite(lane, keys, v));
+  }
+  timeline.addEventListener("keydown", (e) => {
+    const v = ctx.get(),
+      step = e.shiftKey ? 0.1 : 0.01;
+    let handled = true;
+    if (e.key === "ArrowLeft") playhead = clamp(playhead - step, 0, 1);
+    else if (e.key === "ArrowRight") playhead = clamp(playhead + step, 0, 1);
+    else if (e.key === "Home") playhead = 0;
+    else if (e.key === "End") playhead = 1;
+    else if (e.key === "[")
+      ctx.set({ ...v, range: [Math.min(playhead, v.range[1] - 0.02), v.range[1]] });
+    else if (e.key === "]")
+      ctx.set({ ...v, range: [v.range[0], Math.max(playhead, v.range[0] + 0.02)] });
+    else if (e.key === "\\") ctx.set({ ...v, range: [0, 1] });
+    else if (e.key.toLowerCase() === "k") addKey(0, playhead);
+    else handled = false;
+    if (!handled) return;
+    e.preventDefault();
+    track.value = playhead * 1000;
+    draw();
+  });
+  const fmt = (ms) => (Number.isFinite(ms) ? `${ms} ms` : "never settles");
+  function renderCompare(v) {
+    const now = analyze(v),
+      before = analyze(reference),
+      rows = [
+        ["Settle", fmt(now.settleMs), fmt(before.settleMs)],
+        ["Overshoot", `${now.overshoot.toFixed(1)}%`, `${before.overshoot.toFixed(1)}%`],
+        ["Peak at", fmt(now.peakMs), fmt(before.peakMs)],
+        [
+          "Fits duration",
+          now.fits ? "yes" : `no, needs ${fmt(now.settleMs)}`,
+          before.fits ? "yes" : "no",
+        ],
+      ];
+    compare.replaceChildren(
+      el(
+        "div",
+        { class: "d-compare-row d-compare-title", role: "row" },
+        el("span", { role: "columnheader", text: "Measure" }),
+        el("span", { role: "columnheader", text: "Now" }),
+        el("span", { role: "columnheader", text: "Before" }),
+      ),
+      ...rows.map(([k, a, b]) =>
+        el(
+          "div",
+          { class: "d-compare-row", role: "row" },
+          el("span", { role: "rowheader", text: k }),
+          el("strong", { role: "cell", text: a }),
+          el("span", { role: "cell", text: b }),
+        ),
+      ),
+    );
   }
   let lastKeys = "";
   function update() {
@@ -810,6 +1214,8 @@ function motionStudio(ctx, host) {
     mode.querySelector("select").value = v.mode || "bezier";
     numbers.update();
     handles.update();
+    rangeFields.update();
+    bezierOnly.hidden = v.mode === "spring";
     const ks = JSON.stringify(v.keyframes);
     if (ks !== lastKeys) {
       lastKeys = ks;
@@ -900,10 +1306,12 @@ function motionStudio(ctx, host) {
         });
       }
     }
-    exportCode.value =
-      v.mode === "spring"
-        ? `spring · k ${v.stiffness} · c ${v.damping} · m ${v.mass}`
-        : `cubic-bezier(${v.bezier.join(", ")}) · ${v.duration}ms · delay ${v.delay}ms`;
+    for (const x of exportSpecs) x.code.textContent = x.make(v);
+    renderCompare(v);
+    readouts.value = lanes()
+      .slice(1)
+      .map((l) => `${l.label} ${Number(keyframeAt(playhead, l.keys).toFixed(2))}${l.unit}`)
+      .join(" · ");
     draw();
   }
   const reduced = matchMedia("(prefers-reduced-motion: reduce)"),
@@ -992,7 +1400,7 @@ function typeStudio(ctx, host) {
   const ruler = el("div", {
     class: "d-type-ruler",
     "aria-hidden": true,
-    text: "H  x  n  o  a  g  ·  0123456789",
+    text: "Hamburgefonstiv 0123456789",
   });
   specimen.addEventListener("focus", () => ctx.begin("specimen"));
   specimen.addEventListener("input", () =>
@@ -1034,6 +1442,9 @@ function typeStudio(ctx, host) {
       specimen.style.fontSize = `${v.size || 32}px`;
       specimen.style.fontWeight = v.weight || 400;
       specimen.style.letterSpacing = `${v.tracking || 0}px`;
+      ruler.style.fontFamily = specimen.style.fontFamily;
+      ruler.style.fontWeight = specimen.style.fontWeight;
+      ruler.style.fontVariationSettings = "";
       specimen.style.lineHeight = v.lineHeight || 1.2;
       specimen.style.fontVariationSettings = Object.entries(v.axes || {})
         .map(([tag, n]) => `"${tag.replace(/[^\w]/g, "")}" ${Number(n)}`)
@@ -1048,7 +1459,7 @@ function imageStudio(ctx, host) {
   host.append(
     heading("Image darkroom", "Levels, curves & a measured histogram"),
   );
-  const preview = canvas("Image after levels, curves, crop and mask", 320, 180),
+  const preview = canvas("Image after levels, curves, crop and mask", 320, 180, false),
     hist = canvas(
       "Luminance histogram and tone curve. Arrows adjust middle curve point.",
       320,
@@ -1087,6 +1498,10 @@ function imageStudio(ctx, host) {
   s.fillRect(34, 70, 45, 65);
   s.fillStyle = "#c9c5b6";
   s.fillRect(73, 70, 8, 65);
+  const output = Object.assign(document.createElement("canvas"), {
+    width: 320,
+    height: 180,
+  });
   let original = s.getImageData(0, 0, 320, 180),
     dead = false,
     frame = 0,
@@ -1179,6 +1594,10 @@ function imageStudio(ctx, host) {
     v.curve[2] = clamp(v.curve[2] + (e.key === "ArrowUp" ? 0.01 : -0.01), 0, 1);
     ctx.set(v);
   });
+  for (const cv of [preview, hist])
+    cv.addEventListener("d-resize", () => {
+      if (!frame) frame = requestAnimationFrame(draw);
+    });
   function draw() {
     frame = 0;
     if (dead) return;
@@ -1221,7 +1640,10 @@ function imageStudio(ctx, host) {
       out.data[i + 3] = inside && masked ? 255 : 30;
       if (inside && masked) bins[Math.min(63, Math.floor(l * 64))]++;
     }
-    g.putImageData(out, 0, 0);
+    output.getContext("2d").putImageData(out, 0, 0);
+    g.imageSmoothingQuality = "high";
+    g.clearRect(0, 0, 320, 180);
+    g.drawImage(output, 0, 0, 320, 180);
     const hg = hist.getContext("2d");
     grid(hg, 320, 100);
     const max = Math.max(...bins);
@@ -1268,6 +1690,7 @@ function encodingStudio(ctx, host) {
       "Chart preview from the selected field encodings",
       400,
       200,
+      false,
     ),
     shelf = el("div", { class: "d-encoding" }),
     data = ctx.control.data || [],
@@ -1308,6 +1731,7 @@ function encodingStudio(ctx, host) {
     el("div", { class: "d-tools d-studio-only" }, mark),
     stats,
   );
+  plot.addEventListener("d-resize", () => update());
   function update() {
     const v = ctx.get();
     selects.forEach(([k, s]) => (s.value = v[k] || ""));
@@ -1364,14 +1788,16 @@ function encodingStudio(ctx, host) {
 }
 function samplerStudio(ctx, host) {
   host.append(heading("Sampler", "Noise becomes a schedule"));
-  const plot = canvas("Sigma schedule at each sampling step", 400, 160),
+  const plot = canvas("Sigma schedule at each sampling step", 400, 160, false),
     guidance = canvas(
       "Guidance study: unconditioned prediction plus guidance times the conditional difference",
       400,
       48,
+      false,
     ),
     seedStrip = el("div", {
       class: "d-seed-strip",
+      role: "img",
       "aria-label": "Seed fingerprint",
     }),
     cells = el("div", { class: "d-step-cells" }),
@@ -1412,7 +1838,7 @@ function samplerStudio(ctx, host) {
     f.node,
     el("div", { class: "d-tools" }, scheduler, lock, random),
   );
-  return {
+  const api = {
     update() {
       const v = ctx.get();
       f.update();
@@ -1485,6 +1911,9 @@ function samplerStudio(ctx, host) {
       stats.value = `${v.steps} evaluations · guidance ${v.cfg} · seed ${v.seed} · denoise ${v.denoise ?? 1}`;
     },
   };
+  for (const cv of [plot, guidance])
+    cv.addEventListener("d-resize", () => api.update());
+  return api;
 }
 function generalStudio(ctx, host) {
   const c = ctx.control,
@@ -1554,6 +1983,7 @@ function generalStudio(ctx, host) {
       ],
     );
     host.append(f.node);
+    pad.addEventListener("d-resize", () => fns.forEach((fn) => fn()));
     fns.push(() => {
       f.update();
       const v = ctx.get(),
@@ -1749,6 +2179,7 @@ export function createStudio(panel, section, host) {
   const ctx = {
     ...panel.context(c.id, c),
     panel,
+    section,
     surface: (node, handlers) => {
       cleanup.push(pointerSurface(node, handlers));
     },

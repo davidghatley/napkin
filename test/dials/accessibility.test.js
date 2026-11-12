@@ -6,7 +6,7 @@ import { launchChromium } from "../helpers/cdp.js";
 import { serve } from "./serve.js";
 
 test(
-  "all directions, themes and flagship depths have named keyboard surfaces",
+  "every sample, theme and depth passes axe, studios included",
   { timeout: 120000 },
   async (t) => {
     const source = readFileSync(
@@ -17,32 +17,33 @@ test(
       browser = await launchChromium({ width: 1440, height: 1100 }),
       results = [];
     try {
-      for (const direction of ["a", "b", "c"]) {
-        await browser.goto(server.url + "?dir=" + direction);
-        await browser.waitFor("dialsDemo.panels.length===6");
-        await browser.eval(source);
-        // The source inspector and complete control catalogue participate in every audit.
-        await browser.eval('document.querySelector(".catalog").open=true');
-        for (const theme of ["light", "dark"]) {
-          if (theme === "dark")
-            await browser.eval('document.querySelector("#theme").click()');
-          for (const studio of ["bench", "color", "motion"]) {
+      await browser.goto(server.url);
+      await browser.waitFor("dialsDemo.panels.length===6");
+      await browser.eval(source);
+      // The source inspector and complete control catalogue participate in every audit.
+      await browser.eval('document.querySelector(".catalog").open=true');
+      const names = ["color", "typography", "motion", "image", "data", "generation"];
+      for (const theme of ["light", "dark"]) {
+        if (theme === "dark")
+          await browser.eval('document.querySelector("#theme").click()');
+        for (const [index, name] of names.entries()) {
+          for (const depth of [2, 3]) {
             await browser.eval(
-              'dialsDemo.panels[0].setDepth("pigment",2);dialsDemo.panels[2].setDepth("time",2)',
+              `(()=>{const p=dialsDemo.panels[${index}];const id=[...p.sections.keys()][0];p.setDepth(id,${depth},false)})()`,
             );
-            if (studio === "color")
-              await browser.eval('dialsDemo.panels[0].open("ink")');
-            if (studio === "motion")
-              await browser.eval('dialsDemo.panels[2].open("ease")');
-            await new Promise((resolve) => setTimeout(resolve, 180));
+            await new Promise((resolve) => setTimeout(resolve, 200));
             const violations = await browser.eval(
               "axe.run(document).then(r=>r.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)})))",
             );
-            results.push({ direction, theme, studio, violations });
-            await t.test(`${direction} / ${theme} / ${studio}`, () =>
+            const studio = depth === 3 ? "studio" : "bench";
+            results.push({ theme, name, studio, violations });
+            await t.test(`${theme} / ${name} / ${studio}`, () =>
               assert.deepEqual(violations, []),
             );
           }
+          await browser.eval(
+            `(()=>{const p=dialsDemo.panels[${index}];p.setDepth([...p.sections.keys()][0],2,false)})()`,
+          );
         }
       }
       if (process.env.DIALS_EVIDENCE) {

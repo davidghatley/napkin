@@ -1,12 +1,12 @@
 /* Scoped instruments. Host napkin tokens win; fallbacks make the library standalone. */
 .dials {
-  --d-native-surface: #fbfbfc;
-  --d-native-well: #f3f4f6;
-  --d-native-hover: #eaecf0;
-  --d-native-line: #dde0e6;
-  --d-native-text: #1c1f27;
-  --d-native-muted: #4f5663;
-  --d-native-accent: #3459e2;
+  --d-native-surface: #f9f9f5;
+  --d-native-well: #eeede7;
+  --d-native-hover: #e3e2da;
+  --d-native-line: #c9c9c0;
+  --d-native-text: #16181d;
+  --d-native-muted: #555a61;
+  --d-native-accent: #2236b0;
   --d-native-on: #fff;
   --d-surface: var(--nk-chrome, var(--d-native-surface));
   --d-well: var(--nk-chrome-2, var(--d-native-well));
@@ -16,7 +16,7 @@
   --d-muted: var(--nk-text-2, var(--d-native-muted));
   --d-accent: var(--nk-accent, var(--d-native-accent));
   --d-on-accent: var(--nk-on-accent, var(--d-native-on));
-  --d-sans: var(--nk-sans, ui-sans-serif, system-ui, sans-serif);
+  --d-sans: var(--nk-sans, ui-monospace, SFMono-Regular, Consolas, monospace);
   --d-mono: var(--nk-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
   font: 12px/1.45 var(--d-sans);
   color: var(--d-text);
@@ -28,38 +28,38 @@
 }
 @media (prefers-color-scheme: dark) {
   .dials:not([data-theme="light"]) {
-    --d-native-surface: #1b1d23;
-    --d-native-well: #23262d;
-    --d-native-hover: #2b2f37;
-    --d-native-line: #3a3e48;
-    --d-native-text: #e8eaf0;
-    --d-native-muted: #b4bac7;
-    --d-native-accent: #8fadff;
+    --d-native-surface: #1b1e22;
+    --d-native-well: #121417;
+    --d-native-hover: #272b30;
+    --d-native-line: #3a3e44;
+    --d-native-text: #ecebe4;
+    --d-native-muted: #b4b9bf;
+    --d-native-accent: #9fb0ff;
     --d-native-on: #0d1220;
     color-scheme: dark;
   }
 }
 .dials[data-theme="dark"],
 [data-theme="dark"] .dials {
-  --d-native-surface: #1b1d23;
-  --d-native-well: #23262d;
-  --d-native-hover: #2b2f37;
-  --d-native-line: #3a3e48;
-  --d-native-text: #e8eaf0;
-  --d-native-muted: #b4bac7;
-  --d-native-accent: #8fadff;
+  --d-native-surface: #1b1e22;
+  --d-native-well: #121417;
+  --d-native-hover: #272b30;
+  --d-native-line: #3a3e44;
+  --d-native-text: #ecebe4;
+  --d-native-muted: #b4b9bf;
+  --d-native-accent: #9fb0ff;
   --d-native-on: #0d1220;
   color-scheme: dark;
 }
 .dials[data-theme="light"],
 [data-theme="light"] .dials {
-  --d-native-surface: #fbfbfc;
-  --d-native-well: #f3f4f6;
-  --d-native-hover: #eaecf0;
-  --d-native-line: #dde0e6;
-  --d-native-text: #1c1f27;
-  --d-native-muted: #4f5663;
-  --d-native-accent: #3459e2;
+  --d-native-surface: #f9f9f5;
+  --d-native-well: #eeede7;
+  --d-native-hover: #e3e2da;
+  --d-native-line: #c9c9c0;
+  --d-native-text: #16181d;
+  --d-native-muted: #555a61;
+  --d-native-accent: #2236b0;
   --d-native-on: #fff;
   color-scheme: light;
 }
@@ -696,7 +696,7 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .d-section[data-depth="3"] .d-type-specimen {
-  min-height: 240px;
+  min-height: min(420px, 48vh);
   padding: 20px;
   background: var(--d-well);
 }
@@ -733,27 +733,8 @@
   font: 11px var(--d-mono);
   color: var(--d-accent);
 }
-/* B: ruled workshop plates. Square geometry, annotation gutter, coarser figure strokes. */
-.dials[data-direction="b"] {
-  --d-native-surface: #f9f9f5;
-  --d-native-well: #eeede7;
-  --d-native-line: #c9c9c0;
-  --d-native-text: #16181d;
-  --d-native-muted: #555a61;
-  --d-native-accent: #2236b0;
-  --d-sans: ui-monospace, monospace;
-  --d-mono: ui-monospace, monospace;
-}
-.dials[data-direction="b"][data-theme="dark"],
-[data-theme="dark"] .dials[data-direction="b"] {
-  --d-native-surface: #1b1e22;
-  --d-native-well: #121417;
-  --d-native-line: #3a3e44;
-  --d-native-text: #ecebe4;
-  --d-native-muted: #a2a7ad;
-  --d-native-accent: #9fb0ff;
-}
-.dials[data-direction="b"]
+/* Workshop plates: square geometry, ruled headers, plated figures. */
+.dials
   :is(
     input,
     select,
@@ -767,20 +748,20 @@
   ) {
   border-radius: 0;
 }
-.dials[data-direction="b"] .d-section-head {
+.dials .d-section-head {
   border-bottom: 1px solid var(--d-text);
 }
-.dials[data-direction="b"] .d-section-name {
+.dials .d-section-name {
   font: 600 11px var(--d-mono) !important;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.dials[data-direction="b"] .d-row {
+.dials .d-row {
   height: 36px;
   grid-template-columns: 12px minmax(82px, 1fr) 72px minmax(60px, 1fr);
   gap: 4px;
 }
-.dials[data-direction="b"] .d-figure {
+.dials .d-figure {
   width: 72px;
   border-left: 1px solid var(--d-line);
   border-right: 1px solid var(--d-line);
@@ -790,85 +771,27 @@
     color-mix(in srgb, var(--d-line) 20%, transparent) 4px 5px
   );
 }
-.dials[data-direction="b"] .d-figure svg {
+.dials .d-figure svg {
   shape-rendering: crispEdges;
 }
-.dials[data-direction="b"] .d-lab {
+.dials .d-lab {
   padding: 16px;
   border-top: 1px solid var(--d-text);
 }
-.dials[data-direction="b"] .d-lab h3 {
+.dials .d-lab h3 {
   font: 600 11px var(--d-mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.dials[data-direction="b"] .d-plot {
+.dials .d-plot {
   border-color: var(--d-text);
 }
-.dials[data-direction="b"] .d-value :is(input, select) {
+.dials .d-value :is(input, select) {
   border-color: var(--d-line);
   background: var(--d-surface);
 }
-.dials[data-direction="b"] .d-reset::after {
+.dials .d-reset::after {
   border-radius: 0;
-}
-/* C: specimen desk. Broad figures and open rows; controls read in two bands. */
-.dials[data-direction="c"] .d-section-head {
-  padding-left: 14px;
-  height: 32px;
-}
-.dials[data-direction="c"] .d-row {
-  height: 48px;
-  grid-template-columns: 10px minmax(72px, 1fr) 96px minmax(72px, 1fr);
-  gap: 8px;
-  padding-left: 12px;
-}
-.dials[data-direction="c"] .d-figure {
-  width: 96px;
-  height: 36px;
-  background: var(--d-well);
-  border: 1px solid var(--d-line);
-  border-radius: 8px;
-}
-.dials[data-direction="c"] .d-figure svg {
-  width: 80px;
-  height: 30px;
-}
-.dials[data-direction="c"] .d-label {
-  font-size: 12px !important;
-}
-.dials[data-direction="c"] .d-lab {
-  padding: 20px;
-  gap: 14px;
-}
-.dials[data-direction="c"] .d-lab-head {
-  flex-direction: column;
-  gap: 2px;
-}
-.dials[data-direction="c"] .d-lab h3 {
-  font-size: 16px;
-  letter-spacing: -0.02em;
-}
-.dials[data-direction="c"] .d-plot {
-  border: 0;
-  border-radius: 0;
-}
-.dials[data-direction="c"] .d-type-specimen {
-  min-height: 180px;
-}
-.dials[data-direction="c"] .d-value :is(input, select) {
-  height: 28px;
-  border: 0;
-  border-bottom: 1px solid var(--d-line);
-  border-radius: 0;
-  background: transparent;
-  font-size: 11px;
-}
-.dials[data-direction="c"] .d-depth button[aria-pressed="true"] {
-  box-shadow: none;
-  background: transparent;
-  border-radius: 0;
-  border-bottom: 2px solid var(--d-accent);
 }
 @media (max-width: 720px) {
   .d-section[data-depth="3"] .d-section-content {
@@ -927,8 +850,8 @@
   background: var(--d-accent);
   color: var(--d-on-accent);
 }
-.dials[data-direction="b"] .d-segmented,
-.dials[data-direction="b"] .d-segmented button {
+.dials .d-segmented,
+.dials .d-segmented button {
   border-radius: 0;
 }
 .d-seed-strip {
@@ -947,56 +870,117 @@
 .d-section[data-depth="3"] > .d-studio-tabs.d-studio-only {
   display: flex;
 }
-/* Keep response, ghost, physical parameters and keys visible together in a wide studio. */
+/* Motion studio: response and timeline on the left, numbers and measurements on the right, code across the bottom. */
+.d-motion-main,
+.d-motion-side {
+  display: contents;
+}
 .d-section[data-depth="3"] .d-lab[data-studio="motion"] {
-  grid-template-columns: minmax(260px, 1.25fr) minmax(250px, 1fr);
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr);
+  grid-template-areas: "head head" "tools tools" "main side" "code code";
+  align-content: start;
+  column-gap: 28px;
+  row-gap: 12px;
+  columns: auto;
+}
+.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-lab-head {
+  grid-area: head;
+}
+.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-tools {
+  grid-area: tools;
+}
+.d-section[data-depth="3"] .d-motion-main {
+  grid-area: main;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+.d-section[data-depth="3"] .d-motion-side {
+  grid-area: side;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+.d-section[data-depth="3"] .d-exports {
+  grid-area: code;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 20px;
+}
+.d-export-block {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
   align-content: start;
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-lab-head,
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-tools {
-  grid-column: 1/-1;
+.d-exports .d-export-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  color: var(--d-muted);
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-motion-plots {
-  grid-column: 1;
-  grid-row: 3/8;
-  align-self: start;
+.d-exports .d-export-head button {
+  padding: 1px 8px;
+  font-size: 10px;
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-track {
-  grid-column: 1;
-  grid-row: 8;
+.d-exports code.d-export {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 10px/1.5 var(--d-mono);
+  max-height: 84px;
+  overflow: auto;
+  padding: 6px 8px;
+  border: 1px solid var(--d-line);
+  background: var(--d-well);
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-note {
-  grid-column: 1;
-  grid-row: 9;
+.d-timeline-wrap {
+  display: grid;
+  gap: 6px;
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-presets {
-  grid-column: 2;
-  grid-row: 3;
+.d-compare {
+  display: grid;
+  gap: 0;
+  font: 11px/1.4 var(--d-mono);
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-lab-fields {
-  grid-column: 2;
-  grid-row: 4;
+.d-compare-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-motion-details {
-  grid-column: 2;
-  grid-row: 5/10;
+.d-compare-head button {
+  font-size: 10px;
+  padding: 2px 8px;
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-export {
-  grid-column: 1/-1;
+.d-compare-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 1fr;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--d-line);
 }
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] .d-lab-fields {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.d-compare-row > span:not(:first-child) {
+  color: var(--d-muted);
 }
-.d-motion-details > .d-lab-head {
-  margin: 8px 0;
+.d-compare-title {
+  color: var(--d-muted);
+  font-size: 10px;
+}
+.d-lane-values:empty {
+  display: none;
 }
 @media (max-width: 1100px) {
   .d-section[data-depth="3"] .d-lab[data-studio="motion"] {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "head" "tools" "main" "side" "code";
   }
-  .d-section[data-depth="3"] .d-lab[data-studio="motion"] > * {
-    grid-column: 1 !important;
-    grid-row: auto !important;
+  .d-section[data-depth="3"] .d-exports {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 /* The chosen color is a diagnostic figure; every surrounding label stays readable. */
@@ -1008,4 +992,54 @@
 .d-section[data-depth="3"] .d-color-preview canvas {
   width: 200px;
   height: 100px;
+}
+/* Viewport studio: the section leaves the page flow and takes the window. */
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] {
+  position: fixed;
+  inset: var(--d-studio-top, 56px) var(--d-studio-side, 24px)
+    var(--d-studio-bottom, 24px);
+  margin: auto;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-color: var(--d-text);
+  box-shadow:
+    0 0 0 100vmax color-mix(in srgb, #000 42%, transparent),
+    0 24px 64px rgb(0 0 0 / 0.32);
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] > .d-section-inner {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-section-content {
+  min-height: 100%;
+}
+/* A studio is a workbench: its panels sit side by side so nothing hides below the fold. */
+.dials[data-studio-mode="viewport"]
+  .d-section[data-depth="3"]
+  .d-lab:not([data-studio="motion"]) {
+  display: block;
+  column-count: 2;
+  column-gap: 28px;
+  padding: 16px 20px;
+}
+.dials[data-studio-mode="viewport"]
+  .d-section[data-depth="3"]
+  .d-lab:not([data-studio="motion"])
+  > * {
+  break-inside: avoid;
+  margin: 0 0 14px;
+}
+.dials[data-studio-mode="viewport"]
+  .d-section[data-depth="3"]
+  .d-lab:not([data-studio="motion"])
+  > .d-lab-head {
+  column-span: all;
 }

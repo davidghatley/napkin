@@ -49,7 +49,7 @@ test(
       await browser.waitFor("window.dialsDemo?.panels.length===6");
       await sleep(250);
       await t.test(
-        "six live schemas; all directions and both themes render without overflow",
+        "six live schemas; both themes render without overflow",
         async () => {
           assert.equal(
             await q('document.querySelectorAll(".study").length'),
@@ -63,7 +63,7 @@ test(
             await q("document.documentElement.scrollWidth<=innerWidth"),
             true,
           );
-          await shot("a-light-benches");
+          await shot("light-benches");
           if (evidence) {
             await browser.send("Emulation.setDeviceMetricsOverride", {
               width: 1440,
@@ -71,7 +71,7 @@ test(
               deviceScaleFactor: 1,
               mobile: false,
             });
-            await shot("a-light-overview");
+            await shot("light-overview");
             await browser.send("Emulation.setDeviceMetricsOverride", {
               width: 1440,
               height: 1100,
@@ -79,18 +79,12 @@ test(
               mobile: false,
             });
           }
-          for (const dir of ["b", "c"]) {
-            await browser.goto(server.url + `?dir=${dir}`);
-            await browser.waitFor("window.dialsDemo?.panels.length===6");
-            await sleep(200);
-            assert.equal(
-              await q("document.documentElement.scrollWidth<=innerWidth"),
-              true,
-            );
-            await shot(`${dir}-light-benches`);
-            await q('document.querySelector("#theme").click()');
-            await shot(`${dir}-dark-benches`);
-          }
+          await q('document.querySelector("#theme").click()');
+          assert.equal(
+            await q("document.documentElement.scrollWidth<=innerWidth"),
+            true,
+          );
+          await shot("b-dark-benches");
           await browser.goto(server.url);
           await browser.waitFor("window.dialsDemo?.panels.length===6");
         },
@@ -555,7 +549,7 @@ test(
         "scrub input reaches software paint within a frame",
         async () => {
           await q(
-            'dialsDemo.panels[3].setDepth("darkroom",2);dialsDemo.panels[3].update({radius:30});',
+            'dialsDemo.panels.forEach(p=>[...p.sections.keys()].forEach(id=>p.setDepth(id,2,false)));dialsDemo.panels[3].update({radius:30});',
           );
           const traces = {};
           for (const [name, selector] of [
