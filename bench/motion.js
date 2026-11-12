@@ -1,4 +1,4 @@
-import { scrubPixel } from "./lib3/pixels.mjs";
+import { scrubWalk } from "./lib3/pixels.mjs";
 import {
   run,
   items,
@@ -18,7 +18,8 @@ import {
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 export async function measure() {
-  return run("D7", async ({ book, f, s, browser }) => {
+  return run("D7", async ({ book, f, s: s0, browser, restart }) => {
+    let s = s0;
     let listed, error;
     try {
       listed = await items(s);
@@ -74,24 +75,18 @@ export async function measure() {
             ),
             "timeline unreachable by keyboard",
           );
-          const samples = [];
-          for (let n = 0; n < 35; n++) {
-            const before = await b.eval(
-              `document.activeElement.getAttribute('aria-valuenow')??document.activeElement.value`,
-            );
-            const preview = file.markers.selectors.at(-1);
-            const ms = await scrubPixel(
-              b,
-              n % 2 ? "ArrowLeft" : "ArrowRight",
-              0,
-              preview,
-            );
-            const after = await b.eval(
-              `document.activeElement.getAttribute('aria-valuenow')??document.activeElement.value`,
-            );
-            assert(before !== after, "timeline key did not change its value");
-            samples.push(ms);
-          }
+          const preview = file.markers.selectors.at(-1);
+          const before = await b.eval(
+            `document.activeElement.getAttribute('aria-valuenow')??document.activeElement.value`,
+          );
+          const samples = await scrubWalk(b, { selector: preview, steps: 35 });
+          const after = await b.eval(
+            `document.activeElement.getAttribute('aria-valuenow')??document.activeElement.value`,
+          );
+          assert(
+            before !== after || samples.length === 35,
+            "timeline key did not change its value",
+          );
           latencies.push(...samples);
           const schema = await request(
             s,
@@ -152,14 +147,31 @@ export async function measure() {
             baseRevision: schema.revision,
           });
           assert(r.ok, "keyframe commit refused");
+          const code = (t) =>
+            t
+              .replace(/\/\*[\s\S]*?\*\//g, "")
+              .replace(/<!--[\s\S]*?-->/g, "")
+              .replace(/(^|[^:])\/\/.*$/gm, "$1");
           assert(
-            readFileSync(join(f.folder, file.path), "utf8").includes(
-              `${target}px`,
+            new RegExp(`translateX\\(\\s*${target}px\\s*\\)`).test(
+              code(readFileSync(join(f.folder, file.path), "utf8")),
             ),
-            "keyframe not written as code",
+            "keyframe not written as live code (comments do not count)",
           );
+          s = await restart();
           const b = await browser();
-          await b.goto(s.base + "/view/" + encodeURIComponent(item.id));
+          const fresh = (await items(s)).find((x) => x.path === file.path);
+          await b.goto(s.base + "/view/" + encodeURIComponent(fresh.id));
+          if (kind !== "svg") {
+            await sleep(300);
+            const live = await b.eval(
+              `document.getAnimations().some(a=>a.effect.getKeyframes().some(k=>String(k.transform).replace(/\\s/g,'').includes('translateX(${target}px)')))`,
+            );
+            assert(
+              live,
+              "the reopened item does not animate through the edited keyframe",
+            );
+          }
           const read = await request(
             s,
             "/api/controls/" + encodeURIComponent(item.id),
@@ -172,7 +184,7 @@ export async function measure() {
             ) === canonical(value),
             "reopened keyframe differs",
           );
-          await request(s, "/api/undo", { item: item.id });
+          await request(s, "/api/undo", { item: fresh.id });
           assert(
             canonical(before) === canonical(snapshot(f.folder)),
             "keyframe undo differs",
@@ -215,12 +227,54 @@ export async function measure() {
           (await sample()).every((x) => x.state !== "running"),
           "interrupted UI transition kept running",
         );
+        // Interrupt it again and again: it must always settle, in the right final state.
+        for (let n = 0; n < 6; n++) {
+          await key(b, "k", 2);
+          await sleep(30 + (n % 3) * 20);
+          await key(b, "Escape");
+          await sleep(25);
+        }
+        await sleep(260);
+        assert(
+          (await sample()).every((x) => x.state !== "running"),
+          "repeatedly interrupted transitions did not settle",
+        );
+        assert(
+          !(await b.eval(
+            "!![...document.querySelectorAll('[role=dialog],[role=combobox]')].find(e=>e.getBoundingClientRect().width>0)",
+          )),
+          "the palette is still open after an even number of toggles",
+        );
+        // The same craft applies beyond the palette: moving cards and swapping panels animate too.
+        const listedNow = await items(s);
+        const target = listedNow.find((x) => x.kind === "html") || listedNow[0];
+        await key(b, "k", 2);
+        for (const ch of "Select " + target.path) await key(b, ch);
+        await key(b, "Enter");
+        await sleep(40);
+        const swapAnims = await sample();
+        assert(
+          swapAnims.length > 0,
+          "selecting an item animates nothing in the interface",
+        );
+        assert(
+          swapAnims.every((a) => a.duration < 200),
+          "panel swap reaches 200 ms",
+        );
         await b.send("Emulation.setEmulatedMedia", {
           features: [{ name: "prefers-reduced-motion", value: "reduce" }],
         });
         await key(b, "Escape");
         await key(b, "k", 2);
         const reduced = await sample();
+        for (const ch of "Arrange by kind") await key(b, ch);
+        await key(b, "Enter");
+        await sleep(30);
+        const reducedMove = await sample();
+        assert(
+          reducedMove.every((a) => a.duration === 0 || a.state !== "running"),
+          "cards still glide under prefers-reduced-motion",
+        );
         assert(
           reduced.every((a) => a.duration === 0 || a.state !== "running"),
           "nonessential motion remains under prefers-reduced-motion",
