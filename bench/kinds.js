@@ -13,9 +13,213 @@ import {
   waitUntil,
   sleep,
   frameGesture,
+  processRSS,
+  FRAME_BUDGET,
 } from "./lib3/runtime.mjs";
+import {
+  shot,
+  colorShare,
+  differing,
+  rectOf,
+  inkExtent,
+  scrollEverything,
+} from "./lib3/semantic.mjs";
+import { randomInt } from "node:crypto";
 import { join } from "node:path";
 import { readFileSync, statSync, mkdirSync } from "node:fs";
+// Card content test: a shell with an empty pre/svg or an unloaded frame is a blank card.
+export const CARD_CONTENT = `(e=>{const r=e.getBoundingClientRect();const q=e.querySelector('iframe,img,canvas,svg,video,audio,table,pre,article,[role=table],[role=grid],[role=log],[role=tree],ol,ul');if(!q)return false;const t=q.tagName.toLowerCase();if(t==='iframe'){try{const d=q.contentDocument;return !!d&&d.body&&(d.body.innerText.trim().length>0||d.body.children.length>0)}catch{return true}}if(t==='img')return q.complete&&q.naturalWidth>0;if(t==='video')return q.readyState>=1||!!q.poster;if(t==='audio')return !!q.src||!!q.querySelector('source');if(t==='canvas'){try{const c=document.createElement('canvas');c.width=16;c.height=16;c.getContext('2d').drawImage(q,0,0,16,16);const d=c.getContext('2d').getImageData(0,0,16,16).data;let v=new Set();for(let i=0;i<d.length;i+=4)v.add(d[i]+','+d[i+1]+','+d[i+2]+','+d[i+3]);return v.size>1}catch{return true}}if(t==='svg')return q.querySelectorAll('path,rect,circle,ellipse,line,polygon,polyline,text,image,g>*').length>=1;return q.textContent.trim().length>=3})`;
+// Per-kind oracles over values the bench chose for this run (see lib3/media.mjs).
+async function oracle(b, file, item, r, f, s) {
+  const e = file.expect || {},
+    first = await shot(b);
+  for (const hex of e.colors || []) {
+    const share = colorShare(first, hex);
+    if (!file.kind.match(/^(gif|apng)$/))
+      assert(
+        share > 0.002,
+        `viewer never shows this file's colour ${hex} (${share})`,
+      );
+  }
+  if (e.animated || ["gif", "apng"].includes(file.kind)) {
+    const seen = new Map((e.colors || []).map((c) => [c, 0]));
+    const frames = [first];
+    for (let n = 0; n < 7; n++) {
+      await sleep(240);
+      frames.push(await shot(b));
+    }
+    let moved = 0;
+    for (const p of frames.slice(1))
+      moved = Math.max(moved, differing(first, p));
+    assert(moved > 40, "item is not live: pixels never change over 1.7 s");
+    for (const p of frames)
+      for (const c of seen.keys())
+        seen.set(c, Math.max(seen.get(c), colorShare(p, c)));
+    for (const [c, v] of seen)
+      assert(v > 0.002, `colour ${c} from the file never shown (${v})`);
+  }
+  if (e.first) {
+    const sampleAt = async (t) =>
+      b.eval(
+        `(async()=>{const v=document.querySelector('video');v.pause();v.currentTime=${t};await new Promise(r=>{v.onseeked=r;setTimeout(r,2500)});const c=document.createElement('canvas');c.width=8;c.height=8;c.getContext('2d').drawImage(v,0,0,8,8);const d=c.getContext('2d').getImageData(4,4,1,1).data;return[d[0],d[1],d[2]]})()`,
+      );
+    const near = (px, hex) =>
+      [1, 3, 5].every(
+        (i, k) => Math.abs(px[k] - parseInt(hex.slice(i, i + 2), 16)) <= 56,
+      );
+    const d = file.meta.duration;
+    const a = await sampleAt(d * 0.25),
+      z = await sampleAt(d * 0.75);
+    assert(
+      near(a, e.first),
+      `video frame at 25% is ${a}, file says ${e.first}`,
+    );
+    assert(
+      near(z, e.second),
+      `video frame at 75% is ${z}, file says ${e.second}`,
+    );
+  }
+  if (e.ramp !== undefined) {
+    const rect = await rectOf(b, 'canvas,svg,[aria-label*="waveform" i]');
+    assert(rect, "no waveform element");
+    const p = await shot(b),
+      early = inkExtent(p, rect, 0.15),
+      late = inkExtent(p, rect, 0.85);
+    assert(
+      early > 0 && late >= early * 1.4,
+      `waveform does not follow the file's amplitude ramp (early ${early}px, late ${late}px)`,
+    );
+  }
+  if (file.meta.columns) {
+    const k =
+      Math.floor(file.meta.rows / 2) +
+      randomInt(0, Math.ceil(file.meta.rows / 2));
+    const label = ["parquet", "arrow"].includes(file.kind)
+      ? String(
+          file.kind === "parquet"
+            ? (k * 31 + f.seed) % 100003
+            : f.seed + k * 31,
+        )
+      : `orbit-${f.seed}-${k}`;
+    let found = r.text.includes(label);
+    for (const frac of [k / file.meta.rows, 0.5, 1]) {
+      if (found) break;
+      await scrollEverything(b, frac);
+      found = (await b.eval("document.body.innerText")).includes(label);
+    }
+    assert(found, `row ${k} (${label}) of this file never shown`);
+    const types = await b.eval(
+      `[...document.querySelectorAll('th[data-type],[role=columnheader][data-type],[data-column-type]')].map(e=>e.dataset.type||e.dataset.columnType)`,
+    );
+    assert(
+      types.some((t) => /int|num|float/i.test(t)),
+      "no numeric column type: " + types,
+    );
+    if (file.meta.columns >= 4) {
+      assert(
+        types.some((t) => /str|text/i.test(t)),
+        "no string column type",
+      );
+      assert(
+        types.some((t) => /bool/i.test(t)),
+        "no boolean column type",
+      );
+    }
+    const drawn = await b.eval(
+      `[...document.querySelectorAll('[data-distribution],svg[aria-label*="distribution" i],canvas[aria-label*="distribution" i]')].filter(e=>{const r=e.getBoundingClientRect();if(r.width<12||r.height<6)return false;if(e.tagName==='CANVAS')return true;return e.querySelectorAll('rect,path,circle,line,span,div').length>=2||e.textContent.trim().length>0}).length`,
+    );
+    assert(
+      drawn >= file.meta.columns,
+      `only ${drawn} drawn distributions for ${file.meta.columns} columns`,
+    );
+  }
+  if (e.series) {
+    const bars = await b.eval(
+      `[...document.querySelectorAll('svg')].flatMap(s=>{const sr=s.getBoundingClientRect();return[...s.querySelectorAll('rect')].map(r=>r.getBoundingClientRect()).filter(r=>r.width>1&&r.height>1&&r.width<sr.width*0.5).map(r=>({x:r.x,h:r.height}))}).sort((a,b)=>a.x-b.x)`,
+    );
+    assert(
+      bars.length >= e.series.length,
+      `${bars.length} chart marks for ${e.series.length} data points`,
+    );
+    const hs = bars.slice(-e.series.length).map((x) => x.h),
+      mean = (a) => a.reduce((x, y) => x + y, 0) / a.length,
+      mh = mean(hs),
+      ms = mean(e.series);
+    const cov = hs.reduce((n, h, i) => n + (h - mh) * (e.series[i] - ms), 0);
+    const sd = Math.sqrt(
+      hs.reduce((n, h) => n + (h - mh) ** 2, 0) *
+        e.series.reduce((n, v) => n + (v - ms) ** 2, 0),
+    );
+    assert(
+      sd > 0 && cov / sd > 0.97,
+      "mark heights do not follow the file's data",
+    );
+  }
+  if (["pdf"].includes(file.kind)) {
+    const rect = await rectOf(b, file.markers.selectors[0]);
+    assert(rect, "no page element");
+    const p = await shot(b);
+    let ink = 0,
+      light = 0,
+      n = 0;
+    for (let y = rect.y; y < rect.y + rect.h; y += 2)
+      for (let x = rect.x; x < rect.x + rect.w; x += 2) {
+        const i = (y * p.width + x) * 4,
+          l = (p.data[i] + p.data[i + 1] + p.data[i + 2]) / 3;
+        n++;
+        if (l < 110) ink++;
+        if (l > 200) light++;
+      }
+    assert(
+      light / n > 0.3 && ink / n > 0.0015,
+      `rendered page has no page-and-ink structure (ink ${ink / n}, light ${light / n})`,
+    );
+  }
+  if (["ttf", "otf", "woff2"].includes(file.kind))
+    assert(
+      await b.eval(
+        `[...document.fonts].some(f=>f.status==='loaded'&&!/^(sans|serif|monospace)/i.test(f.family))`,
+      ),
+      "specimen does not use the file's font (no loaded FontFace)",
+    );
+  if (["gltf", "glb", "obj"].includes(file.kind)) {
+    const rect = await rectOf(b, file.markers.selectors[0]);
+    assert(rect, "no model canvas");
+    const p0 = await shot(b);
+    await sleep(700);
+    const p1 = await shot(b);
+    assert(
+      differing(p0, p1, rect) > 20,
+      "model does not turn (canvas static over 700 ms)",
+    );
+    assert(inkExtent(p1, rect, 0.5) > 8, "no model geometry drawn");
+  }
+  if (e.entry) {
+    const clicked = await b.eval(
+      `(()=>{const els=[...document.querySelectorAll('*')].filter(e=>e.children.length===0&&e.textContent.includes(${JSON.stringify(e.entry.name)}));const t=els[0];if(!t)return null;const r=t.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`,
+    );
+    assert(clicked, "zip entry not listed");
+    for (const type of ["mousePressed", "mouseReleased"])
+      await b.send("Input.dispatchMouseEvent", {
+        type,
+        x: clicked.x,
+        y: clicked.y,
+        button: "left",
+        clickCount: 1,
+      });
+    await sleep(300);
+    assert(
+      (await b.eval("document.body.innerText")).includes(e.entry.body),
+      "opening a zip entry does not show its contents",
+    );
+  }
+  if (e.head) {
+    const t = (await b.eval("document.body.innerText"))
+      .toLowerCase()
+      .replace(/\s+/g, "");
+    assert(t.includes(e.head), "hex view does not show this file's bytes");
+  }
+}
 export async function measure() {
   return run("D1", async ({ book, f, s, browser }) => {
     let listed,
@@ -49,6 +253,7 @@ export async function measure() {
             r = await observe(
               b,
               s.base + "/view/" + encodeURIComponent(item.id),
+              file.markers,
             );
           assert(r.kind === file.kind, `root data-napkin-kind is ${r.kind}`);
           for (const selector of file.markers.selectors)
@@ -107,6 +312,7 @@ export async function measure() {
               `decoded duration ${duration}, expected ${file.meta.duration}`,
             );
           }
+          await oracle(b, file, item, r, f, s);
           assert(
             r.variance > 20 && r.colors >= 8,
             `blank or generic render (variance ${r.variance}, colors ${r.colors})`,
@@ -171,7 +377,7 @@ export async function measure() {
       }, 10000);
       await sleep(300);
       const cards = await wb.eval(
-        `(()=>{const cards=[...document.querySelectorAll('[data-item-id]')];return{n:cards.length,blank:cards.filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight&&!e.querySelector('iframe,img,canvas,svg,video,audio,table,pre,article')}).length}})()`,
+        `(()=>{const cards=[...document.querySelectorAll('[data-item-id]')];return{n:cards.length,blank:cards.filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight&&!${CARD_CONTENT}(e)}).length}})()`,
       );
       await book.check(
         "mixed.open",
@@ -184,6 +390,32 @@ export async function measure() {
           value: { ms: ws.ms + performance.now() - t, cards },
         }),
       );
+      await book.check(
+        "mixed.sample",
+        "12 random items across the folder open alone with the right kind, real content, non-blank",
+        async () => {
+          const all = await items(ws);
+          const pick = Array.from(
+            { length: 12 },
+            () => all[randomInt(0, all.length)],
+          );
+          const bad = [];
+          for (const it of pick) {
+            const r = await observe(
+              wb,
+              ws.base + "/view/" + encodeURIComponent(it.id),
+            );
+            if (r.kind !== it.kind || r.variance <= 20 || r.colors < 8)
+              bad.push({
+                path: it.path,
+                kind: it.kind,
+                shown: r.kind,
+                variance: r.variance,
+              });
+          }
+          return { ok: !bad.length, value: { sampled: pick.length, bad } };
+        },
+      );
       for (const mode of ["pan", "zoom"])
         await book.check(
           "mixed." + mode,
@@ -192,12 +424,12 @@ export async function measure() {
             const samples = await frameGesture(wb, mode);
             await sleep(300);
             const visible = await wb.eval(
-              `(()=>{const a=[...document.querySelectorAll('[data-item-id]')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight});return{n:a.length,blank:a.filter(e=>!e.querySelector('iframe,img,canvas,svg,video,audio,table,pre,article')).length}})()`,
+              `(()=>{const a=[...document.querySelectorAll('[data-item-id]')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight});return{n:a.length,blank:a.filter(e=>!${CARD_CONTENT}(e)).length}})()`,
             );
             return {
               ok:
                 samples.length >= 30 &&
-                p95(samples) < 16.7 &&
+                p95(samples) < FRAME_BUDGET &&
                 visible.n > 0 &&
                 !visible.blank,
               value: { p95: p95(samples), samples: samples.length, visible },
@@ -205,7 +437,12 @@ export async function measure() {
           },
         );
     } catch (e) {
-      for (const id of ["mixed.open", "mixed.pan", "mixed.zoom"])
+      for (const id of [
+        "mixed.open",
+        "mixed.sample",
+        "mixed.pan",
+        "mixed.zoom",
+      ])
         if (!book.rows.some((r) => r.id === id))
           await book.fail(
             id,
@@ -262,6 +499,7 @@ export async function measure() {
             );
           };
           const browserBaseline = await heapBytes();
+          const browserProc = b.pid ? processRSS(b.pid) : 0;
           let browserPeak = browserBaseline,
             sampling = false,
             sampleError;
@@ -293,6 +531,32 @@ export async function measure() {
             );
             await sleep(500);
             assert(!sampleError, sampleError?.message);
+            let seekMs;
+            if (kind === "mov") {
+              const target = 0.2 + randomInt(0, 70) / 100;
+              seekMs = await b.eval(
+                `(async()=>{const v=document.querySelector('video');const d=v.duration;const t=performance.now();v.currentTime=d*${target};await new Promise(r=>{v.onseeked=r;setTimeout(r,4000)});return Math.abs(v.currentTime-d*${target})<d*0.02&&v.readyState>=2?performance.now()-t:Infinity})()`,
+              );
+              assert(
+                seekMs < 3000,
+                "distant seek in the 2 GB video failed or took " +
+                  seekMs +
+                  " ms",
+              );
+            } else {
+              const frac = 0.3 + randomInt(0, 60) / 100;
+              await scrollEverything(b, frac);
+              const txt = await b.eval("document.body.innerText");
+              const nums = (txt.match(/\b\d{1,7}\b/g) || []).map(Number);
+              assert(
+                nums.some(
+                  (n) => Math.abs(n - frac * 5_000_000) < 0.12 * 5_000_000,
+                ),
+                "scrolling to " +
+                  frac +
+                  " of 5 M rows does not show rows from there",
+              );
+            }
             assert(r.variance > 20, "large item is blank");
             const bytes = statSync(join(large, name)).size;
             if (kind === "mov")
@@ -310,7 +574,8 @@ export async function measure() {
             return {
               ok:
                 server.peakRSS() - baseline < bytes * 0.6 &&
-                browserPeak - browserBaseline < bytes * 0.6,
+                browserPeak - browserBaseline < bytes * 0.6 &&
+                (!b.pid || processRSS(b.pid) - browserProc < bytes * 0.6),
               value: {
                 fileBytes: bytes,
                 baseline,
@@ -319,6 +584,9 @@ export async function measure() {
                 browserBaseline,
                 browserPeak,
                 browserIncrease: browserPeak - browserBaseline,
+                browserProcessIncrease: b.pid
+                  ? processRSS(b.pid) - browserProc
+                  : null,
               },
             };
           } finally {
