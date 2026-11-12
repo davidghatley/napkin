@@ -212,3 +212,274 @@ SOAK=1 node --test test/engine/bench.test.js     # 60 s soak, writes REL-04-60s 
   duration; every accepted revision (or a newer one) must reach the page; all files are parsed
   each minute and at the end; RSS growth is the largest sample against the post-warm-up baseline.
 - `REL-05` runs an actual `git checkout` in a generated temp repo that changes all 40 files.
+
+## DREAM 3 locked measures (D1–D7)
+
+The measures lane owns `corpus3/`, `lib3/`, `kinds.js`, `controls3.js`, `keys3.js`,
+`board.js`, `agents3.js`, `gen.js`, `motion.js`, `dream3.js` and
+`tools/make-corpus3.mjs`. Product builders do not change these files. DREAM 3 and
+INTENT stay locked. D8 belongs to the separate craft review.
+
+Run from the checkout root, with Node 26, Chromium, ffmpeg/ffprobe, woff2 tools,
+zip/unzip and pdfinfo available. There are no new product or bench runtime npm
+dependencies. Chromium always uses CPU rendering; unset `NAPKIN_GPU`.
+
+```sh
+node bench/kinds.js --json
+node bench/controls3.js --json
+node bench/keys3.js --json
+node bench/board.js --json
+node bench/agents3.js --json
+node bench/gen.js --json
+node bench/motion.js --json
+node bench/dream3.js --json
+```
+
+Each dimension prints a human table. `--json` adds one final line with
+`{ dimension, dream: {met,total}, beat: {met,total}, checks: [{id,ok,value,target}] }`.
+The combined runner executes dimensions sequentially and prints one scoreboard;
+its final JSON contains the seven dimension summaries. Exit 0 means every check
+passed; exit 1 means at least one failed. A missing route, missing tool, timeout,
+invalid response or missing external evidence is a **failure**, with its reason.
+Nothing is silently skipped. D7 has no separate beat mark in the locked dream, so
+its beat denominator is zero. Counts are assertions, not percentages of a rubric.
+
+Every dimension opens a private, generated folder with the real command
+`node src/cli.js open <folder> --port <free>`. State is isolated outside that folder.
+No request goes to port 4820. Only processes created by that bench are stopped.
+Generated folders, stress media, browser profiles and state are removed in finally
+blocks. `--out <directory>` writes screenshots there as evidence; this is a requested
+artifact directory and is deliberately retained. The bench never edits the committed
+corpus or the owner's folders. Every generated source folder starts in a clean git
+repository. Opening and organizing may not create even ignored files there.
+
+### Corpus and anti-gaming
+
+`corpus3/manifest.json` lists all 48 files: canonical `kind`, byte count, SHA-256,
+required semantic DOM selectors, text derived from the file, and expected metadata
+(row/column counts, durations, dimensions, glyphs, vertices, archive entries).
+There are 47 distinct kind labels, covering every format family named in D1.
+The generator writes actual codecs and containers: Parquet page and Thrift metadata,
+Arrow IPC, SQLite, PNG/JPEG/WebP/AVIF/GIF/APNG, H.264/VP9 video, four audio codecs,
+Lottie, an xref-based PDF, a GLB with a binary mesh, glTF/OBJ, TrueType/CFF/WOFF2,
+notebook, archive, ComfyUI API and UI workflows, and structured run logs.
+Everything is original and dedicated to CC0, including the geometric font outlines.
+The corpus is below 1 MB; no downloaded creative assets or system fonts are included.
+
+For each run, the bench chooses cryptographically random names, text values,
+Parquet/SQLite/CSV/TSV/JSON/JSONL row counts and values, Arrow values, proposal contents,
+control targets, model names and seeds. The product never receives the manifest.
+Known media bytes are not a substitute for dynamic identity and outcome checks.
+D1 also compares decoded pixels of still-image previews with the source image.
+A fake viewer with an icon, hidden native element and a plausible label does not
+satisfy visible markers and the data checks.
+
+To rebuild the committed binary corpus, install the pinned **generator-only** tools
+outside the repository (roughly 32 packages, no model downloads):
+
+```sh
+npm install --prefix /tmp/napkin-d3-generator-tools --cache /tmp/napkin-d3-npm-cache \
+  --ignore-scripts --no-audit --no-fund \
+  apache-arrow@21.1.0 parquetjs-lite@0.8.7 opentype.js@1.3.4
+node tools/make-corpus3.mjs --tooling /tmp/napkin-d3-generator-tools
+D3_STRESS_SELFTEST=1 node --test bench/lib3/selftest.mjs
+```
+
+These tools are Apache-2.0/MIT; decision 0018 records why they are used. Remove the
+two private `/tmp/napkin-d3-*` tooling/cache directories when finished. Ordinary
+benches use the committed binaries, Node's SQLite and the in-lane Parquet writer.
+
+The self-test uses independent Arrow, Parquet and font readers, ffprobe, pdfinfo,
+unzip, SQLite, Chromium font decoding, actual key events, actual compositor frames,
+and positive/negative ComfyUI requests. It includes a multi-row-group Parquet test.
+Set `D3_STRESS_SELFTEST=1` to include the large workload validation; this switch only
+affects this development self-test, never the seven measuring suites.
+
+`stress(dir)` in the committed generator makes exactly 1,000 primary mixed items,
+a 5,000,000-row Parquet with bounded row groups, and a valid H.264 MOV over 2 GB.
+The large video repeats real encoded frames; it has neither sparse holes nor filler.
+The public `--stress --out <temporary-directory>` command is available for inspection;
+the caller owns that directory. The benches create and remove theirs automatically.
+When `/api/items` is absent, expensive D1 workloads cannot reach a viewer: their
+checks still fail with that explicit route failure. The self-test independently
+proves that the workload generators run, rather than treating missing routes as proof.
+
+### Observable conventions beyond the locked route shapes
+
+The locked HTTP routes are used as written. The dream describes UI state, review,
+bindings and provenance but does not fix every field or MCP tool name. The following
+conventions make those observations concrete before builders implement them:
+
+- Canvas item containers expose `data-item-id`. Instrument regions expose
+  `data-controls-for="<item id>"`; individual control rows expose `data-control-id`.
+  These identify semantic regions; the benches never call product functions.
+- The viewer root exposes the contract's `data-napkin-kind`. All manifest markers
+  must be visible. Typed table headers expose `data-type` or `data-column-type`;
+  distributions expose `data-distribution`, or an SVG/canvas labelled “distribution”.
+  Each column needs both. Counts must be visible, not only hidden metadata.
+- Timeline controls are accessible range inputs/sliders with “time” in their label.
+  Standalone animated viewers must offer a keyboard path to that timeline. Their
+  dials schema includes loop/range and, for editable CSS/WAAPI/SVG, keyframe controls.
+  A keyframe value is an array of actual frame records with a `transform` property.
+- Board readback includes `selection: [id]`, `compare: {item, variants: [...]}` and
+  `presentation: boolean`. `/api/keys` returns `{bindings:[{command,keys}],
+commands:[{id,palette}]}`. Commands include arrange-by-kind and can be rebound.
+- `POST /api/proposals {path,content}` creates an isolated create-file proposal;
+  `GET /api/proposals/<id>` returns its `status` (`accepted` or `rejected` after review).
+  A proposal must not write source bytes until accepted.
+- Workflow inputs use `"nodeId.inputName"` keys. Array-valued inputs for scalar node
+  parameters request the Cartesian sweep. `workflow` is an item id; passing a result
+  item's id reopens its provenance. Generated items expose `meta.provenance` with
+  `workflow` and `inputs`, and placeholders/events carry the returned `job` id.
+- `/api/events` may be SSE or WebSocket on that same path. A WS-only server may take
+  the isolated session token as `?token=`. SSE supports LF or CRLF boundaries.
+
+If a contract-compatible product chooses a different observation shape, resolve
+that with the lead before judging: do not put compatibility branches or bench-specific
+responses into the product. These conventions are not permission to weaken DREAM 3.
+
+### D1 and D2 methods
+
+D1 checks every manifest file, the right MIME/bytes/kind, visible purpose-built DOM,
+file-derived text and metadata, decoded media duration, typed distributions, image
+pixels, screenshot luminance variance >20 and at least eight quantized colors.
+First paint is Chromium's `first-contentful-paint` from navigation, with all items
+required and nearest-rank p95 strictly below 150 ms. The 1,000-item opening clock
+includes CLI readiness and canvas navigation. Pan/zoom uses real wheel events,
+requires real item geometry to move, samples frame intervals, then checks visible
+cards after 300 ms at rest. Frames must have p95 strictly below 16.7 ms.
+
+Large-file gates compare server-tree peak RSS (sampled from spawn every 10 ms) with
+an empty-folder process, and page heap + backing storage with an empty page. Each
+increase must be below 60% of the input size, with a decoded video or a visible
+5-million-row count. This catches straightforward whole-file buffering on either
+side; it does not prove an allocator-independent upper bound or measure OS page cache.
+
+D2 discovers every declared section and control, chooses another value, writes it,
+checks real item bytes or an adjacent recipe, checks API readback, and verifies exact
+whole-folder undo. It also edits each control through the keyboard and opens all
+three depths, taking screenshots when requested. Dial rows must be 32 px high.
+Selection-to-panel timing starts at the final selection key, inside Chromium, and
+ends on the correct instrument region's DOM mutation; search typing is excluded.
+Scrub timing uses timestamped compositor frames cropped to the item preview, not the
+changing number in the panel. At least 30 samples are required. Studios, affordances
+and the blind comparison require independent evidence, described below.
+
+### The twelve keyboard journeys and budgets
+
+A chord counts as one keystroke; each typed character counts as one. Only CDP
+`Input.dispatchKeyEvent` is used inside journeys. No click, mouse, wheel, injected
+`.focus()`, `.value=` or synthetic DOM event is allowed. Setup may create source files
+and proposals through the API. Assertions read disk and HTTP state, not UI text alone.
+Every journey also requires visible focus and a nonzero screenshot difference.
+The palette uses Ctrl K, a command phrase, and Enter. Names and values below are
+chosen during the run; the brackets describe arguments, not literal text.
+
+| Journey          | Scripted actions                                                     | Budget | Required outcome                                                           |
+| ---------------- | -------------------------------------------------------------------- | -----: | -------------------------------------------------------------------------- |
+| Open folder      | `Open folder [fresh folder]`, then `Open folder [original]`          |    160 | `/api/items` switches to the random sentinel and back; source bytes intact |
+| Find item        | `Select [randomized HTML path]`                                      |     90 | Board selection contains that real item id                                 |
+| Spatial focus    | ArrowRight                                                           |      8 | Focus follows the nearest rightward geometric neighbor                     |
+| Group            | ArrowLeft, Shift ArrowRight, `Group [random name]`                   |    110 | API group holds multiple real items; disk stays clean                      |
+| Color target     | `Select [HTML]`, `Control [color label]`, Ctrl A, type target, Enter |    160 | Exact random hex in schema and source file                                 |
+| Compare variants | `Compare variants [TSX path]`                                        |    130 | API compares at least two real variants; typed gold/blue source survives   |
+| Approve proposal | `Approve [proposal id]`                                              |     90 | Exact proposed random bytes land on disk; status accepted                  |
+| Reject proposal  | `Reject [proposal id]`                                               |     90 | Status rejected; whole-folder bytes unchanged                              |
+| Generate         | `Generate [workflow path]`                                           |    100 | Mock receives the request; exact output bytes and provenance land          |
+| Arrange          | `Arrange by kind`                                                    |     40 | Board reports kind arrangement and real groups                             |
+| Present          | `Present`, Escape                                                    |     30 | API presentation state enters and exits                                    |
+| Help and rebind  | `?`, Escape, `Rebind [arrange command] to Alt+Y`, Alt Y              |    130 | Real key map changes and the rebound command changes board state           |
+
+The map is checked against the command registry for 100% keyboard reachability.
+Axe runs on the live canvas and must return zero violations. A map or palette that
+only claims a command exists is insufficient for the twelve outcome checks.
+The broad claim that _every_ pointer gesture has a path within twice its steps still
+requires a fresh interaction review; these twelve budgets do not prove that claim.
+
+### Organization and agents
+
+D4 round-trips nested groups, saved views and pins, restarts the real CLI, checks
+kind/folder/run/tag/date/status/similarity/metadata arrangements twice against actual
+DOM geometry, and checks that pins keep their positions. It also arranges 1,000
+mixed items while recording frame intervals, and checks git including ignored files.
+
+D5 is **MCP only** for all product operations. Disk reads are independent assertions;
+the bench never falls back to HTTP if an MCP tool is absent. The stdio client performs
+initialize/initialized, tools/list and tools/call. The route mirror names are:
+`list_items`, `get_controls`, `set_control`, `get_board`, `set_board`, `start_run`,
+`add_run_step`, `add_artifact`, `get_run`, `checkpoint_run`, `resume_run`,
+`propose`, `resolve_proposal`, `ask_question`, `answer_question`, `read_events`.
+Arguments follow their HTTP bodies; `run`/`item` identify the path parameter.
+`add_artifact` takes `{run,path,content,encoding,kind,step?}` with utf8 or base64.
+`get_run` returns plan, steps, artifacts, questions and proposals. Step status is
+`complete`. Event reads may consume events; the concurrency test uses one collector.
+
+The 30 steps are: start run, read selection; place twelve artifacts (six kinds);
+group; tune five controls; raise and read answers to three proposals; ask and read
+one question; checkpoint; resume after stopping and restarting the CLI. Every step
+must be persisted, not just counted locally. Four simultaneous MCP writers then place
+40 unpredictable files and edit independent controls in the same item, retrying
+explicit revision conflicts. All accepted bytes and values must survive. At least
+30 matched event arrivals must have p95 below 100 ms.
+
+For the real-harness gate, use the CLI's printed MCP connection line (the underlying
+stdio command is `NAPKIN_URL=http://127.0.0.1:<private-port>/ NAPKIN_AGENT=<name> node src/mcp.js`).
+Give an independent Codex run and an independent opencode run this task from a fresh
+folder: “Connect using the README line. Start a run, place a component and five other
+kinds of artifact, group them, tune a real control, propose an edit, ask for review,
+and resume after napkin restarts.” No manual tool-name hints after starting. Keep
+the complete transcripts, disk results and review answers as evidence. Missing runs
+fail; a scripted MCP client does not stand in for either real harness.
+
+### Generation and motion
+
+`lib3/comfy.mjs` implements `/prompt`, `/queue`, `/history`, `/view`, `/object_info`
+and the `/ws?clientId=` handshake. Queue entries are real five-element tuples;
+requests are validated, execution is serial, progress carries node and prompt ids,
+binary previews have the ComfyUI eight-byte header, and history contains exact prompts,
+output descriptors and completion messages. It serves actual image, video, audio and
+GLB bytes, rejects unknown outputs, and supports queue/history clearing and deletion.
+The sampler's model filename changes per run and must be discovered from node schemas.
+The mock computes no model output: it tests the transport and item lifecycle.
+
+The shapes were studied using GET only on the owner's local ComfyUI `/object_info`,
+`/queue`, `/history?max_items=1`, `/system_stats` and the upstream
+[ComfyUI server](https://github.com/comfyanonymous/ComfyUI/blob/master/server.py) and
+[binary protocol](https://github.com/comfyanonymous/ComfyUI/blob/master/protocol.py).
+No real job was queued by this lane. `NAPKIN_COMFY_URL` always points to the private
+mock during benches. The generation gate requires workflow-derived instruments,
+a queued placeholder, multiple matching progress stages, exact output bytes,
+provenance, identical backend prompts after reopening, and a seed/CFG Cartesian grid.
+Video, audio and GLB also have to traverse that same path.
+
+D7 uses keyboard timeline scrubbing and timestamped compositor pixels, not just a
+slider's label. It requires 35 samples for every animated corpus family, a loop-range
+instrument, random keyframes written back to CSS/WAAPI/SVG and exact undo/readback.
+Interface transitions must be observable, interruptible, strictly below 200 ms, and
+nonessential transitions must stop under emulated prefers-reduced-motion.
+
+### Independent evidence gates
+
+A bench cannot manufacture a blind review, a real harness run or a real GPU smoke.
+Those checks fail unless `--reviews <file.json>` supplies independently collected
+results tied to this exact product `src/` and `public/` hash. `buildHash()` in
+`lib3/reviews.mjs` computes it. Each evidence entry needs a fresh `reviewer` identity
+and `artifacts: [{path,sha256}]` referring to real files beside the evidence JSON.
+The bench verifies every artifact hash. This is inspectable evidence, not a digital
+signature or proof of reviewer independence; the separate critic must check that.
+
+The JSON shape is `{sourceHash, instruments, studios, affordances, agents, generation}`:
+
+- `instruments`: `blind:true`, `comparisons:{Tweakpane:score,Leva:score,DialKit:score}`;
+  every score must reach 8/10.
+- `studios.features`: true for oklch, gamut, contrast, palette, ramps, harmony,
+  sampledPalette, tokenBinding, history, curves, springs and ghost.
+- `affordances.features`: true for figures, modified, reset, fineScrub, coarseScrub,
+  units, math, copyPaste, schemaOnly and recipesDocumented.
+- `agents`: `codex:{unaided:true,completed:true}` and the same for `opencode`.
+- `generation`: `locked:true,queued:true,provenance:true`, with the shared GPU lock
+  invocation, backend history, output and exact provenance in the artifacts.
+
+This machine lane forbids GPU work. The real smoke must be performed separately
+through the shared lock by an authorized lane. A successful mock never satisfies it.
+All qualitative claims remain available for the fresh critic to reject from evidence.
