@@ -1,8 +1,8 @@
 import { readFileSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { join, resolve } from "node:path";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { join, resolve, sep } from "node:path";
 import { ROOT, assert, walk } from "./runtime.mjs";
-// Evidence must be supplied by the critic/owner, never fabricated by the bench.
+// Source hash of the product under test.
 export function buildHash() {
   const files = [
     ...walk(join(ROOT, "src")).map((p) => "src/" + p),
@@ -12,30 +12,57 @@ export function buildHash() {
   for (const p of files.sort()) h.update(p).update(readFileSync(join(ROOT, p)));
   return h.digest("hex");
 }
-export function reviewEvidence(key) {
-  const i = process.argv.indexOf("--reviews");
-  assert(
-    i >= 0,
-    "No independent evidence supplied (--reviews FILE); see bench/README.md",
+const canonical = (x) =>
+  JSON.stringify(x, (_, v) =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(
+          Object.entries(v).sort(([a], [b]) => a.localeCompare(b)),
+        )
+      : v,
   );
-  const path = resolve(process.argv[i + 1]),
-    doc = JSON.parse(readFileSync(path));
+// Lead-attested input: gates that need a human or a real external run (blind rubric, slop audit,
+// real Codex/opencode runs, the GPU smoke through the shared lock). Nothing in the repository can
+// satisfy them. The lead supplies two things from outside the repo:
+//   NAPKIN_LEAD_ATTEST  path to a JSON document kept outside this repo and its worktrees
+//   NAPKIN_LEAD_KEY     the secret the lead signs entries with (HMAC-SHA256 of the canonical
+//                       { sourceHash, key, entry } object, hex, stored as entry.mac)
+// Absent, unsigned, stale (different product source hash) or hand-written input is "not met".
+export function leadAttested(key) {
+  const file = process.env.NAPKIN_LEAD_ATTEST,
+    secret = process.env.NAPKIN_LEAD_KEY;
+  assert(
+    file && secret,
+    `PENDING LEAD ATTESTATION (${key}): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md`,
+  );
+  const path = resolve(file);
+  assert(
+    !path.startsWith(ROOT + sep) && !path.includes(sep + ".worktrees" + sep),
+    "Attestation file must live outside the repository",
+  );
+  const doc = JSON.parse(readFileSync(path, "utf8"));
   assert(
     doc.sourceHash === buildHash(),
-    "Review evidence is for a different product source hash",
+    "Attestation is for a different product source hash",
   );
   const e = doc[key];
-  assert(e, "Missing evidence " + key);
+  assert(e && typeof e === "object", "No lead attestation for " + key);
   assert(
-    e.reviewer && e.reviewer !== "builder" && e.artifacts?.length,
-    "Fresh reviewer identity and artifact paths required",
+    e.attestedBy && e.attestedBy !== "builder" && e.at,
+    "attestedBy and at required",
   );
-  for (const a of e.artifacts) {
-    const bytes = readFileSync(resolve(path, "..", a.path));
-    assert(
-      createHash("sha256").update(bytes).digest("hex") === a.sha256,
-      "Evidence artifact hash mismatch: " + a.path,
-    );
-  }
+  const { mac, ...body } = e;
+  const want = createHmac("sha256", secret)
+    .update(canonical({ sourceHash: doc.sourceHash, key, entry: body }))
+    .digest();
+  assert(
+    typeof mac === "string" &&
+      mac.length === want.length * 2 &&
+      timingSafeEqual(Buffer.from(mac, "hex"), want),
+    "Attestation signature invalid",
+  );
   return e;
 }
+export const signAttestation = (secret, sourceHash, key, entry) =>
+  createHmac("sha256", secret)
+    .update(canonical({ sourceHash, key, entry }))
+    .digest("hex");

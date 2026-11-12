@@ -6,6 +6,7 @@ export async function scrubPixel(
   keyName = "ArrowRight",
   modifiers = 0,
   selector = null,
+  skipQuiet = false,
 ) {
   const rect = await b.eval(
     `(()=>{const es=[...document.querySelectorAll('iframe,video,canvas,svg,img')];const selector=${JSON.stringify(selector)};const e=selector?document.querySelector(selector):es.find(e=>e.closest('[data-item-id]')&&!e.closest('[data-controls-for]'));if(!e)return null;const r=e.getBoundingClientRect();return{x:Math.max(0,Math.ceil(r.x)),y:Math.max(0,Math.ceil(r.y)),w:Math.floor(Math.min(r.right,innerWidth)-Math.max(0,r.x)),h:Math.floor(Math.min(r.bottom,innerHeight)-Math.max(0,r.y))}})()`,
@@ -15,6 +16,14 @@ export async function scrubPixel(
     "visible item preview required for scrub-to-pixel measurement",
   );
   const initial = decodePng(await b.screenshot());
+  if (!skipQuiet) {
+    await sleep(200);
+    assert(
+      regionDiff(initial, decodePng(await b.screenshot()), rect) <=
+        Math.max(8, rect.w * rect.h * 0.0005),
+      "preview changes by itself; cannot attribute pixel changes to the key",
+    );
+  }
   let started = false,
     start,
     resolve,
@@ -83,6 +92,69 @@ export async function scrubPixel(
     off();
     await b.send("Page.stopScreencast");
   }
+}
+async function previewRect(b, selector) {
+  return b.eval(
+    `(()=>{const es=[...document.querySelectorAll('iframe,video,canvas,svg,img')];const selector=${JSON.stringify(selector)};const e=selector?document.querySelector(selector):es.find(e=>e.closest('[data-item-id]')&&!e.closest('[data-controls-for]'));if(!e)return null;const r=e.getBoundingClientRect();return{x:Math.max(0,Math.ceil(r.x)),y:Math.max(0,Math.ceil(r.y)),w:Math.floor(Math.min(r.right,innerWidth)-Math.max(0,r.x)),h:Math.floor(Math.min(r.bottom,innerHeight)-Math.max(0,r.y))}})()`,
+  );
+}
+function regionDiff(a, z, rect) {
+  let n = 0;
+  for (let y = rect.y; y < rect.y + rect.h; y += 2)
+    for (let x = rect.x; x < rect.x + rect.w; x += 2) {
+      const i = (y * a.width + x) * 4;
+      if (
+        Math.max(
+          Math.abs(a.data[i] - z.data[i]),
+          Math.abs(a.data[i + 1] - z.data[i + 1]),
+          Math.abs(a.data[i + 2] - z.data[i + 2]),
+        ) > 8
+      )
+        n++;
+    }
+  return n;
+}
+// Causal scrub timing. A random walk of key presses over positions 0..2 (relative to a warm-up
+// step). Every step must change the preview, the preview must be still when no key is pressed,
+// and revisiting a position must show the same frame. An animation that ignores the keys cannot
+// satisfy all three; neither can a preview that changes for any key.
+export async function scrubWalk(
+  b,
+  { selector = null, steps = 30, up = "ArrowRight", down = "ArrowLeft" } = {},
+) {
+  const rect = await previewRect(b, selector);
+  assert(
+    rect?.w > 8 && rect.h > 8,
+    "visible item preview required for scrub measurement",
+  );
+  await key(b, up);
+  await sleep(350);
+  const idle1 = decodePng(await b.screenshot());
+  await sleep(250);
+  const idle2 = decodePng(await b.screenshot());
+  const tolerance = Math.max(8, rect.w * rect.h * 0.0005);
+  assert(
+    regionDiff(idle1, idle2, rect) <= tolerance,
+    "preview changes by itself while no key is pressed; scrub timing cannot be attributed to the key",
+  );
+  const frames = new Map([[1, idle2]]),
+    times = [];
+  let pos = 1;
+  for (let n = 0; n < steps; n++) {
+    const dir = pos === 1 ? 1 : pos === 3 ? -1 : Math.random() < 0.5 ? 1 : -1;
+    const ms = await scrubPixel(b, dir > 0 ? up : down, 0, selector, true);
+    pos += dir;
+    times.push(ms);
+    await sleep(180);
+    const frame = decodePng(await b.screenshot());
+    if (frames.has(pos))
+      assert(
+        regionDiff(frames.get(pos), frame, rect) <= tolerance * 3,
+        `frame at position ${pos} differs between visits: the preview is not a function of the scrub position`,
+      );
+    else frames.set(pos, frame);
+  }
+  return times;
 }
 export async function selectionTime(b, commit, expectedItem) {
   await b.eval(

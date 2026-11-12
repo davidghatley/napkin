@@ -19,12 +19,18 @@ import { launchChromium } from "../../test/helpers/cdp.js";
 import { decodePng, diffPng } from "../p0-lib.js";
 import { stress } from "../../tools/make-corpus3.mjs";
 import { writeParquet } from "./parquet.mjs";
+import { randomize, makeContext } from "./media.mjs";
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const p95 = (a) =>
   a.length
     ? [...a].sort((a, b) => a - b)[Math.ceil(a.length * 0.95) - 1]
     : Infinity;
+// Frame-interval budget. DREAM 3 says p95 frame < 16.7 ms. requestAnimationFrame timestamps are
+// vsync-quantised to ~0.1 ms, so a perfect 60 Hz page measures 16.6 to 16.9 ms; a page that misses
+// a vsync measures >= 33 ms. Any budget between the two separates them, so 0.5 ms of timer
+// quantisation is allowed and nothing more.
+export const FRAME_BUDGET = 17.2;
 export const nonce = () => randomBytes(6).toString("hex");
 export const assert = (ok, message) => {
   if (!ok) throw Error(message);
@@ -98,13 +104,31 @@ export function processRSS(pid) {
     return 0;
   }
 }
+export function chromiumMains() {
+  const out = [];
+  for (const d of readdirSync("/proc"))
+    if (/^\d+$/.test(d))
+      try {
+        const c = readFileSync(`/proc/${d}/cmdline`, "utf8");
+        if (c.includes("--remote-debugging-port=0") && !c.includes("--type="))
+          out.push(Number(d));
+      } catch {}
+  return out;
+}
 export async function start(folder, state, env = {}) {
+  mkdirSync(state, { recursive: true });
   const port = await freePort(),
     base = `http://127.0.0.1:${port}`,
     t = performance.now();
   const proc = spawn(
     process.execPath,
-    [join(ROOT, "src/cli.js"), "open", folder, "--port", String(port)],
+    [
+      process.env.NAPKIN_BENCH_CLI || join(ROOT, "src/cli.js"),
+      "open",
+      folder,
+      "--port",
+      String(port),
+    ],
     {
       cwd: ROOT,
       env: {
@@ -223,7 +247,8 @@ export async function fixture() {
       readFileSync(join(ROOT, "bench/corpus3/manifest.json")),
     ),
     seed = randomInt(1000, 900000),
-    suffix = nonce();
+    suffix = nonce(),
+    media = makeContext(seed, suffix);
   const files = manifest.files.map((f) => structuredClone(f));
   for (const f of files) {
     let bytes = readFileSync(join(ROOT, "bench/corpus3", f.path));
@@ -292,6 +317,11 @@ export async function fixture() {
       }
       f.markers.text = [String(seed)];
     }
+    {
+      const r = randomize(f, bytes, media);
+      if (r) bytes = r.bytes;
+      f.expect = r?.expect || {};
+    }
     // No product sees this manifest. Paths and file-derived content vary each run.
     const original = f.path;
     f.path = `${suffix}-${original}`;
@@ -300,7 +330,7 @@ export async function fixture() {
     if (f.kind === "parquet") {
       await writeParquet(join(folder, f.path), rowCount, seed);
       f.meta.rows = rowCount;
-      f.markers.text = [String(seed)];
+      f.markers.text = [String(seed % 100003)];
     }
     if (f.kind === "sqlite") {
       const { DatabaseSync } = await import("node:sqlite");
@@ -328,7 +358,11 @@ export async function fixture() {
     files,
     seed,
     initial,
-    clean: () => rmSync(temp, { recursive: true, force: true }),
+    media,
+    clean: () => {
+      media.clean();
+      rmSync(temp, { recursive: true, force: true });
+    },
   };
 }
 export class Book {
@@ -336,7 +370,7 @@ export class Book {
     this.dimension = dimension;
     this.rows = [];
   }
-  async check(id, target, fn, tiers = ["dream", "beat"]) {
+  async check(id, target, fn, tiers = this.defaultTiers ?? ["dream", "beat"]) {
     let ok = false,
       value;
     try {
@@ -359,6 +393,22 @@ export class Book {
     });
     return ok;
   }
+  // Gate that only the lead can satisfy (see reviews.mjs). `judge(entry)` must hold for the
+  // signed entry; without lead input the check fails as "pending" and is reported as such.
+  async attest(id, target, key, judge, tiers) {
+    const { leadAttested } = await import("./reviews.mjs");
+    const ok = await this.check(
+      id,
+      target + " [lead-attested]",
+      () => {
+        const entry = leadAttested(key);
+        return { ok: judge(entry) === true, value: entry };
+      },
+      tiers,
+    );
+    this.rows.at(-1).attested = true;
+    return ok;
+  }
   fail(id, target, message, tiers) {
     return this.check(
       id,
@@ -378,6 +428,7 @@ export class Book {
       dimension: this.dimension,
       dream: count("dream"),
       beat: count("beat"),
+      pendingLead: this.rows.filter((r) => r.attested && !r.ok).length,
       checks: this.rows.map(({ tiers, ...r }) => r),
     };
   }
@@ -397,7 +448,14 @@ export async function run(dimension, fn, { env = {} } = {}) {
           throw Error(
             "DREAM 3 measures require CPU Chromium; unset NAPKIN_GPU",
           );
-        return (b ??= await launchChromium());
+        if (!b) {
+          const before = new Set(chromiumMains());
+          b = await launchChromium();
+          b.pid = chromiumMains().find((p) => !before.has(p));
+          // A headless page is never "focused", so :focus and :focus-visible would never match.
+          await b.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+        }
+        return b;
       },
       restart: async () => {
         await s.stop();
@@ -427,7 +485,8 @@ export async function run(dimension, fn, { env = {} } = {}) {
 }
 export function output(r) {
   console.log(
-    `\n${r.dimension} | beat ${r.beat.met}/${r.beat.total} | dream ${r.dream.met}/${r.dream.total}`,
+    `\n${r.dimension} | beat ${r.beat.met}/${r.beat.total} | dream ${r.dream.met}/${r.dream.total}` +
+      (r.pendingLead ? ` | lead-attested pending ${r.pendingLead}` : ""),
   );
   console.log("Check | Result | Value | Target");
   for (const c of r.checks)
@@ -441,15 +500,26 @@ export const entry = (url) =>
   url ===
   new URL(process.argv[1] || "file:///none", "file://" + process.cwd() + "/")
     .href;
-export async function observe(b, url) {
+export async function observe(b, url, markers = null) {
   await b.send("Page.navigate", { url: "about:blank" });
+  let script;
+  if (markers)
+    script = (
+      await b.send("Page.addScriptToEvaluateOnNewDocument", {
+        source: `(()=>{const sel=${JSON.stringify(markers.selectors || [])},txt=${JSON.stringify(markers.text || [])};const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'};const tick=()=>{if(window.__meaningful!==undefined)return;if(document.body&&sel.every(q=>[...document.querySelectorAll(q)].some(vis))&&txt.every(t=>document.body.innerText.includes(t))&&![...document.images].some(i=>!i.complete))window.__meaningful=performance.now();else requestAnimationFrame(tick)};requestAnimationFrame(tick)})()`,
+      })
+    ).identifier;
   await b.goto(url);
+  if (script)
+    await b.send("Page.removeScriptToEvaluateOnNewDocument", {
+      identifier: script,
+    });
   await b.eval("document.fonts.ready");
   await b.eval(
     "new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))",
   );
   const dom = await b.eval(
-    `({text:document.body.innerText,kind:document.querySelector('[data-napkin-kind]')?.dataset.napkinKind,paint:performance.getEntriesByName('first-contentful-paint')[0]?.startTime})`,
+    `({text:document.body.innerText,kind:document.querySelector('[data-napkin-kind]')?.dataset.napkinKind,paint:performance.getEntriesByName('first-contentful-paint')[0]?.startTime,meaningful:window.__meaningful})`,
   );
   const png = await b.screenshot(),
     p = decodePng(png);
@@ -465,6 +535,8 @@ export async function observe(b, url) {
     );
   }
   const n = p.width * p.height;
+  if (typeof dom.paint === "number" && typeof dom.meaningful === "number")
+    dom.paint = Math.max(dom.paint, dom.meaningful);
   return { ...dom, variance: sq / n - (sum / n) ** 2, colors: bins.size, png };
 }
 export async function evidence(b, name) {
@@ -507,10 +579,45 @@ export async function palette(b, command) {
   await sleep(100);
   return command.length + 2;
 }
+// Focus is visible only if an indicator is actually drawn: a real outline or ring whose colour
+// is found in the pixels around the element and contrasts with what is behind it. A caret or
+// the element merely being a text input does not count.
 export async function focusVisible(b) {
-  return b.eval(
-    `(()=>{const e=document.activeElement;if(!e||e===document.body||!e.matches(':focus-visible'))return false;const s=getComputedStyle(e),r=e.getBoundingClientRect();return r.width>0&&r.height>0&&s.visibility!=='hidden'&&s.display!=='none'&&((s.outlineStyle!=='none'&&parseFloat(s.outlineWidth)>0)||s.boxShadow!=='none'||e.matches('input,textarea,[contenteditable=true]'))})()`,
+  const info = await b.eval(
+    `(()=>{const e=document.activeElement;if(!e||e===document.body||!e.matches(':focus-visible'))return null;const s=getComputedStyle(e),r=e.getBoundingClientRect();if(!(r.width>0&&r.height>0)||s.visibility==='hidden'||s.display==='none')return null;const colours=[];if(s.outlineStyle!=='none'&&parseFloat(s.outlineWidth)>=1.5)colours.push({c:s.outlineColor,reach:parseFloat(s.outlineWidth)+Math.max(0,parseFloat(s.outlineOffset)||0)+2});for(const m of s.boxShadow.matchAll(/(rgba?\\([^)]*\\))\\s+(-?[\\d.]+)px\\s+(-?[\\d.]+)px\\s+([\\d.]+)px(?:\\s+(-?[\\d.]+)px)?(?!\\s*inset)/g)){const spread=parseFloat(m[5]||0),blur=parseFloat(m[4]);if(spread>=1.5||(blur<=2&&Math.abs(parseFloat(m[2]))+Math.abs(parseFloat(m[3]))>=1.5))colours.push({c:m[1],reach:Math.abs(spread)+blur+Math.abs(parseFloat(m[2]))+Math.abs(parseFloat(m[3]))+2})}return{rect:{x:r.x,y:r.y,w:r.width,h:r.height},colours}})()`,
   );
+  if (!info?.colours.length) return false;
+  const p = decodePng(await b.screenshot());
+  for (const { c, reach } of info.colours) {
+    const m = c.match(/[\d.]+/g)?.map(Number);
+    if (!m || (m[3] !== undefined && m[3] < 0.5)) continue;
+    const { x, y, w, h } = info.rect,
+      r = Math.ceil(reach);
+    let hit = 0;
+    for (
+      let yy = Math.max(0, Math.floor(y) - r);
+      yy < Math.min(p.height, y + h + r);
+      yy++
+    )
+      for (
+        let xx = Math.max(0, Math.floor(x) - r);
+        xx < Math.min(p.width, x + w + r);
+        xx++
+      ) {
+        const inside =
+          xx >= x + 1 && xx < x + w - 1 && yy >= y + 1 && yy < y + h - 1;
+        if (inside) continue;
+        const i = (yy * p.width + xx) * 4;
+        if (
+          Math.abs(p.data[i] - m[0]) <= 24 &&
+          Math.abs(p.data[i + 1] - m[1]) <= 24 &&
+          Math.abs(p.data[i + 2] - m[2]) <= 24
+        )
+          hit++;
+      }
+    if (hit >= (w + h) * 0.8) return true;
+  }
+  return false;
 }
 export async function axe(b) {
   await b.send("Runtime.evaluate", {
@@ -693,4 +800,4 @@ export async function waitUntil(fn, ms = 5000) {
   }
   throw Error("Outcome not observed within " + ms + " ms");
 }
-export { stress, diffPng };
+export { stress, diffPng, decodePng };
