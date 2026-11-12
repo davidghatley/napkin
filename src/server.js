@@ -21,6 +21,8 @@ import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
 import { openFolder } from './doc/folder.js';
 import { createDocRoutes } from './doc/routes.js';
 import { agentPermission } from './api.js';
+import { openItems } from './kinds/items.js';
+import { createKindRoutes, loadKindPlugins } from './kinds/routes.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, root: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, 'watch-parent': { type: 'string' }, stream: { type: 'boolean' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -91,8 +93,12 @@ ws.events.on('added', async ({ component, by, summary }) => {
 });
 
 const docRoutes = createDocRoutes(docs, { identify: (t) => api.identify(t), permission: (name) => agentPermission(dir, name), broadcast, legacy: (id) => !!ws.find(id),
+  itemRecipe: path => { try { return items.recipe(path); } catch { return {}; } },
   legacyNewest: (verb, by) => { let at = null; for (const x of ws.entries()) { const t = x.store[verb + 'Top']?.(by); if (t && (at === null || t.at > at)) at = t.at; } return at; } });
 const json = (res, code, body) => { if (body?.error) body.error = explainError(body.error); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
+await loadKindPlugins((process.env.NAPKIN_KIND_PLUGINS || '').split(',').filter(Boolean).map(p => resolve(p)));
+const items = openItems(docRoot, { broadcast, watchFiles: true });
+const kindRoutes = createKindRoutes(items, { identify: t => api.identify(t), permission: name => agentPermission(dir, name), hasComponent: id => docs.has(id) });
 const STATIC = { '/': 'public/index.html', '/brand/napkin-favicon.svg': 'public/brand/napkin-favicon.svg', '/brand/napkin-glyph.svg': 'public/brand/napkin-glyph.svg', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js', '/src/css-props.js': 'src/css-props.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml' };
 const send = (res, file) => {
@@ -120,6 +126,7 @@ const server = createServer(async (req, res) => {
       return res.end(r.code);
     }
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
+    if (await kindRoutes(req, res, url)) return;
     if (await docRoutes(req, res, url)) return;
     if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
@@ -231,4 +238,4 @@ server.listen(listenPort, '127.0.0.1', () => {
   if (args.stream) ws.ready.then(async () => { if (!server.listening) return; console.log(await ws.report()); });
 });
 let stopping = false;
-shutdown = () => { if (stopping) return; stopping = true; for (const c of clients) c.end(); server.close(); docs.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
+shutdown = () => { if (stopping) return; stopping = true; for (const c of clients) c.end(); server.close(); docs.close(); items.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };

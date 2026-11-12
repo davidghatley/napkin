@@ -20,7 +20,7 @@ import { createTimeRoutes } from './time-routes.js';
 
 const TYPES = { '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.mp4': 'video/mp4', '.webm': 'video/webm' };
 
-export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false, legacyNewest = () => null } = {}) {
+export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false, legacyNewest = () => null, itemRecipe = () => ({}) } = {}) {
   const tsx = createTsxViews(engine);
   // Doc frames never carry a `component` key: the canvas's dialect client treats that key as one of its own components.
   // (A TSX file's frame names the file only: parsing it on every dialect save would slow the dialect canvas for nothing.)
@@ -109,6 +109,16 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         const id = decodeURIComponent(path.slice('/view/'.length));
         const comp = engine.component(id);
         const v = comp.kind === 'html' ? htmlView(engine, comp) : await tsx.view(comp);
+        // The item contract identifies the document root without changing its source file.
+        const source = Buffer.isBuffer(v.body) ? v.body : Buffer.from(v.body);
+        const at = /<html\b/i.exec(source.toString('latin1'));
+        const marker = Buffer.from(` data-napkin-kind="${comp.kind}"`);
+        const doctype = /^(?:\xEF\xBB\xBF)?\s*<!doctype[^>]*>/i.exec(source.toString('latin1'));
+        v.body = at
+          ? Buffer.concat([source.subarray(0, at.index + 5), marker, source.subarray(at.index + 5)])
+          : Buffer.concat([source.subarray(0, doctype?.[0].length || 0), Buffer.from(`<html data-napkin-kind="${comp.kind}">`), source.subarray(doctype?.[0].length || 0), Buffer.from('</html>')]);
+        const recipe = itemRecipe(comp.path);
+        if (Number.isFinite(recipe.zoom)) v.body = Buffer.concat([v.body, Buffer.from(`<style data-napkin>html{zoom:${recipe.zoom / 100}}</style>`)]);
         res.writeHead(v.status || 200, { 'content-type': v.type, 'cache-control': 'no-store' });
         return res.end(v.body), true;
       }
