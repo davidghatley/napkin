@@ -1,0 +1,29 @@
+{
+  "name": "@napkin/dials",
+  "version": "0.1.0",
+  "description": "Schema-driven instruments that grow from a dial to a studio.",
+  "type": "module",
+  "license": "MIT",
+  "main": "./dials.js",
+  "types": "./dials.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dials.d.ts",
+      "import": "./dials.js"
+    },
+    "./style.css": "./dials.css",
+    "./color": "./color.js",
+    "./motion": "./motion.js",
+    "./values": "./values.js"
+  },
+  "files": [
+    "*.js",
+    "*.d.ts",
+    "dials.css",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": [
+    "*.css"
+  ]
+}

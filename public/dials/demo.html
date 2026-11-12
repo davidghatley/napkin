@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dials · instrument studies</title>
+    <link rel="stylesheet" href="./dials.css" />
+    <link rel="stylesheet" href="./demo.css" />
+  </head>
+  <body>
+    <a class="skip" href="#studies">Skip to instruments</a>
+    <header class="mast">
+      <a class="wordmark" href="./demo.html"
+        ><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true">
+          <path
+            d="M3 3H17V11L11 17H3ZM11 17V11H17"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          /></svg
+        >napkin <span>/ dials</span></a
+      >
+      <nav aria-label="Visual direction">
+        <a href="?dir=a" data-dir="a">A <span>Instrument</span></a
+        ><a href="?dir=b" data-dir="b">B <span>Workshop</span></a
+        ><a href="?dir=c" data-dir="c">C <span>Specimen</span></a>
+      </nav>
+      <button id="theme" type="button">Dark</button>
+    </header>
+    <main>
+      <div class="intro">
+        <div>
+          <p class="eyebrow">INSTRUMENT STUDIES / 01</p>
+          <h1>Small controls.<br />Room to go deep.</h1>
+        </div>
+        <div class="intro-note">
+          <p>Six kinds of work. One language of instruments.</p>
+          <p>Scrub a label. Type an expression. Open a studio.</p>
+          <button id="help" type="button">Keyboard map <kbd>?</kbd></button>
+        </div>
+      </div>
+      <div class="workspace-bar">
+        <span id="direction-label">A / INSTRUMENT</span>
+        <div class="depth-all" role="group" aria-label="Set all section depths">
+          <button type="button" data-depth="1">All dials</button
+          ><button type="button" data-depth="2">All benches</button>
+        </div>
+        <span class="live"><i></i> Live values</span>
+      </div>
+      <div id="studies" class="studies"></div>
+      <details class="catalog">
+        <summary>
+          Control catalogue
+          <span>13 more instruments · plugin example · schema source</span>
+        </summary>
+        <div class="catalog-body">
+          <div id="gallery"></div>
+          <div>
+            <h2>One document, every depth.</h2>
+            <p>
+              The demo runs without a framework, build step or network
+              connection. Every sample below is the document used by its panel.
+            </p>
+            <label for="schema-select">Inspect a schema</label
+            ><select id="schema-select"></select>
+            <pre
+              id="schema-source"
+              tabindex="0"
+              aria-label="Schema source JSON"
+            ></pre>
+            <button id="performance" type="button">Measure 200 controls</button
+            ><output id="performance-result"></output>
+          </div>
+        </div>
+      </details>
+    </main>
+    <footer>
+      <span
+        ><kbd>⇧</kbd> fine <span class="sep">/</span> <kbd>Alt</kbd> coarse
+        <span class="sep">/</span> <kbd>R</kbd> reset</span
+      ><output id="event" aria-live="polite">Ready to tune.</output
+      ><span>Local · ES modules · zero dependencies</span>
+    </footer>
+    <script type="module" src="./demo.js"></script>
+  </body>
+</html>
