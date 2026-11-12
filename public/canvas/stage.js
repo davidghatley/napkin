@@ -15,6 +15,7 @@ import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
+import { createItemFrame, compactItem } from './kinds.js';
 
 let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -49,7 +50,7 @@ export function createStage(ctx, root, world, view) {
     let sec = sections.get(id);
     if (sec) return sec;
     const el = document.createElement('section');
-    el.className = 'cmp'; el.dataset.component = id;
+    el.className = ctx.state.components.get(id)?.item ? 'item-card' : 'cmp'; el.dataset.component = id;
     el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="cmp-path" hidden></span><span class="badge" hidden></span><span class="rev"></span><span class="cmp-note" hidden></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
     sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false };
     sections.set(id, sec);
@@ -146,21 +147,30 @@ export function createStage(ctx, root, world, view) {
     const sec = section(id);
     const token = ++sec.token;
     header(id);
+    // Mixed-file cards have a fixed viewport. Build them in one pass, then pack once;
+    // no per-card layout reads or free-slot searches during a large folder's first draw.
+    if (c.item && !laidOut && !force) {
+      sec.frame.innerHTML = `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>`;
+      sec.size = { w: 480, h: 340 }; sec.pending = true;
+      sec.el.style.setProperty('--nk-w', '480px'); sec.el.style.setProperty('--nk-h', '340px');
+      sec.el.dataset.kind = c.kind; sec.el.dataset.ready = '1';
+      return;
+    }
     if (!force && ctx.state.components.size > CULL_AFTER) {
       if (!sec.pos) {
-        sec.frame.innerHTML = c.kind === 'html' ? `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>` : '<div class="bundle-pending">Preview loads when in view</div>';
+        sec.frame.innerHTML = c.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : c.kind === 'html' ? `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>` : '<div class="bundle-pending">Preview loads when in view</div>';
         measure(sec); placeNew(id);
       }
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
-    if (c.kind === 'html' && !sec.docFrame && ctx.state.components.size > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
+    if ((c.kind === 'html' || c.item) && !sec.docFrame && ctx.state.components.size > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
       sec.pending = true; sec.el.dataset.ready = '1';
-      if (!sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
+      if (!c.item && !sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
       return;
     }
     sec.pending = false;
-    if (c.kind === 'html') return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
+    if (c.kind === 'html' || c.item) return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
@@ -207,15 +217,15 @@ export function createStage(ctx, root, world, view) {
     const w = sec.frame.offsetWidth, h = sec.frame.offsetHeight;
     sec.docFrame?.destroy(); sec.docFrame = null; sec.pending = true;
     sec.frame.style.minWidth = `${w}px`; sec.frame.style.minHeight = `${h}px`;
-    sec.frame.innerHTML = `<div class="bundle-pending">${esc(c?.name ?? id)} · ${esc(c?.path ?? '')}<br>loads when you scroll to it</div>`;
+    sec.frame.innerHTML = c?.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : `<div class="bundle-pending">${esc(c?.name ?? id)} · ${esc(c?.path ?? '')}<br>loads when you scroll to it</div>`;
   }
 
   // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
   async function renderDoc(id, c, sec, token) {
     if (!sec.docFrame) {
-      sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.docFrame = c.item ? createItemFrame(ctx, id) : createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
       sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
-      sec.el.dataset.kind = 'html';
+      sec.el.dataset.kind = c.item ? c.kind : 'html';
       const path = sec.el.querySelector('.cmp-path'); path.textContent = (c.path || '').split('/').slice(-2).join('/'); path.title = c.path || ''; path.hidden = false;
     }
     let ok = false;
@@ -244,6 +254,10 @@ export function createStage(ctx, root, world, view) {
   // ---------------------------------------------------------------------------------------------- placement
   function measure(sec) {
     if (sec.culled) return;
+    if (ctx.state.components.get(sec.el.dataset.component)?.item) { // fixed viewport; no layout reads, including newly arrived files
+      if (sec.size.w !== 480 || sec.size.h !== 340) { sec.size = { w: 480, h: 340 }; sec.el.style.setProperty('--nk-w', '480px'); sec.el.style.setProperty('--nk-h', '340px'); }
+      return;
+    }
     sec.size = { w: sec.frame.offsetWidth, h: sec.frame.offsetHeight };
     sec.el.style.setProperty('--nk-w', `${sec.size.w}px`); sec.el.style.setProperty('--nk-h', `${sec.size.h}px`);
   }
@@ -271,6 +285,10 @@ export function createStage(ctx, root, world, view) {
   // so in canvas units they grow as the view zooms out) and a gap of at least CLEAR px. Packing reserves it, so frames never overlap.
   const CLEAR = 24, RESERVE_Z = 0.25;
   const headBox = (sec, z) => {
+    if (ctx.state.components.get(sec.el.dataset.component)?.item) {
+      const lf = Math.min(4, Math.max(1, 1 / z));
+      return { w: Math.max(sec.size.w, Math.ceil((sec.el.dataset.name.length * 7 + 20) * lf)), top: Math.ceil(36 * lf) + CLEAR };
+    }
     const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
     const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
     const bar = head && ctx.matrix?.natural(sec.el); // WPC-32: a filter bar too big for its frame is hidden, so it takes no room above it
@@ -353,7 +371,7 @@ export function createStage(ctx, root, world, view) {
     // Frames not drawn yet (far off screen on a big canvas) have no size of their own: each is given room for a large one of the sizes
     // measured so far (the 90th percentile), so drawing it later rarely needs more room than it was given and nothing has to move.
     const real = ids.filter((id) => { const x = sections.get(id); return !x.pending && x.size.w > 0 && !x.frame.querySelector('.bundle-pending'); });
-    const pend = ids.filter((id) => !placed(id) && sections.get(id).pending);
+    const pend = ids.filter((id) => !ctx.state.components.get(id)?.item && !placed(id) && sections.get(id).pending);
     if (pend.length && real.length >= 3) {
       const p90 = (vals) => vals.sort((a, b) => a - b)[Math.min(vals.length - 1, Math.floor(vals.length * 0.9))];
       const est = { w: p90(real.map((id) => sections.get(id).size.w)), h: p90(real.map((id) => sections.get(id).size.h)) };
@@ -635,9 +653,10 @@ export function createStage(ctx, root, world, view) {
     const ahead = [];
     // A frame of the document engine is a whole page, so they load progressively and under a budget: a few per pass for the frames in view (at fit-all too), never more than
     // DOC_BUDGET at once. When the frames in view want more than the budget, the loaded ones farthest from the view are unloaded (they keep their size and their name).
-    const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html';
+    const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html' || ctx.state.components.get(id)?.item;
     let docs = [...sections.values()].filter((x) => x.docFrame).length, started = 0, wanting = false;
     for (const [id, sec] of sections) {
+      if (ctx.state.components.get(id)?.item && z < 0.35 && !keep.has(id)) continue;
       if (sec.pending && visible(sec) && isDocSec(id)) {
         if (docs < DOC_BUDGET && started < DOC_BATCH) { docs++; started++; render(id, true).catch(console.error); } else wanting = true;
       } else if (sec.pending && visible(sec)) render(id, true).catch(console.error);
@@ -710,11 +729,11 @@ export function createStage(ctx, root, world, view) {
     const cell = el?.closest('.cell');
     if (!el && ev && !document.body.dataset.play) { // an HTML component's frame: hit-test the document inside it
       const dc = target.closest?.('.doc-cell');
-      const id = dc?.closest('.cmp')?.dataset.component;
-      const p = id && sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY);
+      const id = dc?.closest('.cmp, .item-card')?.dataset.component;
+      const p = id && (sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY) || (ctx.state.components.get(id)?.item ? dc : null));
       return p ? { el: p, id, variant: {} } : null;
     }
-    return el && cell && { el, id: cell.closest('.cmp').dataset.component, variant: JSON.parse(cell.dataset.variant) };
+    return el && cell && { el, id: cell.closest('.cmp, .item-card').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
   root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
@@ -791,7 +810,7 @@ export function createStage(ctx, root, world, view) {
     const body = !head && ctx.state.tool === 'select' && ev.pointerType !== 'touch' && !ev.target.closest('.mount [data-n]') ? ev.target.closest?.('.frame') : null;
     if (ev.target.closest('details, summary, pre, [data-nodrag]')) return;
     if (!(head || body) || ev.button !== 0 || view.isPanning()) return;
-    const id = (head || body).closest('.cmp').dataset.component, sec = sections.get(id);
+    const id = (head || body).closest('.cmp, .item-card').dataset.component, sec = sections.get(id);
     if (!sec?.pos) return;
     ev.preventDefault();
     drag = { id, x: ev.clientX, y: ev.clientY, from: { ...sec.pos }, moved: false, title: !!head };
@@ -814,6 +833,7 @@ export function createStage(ctx, root, world, view) {
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
+      else if (d.title && c?.item) ctx.select({ component: d.id, node: 'item', variant: {} });
       else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; if (first) ctx.select({ component: d.id, node: first.node, variant: {} }); }
       else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
@@ -825,7 +845,9 @@ export function createStage(ctx, root, world, view) {
     if (c) c.canvas = { ...pos };
     auto.delete(d.id);
     try {
-      const r = c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
+      const r = c?.item
+        ? await ctx.fetch('/api/item-layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: d.id, x: pos.x, y: pos.y }) })
+        : c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
         ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, x: pos.x, y: pos.y }) })
         : await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);

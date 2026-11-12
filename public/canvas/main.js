@@ -58,6 +58,7 @@ import { initTheme } from './stage-theme.js';
 import { initChrome } from './stage-chrome.js';
 import { initBreakpoints } from './stage-breakpoints.js';
 import { initInspector } from './doc-panel.js';
+import { initKinds } from './kinds.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -170,8 +171,12 @@ const sync = id => {
 function counts() {
   // WPC-35: counted from the documents, not from the cells on screen (frames far off screen are not drawn), so zoom never changes it
   let cells = 0; for (const c of ctx.state.components.values()) if (c.doc) cells += variantGrid(c.doc).length;
-  const n = ctx.state.components.size;
+  const files = [...ctx.state.components.values()].filter(c => c.item).length;
+  const n = ctx.state.components.size - files;
   $('#counts').textContent = `${n} component${n === 1 ? '' : 's'}${cells ? ` · ${cells} variant${cells === 1 ? '' : 's'}` : ''}`;
+  let fileCount = $('#item-count');
+  if (!fileCount) { fileCount = document.createElement('span'); fileCount.id = 'item-count'; $('#folder').after(fileCount); }
+  fileCount.textContent = files ? `${files} file${files === 1 ? '' : 's'}` : '';
 }
 
 // The change log has a fixed number of rows that are rewritten in place, so a new entry never moves the rows (FEEL-04).
@@ -202,12 +207,14 @@ client.onChange((f) => {
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); counts(); }
   else if (typeof f.type === 'string' && f.type.startsWith('doc-')) ctx.emit(f.type, f); // the document engine (docs.js)
+  else if (f.type === 'item-change' || f.type === 'items-changed') ctx.emit(f.type, f);
 });
 
 for (const c of client.components()) sync(c.component);
 const docs = initDocs(ctx);
 initInspector(ctx); // the inspector's scope keys, measuring and checks (doc-panel.js)
 await docs.load(); // the folder's HTML components (decision 0014), drawn with the rest
+await initKinds(ctx).load();
 await Promise.all([...ctx.state.components.keys()].map((id) => stage.render(id).catch(console.error)));
 stage.layoutAll();
 nav.restore();

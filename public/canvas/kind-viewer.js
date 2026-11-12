@@ -1,0 +1,700 @@
+import { plain } from './words.js';
+// The same live surface is used in /view and in canvas frames. No remote scripts or GPU renderer.
+const item = JSON.parse(document.querySelector('#item').textContent),
+  root = document.querySelector('#viewer'),
+  r = item.recipe || {};
+const enc = encodeURIComponent,
+  raw = '/file/' + enc(item.id),
+  esc = (s) =>
+    String(s ?? '').replace(
+      /[&<>"']/g,
+      (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+    );
+if (r.color) root.style.setProperty('--accent', r.color);
+if (r.fontSize) root.style.setProperty('--font-size', Number(r.fontSize) + 'px');
+if (r.wrap === false) root.classList.add('no-wrap');
+const fmt = (n) => Number(n).toLocaleString(),
+  label = item.path.split('/').at(-1),
+  isReduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const bar = (name, info = '') =>
+  `<div class="toolbar"><strong>${esc(name)}</strong><span class="meta">${esc(info)}</span></div>`;
+const note = (t) => `<div class="note">${esc(t)}</div>`;
+const error = (e) => {
+  root.insertAdjacentHTML('beforeend', `<p class="error" role="alert">${esc(plain(e.message || e))}</p>`);
+  root.querySelector('.loading')?.remove();
+};
+async function data(params = {}) {
+  const p = new URLSearchParams(params),
+    res = await fetch('/api/item-data/' + enc(item.id) + '?' + p);
+  const j = await res.json();
+  if (!res.ok) throw new Error(j.error);
+  return j;
+}
+function highlight(text) {
+  const regex =
+    /("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|\/\/[^\n]*|#[^\n]*|\b(?:const|let|var|function|return|class|import|from|export|default|if|else|for|while|def|fn|pub|async|await|true|false|null|None|SELECT|FROM|WHERE)\b|\b\d+(?:\.\d+)?\b)/g;
+  let html = '',
+    at = 0;
+  for (const m of text.matchAll(regex)) {
+    html += esc(text.slice(at, m.index));
+    const token = m[0],
+      type = /^["'`]/.test(token)
+        ? 'string'
+        : /^(\/\/|#)/.test(token)
+          ? 'comment'
+          : /^\d/.test(token)
+            ? 'number'
+            : 'key';
+    html += `<span class="tok-${type}">${esc(token)}</span>`;
+    at = m.index + token.length;
+  }
+  return html + esc(text.slice(at));
+}
+function source(text, kind = 'code') {
+  return `<pre class="source${r.wrap !== false ? ' wrap' : ''}" style="--font-size:${Number(r.fontSize) || 13}px">${text
+    .split('\n')
+    .map(
+      (line, i) =>
+        `<span class="code-line${kind === 'diff' ? (line.startsWith('+') ? ' diff-add' : line.startsWith('-') ? ' diff-del' : line.startsWith('@@') ? ' diff-hunk' : '') : ''}"><span class="line-no">${i + 1}</span>${kind === 'txt' || kind === 'diff' ? esc(line) : highlight(line)}</span>`,
+    )
+    .join('')}</pre>`;
+}
+function inline(t) {
+  return esc(t)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(
+      /!\[([^\]]*)\]\(([^)]+)\)/g,
+      (_, alt, url) => `<img alt="${alt}" src="${safeUrl(url, true)}">`,
+    )
+    .replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      (_, name, url) => `<a href="${safeUrl(url)}" rel="noreferrer" target="_blank">${name}</a>`,
+    );
+}
+function safeUrl(u, image = false) {
+  if (/^https?:\/\//.test(u) || u.startsWith('#')) return u;
+  if (/^[a-z]+:/i.test(u)) return '#';
+  const parts = item.path.split('/');
+  parts.pop();
+  return '/raw/' + [...parts, ...u.split('/')].map(enc).join('/');
+}
+function markdown(t) {
+  t = t.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  let html = '',
+    code = false,
+    block = [],
+    list = false;
+  for (const line of t.split('\n')) {
+    if (line.startsWith('```')) {
+      if (code) {
+        html += `<pre><code>${highlight(block.join('\n'))}</code></pre>`;
+        block = [];
+      }
+      code = !code;
+      continue;
+    }
+    if (code) {
+      block.push(line);
+      continue;
+    }
+    const m = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (!/^\s*[-*]\s/.test(line) && list) {
+      html += '</ul>';
+      list = false;
+    }
+    if (m) html += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`;
+    else if (/^\s*[-*]\s/.test(line)) {
+      if (!list) {
+        html += '<ul>';
+        list = true;
+      }
+      html += `<li>${inline(line.replace(/^\s*[-*]\s/, ''))}</li>`;
+    } else if (line.startsWith('>')) html += `<blockquote>${inline(line.slice(1))}</blockquote>`;
+    else if (line.trim()) html += `<p>${inline(line)}</p>`;
+  }
+  if (list) html += '</ul>';
+  if (code) html += `<pre>${esc(block.join('\n'))}</pre>`;
+  return `<article class="prose" style="--font-size:${Number(r.fontSize) || 15}px">${html}</article>`;
+}
+function hist(bins) {
+  const max = Math.max(1, ...bins);
+  return `<svg class="hist" viewBox="0 0 100 27" aria-label="Column distribution">${bins.map((v, i) => `<rect x="${(i * 100) / bins.length}" y="${27 - (v / max) * 25}" width="${Math.max(1, 100 / bins.length - 1)}" height="${(v / max) * 25}"/>`).join('')}</svg>`;
+}
+function table(d) {
+  return `<div class="table-scroll"><table><thead><tr>${(d.columns || []).map((c) => `<th scope="col">${esc(c.name)}<small>${esc(c.type)}${c.distinct !== undefined ? ` · ${c.distinct} distinct` : ''}${c.missing ? ` · ${c.missing} missing` : ''}</small>${hist(c.bins || [])}${c.min !== null && c.min !== undefined ? `<small>${esc(c.min)} — ${esc(c.max)}</small>` : ''}</th>`).join('')}</tr></thead><tbody>${(d.rows || []).map((row) => `<tr>${row.map((v) => `<td class="${typeof v === 'number' ? 'num' : v === null ? 'null' : ''}">${v === null ? '∅' : esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+async function showTable(params = {}) {
+  const d = await data(params);
+  root.innerHTML =
+    bar(
+      label,
+      `${d.total === null ? 'Window of' : fmt(d.total ?? d.rows?.length ?? 0)} rows · ${d.columns?.length || 0} columns`,
+    ) +
+    `<div class="toolbar"><button id="prev" aria-label="Previous rows">←</button><span class="meta">${fmt(d.offset ?? 0)}–${fmt((d.offset ?? 0) + (d.rows?.length ?? 0))}</span><button id="next" aria-label="Next rows">→</button>${d.tables ? `<select id="tables" aria-label="Table">${d.tables.map((t) => `<option${t === d.name ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>` : ''}${d.groups > 1 ? `<select id="groups" aria-label="Row group">${Array.from({ length: Math.min(1000, d.groups) }, (_, i) => `<option value="${i}"${i === d.group ? ' selected' : ''}>Group ${i + 1}</option>`).join('')}</select>` : ''}</div>` +
+    table(d) +
+    note(
+      d.note ||
+        `${d.rows?.length || 0} sampled rows. Distributions describe this window.${d.truncated ? ' Text scan stops at 8 MiB.' : ''}`,
+    );
+  const offset = Number(params.offset ?? r.rowOffset ?? 0),
+    size = Number(r.pageSize) || 80;
+  root.querySelector('#prev').onclick = () =>
+    showTable({ ...params, offset: Math.max(0, offset - size) }).catch(error);
+  root.querySelector('#next').onclick = () =>
+    showTable({ ...params, offset: offset + size }).catch(error);
+  root
+    .querySelector('#tables')
+    ?.addEventListener('change', (e) =>
+      showTable({ table: e.target.value, offset: 0 }).catch(error),
+    );
+  root
+    .querySelector('#groups')
+    ?.addEventListener('change', (e) => showTable({ group: e.target.value }).catch(error));
+}
+function jsonTree(v, key = 'root', depth = 0) {
+  if (v === null || typeof v !== 'object')
+    return `<div class="json-leaf"><span class="json-key">${esc(key)}</span> <span class="tok-${typeof v === 'string' ? 'string' : 'number'}">${esc(JSON.stringify(v))}</span></div>`;
+  const entries = Object.entries(v);
+  return `<details${depth < 2 ? ' open' : ''}><summary><span class="json-key">${esc(key)}</span> <span class="meta">${Array.isArray(v) ? '[' : '{'} ${entries.length} ${Array.isArray(v) ? ']' : '}'}</span></summary>${
+    depth < 12
+      ? entries
+          .slice(0, 200)
+          .map(([k, x]) => jsonTree(x, k, depth + 1))
+          .join('')
+      : note('Expand this value in the source')
+  }${entries.length > 200 ? note('Showing 200 entries') : ''}</details>`;
+}
+function chart(j) {
+  let rows =
+      j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [],
+    encs = j.encoding || {},
+    xkey = encs.x?.field,
+    ykey = encs.y?.field;
+  if (!Array.isArray(rows)) rows = [];
+  if (!xkey && rows[0] && typeof rows[0] === 'object') xkey = Object.keys(rows[0])[0];
+  if (!ykey && rows[0] && typeof rows[0] === 'object')
+    ykey = Object.keys(rows[0]).find((k) => k !== xkey && typeof rows[0][k] === 'number');
+  const points = rows
+    .slice(0, 200)
+    .map((v, i) => ({ x: v[xkey] ?? v.x ?? i, y: Number(v[ykey] ?? v.y ?? v.value ?? v) }))
+    .filter((p) => Number.isFinite(p.y));
+  if (!points.length)
+    return (
+      note('No inline numeric series found. External data sources need an adapter.') +
+      `<div class="json-tree">${jsonTree(j)}</div>`
+    );
+  const max = Math.max(0, ...points.map((p) => p.y)),
+    min = Math.min(0, ...points.map((p) => p.y)),
+    range = max - min || 1,
+    w = 600,
+    h = 260,
+    px = (i) => 50 + (i * (w - 75)) / Math.max(1, points.length - 1),
+    py = (v) => h - 25 - ((v - min) / range) * (h - 55),
+    mark = typeof j.mark === 'object' ? j.mark.type : j.mark || j.type || 'bar';
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(j.title || label)}"><line class="axis" x1="45" x2="585" y1="${py(0)}" y2="${py(0)}"/>${Array.from(
+    { length: 5 },
+    (_, i) => {
+      const v = min + (range * i) / 4;
+      return `<line class="axis" x1="45" x2="585" y1="${py(v)}" y2="${py(v)}"/><text x="38" text-anchor="end" y="${py(v) + 3}">${Number(v.toPrecision(3))}</text>`;
+    },
+  ).join(
+    '',
+  )}${mark === 'line' || mark === 'area' ? `<path class="series" d="${points.map((p, i) => `${i ? 'L' : 'M'}${px(i)},${py(p.y)}`).join(' ')}"/>` : points.map((p, i) => (mark === 'point' || mark === 'circle' ? `<circle class="mark" cx="${px(i)}" cy="${py(p.y)}" r="4"><title>${esc(p.x)}: ${p.y}</title></circle>` : `<rect class="mark" x="${45 + (i * 540) / points.length + 3}" y="${Math.min(py(0), py(p.y))}" width="${Math.max(1, 540 / points.length - 6)}" height="${Math.abs(py(p.y) - py(0))}"><title>${esc(p.x)}: ${p.y}</title></rect>`)).join('')}${points
+    .filter((_, i) => i % Math.max(1, Math.ceil(points.length / 8)) === 0)
+    .map(
+      (p) =>
+        `<text x="${px(points.indexOf(p))}" y="255" text-anchor="middle">${esc(String(p.x).slice(0, 12))}</text>`,
+    )
+    .join('')}</svg>`;
+}
+function graph(j) {
+  let nodes = Array.isArray(j.nodes)
+    ? j.nodes
+    : Object.entries(j)
+        .filter(([, v]) => v?.class_type)
+        .map(([id, v], i) => ({
+          id,
+          title: v.class_type,
+          pos: [(i % 3) * 240, Math.floor(i / 3) * 180],
+          widgets_values: Object.entries(v.inputs || {})
+            .filter(([, v]) => !Array.isArray(v))
+            .map(([k, v]) => `${k}: ${v}`),
+          inputs: Object.entries(v.inputs || {})
+            .filter(([, v]) => Array.isArray(v))
+            .map(([name, v]) => ({ name, source: v[0] })),
+        }));
+  nodes = nodes.slice(0, 160);
+  const map = new Map(
+    nodes.map((n, i) => {
+      const p = Array.isArray(n.pos)
+        ? n.pos
+        : [n.pos?.[0] || (i % 3) * 240, n.pos?.[1] || Math.floor(i / 3) * 180];
+      return [
+        String(n.id),
+        {
+          ...n,
+          x: Number(p[0]) || 0,
+          y: Number(p[1]) || 0,
+          w: 200,
+          h: 75 + Math.min(5, n.widgets_values?.length || 0) * 19,
+        },
+      ];
+    }),
+  );
+  const values = [...map.values()];
+  if (!values.length) return note('Workflow has no nodes');
+  const minX = Math.min(...values.map((n) => n.x)) - 20,
+    minY = Math.min(...values.map((n) => n.y)) - 20,
+    maxX = Math.max(...values.map((n) => n.x + n.w)) + 20,
+    maxY = Math.max(...values.map((n) => n.y + n.h)) + 20;
+  let links = j.links || [];
+  if (!Array.isArray(j.nodes))
+    links = values.flatMap((n) => (n.inputs || []).map((v, i) => [0, v.source, 0, n.id, i]));
+  const paths = links
+    .map((l) => {
+      const a = map.get(String(Array.isArray(l) ? l[1] : l.origin_id)),
+        b = map.get(String(Array.isArray(l) ? l[3] : l.target_id));
+      if (!a || !b) return '';
+      return `<path class="edge" d="M${a.x + a.w},${a.y + 48} C${a.x + a.w + 65},${a.y + 48} ${b.x - 65},${b.y + 48} ${b.x},${b.y + 48}"/>`;
+    })
+    .join('');
+  return `<div class="workflow"><svg width="${Math.max(600, (maxX - minX) * (r.scale || 1))}" height="${Math.max(300, (maxY - minY) * (r.scale || 1))}" viewBox="${minX} ${minY} ${maxX - minX} ${maxY - minY}" role="img" aria-label="Workflow graph">${paths}${values
+    .map(
+      (n) =>
+        `<g transform="translate(${n.x},${n.y})"><rect class="node" width="200" height="${n.h}" rx="7"/><rect class="node-head" width="200" height="31" rx="7"/><text x="12" y="21">${esc(String(n.title || n.type || n.class_type || n.id).slice(0, 28))}</text><circle class="port" cx="0" cy="48" r="4"/><circle class="port" cx="200" cy="48" r="4"/><text x="12" y="52" opacity=".5">#${esc(n.id)}</text>${(
+          n.widgets_values || []
+        )
+          .slice(0, 5)
+          .map(
+            (v, i) =>
+              `<text x="12" y="${75 + i * 19}">${esc(String(typeof v === 'object' ? JSON.stringify(v) : v).slice(0, 28))}</text>`,
+          )
+          .join('')}</g>`,
+    )
+    .join('')}</svg></div>`;
+}
+async function archive() {
+  const d = await data();
+  root.innerHTML =
+    bar(label, `${d.entries.length} entries`) +
+    `<div class="archive"><nav aria-label="Archive contents"><input aria-label="Filter archive" placeholder="Filter paths" value="${esc(r.filter || '')}"><div></div></nav><section><p class="note">Choose a file to read it without extracting the archive.</p></section></div>`;
+  const nav = root.querySelector('nav div'),
+    preview = root.querySelector('.archive section');
+  function draw(filter) {
+    nav.innerHTML = d.entries
+      .filter((e) => e.name.includes(filter))
+      .map(
+        (e, i) =>
+          `<button data-index="${d.entries.indexOf(e)}" style="padding-left:${8 + Math.min(8, e.name.split('/').length - 1) * 10}px">${esc(e.name)}<br><span class="meta">${fmt(e.bytes)} bytes</span></button>`,
+      )
+      .join('');
+  }
+  draw(r.filter || '');
+  root.querySelector('input').oninput = (e) => draw(e.target.value);
+  nav.onclick = async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    nav.querySelector('[aria-current]')?.removeAttribute('aria-current');
+    b.setAttribute('aria-current', 'true');
+    try {
+      const entry = await data({ entry: d.entries[Number(b.dataset.index)].name });
+      preview.innerHTML = entry.binary
+        ? `<pre class="hex">${esc(entry.hex.match(/.{1,32}/g)?.join('\n'))}</pre>`
+        : source(entry.text);
+    } catch (e) {
+      preview.innerHTML = note(e.message);
+    }
+  };
+}
+function notebook(j) {
+  return `<div class="notebook">${(j.cells || [])
+    .slice(0, 100)
+    .map((c) =>
+      c.cell_type === 'markdown'
+        ? `<div class="nb-cell">${markdown(Array.isArray(c.source) ? c.source.join('') : c.source || '')}</div>`
+        : `<div class="nb-cell"><header>In [${esc(c.execution_count ?? ' ')}] · ${esc(j.metadata?.kernelspec?.display_name || 'code')}</header>${source(Array.isArray(c.source) ? c.source.join('') : c.source || '')}${(
+            c.outputs || []
+          )
+            .map((o) => {
+              const d = o.data || {},
+                text = o.text || d['text/plain'] || o.traceback || [];
+              return `<div class="nb-output">${d['image/png'] ? `<img alt="Notebook output" src="data:image/png;base64,${esc(d['image/png'])}">` : d['text/html'] ? `<iframe sandbox srcdoc="${esc(Array.isArray(d['text/html']) ? d['text/html'].join('') : d['text/html'])}" title="Notebook output"></iframe>` : `<pre class="source">${esc(Array.isArray(text) ? text.join('') : text)}</pre>`}</div>`;
+            })
+            .join('')}</div>`,
+    )
+    .join('')}</div>`;
+}
+function turningModel(mesh) {
+  root.innerHTML =
+    bar(label, `${fmt(mesh.vertices.length)} vertices · ${fmt(mesh.faces.length)} faces`) +
+    `<canvas class="model" width="900" height="600" aria-label="Turning 3D model"></canvas>` +
+    (mesh.limited ? note('Mesh preview is bounded to the source window.') : '');
+  const canvas = root.querySelector('canvas'),
+    ctx = canvas.getContext('2d'),
+    vs = mesh.vertices,
+    fs = mesh.faces;
+  if (!vs.length) {
+    root.insertAdjacentHTML('beforeend', note('No triangle positions were found'));
+    return;
+  }
+  const lo = [0, 1, 2].map((i) => Math.min(...vs.map((v) => v[i]))),
+    hi = [0, 1, 2].map((i) => Math.max(...vs.map((v) => v[i]))),
+    center = lo.map((n, i) => (n + hi[i]) / 2),
+    scale = 230 / Math.max(0.001, ...hi.map((n, i) => n - lo[i]));
+  let angle = Number(r.rotation) || 0,
+    active = true;
+  document.addEventListener('visibilitychange', () => {
+    active = !document.hidden;
+  });
+  const draw = (t) => {
+    if (active) {
+      if (!isReduced && r.spin !== false) angle += 0.35;
+      const a = (angle * Math.PI) / 180,
+        project = vs.map((v) => {
+          const x = (v[0] - center[0]) * scale,
+            y = (v[1] - center[1]) * scale,
+            z = (v[2] - center[2]) * scale;
+          return [
+            450 + x * Math.cos(a) + z * Math.sin(a),
+            315 - y * 0.9 + (z * Math.cos(a) - x * Math.sin(a)) * 0.3,
+            z * Math.cos(a) - x * Math.sin(a),
+          ];
+        });
+      ctx.clearRect(0, 0, 900, 600);
+      ctx.strokeStyle = '#b0c3b8';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 11; i++) {
+        const x = 130 + i * 64;
+        ctx.beginPath();
+        ctx.moveTo(x, 440);
+        ctx.lineTo(x + 90, 540);
+        ctx.moveTo(130, 440 + i * 10);
+        ctx.lineTo(860, 440 + i * 10);
+        ctx.stroke();
+      }
+      const sorted = fs
+        .slice(0, 16000)
+        .map((f) => ({ f, z: f.reduce((s, i) => s + (project[i]?.[2] || 0), 0) / f.length }))
+        .sort((a, b) => a.z - b.z);
+      for (const { f, z } of sorted) {
+        if (f.some((i) => !project[i])) continue;
+        ctx.beginPath();
+        f.forEach((i, j) =>
+          j ? ctx.lineTo(project[i][0], project[i][1]) : ctx.moveTo(project[i][0], project[i][1]),
+        );
+        ctx.closePath();
+        if (!r.wireframe) {
+          ctx.fillStyle = `hsl(158 21% ${Math.max(22, Math.min(76, 48 + z / 12))}%)`;
+          ctx.fill();
+        }
+        ctx.strokeStyle = r.wireframe ? '#2e6d5b' : '#345f5180';
+        ctx.stroke();
+      }
+      if (!fs.length) {
+        ctx.fillStyle = '#28785d';
+        for (const [x, y] of project) ctx.fillRect(x, y, 3, 3);
+      }
+    }
+    requestAnimationFrame(draw);
+  };
+  requestAnimationFrame(draw);
+  canvas.onpointermove = (e) => {
+    if (e.buttons) angle += e.movementX;
+  };
+}
+// A small Lottie vector player: shape layers, transforms, paths, fills, strokes and animated properties.
+function lottie(j) {
+  root.innerHTML =
+    bar(label, `${j.w} × ${j.h} · ${j.fr} fps`) +
+    `<div class="motion-stage"><svg viewBox="0 0 ${Number(j.w) || 512} ${Number(j.h) || 512}" role="img" aria-label="Vector animation"></svg></div>`;
+  const svg = root.querySelector('svg');
+  function prop(p, frame, fallback) {
+    if (p === undefined) return fallback;
+    let k = p.k ?? p;
+    if (!p.a) return k;
+    if (!Array.isArray(k)) return fallback;
+    let a = k[0],
+      b;
+    for (let i = 0; i < k.length; i++) {
+      if (k[i].t <= frame) {
+        a = k[i];
+        b = k[i + 1];
+      }
+    }
+    if (!a) return fallback;
+    const s = a.s ?? fallback,
+      e = a.e ?? b?.s ?? s;
+    if (!b || a.h) return s;
+    const t = Math.max(0, Math.min(1, (frame - a.t) / (b.t - a.t)));
+    return Array.isArray(s)
+      ? s.map((v, i) => (typeof v === 'number' ? v + (Number(e[i] ?? v) - v) * t : v))
+      : s;
+  }
+  function transform(t, frame) {
+    const p = prop(t?.p, frame, [0, 0]),
+      a = prop(t?.a, frame, [0, 0]),
+      s = prop(t?.s, frame, [100, 100]),
+      rot = prop(t?.r, frame, 0);
+    return `translate(${p[0] || 0} ${p[1] || 0}) rotate(${Array.isArray(rot) ? rot[0] : rot}) scale(${(s[0] ?? 100) / 100} ${(s[1] ?? 100) / 100}) translate(${-a[0] || 0} ${-a[1] || 0})`;
+  }
+  function shapes(list, frame) {
+    let fill = 'none',
+      stroke = 'none',
+      sw = 1,
+      html = '';
+    for (const s of list) {
+      if (s.ty === 'fl') {
+        const c = prop(s.c, frame, [0, 0, 0]);
+        fill = `rgb(${c
+          .slice(0, 3)
+          .map((v) => Math.round(v * 255))
+          .join(',')})`;
+      }
+      if (s.ty === 'st') {
+        const c = prop(s.c, frame, [0, 0, 0]);
+        stroke = `rgb(${c
+          .slice(0, 3)
+          .map((v) => Math.round(v * 255))
+          .join(',')})`;
+        sw = Number(prop(s.w, frame, 1));
+      }
+    }
+    for (const s of list) {
+      if (s.ty === 'gr') {
+        const tr = s.it.find((x) => x.ty === 'tr');
+        html += `<g transform="${transform(tr, frame)}">${shapes(s.it, frame)}</g>`;
+      }
+      if (s.ty === 'rc' || s.ty === 'el') {
+        const p = prop(s.p, frame, [0, 0]),
+          size = prop(s.s, frame, [50, 50]),
+          style = `fill="${fill}" stroke="${stroke}" stroke-width="${sw}"`;
+        html +=
+          s.ty === 'el'
+            ? `<ellipse cx="${p[0]}" cy="${p[1]}" rx="${size[0] / 2}" ry="${size[1] / 2}" ${style}/>`
+            : `<rect x="${p[0] - size[0] / 2}" y="${p[1] - size[1] / 2}" width="${size[0]}" height="${size[1]}" rx="${Number(prop(s.r, frame, 0))}" ${style}/>`;
+      }
+      if (s.ty === 'sh') {
+        let path = prop(s.ks, frame, null);
+        if (Array.isArray(path)) path = path[0];
+        if (path?.v?.length) {
+          const v = path.v;
+          let d = `M${v[0].join(',')}`;
+          for (let k = 1; k < v.length + (path.c ? 1 : 0); k++) {
+            const prev = (k - 1) % v.length,
+              n = k % v.length,
+              o = path.o?.[prev] || [0, 0],
+              i = path.i?.[n] || [0, 0];
+            d += ` C${v[prev][0] + o[0]},${v[prev][1] + o[1]} ${v[n][0] + i[0]},${v[n][1] + i[1]} ${v[n].join(',')}`;
+          }
+          html += `<path d="${d}${path.c ? 'Z' : ''}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+        }
+      }
+    }
+    return html;
+  }
+  const start = performance.now();
+  function tick(now) {
+    const frame =
+      isReduced || r.paused
+        ? Number(j.ip) || 0
+        : (Number(j.ip) || 0) +
+          ((((now - start) / 1000) * (j.fr || 30) * (r.speed || 1)) %
+            Math.max(1, (j.op || 60) - (j.ip || 0)));
+    svg.innerHTML = (j.layers || [])
+      .slice()
+      .reverse()
+      .filter((l) => frame >= (l.ip ?? 0) && frame < (l.op ?? Infinity))
+      .map(
+        (l) =>
+          `<g transform="${transform(l.ks, frame)}" opacity="${Number(prop(l.ks?.o, frame, 100)) / 100}">${l.ty === 4 ? shapes(l.shapes || [], frame) : l.ty === 1 ? `<rect width="${l.sw || j.w}" height="${l.sh || j.h}" fill="${esc(l.sc || '#158474')}"/>` : l.ty === 5 ? `<text font-size="32">${esc(l.t?.d?.k?.[0]?.s?.t || '')}</text>` : ''}</g>`,
+      )
+      .join('');
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+async function run() {
+  if (item.family === 'image') {
+    root.innerHTML = `<div class="media"><img alt="${esc(label)}" src="${raw}" style="object-fit:${r.fit === 'cover' ? 'cover' : 'contain'};filter:brightness(${2 ** (Number(r.exposure) || 0)}) contrast(${Number(r.contrast ?? 1)})"><span class="stamp">${esc(item.kind.toUpperCase())}</span></div>`;
+    const img = root.querySelector('img');
+    img.onload = () => {
+      root.querySelector('.stamp').textContent =
+        `${item.kind.toUpperCase()} · ${img.naturalWidth} × ${img.naturalHeight}`;
+    };
+    img.onerror = () => error('The browser cannot decode this image.');
+    return;
+  }
+  if (item.family === 'video') {
+    root.innerHTML = `<div class="media video"><video controls playsinline preload="metadata" ${r.muted !== false ? 'muted' : ''} src="${raw}"></video><span class="stamp">Move across to scrub</span></div>`;
+    const v = root.querySelector('video'),
+      stamp = root.querySelector('.stamp');
+    v.playbackRate = Number(r.playbackRate) || 1;
+    v.onloadedmetadata = () => {
+      v.currentTime = Math.min(Number(r.posterTime) || 0, Math.max(0, v.duration - 0.01));
+    };
+    let queued = false,
+      fraction = 0;
+    function scrub(f) {
+      fraction = f;
+      if (queued || !Number.isFinite(v.duration)) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        v.currentTime = Math.max(0, Math.min(v.duration - 0.01, fraction * v.duration));
+        stamp.textContent = `${v.currentTime.toFixed(1)} / ${v.duration.toFixed(1)} s`;
+      });
+    }
+    v.onpointermove = (e) => {
+      if (v.paused) {
+        const b = v.getBoundingClientRect();
+        scrub((e.clientX - b.left) / b.width);
+      }
+    };
+    addEventListener('message', (e) => {
+      if (e.source === parent && e.data?.type === 'kind-scrub') scrub(e.data.fraction);
+    });
+    return;
+  }
+  if (item.family === 'audio') {
+    root.innerHTML =
+      bar(label, 'Waveform') +
+      `<div class="audio-wrap"><svg class="waveform" viewBox="0 0 720 180" role="img" aria-label="Audio waveform"><line class="axis" x1="0" x2="720" y1="90" y2="90"/></svg><audio controls preload="metadata" src="${raw}"></audio></div>`;
+    const audio = root.querySelector('audio');
+    audio.volume = Math.min(1, Number(r.gain ?? 1));
+    audio.playbackRate = Number(r.playbackRate) || 1;
+    const d = await data(),
+      svg = root.querySelector('svg');
+    svg.insertAdjacentHTML(
+      'beforeend',
+      d.peaks
+        .map(
+          (v, i) =>
+            `<rect x="${i * 3}" y="${90 - Math.max(1, v * 80)}" width="2" height="${Math.max(2, v * 160)}" rx="1"/>`,
+        )
+        .join(''),
+    );
+    svg.onclick = (e) => {
+      if (Number.isFinite(audio.duration)) {
+        const b = svg.getBoundingClientRect();
+        audio.currentTime = ((e.clientX - b.left) / b.width) * (d.sampledSeconds || audio.duration);
+      }
+    };
+    root.insertAdjacentHTML(
+      'beforeend',
+      note(
+        d.note ||
+          `${d.duration ? d.duration.toFixed(2) + ' seconds · ' : ''}${d.sampleRate ? fmt(d.sampleRate) + ' Hz · ' : ''}${d.channels ? d.channels + ' channels · ' : ''}waveform covers ${Number(d.sampledSeconds).toFixed(1)} seconds`,
+      ),
+    );
+    return;
+  }
+  if (['table', 'parquet', 'sqlite', 'arrow'].includes(item.family)) return showTable();
+  if (item.family === 'font') {
+    const style = document.createElement('style');
+    style.textContent = `@font-face{font-family:specimen;src:url(${JSON.stringify(raw)})}`;
+    document.head.append(style);
+    root.innerHTML =
+      bar(label, item.kind.toUpperCase()) +
+      `<div class="font-specimen" style="--specimen-size:${Number(r.size) || 56}px;--weight:${Number(r.weight) || 400}"><div class="hero">${esc(r.specimen || 'Sphinx of black quartz, judge my vow.')}</div><div class="glyphs">ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>abcdefghijklmnopqrstuvwxyz<br>0123456789 &amp; @ ! ?</div>${[12, 18, 24].map((size) => `<div class="font-line" style="font-size:${size}px"><small>${size}</small>The quick brown fox jumps over the lazy dog.</div>`).join('')}</div>`;
+    return;
+  }
+  if (item.family === 'pdf') {
+    root.innerHTML = `<iframe class="pdf" title="${esc(label)}" src="${raw}#page=${Number(r.page) || 1}&zoom=${Number(r.zoom) || 100}"></iframe>`;
+    return;
+  }
+  if (item.family === 'zip') return archive();
+  if (item.family === 'model') return turningModel(await data());
+  const d = await data();
+  if (item.family === 'binary') {
+    const b = d.hex.match(/.{1,2}/g) || [],
+      cols = Number(r.columns) || 16;
+    root.innerHTML =
+      bar(label, `${fmt(item.bytes)} bytes`) +
+      `<div class="binary-grid"><div class="hex">${Array.from(
+        { length: Math.ceil(b.length / cols) },
+        (_, i) => {
+          const bytes = b.slice(i * cols, (i + 1) * cols),
+            ascii = bytes
+              .map((h) => {
+                const c = parseInt(h, 16);
+                return c >= 32 && c < 127 ? String.fromCharCode(c) : '·';
+              })
+              .join('');
+          return `${(d.offset + i * cols).toString(16).padStart(8, '0')}  ${bytes.join(' ').padEnd(cols * 3)}  ${ascii}`;
+        },
+      )
+        .map(esc)
+        .join(
+          '\n',
+        )}</div><div class="strings"><b>Strings</b>${d.strings.map((s) => `<div><small>${s.offset.toString(16)}</small>${esc(s.text)}</div>`).join('') || note('No printable strings in this window')}</div></div>`;
+    return;
+  }
+  if (item.family === 'markdown') {
+    root.innerHTML = markdown(d.text) + (d.limited ? note('Showing the first 1 MiB') : '');
+    return;
+  }
+  if (item.family === 'json') {
+    root.innerHTML =
+      bar(label, 'Structured values') + `<div class="json-tree">${jsonTree(d.data)}</div>`;
+    return;
+  }
+  if (item.family === 'notebook') {
+    root.innerHTML = bar(label, `${d.data.cells?.length || 0} cells`) + notebook(d.data);
+    return;
+  }
+  if (item.family === 'chart') {
+    root.innerHTML = bar(d.data.title || label, item.kind) + chart(d.data);
+    return;
+  }
+  if (item.family === 'graph') {
+    root.innerHTML = bar(label, 'Workflow') + graph(d.data);
+    return;
+  }
+  if (item.family === 'timeline') {
+    root.innerHTML =
+      bar(label, `${d.events.length} events`) +
+      `<div class="timeline">${d.events.map((e, i) => `<article class="event"><header><span>${String(i + 1).padStart(2, '0')} · ${esc(e.role || e.type || e.event || 'Step')}</span><time>${esc(e.timestamp || e.time || e.at || '')}</time></header><pre>${esc(typeof e.content === 'string' ? e.content : e.message || e.text || JSON.stringify(e.content ?? e, null, 2))}</pre></article>`).join('')}</div>` +
+      (d.limited ? note('Showing the source window') : '');
+    return;
+  }
+  if (item.family === 'animation') {
+    if (item.kind === 'lottie') return lottie(d.data);
+    root.innerHTML =
+      bar(label, 'Web animation') +
+      `<div class="motion-stage"><div class="motion-chip">${esc(d.data.text || 'Motion')}</div></div>`;
+    const a = root
+      .querySelector('.motion-chip')
+      .animate(d.data.keyframes, { ...(d.data.options || d.data.timing), iterations: Infinity });
+    a.playbackRate = Number(r.speed) || 1;
+    if (r.paused || isReduced) a.pause();
+    return;
+  }
+  if (item.family === 'css') {
+    const vars = [...d.text.matchAll(/(--[\w-]+)\s*:\s*([^;}\n]+)/g)];
+    root.innerHTML =
+      bar(label, item.kind === 'css-animation' ? 'Keyframes' : 'CSS variables') +
+      `<div class="swatches">${vars
+        .slice(0, 20)
+        .map(
+          (m) =>
+            `<div class="swatch"><i style="background:${esc(m[2])}"></i><span>${esc(m[1])}<br>${esc(m[2])}</span></div>`,
+        )
+        .join('')}</div>`;
+    const iframe = document.createElement('iframe');
+    iframe.className = 'css-preview';
+    iframe.sandbox = '';
+    iframe.title = 'Stylesheet specimen';
+    const animation = /@(?:-webkit-)?keyframes\s+([\w-]+)/.exec(d.text)?.[1];
+    iframe.srcdoc = `<style>body{margin:20px;font:16px system-ui;display:flex;gap:12px;align-items:center}button,.motion-chip{padding:16px 24px;border-radius:8px;border:1px solid #bbc8c0;background:#d8e8df;color:#183c2c}${d.text.replaceAll('</style', '<\\/style')}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style><div class="motion-chip" style="${animation ? `animation:${esc(animation)} 2s infinite` : ''}">Aa · 0123</div><button>Button</button><p>Type and color</p>`;
+    root.append(iframe);
+    root.insertAdjacentHTML('beforeend', source(d.text));
+    return;
+  }
+  root.innerHTML =
+    bar(label, item.kind) +
+    source(d.text, item.kind) +
+    (d.limited ? note('Showing the first 1 MiB') : '');
+}
+run().catch(error);

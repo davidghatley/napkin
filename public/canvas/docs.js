@@ -17,7 +17,7 @@ export function initDocs(ctx) {
   // engine as its /view page, like an HTML file. `forced` holds dialect files whose bundle failed: they move over too.
   api.forced = new Set();
   api.enginePaths = new Set(); // .tsx/.jsx files the engine can draw (from the last load)
-  const isDialect = (c) => c && c.kind !== 'html';
+  const isDialect = (c) => c && !c.item && c.kind !== 'html';
   // The dialect's paths are relative to the folder it opened (often a components/ folder inside the one the engine opened):
   // a dialect file is the engine file whose path ends with its own. The shared prefix is learned from the unambiguous ones.
   const prefixes = new Set();

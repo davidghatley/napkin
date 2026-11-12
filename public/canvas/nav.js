@@ -24,6 +24,7 @@ export function initNav(ctx) {
     const r = stage.componentRect(focused);
     if (r) view.fitRect(r, { pad: 88, max: 2, animate });
     if (node && c.doc && !byIdHas(c, node)) node = null; // a link to a node that is not there focuses the component only
+    if (c.item) ctx.select({ component: focused, node: 'item', variant: {} });
     if (node && c.doc) {
       ctx.select({ component: focused, node, variant: firstVariant(c) });
     } else if (c.doc && !ctx.state.selections.some((s) => s.component === focused)) {
