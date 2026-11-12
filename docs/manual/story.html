@@ -1,0 +1,261 @@
+<title>napkin Gauntlet Record</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<style>
+  body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); gap: .5rem; margin: 1.2rem 0 1.6rem; max-width: var(--wide) !important; }
+  .stat div { border: 1px solid var(--rule); background: var(--sheet); padding: .6rem .75rem; }
+  .stat b { display: block; font: 600 1.6rem/1.1 var(--f-sans); font-variant-numeric: tabular-nums; }
+  .stat span { font: 500 10px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .who { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .8rem; max-width: var(--wide) !important; }
+  .who > div { border: 1px solid var(--rule); background: var(--sheet); padding: .7rem .9rem; min-width: 0; }
+  .who h4 { margin-top: 0; }
+  .shot { max-width: var(--wide) !important; margin: 1rem 0 1.6rem; }
+  .shot .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .5rem; }
+  .shot figure { margin: 0; min-width: 0; }
+  .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); }
+  .shot figcaption { font: 500 10px/1.5 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: .3rem; }
+  @media (max-width: 640px) { .who, .shot .pair { grid-template-columns: minmax(0, 1fr); } }
+  section.ch > .tw, section.ch > .shot, section.ch > .who { max-width: var(--wide) !important; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.last { white-space: nowrap; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .bar { display: inline-block; width: 5rem; height: .55rem; background: var(--rule); vertical-align: middle; margin-right: .45rem; position: relative; }
+  .bar i { position: absolute; inset: 0 auto 0 0; background: var(--bad); }
+  .bar.ok i { background: var(--ok); }
+  .bar::after { content: ""; position: absolute; left: 80%; top: -2px; bottom: -2px; width: 1px; background: var(--ink, currentColor); }
+  ol.flow { list-style: none; padding: 0; margin: 1rem 0; }
+  ol.flow li { display: grid; grid-template-columns: 5.2rem minmax(0, 1fr); gap: .8rem; padding: .55rem 0; border-top: 1px solid var(--rule); }
+  ol.flow time { font: 500 11px/1.6 var(--f-mono); color: var(--muted); }
+  ol.flow b { font-weight: 600; }
+</style>
+
+<div class="runhead"><span><b>napkin</b> · Gauntlet record</span><span>Edition 1.0 · 2026-10-30 · smoothing at f7b2e87</span></div>
+
+<main>
+<section class="cover">
+  <h1>What happened</h1>
+  <p class="sub">The record of the napkin dream-gauntlet, from its start on 2026-10-21 to your stop on the night of 2026-10-30, with what else moved in your other projects.</p>
+  <p class="lede">napkin went through two gauntlets. The first passed 140 of 141 criteria and then failed the only test that mattered to you: it couldn't open your own design system. The second rebuilt the core so it opens any folder and edits files byte for byte. That core is sound and measured. The interface is good in places, and two blind critics in a row said a designer would not choose it over Figma yet. You stopped the third smoothing round before it changed anything.</p>
+  <div class="stat">
+    <div><b>5 / 10</b><span>built moments at the bar, last score</span></div>
+    <div><b>830</b><span>tests, 0 failing, 5 opt-in skipped</span></div>
+    <div><b>60 / 60</b><span>edits byte exact, undo exact</span></div>
+    <div><b>80 / 80</b><span>compared renders match Chromium</span></div>
+    <div><b>1 / 7</b><span>shadcn components draw usefully</span></div>
+    <div><b>$1,196</b><span>machine-wide ccusage, all sessions</span></div>
+  </div>
+</section>
+
+<section class="ch" id="c1">
+  <div class="num">Chapter 1</div>
+  <h2>Where things stand</h2>
+  <p class="deck">The work is safe on branches. Nothing is running. Nothing went to main.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Branch</th><th>Commit</th><th>Holds</th><th>Checked by</th></tr></thead>
+    <tbody>
+      <tr><td><code>feat/core</code></td><td><code>8c63586</code></td><td>Run 1, the favicon fix, INTENT change, Dream 2 page</td><td>Run 1 critics</td></tr>
+      <tr><td><code>feat/html</code></td><td><code>be00255</code></td><td>Measures, engine, inspector, canvas, film strip, merged</td><td>Blind correctness critics; my full run: 804 tests, 0 failing</td></tr>
+      <tr><td><code>area/html-smooth</code></td><td><code>f7b2e87</code></td><td>Two smoothing rounds on top of feat/html, not merged</td><td>Blind critic: 830 tests, 0 failing, measures pass, not ready</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note trap"><b>Your stop</b> You stopped smoothing round 3. It made no commits and left that worktree clean, so none of its twelve fixes exist. Those gaps are all still open (chapter 5).</div>
+</section>
+
+<section class="ch" id="c2">
+  <div class="num">Chapter 2</div>
+  <h2>The timeline</h2>
+  <p class="deck">Nine days on the first idea, one long day on the second.</p>
+  <ol class="flow">
+    <li><time>10-17 to 20</time><div>napkin starts: intent, agent rules, landing copy. 24 commits before the gauntlet.</div></li>
+    <li><time>10-21</time><div><b>Run 1 begins.</b> 141 criteria in 17 areas. Parallel builders and blind critics; 131 commits that day.</div></li>
+    <li><time>10-22</time><div>First whole-product walk fails two of five scenes and files 22 gaps. 72 commits.</div></li>
+    <li><time>10-22 to 29</time><div>Keyboard and pan rounds, a second walk, 15 more gaps, round 6. <b>140 of 141 pass.</b> FEEL-02 waits for you.</div></li>
+    <li><time>10-29</time><div>You pause the build to review it.</div></li>
+    <li><time>10-30</time><div>You ask to load Secret Sauce. <b>napkin finds 0 components.</b> You also correct the logo: my fix had used your DH mark, and it's now the 5×5 folded napkin. You say napkin should be HTML/CSS first and render what it loads, and ask for a re-dream.</div></li>
+    <li><time>10-30 01:35</time><div>You approve Dream 2. INTENT and decision 0013 change with your agreement.</div></li>
+    <li><time>10-30 01:36</time><div>Locked measures written. Today's engine scores 0 of 82 renders, 0 of 60 edits, 0 of 5 folders.</div></li>
+    <li><time>10-30 02:01</time><div>New engine built. By 03:54 it passes every measure, checked twice blind, and merges.</div></li>
+    <li><time>10-30 04:15</time><div>Inspector, canvas and film strip start in parallel. Rounds run all day, with two usage-limit stops.</div></li>
+    <li><time>10-30 17:19</time><div>All three merged into feat/html. 804 tests, 0 failing.</div></li>
+    <li><time>10-30 evening</time><div>Two smoothing rounds on the merged product, each rescored by a fresh Opus critic. Both say not ready.</div></li>
+    <li><time>10-30 night</time><div>You stop round 3 and ask for this record.</div></li>
+  </ol>
+</section>
+
+<section class="ch" id="c3">
+  <div class="num">Chapter 3</div>
+  <h2>What's actually built</h2>
+  <p class="deck">The foundation meets its bar. It's the part I'd trust most.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Measure</th><th>Bar</th><th class="n">Today's engine, before</th><th class="n">Now</th></tr></thead>
+    <tbody>
+      <tr><td>Renders like a browser</td><td>100% render, ≤0.1% of pixels differ</td><td class="n">0 of 82</td><td class="n">83 of 83 render; 80 compared, worst 0%</td></tr>
+      <tr><td>Edits are exact</td><td>Only the changed bytes move, undo is byte exact</td><td class="n">0 of 60</td><td class="n">60 of 60</td></tr>
+      <tr><td>Nothing imposed</td><td>1 command, no files added, first view ≤2 s</td><td class="n">0 of 5 folders</td><td class="n">5 of 5; Secret Sauce about 0.5 s</td></tr>
+    </tbody>
+  </table></div>
+  <p>Three shadcn components have no reference to compare, because they need app context to run at all. They count as rendered, not as compared.</p>
+  <div class="shot">
+    <div class="pair">
+      <figure><img src="assets/dream2/m3-light.jpg" alt="The m3 mockup: a rule lit across components" loading="lazy"><figcaption>Fig. 3.1 · The mockup we aimed at</figcaption></figure>
+      <figure><img src="assets/story/m3.jpg" alt="napkin on real Secret Sauce: the .ss-label rule lit in 4 components, with the list, the one-line change, and Keep and Revert in the inspector" loading="lazy"><figcaption>Fig. 3.2 · napkin at f7b2e87, real Secret Sauce</figcaption></figure>
+    </div>
+  </div>
+  <div class="shot">
+    <div class="pair">
+      <figure><img src="assets/story/m2.jpg" alt="Editing a Note tag's padding at a chosen scope, with its source and a one-line diff" loading="lazy"><figcaption>Fig. 3.3 · Edit at scope</figcaption></figure>
+      <figure><img src="assets/story/m4.jpg" alt="A frame resized with breakpoint ticks and the breakpoints panel in the inspector" loading="lazy"><figcaption>Fig. 3.4 · Real responsiveness</figcaption></figure>
+      <figure><img src="assets/story/m9.jpg" alt="The film strip of a component's versions docked at the foot of the canvas" loading="lazy"><figcaption>Fig. 3.5 · Film strip</figcaption></figure>
+      <figure><img src="assets/story/m3-dark.jpg" alt="The lit rule view in dark" loading="lazy"><figcaption>Fig. 3.6 · Dark</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section class="ch" id="c4">
+  <div class="num">Chapter 4</div>
+  <h2>The moments, by score</h2>
+  <p class="deck">The bar is 8, marked on each bar. Critics changed each round and dug in new places, so a drop isn't always a regression.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Moment</th><th>Scores, oldest first</th><th>Latest</th><th>What holds it back</th></tr></thead>
+    <tbody>
+      <tr><td>Copy real code</td><td>8 · 9 · 9 · 9</td><td class="last"><span class="bar ok"><i style="width:90%"></i></span>9</td><td>No visible Copy control</td></tr>
+      <tr><td>Responsiveness</td><td>6.5 · 7 · 7 · 8.5</td><td class="last"><span class="bar ok"><i style="width:85%"></i></span>8.5</td><td>Esc drops the selection after the panel</td></tr>
+      <tr><td>Measurement</td><td>6 · 6 · 6.5 · 8 · 8.5</td><td class="last"><span class="bar ok"><i style="width:85%"></i></span>8.5</td><td>Reaches only one parent up</td></tr>
+      <tr><td>Zero chrome</td><td>8 · 9 · 9 · 8.5</td><td class="last"><span class="bar ok"><i style="width:85%"></i></span>8.5</td><td>Nothing shows the way back</td></tr>
+      <tr><td>Theme wipe</td><td>7.5 · 8 · 9 · 8</td><td class="last"><span class="bar ok"><i style="width:80%"></i></span>8</td><td>Caption pills awkward on the line</td></tr>
+      <tr><td>Alive (Space-P)</td><td>6 · 9 · 7 · 7.5</td><td class="last"><span class="bar"><i style="width:75%"></i></span>7.5</td><td>P then Esc drops the selection</td></tr>
+      <tr><td>One rule lights up</td><td>6 · 7 · 7 · 7</td><td class="last"><span class="bar"><i style="width:70%"></i></span>7</td><td>Stale outlines; Revert undoes only part of "Change all"</td></tr>
+      <tr><td>Film strip</td><td>6.5 · 6 · 7 · 7</td><td class="last"><span class="bar"><i style="width:70%"></i></span>7</td><td>Banner overprints; labels often useless</td></tr>
+      <tr><td>Edit at scope</td><td>6 · 7 · 6 · 7 · 6.5</td><td class="last"><span class="bar"><i style="width:65%"></i></span>6.5</td><td>First edit throws the frame off-screen</td></tr>
+      <tr><td>Variables</td><td>5.5 · 8 · 7 · 8 · 6.5</td><td class="last"><span class="bar"><i style="width:65%"></i></span>6.5</td><td>Diff shows 1 line, writes 2; flags nearly absent</td></tr>
+      <tr><td>Agent ghost alternatives</td><td>none</td><td class="last">not built</td><td>The agents piece never started</td></tr>
+    </tbody>
+  </table></div>
+  <p>The second column mixes separate critics, so read it as a trail and not a trend line. Correctness-only rounds aren't scored and don't appear.</p>
+</section>
+
+<section class="ch" id="c5">
+  <div class="num">Chapter 5</div>
+  <h2>What's still wrong</h2>
+  <p class="deck">The last critic's verdict: not tomorrow. These are the reasons, worst first, none of them fixed.</p>
+  <div class="shot">
+    <figure style="max-width:34rem"><img src="assets/story/off-screen.jpg" alt="After typing a value at the zoomed-out view, the edited component has moved off-screen and the view shows nothing useful" loading="lazy"><figcaption>Fig. 5.1 · After a first edit from the fit view, the component is gone from view</figcaption></figure>
+  </div>
+  <ol>
+    <li><b>A first edit from the zoomed-out view moves the component off-screen,</b> and it stays moved after Cancel. Typing also zooms to 100%, which hides the reach of a system-wide change.</li>
+    <li><b>Above 40 components, counts are wrong.</b> 6 places reported where the files hold 12, and some frames can't be selected.</li>
+    <li><b>React is mostly empty.</b> 1 of 7 shadcn components draws something useful. The others need props or app context, and napkin can't supply either.</li>
+    <li><b>Old drawers say false things,</b> including "Configure tokens.source in napkin.json", which breaks your decision that nothing is required. There are two histories and three token surfaces.</li>
+    <li><b>Some refusals are silent.</b> Adding a class on a <code>cva</code> element does nothing, and Cmd-K can't find a class or a variable.</li>
+    <li><b>Esc drops the selection</b> after Breakpoints and Play.</li>
+    <li><b>Stale outlines</b> stay on screen with nothing selected.</li>
+    <li><b>A variable's diff shows one line when two get written,</b> and the panel can show the wrong theme's value.</li>
+    <li><b>Film strip noise:</b> the banner overprints the inspector, undo tiles flood the strip, and labels cut off the part that differs.</li>
+    <li><b>Revert after "Change all"</b> undoes only the last step.</li>
+    <li><b>Off-scale flags barely exist:</b> 1 in about 140 elements.</li>
+    <li><b>Four serious or critical accessibility failures</b> in the older panels, and some wrong wording.</li>
+  </ol>
+  <p>The critic also named these: double-click doesn't edit text, the frame tool silently does nothing over HTML, and Layers truncates hard. It said napkin is already better on small HTML folders for true responsiveness, exact provenance and copying real code.</p>
+  <div class="note trap"><b>What tests can't tell you</b> Every suite run stayed green while all of this was wrong. Only people-style walks found it. Performance figures are from headless software rendering, so nobody has measured how it feels on a real graphics card, and nobody but critics has used this build. Your own hands haven't been on it.</div>
+</section>
+
+<section class="ch" id="c6">
+  <div class="num">Chapter 6</div>
+  <h2>Who decided what</h2>
+  <p class="deck">Your decisions, and the ones I made without you that you may want to overrule.</p>
+  <div class="who">
+    <div>
+      <h4>You decided</h4>
+      <ul>
+        <li>HTML/CSS first, React also supported, no imposed tokens.</li>
+        <li>Approve Dream 2 and change INTENT.</li>
+        <li>Undefined variables: ask once, remember outside the folder.</li>
+        <li>Work on a copy of Secret Sauce.</li>
+        <li>Quality that makes a designer prefer napkin, not a one-to-one Figma match, and inspiring as well as good.</li>
+        <li>The napkin glyph everywhere, never your DH mark.</li>
+        <li>Stop round 3.</li>
+      </ul>
+    </div>
+    <div>
+      <h4>I decided, the AI lead</h4>
+      <ul>
+        <li>Started the engine and every later piece before you locked the mockups, which still aren't locked.</li>
+        <li>Rewrote or amended about a dozen old tests where they contradicted decision 0013. Each is logged. The critics judged the amendments stricter or intent-keeping.</li>
+        <li>Ended rubric rounds on the inspector and film strip when scores stalled, and merged them on correctness, below the visual bar.</li>
+        <li>Accepted limits: 20 of 60 frames as placeholders at fit-all, a reload peak of 46 frames, and three restore edge cases.</li>
+        <li>Clicking elsewhere cancels a staged edit.</li>
+        <li>Ruled that the old drawers must not say false things. Never carried out.</li>
+      </ul>
+    </div>
+  </div>
+  <p>Builders and critics were AI agents throughout: Sonnet for lanes and most critics, Opus for the engine, smoothing, merges and whole-product critics. Decisions 0014, 0015 and 0016 are still marked proposed and wait for you, as do 0006 to 0012 from run 1.</p>
+  <h3>My mistakes on the record</h3>
+  <ul>
+    <li>My first favicon fix used your DH mark.</li>
+    <li>I told builders the corpus was checked in, then gave a <code>--keep</code> flag that doesn't exist for that script.</li>
+    <li>One critic called a keyboard test failure a regression, and I sent a builder after it. Ten alternating runs showed the same flake on the old code: 3 of 10 against 4 of 10.</li>
+    <li>I kept reporting builders' claims in detail between checks, and you were asked the same four questions many times.</li>
+  </ul>
+</section>
+
+<section class="ch" id="c7">
+  <div class="num">Chapter 7</div>
+  <h2>The rest of your portfolio</h2>
+  <p class="deck">This gauntlet only worked in napkin. Everything below came from other sessions or from you. I read git logs only and changed nothing.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Project</th><th class="n">Commits since 10-21</th><th class="n">Last</th><th>What the log shows</th></tr></thead>
+    <tbody>
+      <tr><td>portfolio</td><td class="n">127</td><td class="n">10-30</td><td>Audit fixes, new home and case pages, Lab board, Drawing mode in 6 rounds, a gas chromatograph figure in Background. Auto-deploy commits are included. <code>portfolio-fonts</code> is a second checkout showing the same count.</td></tr>
+      <tr><td>tasty_tunez</td><td class="n">42</td><td class="n">10-28</td><td>Rail, library, arrange and inspector rounds, then open-source prep under Apache-2.0. 30 uncommitted changes.</td></tr>
+      <tr><td>playdough</td><td class="n">17</td><td class="n">10-30</td><td>Studio and v1 base, a prompt-to-game loop, then decision 0011: archive the toolkit and earn tools by making many games.</td></tr>
+      <tr><td>secret-sauce</td><td class="n">17</td><td class="n">10-27</td><td>v1 system, font foundry with 15 new families, Archivo retired for Hoop. <code>SKILL.md</code> is modified, not by this run.</td></tr>
+      <tr><td>mise_en_place</td><td class="n">11</td><td class="n">10-22</td><td>CLI, prep-pack spec, skills, landing page.</td></tr>
+      <tr><td>nibble</td><td class="n">9</td><td class="n">10-30</td><td>Kev-4B shadcn picker experiment and its fine-tune. Uncommitted web files.</td></tr>
+      <tr><td>local-mobile-research</td><td class="n">8</td><td class="n">10-22</td><td>Renamed to lmr, Pages site, Android spike.</td></tr>
+      <tr><td>stem-foundry</td><td class="n">6</td><td class="n">10-22</td><td>Font tool: core, web app, tests.</td></tr>
+      <tr><td>3060-recipes</td><td class="n">5</td><td class="n">10-30</td><td>New: a DeepSeek v4.1 Strata experiment, with measured results.</td></tr>
+      <tr><td>font-promo</td><td class="n">5</td><td class="n">10-28</td><td>35 s font library promo and a Dive Club cut.</td></tr>
+      <tr><td>onecard</td><td class="n">4</td><td class="n">10-28</td><td>GPU queue and memory caps as a tool.</td></tr>
+      <tr><td>bonfire</td><td class="n">3</td><td class="n">10-22</td><td>Landing page and stranger README.</td></tr>
+      <tr><td>stem7</td><td class="n">2</td><td class="n">10-27</td><td>Stem 7 1.001; site moved into the font library.</td></tr>
+      <tr><td><b>napkin</b></td><td class="n">193</td><td class="n">10-30</td><td>This record.</td></tr>
+    </tbody>
+  </table></div>
+  <p>The list covers repos directly under <code>~/Projects</code> with commits since 10-21. These lines are my reading of commit messages, so they say what was recorded, not whether it works.</p>
+  <h3>Spend</h3>
+  <p>ccusage today reports <b>$1,195.89</b> for 10-21 to 10-30, machine-wide across every session above: 10-30 $203, 10-29 $159, 10-28 $125, 10-27 $85, 10-24 to 26 $24, 10-23 $257, 10-22 $242, 10-21 $102. There's no napkin-only figure.</p>
+  <div class="note trap"><b>These numbers don't reconcile</b> The ledger recorded $1,133 through 10-29, with 10-21 at $268 and 10-22 at $334. Today's ccusage gives $994 for that same stretch, and lower figures for those days. 10-29 was still in progress when that entry was written. I don't know why the older days fell, so treat the total as approximate.</div>
+</section>
+
+<section class="ch" id="c8">
+  <div class="num">Chapter 8</div>
+  <h2>What's waiting for you</h2>
+  <p class="deck">Nothing here is running. It all holds until you say.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Item</th><th>The choice</th></tr></thead>
+    <tbody>
+      <tr><td><b>Next step</b></td><td>Try <code>area/html-smooth</code> yourself first. Then pick: resume round 3, stop at the core, or redirect.</td></tr>
+      <tr><td><b>Mockups as the bar</b></td><td>Lock them, or change them. Every score above assumes them.</td></tr>
+      <tr><td><b>React props</b></td><td>Build a way to give components props and context, or accept that real React folders mostly show blanks.</td></tr>
+      <tr><td><b>Budget</b></td><td>No cap has been set. The run hit usage limits twice on 10-30.</td></tr>
+      <tr><td><b>Agents and the proving demo</b></td><td>Not started: ghost alternatives, the demo on HTML, and the designer panel.</td></tr>
+      <tr><td><b>Run 1 leftovers</b></td><td>FEEL-02, N8, and whether 0006 to 0012 still stand.</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Left running or lying around</h3>
+  <ul>
+    <li><b>Four stray test servers from critics.</b> All four were still alive when I checked just now. My safety checks blocked agents from stopping two of them, so they're yours to stop: <code>! kill 505373 505364 3823829 3862197</code></li>
+    <li><b>80 <code>napkin-p0-*</code> folders</b> in <code>/tmp/claude-1000</code>, from measure runs. <code>/tmp</code> is at 32% of its file slots. I'll delete them only if you say so.</li>
+    <li><b>An old napkin copy on your tailnet</b> at port 8444, serving the 10-21 build with full edit access on fixtures. It's still running. Stop it with <code>tailscale serve --https=8444 off</code> and by ending the process on port 4820.</li>
+    <li><b>Six napkin worktrees</b> for this run, under <code>~/Projects/.worktrees/</code>.</li>
+  </ul>
+  <h3>To open it yourself</h3>
+  <pre><code>cd ~/Projects/.worktrees/napkin-html-smooth
+node src/cli.js open &lt;a copy of a folder&gt;</code></pre>
+  <p>Edits write to the folder you open, so point it at a copy.</p>
+</section>
+</main>
+<div class="foot">napkin · Gauntlet record · Edition 1.0 · 2026-10-30 · written by the AI lead from git logs, the ledger and critic reports</div>

@@ -1,0 +1,186 @@
+<title>napkin Interface Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<style>
+  body { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .5rem; margin: 1.2rem 0 1.6rem; max-width: var(--wide) !important; }
+  .stat div { border: 1px solid var(--rule); background: var(--sheet); padding: .6rem .75rem; }
+  .stat b { display: block; font: 600 1.6rem/1.1 var(--f-sans); font-variant-numeric: tabular-nums; }
+  .stat span { font: 500 10px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  section.ch > .tw, section.ch > .shot, section.ch > .lv, section.ch > .steps { max-width: var(--wide) !important; }
+  .shot figure { margin: 0 0 1rem; min-width: 0; }
+  .shot img { display: block; width: 100%; height: auto; border: 1px solid var(--rule); background: var(--sheet); }
+  .shot .small img { width: auto; max-width: 100%; padding: .8rem; }
+  .shot .pair { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: .6rem; align-items: start; }
+  .shot figcaption { font: 500 10px/1.5 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-top: .3rem; }
+  @media (max-width: 640px) { .shot .pair { grid-template-columns: minmax(0, 1fr); } }
+  .lv { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; margin: 1rem 0 1.4rem; }
+  .lv > div { border: 1px solid var(--rule); background: var(--sheet); padding: .7rem .85rem; min-width: 0; }
+  .lv b { display: block; font: 600 1.05rem var(--f-sans); }
+  .lv .n { font: 600 1.8rem/1 var(--f-sans); font-variant-numeric: tabular-nums; margin: .35rem 0 .2rem; }
+  .lv .w { height: .4rem; background: var(--accent); margin-top: .5rem; }
+  @media (max-width: 640px) { .lv { grid-template-columns: minmax(0, 1fr); } }
+  ol.steps { list-style: none; padding: 0; margin: 1rem 0; counter-reset: s; }
+  ol.steps li { counter-increment: s; display: grid; grid-template-columns: 2rem minmax(0, 1fr); gap: .6rem; padding: .55rem 0; border-top: 1px solid var(--rule); }
+  ol.steps li::before { content: counter(s); font: 600 12px/1.7 var(--f-mono); color: var(--accent); }
+  td.id { font: 600 11px var(--f-mono); white-space: nowrap; }
+  td.st { font-size: .85em; color: var(--muted); }
+  details.inv { margin: .6rem 0; }
+  details.inv summary { cursor: pointer; font: 600 .95rem var(--f-sans); padding: .4rem 0; }
+  code.cmd { display: block; padding: .6rem .75rem; background: var(--sheet); border: 1px solid var(--rule); overflow-x: auto; }
+</style>
+
+<div class="runhead"><span><b>napkin</b> · Interface review</span><span>Edition 1.0 · 2026-11-03 · area/storybook @ 93347c8</span></div>
+
+<main>
+<section class="cover">
+  <h1>Interface review</h1>
+  <p class="sub">Every part of napkin's interface in Storybook, from the whole screen down to a single control, ready for your feedback, with 10 variations of each to follow.</p>
+  <p class="lede">You asked for a structured way to go through the interface from largest to smallest, give feedback, and see 10 variations of each component that make it self-evident without needing its text. You also asked me to hand the work to fresh agents and keep token use down. Storybook is set up with the current interface captured from the running app. The first set of variations, for the value row, is being designed now.</p>
+  <div class="stat">
+    <div><b>66</b><span>interface items</span></div>
+    <div><b>104</b><span>stories of the current state</span></div>
+    <div><b>208</b><span>views opened, 0 errors</span></div>
+    <div><b>2</b><span>themes, light and dark</span></div>
+    <div><b>1</b><span>builder at a time</span></div>
+  </div>
+</section>
+
+<section class="ch" id="c1">
+  <div class="num">Chapter 1</div>
+  <h2>What I decided on your behalf</h2>
+  <p class="deck">You said you trust my judgement. Here is what that covered, so you can overrule any of it.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Question</th><th>My call</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td>Which design system</td><td><b>Secret Sauce</b></td><td>napkin's interface uses only its own small set of colour and font tokens, with no spacing, radius or size tokens, and nothing from Secret Sauce. Secret Sauce is the only complete system you have, and it's what you called "our design system". Variations will look noticeably different from today.</td></tr>
+      <tr><td>How many variations</td><td><b>10 per item, in the order you review</b></td><td>All 66 items would be 660 designs. Going in your order means your feedback on early items can settle a pattern for similar ones, and you can stop any time.</td></tr>
+      <tr><td>Which item first</td><td><b>C23 Value row</b></td><td>It's the inspector's most-used control and the most text-heavy today: a property name, a value, and its source as a file and line.</td></tr>
+      <tr><td>Where it lives</td><td><b>Its own branch, <code>area/storybook</code></b></td><td>Storybook is a development tool only. The product's runtime doesn't use it, and nothing changes for napkin's users.</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="ch" id="c2">
+  <div class="num">Chapter 2</div>
+  <h2>What's built</h2>
+  <p class="deck">The interface as it is today, captured from the real app on real Secret Sauce components.</p>
+  <div class="lv">
+    <div><b>1 · Interface</b><div class="n">6</div><span>whole screens and modes: canvas, drawer, film strip, play, jump-to, focused</span><div class="w" style="width:15%"></div></div>
+    <div><b>2 · Panels</b><div class="n">20</div><span>top bar, layers, inspector, status bar, canvas, breakpoints, palettes, overlays</span><div class="w" style="width:50%"></div></div>
+    <div><b>3 · Components</b><div class="n">40</div><span>single controls: tool button, layer row, value row, scope chooser, variable chip</span><div class="w" style="width:100%"></div></div>
+  </div>
+  <div class="shot">
+    <figure><img src="assets/sb/i01.jpg" alt="Level 1: the whole napkin canvas with an element selected, captured into Storybook" loading="lazy"><figcaption>Fig. 2.1 · Level 1, I01 Canvas with an element selected</figcaption></figure>
+    <div class="pair">
+      <figure><img src="assets/sb/p05.jpg" alt="Level 2: the inspector panel with an element selected" loading="lazy"><figcaption>Fig. 2.2 · Level 2, P05 Inspector</figcaption></figure>
+      <div>
+        <figure class="small"><img src="assets/sb/c23.jpg" alt="Level 3: one value row reading padding 1px 7px, from .ss-pill line 117" loading="lazy"><figcaption>Fig. 2.3 · Level 3, C23 Value row, the pilot</figcaption></figure>
+        <figure class="small"><img src="assets/sb/c24.jpg" alt="Level 3: the scope chooser" loading="lazy"><figcaption>Fig. 2.4 · Level 3, C24 Scope chooser</figcaption></figure>
+      </div>
+    </div>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>Part</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>Sidebar</td><td>1 Interface, 2 Panels, 3 Components, largest first. Each item's stories are named "Current · state".</td></tr>
+      <tr><td>Feedback tab</td><td>Keep, change or drop, plus a note, for the story on screen. It saves to one file I read directly, so you don't have to relay anything.</td></tr>
+      <tr><td>Reviewed marks</td><td>A tick on reviewed stories and a count on each item, so progress shows in the sidebar.</td></tr>
+      <tr><td>Theme toolbar</td><td>Light and dark for every story.</td></tr>
+      <tr><td>Recapture</td><td><code>npm run storybook:capture</code> rebuilds every Current story from the live app after the interface changes.</td></tr>
+      <tr><td>Variation guide</td><td><code>storybook/VARIATIONS.md</code> lets a fresh builder add 10 variations to one item from that page alone.</td></tr>
+    </tbody>
+  </table></div>
+  <p>Added as development-only dependencies, each pinned and published at least two weeks earlier: storybook 10.6.2 and @storybook/html-vite 10.6.2 (both 2026-10-12), and vite 7.3.7 (2026-10-06). All 104 stories opened without errors in both themes, the build succeeds, and the check that napkin writes nothing into folders still passes.</p>
+  <div class="note trap"><b>Two captures aren't exact</b> The empty-state card (P17) is the real card shown on the Secret Sauce folder, not on an empty one. The two dialogs (P11, P12) are captured open but don't block the page as they do in the app.</div>
+</section>
+
+<section class="ch" id="c3">
+  <div class="num">Chapter 3</div>
+  <h2>How to review</h2>
+  <p class="deck">About a minute per item. Start at the top and work down.</p>
+  <ol class="steps">
+    <li><div>Open <b>http://127.0.0.1:6006</b> on this machine. It's running now and isn't reachable from other devices. To start it again later:<code class="cmd">cd ~/Projects/.worktrees/napkin-storybook &amp;&amp; npm run storybook</code></div></li>
+    <li><div>Pick a story in the sidebar, starting with <b>1 Interface</b>. Switch themes from the toolbar if you want to see both.</div></li>
+    <li><div>In the <b>Feedback</b> tab at the bottom, choose keep, change or drop, and add a note when "change" needs explaining.</div></li>
+    <li><div>When variations arrive, they appear under the same item as "Variation 01" to "Variation 10", next to the Current story. Mark the ones you like and the ones you don't.</div></li>
+    <li><div>Tell me when you've finished a batch, or just keep going. I read the feedback file and use it to brief the next builder.</div></li>
+  </ol>
+</section>
+
+<section class="ch" id="c4">
+  <div class="num">Chapter 4</div>
+  <h2>The plan from here</h2>
+  <p class="deck">Small steps, each with one fresh builder, so you see results before the cost grows.</p>
+  <div class="tw"><table>
+    <thead><tr><th>Step</th><th>What happens</th><th>Status</th></tr></thead>
+    <tbody>
+      <tr><td>Foundation</td><td>Storybook, inventory, captured current interface, feedback panel.</td><td><span class="pill ok">done</span></td></tr>
+      <tr><td>Pilot</td><td>10 variations of the value row in Secret Sauce, ranging from conservative to bold, with a review sheet beside the current row.</td><td><span class="pill ok">done</span></td></tr>
+      <tr><td>Your read on the pilot</td><td>Which ideas work as "self-evident without text". This sets the brief for every later batch.</td><td><span class="pill bad">waiting for you</span></td></tr>
+      <tr><td>Batches</td><td>The remaining items, a few at a time, in the order you review. Items that share a pattern get a shared decision.</td><td><span class="pill info">later</span></td></tr>
+      <tr><td>Into the product</td><td>Variations you keep become changes to napkin itself, built and checked as separate work.</td><td><span class="pill info">later</span></td></tr>
+    </tbody>
+  </table></div>
+  <h3>How I'm keeping token use down</h3>
+  <ul>
+    <li><b>One fresh builder per task</b> with a short brief. No builder is resumed for a new round, so none carries a long history.</li>
+    <li><b>Details go into files.</b> Builders send me reports of 12 to 15 lines, and I read the files only when needed.</li>
+    <li><b>One task at a time.</b> No parallel lanes, which is what hit your usage limits before.</li>
+    <li><b>No full test suite for Storybook work,</b> since it doesn't change the product. Builders check only what they built.</li>
+    <li><b>Your feedback replaces critic rounds</b> for how the interface looks and feels. I check a builder's work by looking at its result.</li>
+  </ul>
+  <p>The foundation builder used about 219,000 tokens. That included installing Storybook, finding all 66 items in the running app, and capturing 104 states.</p>
+</section>
+
+<section class="ch" id="pilot">
+  <div class="num">Chapter 5</div>
+  <h2>The pilot: value row</h2>
+  <p class="deck">Ten ways to show a property's value and where it comes from, so you can see it instead of reading it.</p>
+  <p>Every variation shows the same five rows: a padding set by a rule, a colour and a border from variables, a gap where an inline style beats a rule, and an inherited font size. In Storybook they're under <b>3 Components › C23 Value row</b>, next to the Current stories, in both themes.</p>
+  <div class="shot">
+    <figure><img src="assets/sb/C23.jpg" alt="Review sheet: the current value row, then ten variations, each showing padding, colour, border, an overridden gap and an inherited font size" loading="lazy"><figcaption>Fig. 5.1 · Current, then variations 01 to 10, light</figcaption></figure>
+    <figure><img src="assets/sb/C23-dark.jpg" alt="The same review sheet in dark" loading="lazy"><figcaption>Fig. 5.2 · The same, dark</figcaption></figure>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>No.</th><th>Idea</th><th>What replaces the text</th><th>My read</th></tr></thead>
+    <tbody>
+      <tr><td class="id">01</td><td>Origin rail</td><td>A rail on the left edge: solid for a rule, double for a variable, dashed for inherited, red for the value that lost</td><td>Safe, closest to today</td></tr>
+      <tr><td class="id">02</td><td>Value drawn as itself</td><td>Padding as a box, a colour as its swatch, a border as the real line, a length as a bar</td><td>Strong; the value is visible at a glance</td></tr>
+      <tr><td class="id">03</td><td>Ruler scrub</td><td>Draggable ruled bars for lengths, a strip of neighbouring shades for colour</td><td>Good for editing, but tall</td></tr>
+      <tr><td class="id">04</td><td>Wire to source</td><td>A wire from the field to a square for a rule, then a circle for a variable</td><td>Clear once you know the shapes</td></tr>
+      <tr><td class="id">05</td><td>Variable as swatch chip</td><td>A variable becomes a pill holding the colour or line it stands for</td><td>Strong, and small enough to use everywhere</td></tr>
+      <tr><td class="id">06</td><td>Cascade deck</td><td>The value sits on cards stacked behind it: the variable, or the value it beat</td><td>Good idea, busy in practice</td></tr>
+      <tr><td class="id">07</td><td>Provenance strip</td><td>Four shape cells for inherited, rule, variable and inline, lit where set</td><td>Needs learning; reads like a legend</td></tr>
+      <tr><td class="id">08</td><td>Caliper</td><td>Lengths as a measured gap between two jaws; a colour tied to its variable's swatch</td><td>Strong for spacing</td></tr>
+      <tr><td class="id">09</td><td>Cascade lanes</td><td>The field's position across four lanes says where the value comes from</td><td>Weakest; reads as a diagram, not a control</td></tr>
+      <tr><td class="id">10</td><td>The row is the value</td><td>The colour floods the row, padding is a dashed inner box, a length is a filled bar</td><td>Boldest; cuts off long values today</td></tr>
+    </tbody>
+  </table></div>
+  <div class="note tip"><b>What I'd look at first</b> 02, 05 and 08 do the most to make the text unnecessary. They could also combine: draw the value as itself, show variables as swatch chips, and measure lengths with the caliper. Your marks decide.</div>
+  <p>Two small departures from Secret Sauce: property names stay in lowercase monospace at 11 px because they're code, and IBM Plex Mono isn't available offline, so it falls back to napkin's monospace. The builder used about 117,000 tokens.</p>
+</section>
+
+<section class="ch" id="c5">
+  <div class="num">Chapter 6</div>
+  <h2>The inventory</h2>
+  <p class="deck">All 66 items as found in the running app, with the states captured for each.</p>
+  <details class="inv" open><summary>Level 1 · Interface (6)</summary><div class="tw"><table><thead><tr><th>Id</th><th>Item</th><th>What it is for</th><th>States captured</th></tr></thead><tbody><tr><td class="id">I01</td><td>Canvas</td><td>The whole editor in its main mode: layers on the left, the canvas of component frames, the inspector on the right, the status bar under.</td><td class="st">First open (stylesheet question); Nothing selected; An element selected, inspector open; A value being typed (scope chooser)</td></tr><tr><td class="id">I02</td><td>Canvas with a drawer</td><td>The same editor with one drawer open under the canvas (Code, History, Tokens, Inspect, Assets, Changes, Activity).</td><td class="st">Tokens drawer; History drawer; Code drawer</td></tr><tr><td class="id">I03</td><td>Film strip</td><td>A component&#x27;s versions as a film strip under the canvas (H): scrub, flip before/after, restore.</td><td class="st">Strip open on a component</td></tr><tr><td class="id">I04</td><td>Play mode</td><td>Frames become live and clickable so a component can be tried like the real thing (Space).</td><td class="st">Playing</td></tr><tr><td class="id">I05</td><td>Jump to anything</td><td>The command palette (Cmd-K): jump to a component, a node, a property or an action.</td><td class="st">Open, empty query; A query typed</td></tr><tr><td class="id">I06</td><td>Focused component</td><td>Enter zooms to one component and dims the rest so a single frame can be worked on.</td><td class="st">One component in focus</td></tr></tbody></table></div></details>
+<details class="inv" open><summary>Level 2 · Panels (20)</summary><div class="tw"><table><thead><tr><th>Id</th><th>Item</th><th>What it is for</th><th>States captured</th></tr></thead><tbody><tr><td class="id">P01</td><td>Top bar</td><td>Brand, the tools (select, frame, text, image slot, new component, play), jump-to, theme, revision.</td><td class="st">Default; New component form open; Frame tool active</td></tr><tr><td class="id">P02</td><td>Layers</td><td>The tree of components and their elements; click to select, twirl to open, rows have a menu.</td><td class="st">Components, collapsed; One component open, an element selected; Row menu open</td></tr><tr><td class="id">P03</td><td>Styles tab</td><td>The folder&#x27;s stylesheets as a list of classes and variables, filterable.</td><td class="st">Styles list; Filtered</td></tr><tr><td class="id">P04</td><td>Changes list</td><td>The session&#x27;s edits, newest first, at the foot of the sidebar.</td><td class="st">Collapsed; Open, no changes yet</td></tr><tr><td class="id">P05</td><td>Inspector</td><td>Everything about the selected element: its text, classes, where each value comes from, rules, variables, checks.</td><td class="st">Nothing selected; An element selected; A value being typed (scope chooser); A component selected</td></tr><tr><td class="id">P06</td><td>Status bar</td><td>Component count, drawer tabs, key hints and the zoom control.</td><td class="st">Default; A drawer tab active</td></tr><tr><td class="id">P07</td><td>Canvas</td><td>The infinite canvas: every component as a frame, panned and zoomed.</td><td class="st">All frames, fitted; An element selected; Zoomed in on a frame</td></tr><tr><td class="id">P08</td><td>Drawer</td><td>One panel under the canvas with a pane per tool.</td><td class="st">Code pane; History pane; Tokens pane; Inspect pane; Assets pane; Changes pane; Activity pane</td></tr><tr><td class="id">P09</td><td>Film strip panel</td><td>The strip itself: versions as thumbnails, Now on the right, flip, fit, restore.</td><td class="st">Open</td></tr><tr><td class="id">P10</td><td>Breakpoints</td><td>The selected frame&#x27;s @media conditions and the same frame at other widths.</td><td class="st">Open on a frame</td></tr><tr><td class="id">P11</td><td>Jump-to palette</td><td>The Cmd-K dialog: a field, results, a footer of keys.</td><td class="st">Open; A query typed</td></tr><tr><td class="id">P12</td><td>Shortcuts sheet</td><td>Every keyboard shortcut, opened with ?.</td><td class="st">Open</td></tr><tr><td class="id">P13</td><td>Highlight</td><td>Light up every place a rule or variable applies: the picker, the count bar and the side list.</td><td class="st">Picker open; A rule lit up</td></tr><tr><td class="id">P14</td><td>Theme wipe</td><td>A slider wipes one theme of the components into another across the canvas.</td><td class="st">Open</td></tr><tr><td class="id">P15</td><td>Play bar</td><td>The bar shown while frames are live.</td><td class="st">Playing</td></tr><tr><td class="id">P16</td><td>Stylesheet question</td><td>Asked once per folder: which stylesheets do the components share.</td><td class="st">Asking</td></tr><tr><td class="id">P17</td><td>Empty state</td><td>Teaching card shown on an empty canvas.</td><td class="st">Empty canvas</td></tr><tr><td class="id">P18</td><td>Row menu</td><td>The menu behind a layer row&#x27;s dots.</td><td class="st">Open</td></tr><tr><td class="id">P19</td><td>Frame (one component)</td><td>One component card on the canvas: title bar, live frame, width grip.</td><td class="st">Resting; With its element selected</td></tr><tr><td class="id">P20</td><td>Selection and measure overlays</td><td>Outlines drawn over the canvas: selection, hover and measuring.</td><td class="st">An element selected</td></tr></tbody></table></div></details>
+<details class="inv"><summary>Level 3 · Components (40)</summary><div class="tw"><table><thead><tr><th>Id</th><th>Item</th><th>What it is for</th><th>States captured</th></tr></thead><tbody><tr><td class="id">C01</td><td>Tool button</td><td>A tool in the top bar: icon, label, shortcut key.</td><td class="st">Active (Select); Idle (Frame)</td></tr><tr><td class="id">C02</td><td>Jump-to button</td><td>The search field look-alike that opens the palette.</td><td class="st">Resting</td></tr><tr><td class="id">C03</td><td>Theme toggle</td><td>Switches the chrome between light and dark.</td><td class="st">Resting</td></tr><tr><td class="id">C04</td><td>Component theme select</td><td>Which theme the components are shown in.</td><td class="st">Resting</td></tr><tr><td class="id">C05</td><td>Brand lockup</td><td>The napkin glyph, the name and the folder.</td><td class="st">Resting</td></tr><tr><td class="id">C06</td><td>Revision chip</td><td>The revision of the component drawn last.</td><td class="st">Resting</td></tr><tr><td class="id">C07</td><td>Presence</td><td>Who and what is connected: avatars and the agent status.</td><td class="st">Resting</td></tr><tr><td class="id">C08</td><td>Sidebar tabs</td><td>Layers / Styles switch.</td><td class="st">Layers active; Styles active</td></tr><tr><td class="id">C09</td><td>Component row</td><td>A layer row for a component: twirl, icon, name, menu.</td><td class="st">Resting; Open</td></tr><tr><td class="id">C10</td><td>Element row</td><td>A layer row for an element inside a component.</td><td class="st">Resting; Selected</td></tr><tr><td class="id">C11</td><td>Frame title bar</td><td>A frame&#x27;s name, file path and revision above the frame.</td><td class="st">Resting</td></tr><tr><td class="id">C12</td><td>Width grip</td><td>Drag to change a frame&#x27;s width; keys step it.</td><td class="st">Resting</td></tr><tr><td class="id">C13</td><td>Frame ruler</td><td>Breakpoint marks above a frame while it is selected.</td><td class="st">Frame selected</td></tr><tr><td class="id">C14</td><td>Frame caption</td><td>The width label under a frame.</td><td class="st">Resting</td></tr><tr><td class="id">C15</td><td>Zoom control</td><td>Zoom out, level, zoom in, fit.</td><td class="st">Resting</td></tr><tr><td class="id">C16</td><td>Component count</td><td>How many components are on the canvas.</td><td class="st">Resting</td></tr><tr><td class="id">C17</td><td>Drawer tabs</td><td>The tabs that open each drawer pane.</td><td class="st">Resting; One active</td></tr><tr><td class="id">C18</td><td>Key hints</td><td>Three shortcuts always in view.</td><td class="st">Resting</td></tr><tr><td class="id">C19</td><td>Selection chip</td><td>The inspector&#x27;s breadcrumb: component chip and the element&#x27;s selector.</td><td class="st">Element selected</td></tr><tr><td class="id">C20</td><td>Source line</td><td>File and line of the element, with the frame-width key.</td><td class="st">Resting</td></tr><tr><td class="id">C21</td><td>Text field</td><td>The element&#x27;s text, editable.</td><td class="st">Resting</td></tr><tr><td class="id">C22</td><td>Class chips</td><td>The element&#x27;s classes, removable, with an add field.</td><td class="st">Resting</td></tr><tr><td class="id">C23</td><td>Value row</td><td>One property: name, resolved value, the field, and where the value comes from.</td><td class="st">A length (padding); A colour with a variable; A shorthand with a variable</td></tr><tr><td class="id">C24</td><td>Scope chooser</td><td>Where a typed value is written: this element, this class, or the variable; shows the diff.</td><td class="st">A value typed</td></tr><tr><td class="id">C25</td><td>Scope note</td><td>The one-line change the chosen scope would make.</td><td class="st">A value typed</td></tr><tr><td class="id">C26</td><td>Origin chips</td><td>Under a value: the rule and the variable it came from, each lights up its places.</td><td class="st">Rule and variable</td></tr><tr><td class="id">C27</td><td>Declaration row</td><td>A property : value line, and the add line.</td><td class="st">Add line</td></tr><tr><td class="id">C28</td><td>Rule block</td><td>A rule that applies: its selector, source, and declarations.</td><td class="st">Resting</td></tr><tr><td class="id">C29</td><td>Fold section</td><td>A collapsible inspector section.</td><td class="st">Closed; Open</td></tr><tr><td class="id">C30</td><td>Variable chip</td><td>One variable of the folder: swatch or bar, name, value; click to use it.</td><td class="st">A colour; A space; A radius</td></tr><tr><td class="id">C31</td><td>Variable strip</td><td>A row of variables of one kind (colour, space, radius, type).</td><td class="st">Colours; Spaces</td></tr><tr><td class="id">C32</td><td>Variable filter</td><td>Filters the variables list.</td><td class="st">Empty</td></tr><tr><td class="id">C33</td><td>Checks row</td><td>Contrast and other checks as chips, with a summary.</td><td class="st">Resting</td></tr><tr><td class="id">C34</td><td>Nothing selected card</td><td>What the inspector says when nothing is picked.</td><td class="st">Resting</td></tr><tr><td class="id">C35</td><td>Shortcut row</td><td>A key and what it does, listed under &quot;Nothing selected&quot;.</td><td class="st">Resting</td></tr><tr><td class="id">C36</td><td>Palette result</td><td>A row in the jump-to list.</td><td class="st">Resting</td></tr><tr><td class="id">C37</td><td>New component form</td><td>Name a new component and create it.</td><td class="st">Open</td></tr><tr><td class="id">C38</td><td>Stylesheet choice</td><td>One stylesheet of the question: a checkbox, its name, why.</td><td class="st">Checked</td></tr><tr><td class="id">C39</td><td>Time cue chip</td><td>Names the version under the playhead.</td><td class="st">Strip open</td></tr><tr><td class="id">C40</td><td>Film strip button</td><td>Flip, fit and restore controls of the strip.</td><td class="st">Strip open</td></tr></tbody></table></div></details>
+</section>
+
+<section class="ch" id="c6">
+  <div class="num">Chapter 7</div>
+  <h2>Still open</h2>
+  <ul>
+    <li><b>Design system:</b> confirm Secret Sauce, or say you'd rather keep napkin's current look and have me add the missing tokens.</li>
+    <li><b>The pilot:</b> mark the value-row variations in Storybook. Your marks set the brief for the next batch.</li>
+    <li><b>Earlier work, unchanged:</b> the napkin build is still where the gauntlet record left it, with no merges since. That record and this page are published but not committed to git yet.</li>
+  </ul>
+</section>
+</main>
+<div class="foot">napkin · Interface review · Edition 1.0 · 2026-11-03 · written by the AI lead; the inventory comes from storybook/INVENTORY.md</div>
