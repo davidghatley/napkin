@@ -33,7 +33,8 @@ for _ in $(seq 1 "$MAX"); do
     [ -n "$(cd "$WT" && git status --porcelain)" ] && echo "NOTE: an earlier builder session was cut off mid-work, so there are uncommitted changes in the tree. Review them first (git status, git diff), keep what is good, finish the job and commit."
     [ "$stalled" = 1 ] && echo "STALL: the score has not moved in two rounds. Stop tweaking. Find the structural cause and make one deliberate big change, even if it means throwing code away."
   } > "$D/builder-prompt.txt"
-  cx 120 "$D/builder.md" "$D/builder.log" "$D/builder-prompt.txt"; echo "builder exit $?" > "$D/status"
+  if [ "${SKIP_FIRST_BUILD:-0}" = 1 ]; then SKIP_FIRST_BUILD=0; echo "builder external (built outside the driver)" > "$D/status"
+  else cx 120 "$D/builder.md" "$D/builder.log" "$D/builder-prompt.txt"; echo "builder exit $?" > "$D/status"; fi
   if [ -s "$L/test.cmd" ]; then ( flock 9; cd "$WT" && timeout 45m bash "$L/test.cmd" > "$D/tests.log" 2>&1; echo $? > "$D/tests.exit" ) 9>"$GD/suite.lock"; fi
   ( cd "$WT" && git status --porcelain > "$D/dirty-before-critic.txt"; git log --oneline -15 > "$D/commits.txt"; git diff --stat feat/core -- docs/DREAM3.md > "$D/dream-touched.txt" )
   { cat "$GD/critic-head.md" "$L/critic.md"
