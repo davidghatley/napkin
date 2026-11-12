@@ -237,6 +237,8 @@ export async function items(s) {
   assert(Array.isArray(a.items), "/api/items must return {items:[]}");
   return a.items;
 }
+// Temp dirs of fixtures that failed half-way are still removed by run().
+const pendingTemps = [];
 export async function fixture() {
   const temp = mkdtempSync(join(tmpdir(), "napkin-d3-")),
     folder = join(temp, "work"),
@@ -249,6 +251,7 @@ export async function fixture() {
     seed = randomInt(1000, 900000),
     suffix = nonce(),
     media = makeContext(seed, suffix);
+  pendingTemps.push(temp, media.tmp);
   const files = manifest.files.map((f) => structuredClone(f));
   for (const f of files) {
     let bytes = readFileSync(join(ROOT, "bench/corpus3", f.path));
@@ -470,7 +473,15 @@ export async function run(dimension, fn, { env = {} } = {}) {
       e.stack || e.message,
     );
   } finally {
-    for (const cleanup of [() => b?.close(), () => s?.stop(), () => f?.clean()])
+    for (const cleanup of [
+      () => b?.close(),
+      () => s?.stop(),
+      () => f?.clean(),
+      () =>
+        pendingTemps
+          .splice(0)
+          .forEach((p) => rmSync(p, { recursive: true, force: true })),
+    ])
       try {
         await cleanup();
       } catch (e) {
