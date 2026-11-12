@@ -213,12 +213,19 @@ SOAK=1 node --test test/engine/bench.test.js     # 60 s soak, writes REL-04-60s 
   each minute and at the end; RSS growth is the largest sample against the post-warm-up baseline.
 - `REL-05` runs an actual `git checkout` in a generated temp repo that changes all 40 files.
 
-## DREAM 3 locked measures (D1–D7)
+## DREAM 3 locked measures (D1–D8)
 
 The measures lane owns `corpus3/`, `lib3/`, `kinds.js`, `controls3.js`, `keys3.js`,
-`board.js`, `agents3.js`, `gen.js`, `motion.js`, `dream3.js` and
+`board.js`, `agents3.js`, `gen.js`, `motion.js`, `craft.js`, `dream3.js` and
 `tools/make-corpus3.mjs`. Product builders do not change these files. DREAM 3 and
-INTENT stay locked. D8 belongs to the separate craft review.
+INTENT stay locked.
+
+**Acceptance is the whole scoreboard.** `node bench/dream3.js` runs D1 to D8, the three
+legacy benches (`fidelity`, `edits`, `imposed`) and, with `--tests`, the full test suite.
+ACCEPTANCE is MET only when every check in every dimension passed, every regression gate
+passed, and every lead-attested gate is satisfied, all in that one run. `--only`,
+`--skip-legacy` and a missing `--tests` are for quick looks: whatever they leave out is
+reported as "not run" and blocks acceptance. D8 has no beat-the-best mark.
 
 Run from the checkout root, with Node 26, Chromium, ffmpeg/ffprobe, woff2 tools,
 zip/unzip and pdfinfo available. There are no new product or bench runtime npm
@@ -238,11 +245,11 @@ node bench/dream3.js --json
 Each dimension prints a human table. `--json` adds one final line with
 `{ dimension, dream: {met,total}, beat: {met,total}, checks: [{id,ok,value,target}] }`.
 The combined runner executes dimensions sequentially and prints one scoreboard;
-its final JSON contains the seven dimension summaries. Exit 0 means every check
+its final JSON contains the eight dimension summaries and the regression gates. Exit 0 means every check
 passed; exit 1 means at least one failed. A missing route, missing tool, timeout,
 invalid response or missing external evidence is a **failure**, with its reason.
-Nothing is silently skipped. D7 has no separate beat mark in the locked dream, so
-its beat denominator is zero. Counts are assertions, not percentages of a rubric.
+Nothing is silently skipped. D7 and D8 have no separate beat mark in the locked dream, so
+their beat denominators are zero. Counts are assertions, not percentages of a rubric.
 
 Every dimension opens a private, generated folder with the real command
 `node src/cli.js open <folder> --port <free>`. State is isolated outside that folder.
@@ -274,14 +281,15 @@ D1 also compares decoded pixels of still-image previews with the source image.
 A fake viewer with an icon, hidden native element and a plausible label does not
 satisfy visible markers and the data checks.
 
-To rebuild the committed binary corpus, install the pinned **generator-only** tools
+Set `NAPKIN_D3_TOOLS` to a directory outside the repository (the self-test and the generator
+read it; the default is `/tmp/napkin-d3-generator-tools`). To rebuild the committed binary corpus, install the pinned **generator-only** tools
 outside the repository (roughly 32 packages, no model downloads):
 
 ```sh
-npm install --prefix /tmp/napkin-d3-generator-tools --cache /tmp/napkin-d3-npm-cache \
+npm install --prefix "$NAPKIN_D3_TOOLS" --cache /tmp/napkin-d3-npm-cache \
   --ignore-scripts --no-audit --no-fund \
   apache-arrow@21.1.0 parquetjs-lite@0.8.7 opentype.js@1.3.4
-node tools/make-corpus3.mjs --tooling /tmp/napkin-d3-generator-tools
+node tools/make-corpus3.mjs --tooling "$NAPKIN_D3_TOOLS"
 D3_STRESS_SELFTEST=1 node --test bench/lib3/selftest.mjs
 ```
 
@@ -303,6 +311,35 @@ the caller owns that directory. The benches create and remove theirs automatical
 When `/api/items` is absent, expensive D1 workloads cannot reach a viewer: their
 checks still fail with that explicit route failure. The self-test independently
 proves that the workload generators run, rather than treating missing routes as proof.
+
+**Bench-time randomisation.** Each run re-makes the content a viewer must show, from the
+committed corpus' structure: colours in svg, lottie, html, css, tsx and animation files; stills,
+gif/apng and video from ffmpeg with this run's colours (video: first half one colour, second
+half another, duration random); audio with a random frequency, duration and a rising
+amplitude ramp (a waveform must be taller late than early); zip entries with random names and
+bodies; binary files with random leading bytes and a random string; table rows, chart data and
+all names. Oracles read the screen: this run's colours must appear in the viewer, animated
+kinds must change over time, video frames sampled at 25% and 75% must match the file, a
+waveform must follow the ramp, a random late table row must be reachable by scrolling, chart
+mark heights must follow the data (SVG marks), an opened zip entry must show its body, the hex
+view must show this run's first bytes, a font specimen needs a loaded FontFace, a model must
+turn. "First paint" is the later of first-contentful-paint and the moment every manifest
+marker is visible with its text.
+
+**Causality for timing.** `scrubWalk` (lib3/pixels.mjs) takes a random walk of key presses.
+The preview must be still when no key is pressed, every step must change it, and revisiting a
+position must show the same frame. An animation unrelated to the keys, or a preview that
+changes on any key, fails.
+
+**Frame budget.** `FRAME_BUDGET` (17.2 ms) is the p95 frame-interval limit used for the
+"p95 frame < 16.7 ms" marks: requestAnimationFrame timestamps are quantised to the vsync, a
+perfect 60 Hz page measures 16.6 to 16.9 ms and a page that misses a vsync measures at least
+33 ms. The scrub-to-pixel latency marks still use 16.7 ms.
+
+**Focus.** A page in headless Chromium is never focused, so `:focus-visible` never matches;
+the benches turn on focus emulation. Focus counts as visible only if a real outline or ring
+(at least 1.5 px, not transparent) is drawn and its colour is found in the pixels around the
+element. Being a text input, or a caret, does not count.
 
 ### Observable conventions beyond the locked route shapes
 
@@ -331,6 +368,25 @@ commands:[{id,palette}]}`. Commands include arrange-by-kind and can be rebound.
   parameters request the Cartesian sweep. `workflow` is an item id; passing a result
   item's id reopens its provenance. Generated items expose `meta.provenance` with
   `workflow` and `inputs`, and placeholders/events carry the returned `job` id.
+- Review and presentation state is on screen: pending proposals are `data-proposal-id`
+  cards (gone once resolved), variants side by side are `data-variant`, presentation sets
+  `data-presenting` (or fullscreen) and fills at least 70% of the screen, arranged groups
+  are `data-group-id` headings with the group name, the key map (`?`) and palette are
+  `[role=dialog]` / `[role=option]` lists showing real bindings and command labels,
+  a control's live figure is an svg, canvas or `[data-figure]` of at least 12 x 8 px inside its
+  `data-control-id` row, the modified marker is `[data-modified]`, a studio is
+  `[data-studio-for="<control id>"]` covering at least 30% of the screen for color and motion.
+  Palette commands used by the benches: `Select`, `Control`, `Dial|Bench|Studio`, `Reset`,
+  `Open folder`, `Group`, `Compare variants`, `Approve`, `Reject`, `Generate`,
+  `Arrange by <mode>`, `Present`, `Rebind <command> to <keys>`.
+- Arrange modes are `kind`, `folder`, `date`, `similarity`, `tag`, `status`, `run`, and
+  `meta.<column>`. `/api/board` groups are exactly the partition the data implies (the
+  bench seeds a Latin square of kinds, folders and ages, front-matter tags and statuses,
+  warm and cool images, two agent runs and CSV label columns). Runs are created with
+  `POST /api/runs {name}` and `POST /api/runs/<id>/artifacts`.
+- `resume_run` returns the next unfinished step (its id appears in the result).
+- Control keys: ArrowRight/Left step, Shift+Arrow is coarse (larger than a step), Alt+Arrow
+  is fine (smaller than a step); typed entry accepts math such as `12+7`.
 - `/api/events` may be SSE or WebSocket on that same path. A WS-only server may take
   the isolated session token as `?token=`. SSE supports LF or CRLF boundaries.
 
@@ -343,13 +399,17 @@ responses into the product. These conventions are not permission to weaken DREAM
 D1 checks every manifest file, the right MIME/bytes/kind, visible purpose-built DOM,
 file-derived text and metadata, decoded media duration, typed distributions, image
 pixels, screenshot luminance variance >20 and at least eight quantized colors.
-First paint is Chromium's `first-contentful-paint` from navigation, with all items
-required and nearest-rank p95 strictly below 150 ms. The 1,000-item opening clock
+First paint is the later of Chromium's `first-contentful-paint` and the moment all manifest
+markers are visible with their text, from navigation, with all items
+required and nearest-rank p95 strictly below 150 ms. Twelve random items of the 1,000 are also
+opened alone and must show the right kind and real content. The 1,000-item opening clock
 includes CLI readiness and canvas navigation. Pan/zoom uses real wheel events,
 requires real item geometry to move, samples frame intervals, then checks visible
-cards after 300 ms at rest. Frames must have p95 strictly below 16.7 ms.
+cards after 300 ms at rest. Frame intervals must have p95 below the frame budget (see Anti-gaming).
 
-Large-file gates compare server-tree peak RSS (sampled from spawn every 10 ms) with
+Large-file gates also seek the 2 GB video to a random distant offset (must settle in 3 s),
+scroll the 5 M-row table to a random fraction and require rows from there, and compare the
+Chromium process tree's RSS as well. They compare server-tree peak RSS (sampled from spawn every 10 ms) with
 an empty-folder process, and page heap + backing storage with an empty page. Each
 increase must be below 60% of the input size, with a decoded video or a visible
 5-million-row count. This catches straightforward whole-file buffering on either
@@ -361,9 +421,14 @@ whole-folder undo. It also edits each control through the keyboard and opens all
 three depths, taking screenshots when requested. Dial rows must be 32 px high.
 Selection-to-panel timing starts at the final selection key, inside Chromium, and
 ends on the correct instrument region's DOM mutation; search typing is excluded.
-Scrub timing uses timestamped compositor frames cropped to the item preview, not the
-changing number in the panel. At least 30 samples are required. Studios, affordances
-and the blind comparison require independent evidence, described below.
+Scrub timing is `scrubWalk` (see Anti-gaming) on compositor frames cropped to the item
+preview. Further D2 checks: each control's live figure must change its pixels when the
+value changes; changing a control must change the rendered `/view` (at least 70% of
+sampled controls on visual kinds, and undo must restore it); committed values must be
+re-read from files by a fresh server process; the control types must be at least eight
+distinct widget shapes; a numeric control must evaluate typed math (`12+7`), show a
+modified marker, step finer and coarser with Alt and Shift, and reset. Studios and the
+blind rubric are lead-attested (below).
 
 ### The twelve keyboard journeys and budgets
 
@@ -371,7 +436,13 @@ A chord counts as one keystroke; each typed character counts as one. Only CDP
 `Input.dispatchKeyEvent` is used inside journeys. No click, mouse, wheel, injected
 `.focus()`, `.value=` or synthetic DOM event is allowed. Setup may create source files
 and proposals through the API. Assertions read disk and HTTP state, not UI text alone.
-Every journey also requires visible focus and a nonzero screenshot difference.
+Every journey also requires visible focus (a drawn ring, see Anti-gaming), a nonzero
+screenshot difference and the visible state named in its outcome (review queue card gone,
+variants side by side, presentation filling the screen, group names drawn, key map listing
+the real bindings). The rebind journey first moves the arrangement away from "kind" so a
+no-op key cannot pass. axe runs on the populated canvas, with the palette open and with
+the key map open; an empty canvas fails. The palette must list a random sample of
+advertised commands.
 The palette uses Ctrl K, a command phrase, and Enter. Names and values below are
 chosen during the run; the brackets describe arguments, not literal text.
 
@@ -458,28 +529,36 @@ instrument, random keyframes written back to CSS/WAAPI/SVG and exact undo/readba
 Interface transitions must be observable, interruptible, strictly below 200 ms, and
 nonessential transitions must stop under emulated prefers-reduced-motion.
 
-### Independent evidence gates
+### Lead-attested gates
 
-A bench cannot manufacture a blind review, a real harness run or a real GPU smoke.
-Those checks fail unless `--reviews <file.json>` supplies independently collected
-results tied to this exact product `src/` and `public/` hash. `buildHash()` in
-`lib3/reviews.mjs` computes it. Each evidence entry needs a fresh `reviewer` identity
-and `artifacts: [{path,sha256}]` referring to real files beside the evidence JSON.
-The bench verifies every artifact hash. This is inspectable evidence, not a digital
-signature or proof of reviewer independence; the separate critic must check that.
+A bench cannot manufacture a blind review, a real harness run, a real GPU smoke, a slop
+audit or a critics' rubric, and a file in this repository cannot stand in for them. These
+gates are **lead-attested**: they are not met by default and read two inputs supplied from
+outside the repo and its worktrees:
 
-The JSON shape is `{sourceHash, instruments, studios, affordances, agents, generation}`:
+- `NAPKIN_LEAD_ATTEST`: path to a JSON document the lead keeps outside the repository.
+- `NAPKIN_LEAD_KEY`: the secret the lead signs entries with.
 
-- `instruments`: `blind:true`, `comparisons:{Tweakpane:score,Leva:score,DialKit:score}`;
-  every score must reach 8/10.
-- `studios.features`: true for oklch, gamut, contrast, palette, ramps, harmony,
-  sampledPalette, tokenBinding, history, curves, springs and ghost.
-- `affordances.features`: true for figures, modified, reset, fineScrub, coarseScrub,
-  units, math, copyPaste, schemaOnly and recipesDocumented.
-- `agents`: `codex:{unaided:true,completed:true}` and the same for `opencode`.
-- `generation`: `locked:true,queued:true,provenance:true`, with the shared GPU lock
-  invocation, backend history, output and exact provenance in the artifacts.
+The document is `{ sourceHash, <key>: { attestedBy, at, ...fields, mac } }` where
+`sourceHash` is `buildHash()` (lib3/reviews.mjs: hash of `src/` and `public/`) and `mac` is
+the hex HMAC-SHA256, keyed by `NAPKIN_LEAD_KEY`, of the canonical JSON of
+`{ sourceHash, key, entry }` (entry without `mac`). `signAttestation` computes it. A missing
+file, an unsigned or wrongly signed entry, a different source hash or a file inside the repo
+fails with `PENDING LEAD ATTESTATION`. Checks that wait on the lead are listed per dimension
+as "lead-attested pending" and keep ACCEPTANCE at NOT MET.
 
-This machine lane forbids GPU work. The real smoke must be performed separately
-through the shared lock by an authorized lane. A successful mock never satisfies it.
-All qualitative claims remain available for the fresh critic to reject from evidence.
+Keys and the fields each must carry:
+
+- `instruments` (D2 rubric): `blind`, `orderSwapped`, `comparisons:{Tweakpane,Leva,DialKit}` each >= 8.
+- `studios` (D2): `features` and `captures` true for oklch, gamut, contrast, palette, ramps,
+  harmony, sampledPalette, tokenBinding, history, curves, springs, ghost.
+- `agents` (D5): for `codex` and `opencode`: `unaided`, `completed`, `readmeLine`, `runId`,
+  `transcriptSha256`.
+- `generation` (D6): `lockInvocation` (contains `gpu_run`), `nvidiaSmiBefore`, `promptId`,
+  `historyStatus: "success"`, `outputSha256` equal to `resultFileSha256`, and
+  `provenanceRequestSha256` equal to `reopenRequestSha256`.
+- `craft` (D8): `blind`, `orderSwapped`, `critics: [{id, score >= 8, screenshotsSha256}]`
+  from at least two distinct fresh critics.
+- `slop` (D8): `tells: 0`, `skill: "slop-audit"`, `reportSha256`.
+
+This lane forbids GPU work. A successful mock never satisfies the GPU smoke.

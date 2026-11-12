@@ -32,3 +32,26 @@ memory gate samples the owned server process tree from spawn, compares it with a
 empty-folder process, and also samples the page's heap and backing storage. Each
 increase must stay below 60% of input bytes. This is an explicit operational bound
 for “without loading whole,” not a claim that RSS reveals every allocator or OS cache.
+
+## Round 2 (critic verdict 3/10): semantic checks and lead-attested gates
+
+The first harness could be passed by cheap fakes: an invented SVG viewer, a board that never
+rearranged, a focus check that accepted zero changed pixels, a timing check fed by an
+unrelated animation, and self-written evidence files for every qualitative gate. Decisions:
+
+- Every value a viewer or instrument must show is chosen at bench time (colours, durations,
+  amplitude ramps, zip entries, binary bytes, chart data, names), and oracles read the
+  screen and the files, not tags. Timing uses a causal random walk of key presses.
+- Qualitative gates (blind rubrics, studios, real Codex and opencode runs, the real GPU smoke,
+  the slop audit) are lead-attested: an HMAC-signed document kept outside the repository, tied
+  to the product source hash. A file in the repo cannot satisfy them; absent input is "not met".
+  The earlier `--reviews` file with a self-declared reviewer name is removed.
+- D8 is part of the scoreboard (`bench/craft.js`) and so are the three legacy benches and the
+  full test suite; skipped or unexecuted parts block acceptance.
+- The mock ComfyUI follows the real server's SaveVideo shape (VIDEO output, nested dynamic
+  codec choice, optional codec), validates nested dynamic inputs and link-typed inputs, and
+  emits a random-length progress stream so a client cannot invent stage events. Real
+  /object_info was compared with GET requests only.
+- The frame-interval budget is 17.2 ms for the "p95 frame < 16.7 ms" marks: rAF timestamps are
+  vsync-quantised, a perfect 60 Hz page measures up to about 16.9 ms and a page that misses
+  a vsync at least 33 ms.

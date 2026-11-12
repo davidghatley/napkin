@@ -21,7 +21,10 @@ import {
 import { writeParquet } from "./parquet.mjs";
 import { launchChromium } from "../../test/helpers/cdp.js";
 import { selectionTime, scrubPixel } from "./pixels.mjs";
-const require = createRequire("/tmp/napkin-d3-generator-tools/package.json");
+const require = createRequire(
+  (process.env.NAPKIN_D3_TOOLS || "/tmp/napkin-d3-generator-tools") +
+    "/package.json",
+);
 test("manifest hashes, all kinds, genuine binaries and small footprint", async () => {
   const { files } = JSON.parse(
     readFileSync(join(ROOT, "bench/corpus3/manifest.json")),
