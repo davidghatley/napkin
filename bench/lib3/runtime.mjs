@@ -566,6 +566,20 @@ export function valueFor(c) {
   if (typeof c.value === "string") {
     if (/color/i.test(c.type) || /^#[0-9a-f]{3,8}$/i.test(c.value))
       return "#" + randomBytes(3).toString("hex");
+    const numeric = /^(-?\d+(?:\.\d+)?)(px|rem|em|%|deg|ms|s|vh|vw)?$/.exec(
+      c.value,
+    );
+    if (numeric)
+      return (
+        String(valueFor({ ...c, value: Number(numeric[1]) })) +
+        (numeric[2] || "")
+      );
+    const bezier = /^cubic-bezier\(([^)]+)\)$/.exec(c.value);
+    if (bezier) {
+      const values = bezier[1].split(",").map(Number);
+      values[1] += 0.125;
+      return `cubic-bezier(${values.join(",")})`;
+    }
     return "Orbit " + nonce();
   }
   if (Array.isArray(c.value) && c.value.length) {

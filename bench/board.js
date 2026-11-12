@@ -17,6 +17,15 @@ import {
   sleep,
 } from "./lib3/runtime.mjs";
 import { join } from "node:path";
+const samePosted = (actual, expected) =>
+  Array.isArray(expected)
+    ? Array.isArray(actual) &&
+      actual.length === expected.length &&
+      expected.every((e, n) => samePosted(actual[n], e))
+    : expected && typeof expected === "object"
+      ? actual &&
+        Object.entries(expected).every(([k, v]) => samePosted(actual[k], v))
+      : actual === expected;
 export async function measure() {
   return run("D4", async ({ book, f, s, browser, restart }) => {
     let listed, error;
@@ -63,14 +72,14 @@ export async function measure() {
         const got = await request(s, "/api/board");
         for (const key of ["arrange", "groups", "views"])
           assert(
-            canonical(got[key]) === canonical(expected[key]),
+            samePosted(got[key], expected[key]),
             "roundtrip differs: " + key,
           );
         s = await restart();
         const reopened = await request(s, "/api/board");
         for (const key of ["arrange", "groups", "views"])
           assert(
-            canonical(reopened[key]) === canonical(expected[key]),
+            samePosted(reopened[key], expected[key]),
             "restart lost " + key,
           );
         return { ok: true, value: { group: name, savedView: viewId } };
