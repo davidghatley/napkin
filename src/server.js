@@ -102,8 +102,11 @@ const send = (res, file) => {
 
 // Only this machine's own canvas may talk to us: Host must be loopback on our port, and Origin (when a browser sends one) the canvas's own origin.
 // This stops a web page open in your browser (or a DNS-rebinding name) from writing. It is not a defence against programs running as you.
-const allowedHost = (h) => { const p = server.address()?.port; return h === `127.0.0.1:${p}` || h === `localhost:${p}`; };
-const guard = (req) => allowedHost(req.headers.host) && (req.headers.origin === undefined || req.headers.origin === `http://${req.headers.host}` || allowedHost(req.headers.origin.replace(/^http:\/\//, '')) && req.headers.origin.startsWith('http://'));
+// Opt-in: NAPKIN_ALLOW_HOST=name.ts.net[,other] also accepts those hostnames (e.g. behind `tailscale serve` on a private tailnet; they get full write access).
+const EXTRA = (process.env.NAPKIN_ALLOW_HOST || '').split(',').map((x) => x.trim().toLowerCase()).filter(Boolean);
+const bare = (h) => String(h || '').toLowerCase().replace(/:\d+$/, '');
+const allowedHost = (h) => { const p = server.address()?.port; return h === `127.0.0.1:${p}` || h === `localhost:${p}` || EXTRA.includes(bare(h)); };
+const guard = (req) => allowedHost(req.headers.host) && (req.headers.origin === undefined || req.headers.origin === `http://${req.headers.host}` || (allowedHost(req.headers.origin.replace(/^https?:\/\//, '')) && (req.headers.origin.startsWith('http://') || EXTRA.includes(bare(req.headers.origin.replace(/^https?:\/\//, ''))))));
 
 const server = createServer(async (req, res) => {
   if (!guard(req)) return json(res, 403, { ok: false, error: 'forbidden: napkin only answers its own canvas on 127.0.0.1 or localhost' });
