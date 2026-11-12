@@ -4,7 +4,7 @@
 // Every write goes through writeFileAtomic (REL-01): temp file in the same folder, fsync, rename; a new file is created
 // exclusively (link), so it can never replace one that exists.
 import { unlinkSync, mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { writeFileAtomic } from './atomic-write.js';
 
 // Atomic replace of an existing component file. opts.check() runs just before the rename (a hand edit that landed meanwhile cancels it).
@@ -39,4 +39,18 @@ export function removeDemoWorkspace(dir) { rmSync(dir, { recursive: true, force:
 export function writeTokens(file, text, generated) {
   writeFileAtomic(file, text);
   if (generated) writeFileAtomic(generated.file, generated.text);
+}
+
+// Kind controls use the same filesystem authority as components. The item model checks
+// identity, permissions, revisions and format values before reaching this boundary.
+export function writeItemValue(file, bytes, options) { writeFileAtomic(file, bytes, options); }
+export function removeItemRecipe(file, check) {
+  if (!file.endsWith('.napkin-recipe.json')) throw new Error('Only an item recipe may be removed');
+  check?.();
+  unlinkSync(file);
+}
+// Item placement is private application state, never a file in the opened folder.
+export function writeItemLayout(file, frames) {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileAtomic(file, JSON.stringify(frames));
 }
