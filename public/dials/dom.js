@@ -117,6 +117,16 @@ export function canvas(label, width = 420, height = 230, interactive = true) {
     if (type === "2d" && g) g.setTransform(scale, 0, 0, scale, 0, 0);
     return g;
   };
+  // Drawing is skipped while a plot cannot be seen (collapsed, scrolled away, hidden by
+  // content-visibility); it is redrawn from the same event once the plot comes into view.
+  c.skipped = false;
+  if (typeof IntersectionObserver === "function")
+    new IntersectionObserver((entries) => {
+      if (c.skipped && entries.some((e) => e.isIntersecting)) {
+        c.skipped = false;
+        c.dispatchEvent(new Event("d-resize"));
+      }
+    }).observe(c);
   if (typeof ResizeObserver === "function")
     new ResizeObserver(() => {
       const shown = c.clientWidth;
@@ -132,6 +142,17 @@ export function canvas(label, width = 420, height = 230, interactive = true) {
       c.dispatchEvent(new Event("d-resize"));
     }).observe(c);
   return c;
+}
+/** True when drawing to this plot would be seen. A plot that is not seen is flagged for redraw. */
+export function visible(c) {
+  const seen =
+    c.isConnected &&
+    c.getClientRects().length > 0 &&
+    c.checkVisibility?.({ contentVisibilityAuto: true, visibilityProperty: true }) !== false &&
+    c.getBoundingClientRect().bottom > -200 &&
+    c.getBoundingClientRect().top < innerHeight + 200;
+  c.skipped = !seen;
+  return seen;
 }
 export function grid(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);

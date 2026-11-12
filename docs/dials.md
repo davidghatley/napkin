@@ -12,19 +12,43 @@ node test/dials/serve.js
 
 Open the printed URL. The server binds a random free localhost port. Stop that process with Ctrl C when finished. It never uses the owner's live port. The six sample documents are color, typography, motion, image adjustment, chart encoding and generation. Expand the catalogue for thirteen further controls and a custom plugin example. Each schema is inspectable in the page and exported from `public/dials/schemas.js`.
 
-- `demo.html?dir=a`: cool, compact instrument chrome; 32 px rows, sans labels and mono values.
-- `demo.html?dir=b`: ruled workshop plates; square fields, annotation gutter, 36 px bench rows and hatched miniatures.
-- `demo.html?dir=c`: a specimen desk; two broad columns, open 48 px bench rows and larger figures.
+The demo uses one visual language, the workshop: ruled headers, square fields, plated figures, monospaced labels. Round one compared three directions (compact, workshop, specimen); the workshop was kept and the others were removed.
 
-All directions keep collapsed sections at 32 px. The round-one directions use identical documents and behavior. Theme switching is on the top bar. Section buttons are keyboard accessible; `1`, `2`, `3` on those buttons select a depth. A focused label accepts arrows, counts, reset and `S` to open its own studio. Enter or Space on a live figure opens its studio. The studio's instrument buttons switch between every control in the section. Focus Size and use arrows to resize the pane, or drag its resize corner.
+Theme switching is on the top bar. Section buttons are keyboard accessible; `1`, `2`, `3` on those buttons select a depth. A focused label accepts arrows, counts, reset and `S` to open its own studio. Enter or Space on a live figure opens its studio. `Ctrl K` opens a palette that finds any control or depth command; Enter goes to the control and Shift Enter opens its studio. `?` opens the key map, which also lets you rebind keys.
 
-![The compact direction in light theme](../public/dials/evidence/a-light-overview.png)
+A studio takes the window when the panel is created with `studio: "viewport"` (the demo does). It is a fixed pane with a backdrop; content is laid out in columns so nothing hides below a scroll. Without that option the studio stays inside the host. Escape or the Dial and Bench buttons close it. Focus Size and use arrows to resize the pane.
 
-![Color at studio depth](../public/dials/evidence/a-light-color-studio.png)
+![The workshop direction in light theme](../public/dials/evidence/light-overview.png)
 
-![Motion in dark theme](../public/dials/evidence/a-dark-motion-studio.png)
+![Color studio](../public/dials/evidence/studio-color-light.png)
 
-The [evidence folder](../public/dials/evidence/) also contains directions B/C, dark variants, the collapsed dial state, narrow-screen studio, and recorded timing samples. These are browser captures of the shipped demo, not design mockups.
+![Motion studio with loop range, lanes, measurements and code](../public/dials/evidence/studio-motion-light.png)
+
+The [evidence folder](../public/dials/evidence/) also contains every studio in both themes, the collapsed dial state, the narrow-screen studio, and recorded timing samples. These are browser captures of the shipped demo, not design mockups.
+
+## Motion studio
+
+- Response plot (spring or cubic-bezier) with a dashed earlier response. **Pin as before** keeps the current response as the comparison; the trail below the plot shows the current and pinned responses side by side.
+- Measured: settle time (within 2 percent of the end), overshoot, peak time, and whether the response fits the duration. The same measures are shown for the pinned response.
+- Timeline: a ruler in milliseconds, a **loop range** (drag the markers, or `[` and `]` at the playhead, `\` to clear; Loop in and Loop out fields as well), a lane for the response keys and one lane per other number or angle instrument in the section. Drag a key to change its time and value, double-click to add or remove, `K` adds a response key at the playhead. Playback repeats inside the range. **Apply at playhead** sets the other instruments to their values at the playhead.
+- Output you can paste: a CSS easing (`cubic-bezier()`, or a thinned `linear()` for springs), a `transition` line, and a Web Animations call (key values drive the custom property `--progress`; lane keys drive `--<id>`).
+- Additive fields on the motion value: `range: [in, out]` and `tracks: { "<controlId>": [{ time, value }] }`.
+
+## Talking to napkin's HTTP contract
+
+`public/dials/remote.js` connects a panel to `GET /api/controls/<item>`, `POST /api/control` and `POST /api/undo`:
+
+```js
+import { Dials } from './public/dials/dials.js';
+import { connect } from './public/dials/remote.js';
+const panel = new Dials(mount, { studio: 'viewport' });
+const link = connect(panel, { item: 'brand.css' });
+await link.load({ render: true });
+// every commit is one POST with baseRevision; a refused write reloads the real values
+// await link.undo();  // asks the server to restore the earlier bytes
+```
+
+`test/dials/remote.test.js` drives this against a stand-in server that checks `baseRevision` and restores bytes on undo. It is not napkin's real server: pointing the same code at the server lane's implementation is the integration step.
 
 ## Library entry point
 
@@ -32,7 +56,7 @@ The [evidence folder](../public/dials/evidence/) also contains directions B/C, d
 import { Dials } from './public/dials/dials.js';
 
 const panel = new Dials(document.querySelector('#inspector'), {
-  direction: 'a',
+  studio: 'viewport',
   theme: 'light',
   history: false, // Host owns durable undo.
   onDepth(section, depth) {
@@ -126,7 +150,7 @@ DIALS_EVIDENCE=public/dials/evidence node --test test/dials/browser.test.js
 
 The Node suite checks arithmetic and rejection paths, reference OKLab coordinates, RGB round trips, gamut boundaries, black/white WCAG and APCA values, spring damping regimes, bezier endpoints and sampler schedules. The Chromium suite uses the repository's `src/chromium.js` lifecycle through its CDP helper, software rendering with GPU disabled, random-port static server, real key/pointer events, and cleanup in `finally`.
 
-The browser suite checks all demo directions and themes, 32 px dials, node identity across depth changes, expression entry and invalid drafts, local undo/redo, numeric counts, modifier scrubbing, queued updates/conflicts, all basic control edit paths, CSS color syntax, plugins, focus indication, reduced motion, narrow layout, and axe. Performance evidence contains 15 swaps of a 200-control document, 100 update/layout samples and 50 real pointer moves per number, color, motion and image control traced from a capture-phase mark to the end of Chromium's next software `Paint`. That last measurement includes the rendering path; it does not measure physical display scanout. Hardware and browser differences still matter.
+The browser suite checks both themes, 32 px dials, node identity across depth changes, expression entry and invalid drafts, local undo/redo, numeric counts, modifier scrubbing, queued updates/conflicts, all basic control edit paths, CSS color syntax, plugins, focus indication, reduced motion, narrow layout, and axe. Performance evidence contains 15 swaps of a 200-control document, 100 update/layout samples and 50 real pointer moves per number, color, motion and image control traced from a capture-phase mark to the end of Chromium's next software `Paint`. That last measurement includes the rendering path; it does not measure physical display scanout. Hardware and browser differences still matter.
 
 ## Integration boundary and remaining gaps
 

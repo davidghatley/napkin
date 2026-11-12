@@ -1,416 +1,146 @@
 [
   {
-    "direction": "a",
     "theme": "light",
+    "name": "color",
     "studio": "bench",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "violations": []
   },
   {
-    "direction": "a",
     "theme": "light",
-    "studio": "color",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "name": "color",
+    "studio": "studio",
+    "violations": []
   },
   {
-    "direction": "a",
     "theme": "light",
-    "studio": "motion",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
-  },
-  {
-    "direction": "a",
-    "theme": "dark",
+    "name": "typography",
     "studio": "bench",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "violations": []
   },
   {
-    "direction": "a",
-    "theme": "dark",
-    "studio": "color",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
-  },
-  {
-    "direction": "a",
-    "theme": "dark",
-    "studio": "motion",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
-  },
-  {
-    "direction": "b",
     "theme": "light",
+    "name": "typography",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "motion",
     "studio": "bench",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "violations": []
   },
   {
-    "direction": "b",
     "theme": "light",
-    "studio": "color",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "name": "motion",
+    "studio": "studio",
+    "violations": []
   },
   {
-    "direction": "b",
     "theme": "light",
-    "studio": "motion",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
-  },
-  {
-    "direction": "b",
-    "theme": "dark",
+    "name": "image",
     "studio": "bench",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "violations": []
   },
   {
-    "direction": "b",
-    "theme": "dark",
-    "studio": "color",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
-  },
-  {
-    "direction": "b",
-    "theme": "dark",
-    "studio": "motion",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
-  },
-  {
-    "direction": "c",
     "theme": "light",
+    "name": "image",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "data",
     "studio": "bench",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "violations": []
   },
   {
-    "direction": "c",
     "theme": "light",
-    "studio": "color",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "name": "data",
+    "studio": "studio",
+    "violations": []
   },
   {
-    "direction": "c",
     "theme": "light",
-    "studio": "motion",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
-  },
-  {
-    "direction": "c",
-    "theme": "dark",
+    "name": "generation",
     "studio": "bench",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "violations": []
   },
   {
-    "direction": "c",
-    "theme": "dark",
-    "studio": "color",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "theme": "light",
+    "name": "generation",
+    "studio": "studio",
+    "violations": []
   },
   {
-    "direction": "c",
     "theme": "dark",
-    "studio": "motion",
-    "violations": [
-      {
-        "id": "color-contrast",
-        "nodes": [
-          [
-            "small"
-          ]
-        ]
-      },
-      {
-        "id": "scrollable-region-focusable",
-        "nodes": [
-          [
-            "#schema-source"
-          ]
-        ]
-      }
-    ]
+    "name": "color",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "color",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "typography",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "typography",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "motion",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "motion",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "image",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "image",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "data",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "data",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "generation",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "generation",
+    "studio": "studio",
+    "violations": []
   }
 ]

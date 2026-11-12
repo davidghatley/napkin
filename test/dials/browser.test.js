@@ -84,7 +84,7 @@ test(
             await q("document.documentElement.scrollWidth<=innerWidth"),
             true,
           );
-          await shot("b-dark-benches");
+          await shot("dark-benches");
           await browser.goto(server.url);
           await browser.waitFor("window.dialsDemo?.panels.length===6");
         },
@@ -270,7 +270,7 @@ test(
             32,
           );
           await q("window.scrollTo(0,0)");
-          await shot("a-light-dials");
+          await shot("light-dials");
           await q('dialsDemo.panels[0].setDepth("pigment",3)');
           await sleep(200);
           assert.equal(
@@ -325,9 +325,9 @@ test(
           assert.ok(
             (await q('dialsDemo.panels[0].get("ink")')).startsWith("oklch"),
           );
-          await shot("a-light-color-studio");
+          await shot("flow-color-studio-light");
           await q('document.querySelector("#theme").click()');
-          await shot("a-dark-color-studio");
+          await shot("flow-color-studio-dark");
           await q(
             'dialsDemo.panels[0].setDepth("pigment",2);dialsDemo.panels[2].setDepth("time",3);document.querySelector("#sample-motion").scrollIntoView()',
           );
@@ -344,7 +344,7 @@ test(
               'Number(document.querySelector("#sample-motion .d-track input").value)>0',
             ),
           );
-          await shot("a-dark-motion-studio");
+          await shot("flow-motion-studio-dark");
           await q(
             'dialsDemo.panels[2].setDepth("time",2);document.querySelector("#theme").click();window.scrollTo(0,0)',
           );
@@ -536,6 +536,14 @@ test(
         const result = await q(
           `(async()=>{const mount=document.createElement('div');mount.style.cssText='position:fixed;left:-2000px;width:900px';document.body.append(mount);const p=new dialsDemo.Dials(mount),schema={sections:dialsDemo.samples.flatMap(s=>structuredClone(s.schema.sections))},times=[];schema.sections.at(-1).controls.push(...Array.from({length:176},(_,i)=>({id:'extra'+i,type:'number',label:'Parameter '+i,value:i,min:0,max:1000,step:1,depth:1})));for(let i=0;i<15;i++){const t=performance.now();p.render(schema);mount.getBoundingClientRect();times.push(performance.now()-t);await new Promise(requestAnimationFrame);}p.destroy();mount.remove();times.sort((a,b)=>a-b);return {times,p95:times[14],controls:schema.sections.reduce((n,s)=>n+s.controls.length,0)};})()`,
         );
+        // The same 200 controls with the panel on screen, timed to the end of the first frame after the swap.
+        const framed = await q(
+          `(async()=>{const mount=document.createElement('div');mount.style.cssText='position:fixed;left:0;top:0;width:900px;height:700px;overflow:hidden;z-index:-1';document.body.append(mount);const p=new dialsDemo.Dials(mount),schema={sections:dialsDemo.samples.flatMap(s=>structuredClone(s.schema.sections))},times=[];schema.sections.at(-1).controls.push(...Array.from({length:176},(_,i)=>({id:'extra'+i,type:'number',label:'Parameter '+i,value:i,min:0,max:1000,step:1,depth:1})));for(let i=0;i<15;i++){const t=performance.now();p.render(schema);await new Promise(r=>requestAnimationFrame(()=>setTimeout(r)));times.push(performance.now()-t);}p.destroy();mount.remove();times.sort((a,b)=>a-b);return {times,p95:times[14],note:'start of render to the end of the first frame after it (animation frame callback, then the task after paint), panel on screen'};})()`,
+        );
+        t.diagnostic("framed " + JSON.stringify(framed));
+        assert.ok(framed.p95 < 50, "on-screen swap to first frame p95 " + framed.p95);
+        if (evidence)
+          writeFileSync(evidence + "/framed-timings.json", JSON.stringify(framed, null, 2));
         t.diagnostic("mixed " + JSON.stringify(result));
         assert.equal(result.controls, 200);
         assert.ok(result.p95 < 50, "mixed swap p95 " + result.p95);

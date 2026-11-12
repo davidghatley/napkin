@@ -3,9 +3,10 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolve, extname, sep } from "node:path";
 const root = resolve(fileURLToPath(new URL("../../public/", import.meta.url)));
-export async function serve() {
+export async function serve({ api } = {}) {
   const server = createServer(async (req, res) => {
     try {
+      if (api && (await api(req, res))) return;
       const path = resolve(
         root,
         "." + decodeURIComponent(new URL(req.url, "http://localhost").pathname),

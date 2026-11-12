@@ -95,7 +95,7 @@ theme.addEventListener("click", () => {
   }
   theme.textContent = next === "light" ? "Dark" : "Light";
 });
-for (const b of document.querySelectorAll("[data-depth]"))
+for (const b of document.querySelectorAll(".depth-all [data-depth]"))
   b.addEventListener("click", () =>
     panels.forEach((p) =>
       [...p.sections.keys()].forEach((id) =>

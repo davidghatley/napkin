@@ -73,7 +73,25 @@ export function figureMarkup(c, v) {
     b = `<rect x="7" y="2" width="50" height="20" fill="none" stroke="${line}"/><rect x="${7 + Math.min(l, 20) / 2}" y="${2 + Math.min(t, 12) / 2}" width="${50 - Math.min(l + r, 60) / 2}" height="${20 - Math.min(t + bt, 28) / 2}" fill="${a}" opacity=".5"/>`;
   } else if (kind === "shadow")
     b = `<rect x="${14 + (v.x || 0) / 4}" y="${4 + (v.y || 0) / 4}" width="32" height="15" rx="${Math.min(8, (v.blur || 0) / 3)}" fill="${a}" opacity=".3"/><rect x="14" y="4" width="32" height="15" fill="var(--d-surface)" stroke="${ink}"/>`;
-  else if (["text", "typography"].includes(kind)) {
+  else if (kind === "text" && typeof v === "string") {
+    // Words as bars: the figure grows with the amount of text and wraps like a paragraph.
+    const words = v.trim().split(/\s+/).filter(Boolean);
+    let x = 3,
+      y = 5;
+    b = words
+      .slice(0, 18)
+      .map((w) => {
+        const len = Math.min(26, 3 + w.length * 2.2);
+        if (x + len > 61) {
+          x = 3;
+          y += 6;
+        }
+        const r = y < 20 ? `<rect x="${x}" y="${y}" width="${len}" height="3" rx="1" fill="${a}"/>` : "";
+        x += len + 3;
+        return r;
+      })
+      .join("") || P("M2 21H62", line);
+  } else if (["text", "typography"].includes(kind)) {
     const text = typeof v === "string" ? v : "Ag";
     b =
       `<text x="3" y="19" fill="${ink}" font-family="sans-serif" font-size="${typeof v === "object" ? clamp(v.size || 20, 10, 24) : 18}" font-weight="${v?.weight || 400}" letter-spacing="${v?.tracking || 0}">${esc(text.slice(0, 5) || "Aa")}</text>` +
@@ -100,13 +118,28 @@ export function figureMarkup(c, v) {
       ),
     );
   } else if (kind === "encoding") {
-    const axes = ["x", "y", "color", "size"];
-    b = axes
-      .map(
-        (k, i) =>
-          `<rect x="${i * 16 + 1}" y="${v[k] ? 3 : 16}" width="12" height="${v[k] ? 18 : 5}" fill="${v[k] ? a : line}"/><text x="${i * 16 + 7}" y="15" font-size="8" text-anchor="middle" fill="${v[k] ? "var(--d-on-accent)" : ink}">${k[0]}</text>`,
-      )
-      .join("");
+    // A small chart that uses exactly the channels that are bound: no x means points
+    // stack on one column, no y means one row, color splits two series, size varies radius.
+    const pts = [
+      [0.08, 0.7],
+      [0.22, 0.45],
+      [0.34, 0.6],
+      [0.5, 0.3],
+      [0.62, 0.42],
+      [0.78, 0.15],
+      [0.92, 0.25],
+    ];
+    const px = (p) => (v.x ? 6 + p[0] * 54 : 33),
+      py = (p) => (v.y ? 3 + p[1] * 14 : 10),
+      series = ["var(--d-accent)", "var(--d-text)"];
+    b =
+      P("M4 2V19H62", line) +
+      pts
+        .map(
+          (p, i) =>
+            `<circle cx="${px(p).toFixed(1)}" cy="${py(p).toFixed(1)}" r="${v.size ? 1.2 + ((i * 5) % 7) * 0.45 : 2.2}" fill="${v.color ? series[i % 2] : a}" opacity="${v.x || v.y ? 0.9 : 0.35}"/>`,
+        )
+        .join("");
   } else if (kind === "sampler")
     b = P(
       path(
@@ -139,6 +172,27 @@ export function figureMarkup(c, v) {
       (_, i) =>
         `<rect x="${i * 10 + 2}" y="4" width="8" height="16" fill="${a}" opacity="${(clamp(n / (c.max || 1), 0, 1) * (i + 1)) / 6}"/>`,
     ).join("");
+  else if (typeof v === "string")
+    b =
+      `<text x="3" y="16" font-size="11" fill="${ink}" font-family="monospace">${esc(v.slice(0, 9) || "empty")}</text>` +
+      P("M2 21H62", line);
+  else if (Array.isArray(v) && v.every((x) => typeof x === "number")) {
+    const hi = Math.max(1e-9, ...v.map(Math.abs));
+    b = v
+      .slice(0, 12)
+      .map(
+        (x, i, arr) =>
+          `<rect x="${2 + (i * 60) / arr.length}" y="${22 - (Math.abs(x) / hi) * 19}" width="${Math.max(2, 60 / arr.length - 2)}" height="${(Math.abs(x) / hi) * 19}" fill="${a}"/>`,
+      )
+      .join("");
+  } else if (v && typeof v === "object")
+    b = Object.keys(v)
+      .slice(0, 6)
+      .map(
+        (k, i) =>
+          `<rect x="${2 + i * 10}" y="${4 + (i % 3) * 4}" width="8" height="14" fill="${a}" opacity="${0.35 + 0.1 * (i % 5)}"/>`,
+      )
+      .join("");
   else {
     // Two compound paths keep the same sixteen ticks without sixteen DOM nodes.
     const ticks = ["", ""];

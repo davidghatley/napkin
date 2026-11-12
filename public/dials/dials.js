@@ -57,6 +57,7 @@ const keyBindings = (keys) => [
     "Open this control in the studio",
   ],
   ["Ctrl C / Ctrl V", "Copy / paste a value (on a label)"],
+  ["Ctrl K", "Find any control, or change a section's depth"],
   ["Ctrl Z / Ctrl Shift Z", "Undo / redo"],
   ["1 / 2 / 3", "Dial / bench / studio (on section depth buttons)"],
   ["Escape", "Cancel edit / leave studio"],
@@ -559,7 +560,11 @@ export class Dials extends EventTarget {
       if (input.tagName === "INPUT")
         input.value =
           input !== document.activeElement &&
-          c.value &&
+          typeof c.value === "string" &&
+          ["gradient", "asset", "file"].includes(c.type)
+            ? this.summary(c)
+            : input !== document.activeElement &&
+                c.value &&
           typeof c.value === "object" &&
           !Array.isArray(c.value)
             ? this.summary(c)
@@ -608,6 +613,25 @@ export class Dials extends EventTarget {
       if (c.type === "image") return `γ ${v.gamma || 1}`;
       if (c.type === "encoding") return `${v.x || "—"} × ${v.y || "—"}`;
     }
+    if (typeof v === "string" && c.type === "gradient") {
+      const parts = [];
+      let depth = 0,
+        cur = "";
+      for (const ch of v.slice(v.indexOf("(") + 1, v.lastIndexOf(")"))) {
+        if (ch === "(") depth++;
+        if (ch === ")") depth--;
+        if (ch === "," && !depth) {
+          parts.push(cur.trim());
+          cur = "";
+        } else cur += ch;
+      }
+      parts.push(cur.trim());
+      const first = parts[0] || "",
+        direction = /^(-?[\d.]+(?:deg|turn|rad)|to [a-z ]+|circle|ellipse)/.test(first);
+      return `${/^([a-z-]+)-gradient/.exec(v)?.[1] || "gradient"} ${direction ? first.split(" ")[0] + " " : ""}· ${parts.length - (direction ? 1 : 0)} stops`;
+    }
+    if (typeof v === "string" && ["asset", "file"].includes(c.type))
+      return v.split(/[\\/]/).pop() || v;
     return format(v, c).slice(0, 38);
   }
   buildStudio(s, id, update = true) {
@@ -833,6 +857,11 @@ export class Dials extends EventTarget {
       );
       return;
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      this.palette();
+      return;
+    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !editing) {
       e.preventDefault();
       this.undo(e.shiftKey);
@@ -924,8 +953,147 @@ export class Dials extends EventTarget {
     to.push(entry);
     this.paint(id);
   }
+  /** Command palette: type to find a control or a depth command; Enter runs, Shift+Enter opens the studio. */
+  palette() {
+    if (this.dialog?.open) return;
+    const items = [];
+    for (const s of this.sections.values()) {
+      const name = s.schema.label || s.schema.id;
+      for (const c of s.schema.controls)
+        items.push({
+          text: `${name} / ${c.label || c.id}`,
+          hint: format(c.value ?? c.default, c).slice(0, 24),
+          run: (studio) => {
+            if (studio) return this.open(c.id);
+            if (s.depth === 1) this.setDepth(s.schema.id, 2, false);
+            this.rows.get(c.id)?.label.focus();
+          },
+        });
+      ["Dial", "Bench", "Studio"].forEach((depthName, i) =>
+        items.push({
+          text: `${name}: show as ${depthName.toLowerCase()}`,
+          hint: String(i + 1),
+          run: () => {
+            this.setDepth(s.schema.id, i + 1);
+            s.buttons[i].focus();
+          },
+        }),
+      );
+    }
+    const input = el("input", {
+        type: "text",
+        role: "combobox",
+        "aria-expanded": "true",
+        "aria-autocomplete": "list",
+        "aria-label": "Find a control or command",
+        placeholder: "Find a control or command",
+        spellcheck: false,
+        autocomplete: "off",
+      }),
+      list = el("div", { role: "listbox", class: "d-palette-list", "aria-label": "Results" });
+    const listId = `d-pal-${++serial}`;
+    list.id = listId;
+    input.setAttribute("aria-controls", listId);
+    let shown = [],
+      at = 0;
+    const score = (text, q) => {
+      if (!q) return 1;
+      const t = text.toLowerCase();
+      let i = 0,
+        gaps = 0,
+        last = -1;
+      for (const ch of q.toLowerCase().replace(/\s+/g, "")) {
+        const j = t.indexOf(ch, i);
+        if (j < 0) return 0;
+        gaps += last >= 0 ? j - last - 1 : j;
+        last = j;
+        i = j + 1;
+      }
+      return 1 / (1 + gaps);
+    };
+    const paint = () => {
+      shown = items
+        .map((it) => [score(it.text, input.value), it])
+        .filter(([n]) => n > 0)
+        .sort((a, b) => b[0] - a[0])
+        .slice(0, 12)
+        .map(([, it]) => it);
+      at = Math.min(at, Math.max(0, shown.length - 1));
+      list.replaceChildren(
+        ...shown.map((it, i) => {
+          const o = el(
+            "div",
+            {
+              role: "option",
+              id: `${listId}-${i}`,
+              class: "d-palette-item",
+              "aria-selected": String(i === at),
+            },
+            el("span", { text: it.text }),
+            el("kbd", { text: it.hint }),
+          );
+          o.addEventListener("click", () => run(it, false));
+          return o;
+        }),
+      );
+      input.setAttribute("aria-activedescendant", shown.length ? `${listId}-${at}` : "");
+      if (!shown.length) list.append(el("div", { class: "d-palette-empty", text: "Nothing matches" }));
+    };
+    const run = (it, studio) => {
+      this.dialog.close();
+      // The dialog hands focus back to its opener on close; move focus after that.
+      setTimeout(() => it.run(studio), 0);
+    };
+    input.addEventListener("input", () => {
+      at = 0;
+      paint();
+    });
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        at = clamp(at + (e.key === "ArrowDown" ? 1 : -1), 0, Math.max(0, shown.length - 1));
+        paint();
+      } else if (e.key === "Enter" && shown[at]) {
+        e.preventDefault();
+        run(shown[at], e.shiftKey);
+      }
+    });
+    this.dialog = el(
+      "dialog",
+      { class: "dials d-help d-palette", "aria-label": "Command palette" },
+      input,
+      list,
+      el("p", { class: "d-palette-note", text: "Enter goes to the control. Shift Enter opens its studio. Escape closes." }),
+    );
+    this.root.append(this.dialog);
+    this.dialog.addEventListener("close", () => this.dialog.remove(), { once: true });
+    paint();
+    this.dialog.showModal();
+    input.focus();
+  }
   help() {
     if (this.dialog?.open) return;
+    const editor = el("div", { class: "d-keymap" });
+    for (const action of ["increase", "decrease", "reset", "studio", "help"]) {
+      const field = el("input", {
+        type: "text",
+        "aria-label": `Keys for ${action}`,
+        value: this.keys[action].join(" "),
+        spellcheck: false,
+      });
+      field.addEventListener("change", () => {
+        const list = field.value.split(/\s+/).filter(Boolean);
+        if (!list.length) {
+          field.value = this.keys[action].join(" ");
+          return;
+        }
+        this.keys[action] = list;
+        this.options.onKeys?.({ ...this.keys });
+        this.announce(`${action} is now ${list.join(", ")}`);
+      });
+      editor.append(el("label", {}, el("span", { text: action }), field));
+    }
     this.dialog = el(
       "dialog",
       { class: "dials d-help", "aria-label": "Instrument keyboard map" },
@@ -933,6 +1101,9 @@ export class Dials extends EventTarget {
       ...keyBindings(this.keys).map(([key, text]) =>
         el("p", {}, el("kbd", { text: key }), el("span", { text })),
       ),
+      el("h2", { text: "Change keys" }),
+      el("p", { class: "d-note", text: "Separate several keys with a space, for example: ArrowRight l" }),
+      editor,
       button("Close", "Close keyboard map", () => this.dialog.close()),
     );
     this.root.append(this.dialog);

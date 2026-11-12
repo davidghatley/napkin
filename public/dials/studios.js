@@ -1,4 +1,4 @@
-import { el, button, heading, canvas, grid, pointerSurface } from "./dom.js";
+import { el, button, heading, canvas, grid, pointerSurface, visible } from "./dom.js";
 import { clamp, clone, expression, same } from "./values.js";
 import {
   parseColor,
@@ -421,7 +421,7 @@ function colorStudio(ctx, host) {
   plane.addEventListener("d-resize", () => draw());
   function draw() {
     frame = 0;
-    if (dead) return;
+    if (dead || !visible(plane)) return;
     const v = parseColor(ctx.get(), ctx.host),
       back = parseColor(background, ctx.host),
       key = [
@@ -1600,7 +1600,7 @@ function imageStudio(ctx, host) {
     });
   function draw() {
     frame = 0;
-    if (dead) return;
+    if (dead || !visible(preview)) return;
     const v = ctx.get(),
       g = preview.getContext("2d"),
       out = new ImageData(320, 180),
@@ -2193,6 +2193,20 @@ export function createStudio(panel, section, host) {
   else if (c.type === "encoding") lab = encodingStudio(ctx, host);
   else if (c.type === "sampler") lab = samplerStudio(ctx, host);
   else lab = generalStudio(ctx, host);
+  // Two columns in a wide studio: the main figure and its direct tools on the left, the rest on the right.
+  if (host.dataset.studio !== "motion") {
+    const kids = [...host.children].filter((k) => !k.matches(".d-lab-head")),
+      heroSelector = ".d-plot, .d-color-main, .d-type-specimen, .d-type-ruler, .d-step-cells",
+      main = el("div", { class: "d-col d-col-main" }),
+      side = el("div", { class: "d-col d-col-side" });
+    for (const k of kids)
+      (k.matches(heroSelector) ||
+      (host.dataset.studio === "color" && k.matches(".d-tools"))
+        ? main
+        : side
+      ).append(k);
+    host.append(main, side);
+  }
   const onValue = (e) => {
     if (e.detail.control === c.id && e.detail.phase === "commit")
       lab.commit?.();
