@@ -1,0 +1,1 @@
+@keyframes drift { 0%,100% { transform: translateX(-50px) rotate(-10deg); } 50% { transform: translateX(50px) rotate(10deg); } }

@@ -1,0 +1,1 @@
+export default function Badge(){return <div style={{background:"#c9ded1",padding:24,color:"#224b39"}}>Field notes</div>}

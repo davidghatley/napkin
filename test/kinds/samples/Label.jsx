@@ -1,0 +1,1 @@
+export default function Label(){return <h2>Specimen</h2>}
