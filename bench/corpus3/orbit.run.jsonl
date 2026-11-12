@@ -1,0 +1,4 @@
+{"type":"run","id":"orbit-731","plan":["draw","review"]}
+{"type":"step","run":"orbit-731","step":"draw","status":"complete"}
+{"type":"artifact","run":"orbit-731","path":"spectrum.png"}
+{"type":"question","run":"orbit-731","text":"Keep the gold?"}

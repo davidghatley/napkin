@@ -1,0 +1,840 @@
+{
+  "license": "CC0-1.0",
+  "generator": "tools/make-corpus3.mjs",
+  "files": [
+    {
+      "path": "orbit.html",
+      "kind": "html",
+      "markers": {
+        "selectors": [
+          "h1",
+          "button"
+        ],
+        "text": [
+          "Orbit 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 253,
+      "sha256": "44cee289bf34847ca903c6dc9eb6c187b86cfd5a901983936926ddde053c2b20"
+    },
+    {
+      "path": "Orbit.tsx",
+      "kind": "tsx",
+      "markers": {
+        "selectors": [
+          "button"
+        ],
+        "text": [
+          "Launch 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 195,
+      "sha256": "3259bc8baa2b134a911b3f41a551371a84166eeb977050a9925557880d9506f6"
+    },
+    {
+      "path": "Orbit.jsx",
+      "kind": "jsx",
+      "markers": {
+        "selectors": [
+          "button"
+        ],
+        "text": [
+          "Launch 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 147,
+      "sha256": "2a40ddd125cdb2f0dec285a96faf20edf6170cb820c4eb43fc1fe4036a17e54f"
+    },
+    {
+      "path": "palette.css",
+      "kind": "css",
+      "markers": {
+        "selectors": [
+          "pre,code,[role=\"table\"]"
+        ],
+        "text": [
+          "#154f65"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 63,
+      "sha256": "372a7d9c1705e1c17156d53462fc7d0bade72d013b53e2963c0bb2136de1e784"
+    },
+    {
+      "path": "orbit.svg",
+      "kind": "svg",
+      "markers": {
+        "selectors": [
+          "svg,img,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "width": 160,
+        "height": 100
+      },
+      "dependencies": [],
+      "bytes": 303,
+      "sha256": "dca1e5b285cb2b61af21062e222cd37a67294af2ca7b70dab9c614c921551fbf"
+    },
+    {
+      "path": "spectrum.png",
+      "kind": "png",
+      "markers": {
+        "selectors": [
+          "img,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "width": 160,
+        "height": 100,
+        "frames": 1
+      },
+      "dependencies": [],
+      "bytes": 3120,
+      "sha256": "fc8b853ffe1556753234bdb3c2793e9d5bd7ec247910fdd6a758383003a3691d"
+    },
+    {
+      "path": "spectrum.jpg",
+      "kind": "jpg",
+      "markers": {
+        "selectors": [
+          "img,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "width": 160,
+        "height": 100,
+        "frames": 1
+      },
+      "dependencies": [],
+      "bytes": 4868,
+      "sha256": "b3d49056bd320ac34c9787a23fc9bae9779c69d2256b7d3ecf53809ab78dd07c"
+    },
+    {
+      "path": "spectrum.webp",
+      "kind": "webp",
+      "markers": {
+        "selectors": [
+          "img,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "width": 160,
+        "height": 100,
+        "frames": 1
+      },
+      "dependencies": [],
+      "bytes": 2154,
+      "sha256": "8a7184e24f36d2245be5d79d42d79ed0557525cc242d65eea363e4294c3e8c1e"
+    },
+    {
+      "path": "spectrum.avif",
+      "kind": "avif",
+      "markers": {
+        "selectors": [
+          "img,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "width": 160,
+        "height": 100,
+        "frames": 1
+      },
+      "dependencies": [],
+      "bytes": 1176,
+      "sha256": "c87ad82eaa4a3d2d59dfbfc3ab9dbc43d040aa1631929aa691319e8a407723cf"
+    },
+    {
+      "path": "spectrum.gif",
+      "kind": "gif",
+      "markers": {
+        "selectors": [
+          "img,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "width": 160,
+        "height": 100,
+        "frames": 5
+      },
+      "dependencies": [],
+      "bytes": 15104,
+      "sha256": "33a5dc4b3746d57e98b1e8baa12e2c9fa303dba163bf9c928a32fd981fcbe20b"
+    },
+    {
+      "path": "spectrum.apng",
+      "kind": "apng",
+      "markers": {
+        "selectors": [
+          "img,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "width": 160,
+        "height": 100,
+        "frames": 5
+      },
+      "dependencies": [],
+      "bytes": 15068,
+      "sha256": "e16a5e70a7da71b0e0f06ff13426188d361cc97dd4484b2658d85dcbaa04e219"
+    },
+    {
+      "path": "orbit.mp4",
+      "kind": "mp4",
+      "markers": {
+        "selectors": [
+          "video"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 1.2,
+        "width": 160,
+        "height": 100
+      },
+      "dependencies": [],
+      "bytes": 13290,
+      "sha256": "871a904204e7ad6234138eff763c3af81a57efcde767f3032a5b136c7449b2eb"
+    },
+    {
+      "path": "orbit.webm",
+      "kind": "webm",
+      "markers": {
+        "selectors": [
+          "video"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 1.2,
+        "width": 160,
+        "height": 100
+      },
+      "dependencies": [],
+      "bytes": 10946,
+      "sha256": "212dac0a60eb25dfb77cfa402ba9670f9e951c27941e360b2672602be3050220"
+    },
+    {
+      "path": "orbit.mov",
+      "kind": "mov",
+      "markers": {
+        "selectors": [
+          "video"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 1.2,
+        "width": 160,
+        "height": 100
+      },
+      "dependencies": [],
+      "bytes": 13237,
+      "sha256": "0d6b1383ab6c24f4a66f86c389ff9f4fa743da48296f1c620d48608c0eb29c89"
+    },
+    {
+      "path": "tone.wav",
+      "kind": "wav",
+      "markers": {
+        "selectors": [
+          "audio",
+          "canvas,svg,[aria-label*=\"waveform\" i]"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 1.2,
+        "frequency": 731
+      },
+      "dependencies": [],
+      "bytes": 105918,
+      "sha256": "53418d725f9c3c65fe19051a56f288e50506ecd44801d550051b12e6ada00048"
+    },
+    {
+      "path": "tone.mp3",
+      "kind": "mp3",
+      "markers": {
+        "selectors": [
+          "audio",
+          "canvas,svg,[aria-label*=\"waveform\" i]"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 1.2,
+        "frequency": 731
+      },
+      "dependencies": [],
+      "bytes": 10048,
+      "sha256": "556441197a56f6748927e0db1027baeb408ca62277a94e70de1b609d11de56f1"
+    },
+    {
+      "path": "tone.flac",
+      "kind": "flac",
+      "markers": {
+        "selectors": [
+          "audio",
+          "canvas,svg,[aria-label*=\"waveform\" i]"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 1.2,
+        "frequency": 731
+      },
+      "dependencies": [],
+      "bytes": 27607,
+      "sha256": "3e49d42e31fa6e96b90045bf03d824955ac8814abadf00c257f98f0a278f4bf2"
+    },
+    {
+      "path": "tone.ogg",
+      "kind": "ogg",
+      "markers": {
+        "selectors": [
+          "audio",
+          "canvas,svg,[aria-label*=\"waveform\" i]"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 1.2,
+        "frequency": 731
+      },
+      "dependencies": [],
+      "bytes": 6242,
+      "sha256": "175e23c41cffe59fd604863f4e69b10d0ad424f72dce484722d1b87aca16da52"
+    },
+    {
+      "path": "orbit.lottie.json",
+      "kind": "lottie",
+      "markers": {
+        "selectors": [
+          "svg,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "duration": 2
+      },
+      "dependencies": [],
+      "bytes": 544,
+      "sha256": "806ee479894e45d7148c6f42edf9e0331313e6445ba98a85f7094c28bbaddcea"
+    },
+    {
+      "path": "orbit.animation.html",
+      "kind": "css-animation",
+      "markers": {
+        "selectors": [
+          "button"
+        ],
+        "text": [
+          "Launch 731"
+        ]
+      },
+      "meta": {
+        "duration": 2
+      },
+      "dependencies": [],
+      "bytes": 373,
+      "sha256": "f7c5e373ee0c795f2333fa9cd0a7e6d9fd944aae318133bb520e3cecb9e8bf9b"
+    },
+    {
+      "path": "orbit.waapi.html",
+      "kind": "waapi",
+      "markers": {
+        "selectors": [
+          "button"
+        ],
+        "text": [
+          "Launch 731"
+        ]
+      },
+      "meta": {
+        "duration": 2
+      },
+      "dependencies": [],
+      "bytes": 409,
+      "sha256": "403e3850cfcb11a18d1de213f15a4b0747307c35d531372f0cb92191dda659bc"
+    },
+    {
+      "path": "table.csv",
+      "kind": "csv",
+      "markers": {
+        "selectors": [
+          "table,[role=\"grid\"],[role=\"table\"]"
+        ],
+        "text": [
+          "orbit-0"
+        ]
+      },
+      "meta": {
+        "rows": 17,
+        "columns": 4
+      },
+      "dependencies": [],
+      "bytes": 375,
+      "sha256": "46c575661d03b9262e7d4400f0dc3dfa130467446aa51aa6a9bca3321612a397"
+    },
+    {
+      "path": "table.tsv",
+      "kind": "tsv",
+      "markers": {
+        "selectors": [
+          "table,[role=\"grid\"],[role=\"table\"]"
+        ],
+        "text": [
+          "orbit-0"
+        ]
+      },
+      "meta": {
+        "rows": 17,
+        "columns": 4
+      },
+      "dependencies": [],
+      "bytes": 375,
+      "sha256": "fbd20e399ff3a02e165d3b478fa0521490edb034b5c39076fc659a706aeabc0c"
+    },
+    {
+      "path": "table.json",
+      "kind": "json",
+      "markers": {
+        "selectors": [
+          "table,[role=\"grid\"],[role=\"table\"]"
+        ],
+        "text": [
+          "orbit-0"
+        ]
+      },
+      "meta": {
+        "rows": 17,
+        "columns": 4
+      },
+      "dependencies": [],
+      "bytes": 932,
+      "sha256": "0213cd3a68d157f926299b55bc094eec3ee76c3a83e3ee9a5998a304a89e6afc"
+    },
+    {
+      "path": "table.jsonl",
+      "kind": "jsonl",
+      "markers": {
+        "selectors": [
+          "table,[role=\"grid\"],[role=\"table\"]"
+        ],
+        "text": [
+          "orbit-0"
+        ]
+      },
+      "meta": {
+        "rows": 17,
+        "columns": 4
+      },
+      "dependencies": [],
+      "bytes": 931,
+      "sha256": "ac5ac568d73565f8bec767a96a8c26bfa2272d6369b70dea18f0c991679bceaf"
+    },
+    {
+      "path": "table.parquet",
+      "kind": "parquet",
+      "markers": {
+        "selectors": [
+          "table,[role=\"grid\"],[role=\"table\"]"
+        ],
+        "text": [
+          "731"
+        ]
+      },
+      "meta": {
+        "rows": 17,
+        "columns": 2
+      },
+      "dependencies": [],
+      "bytes": 323,
+      "sha256": "dd869b7716134c875200e446366b783a8a67a7c4c5159d3bc45d08297b05bad3"
+    },
+    {
+      "path": "table.sqlite",
+      "kind": "sqlite",
+      "markers": {
+        "selectors": [
+          "table,[role=\"grid\"],[role=\"table\"]"
+        ],
+        "text": [
+          "orbit-0"
+        ]
+      },
+      "meta": {
+        "rows": 17,
+        "columns": 4
+      },
+      "dependencies": [],
+      "bytes": 8192,
+      "sha256": "4ed3fd74751abf6ec037eae38fe871c3c6d3ba8c070219488f1114506bf87449"
+    },
+    {
+      "path": "table.arrow",
+      "kind": "arrow",
+      "markers": {
+        "selectors": [
+          "table,[role=\"grid\"],[role=\"table\"]"
+        ],
+        "text": [
+          "731"
+        ]
+      },
+      "meta": {
+        "rows": 17,
+        "columns": 2
+      },
+      "dependencies": [],
+      "bytes": 578,
+      "sha256": "0d8102b68727bbcbf5e3f6f4ec4131f4c250aa29b99e0b0d58020a34677f38d1"
+    },
+    {
+      "path": "chart.vl.json",
+      "kind": "vega-lite",
+      "markers": {
+        "selectors": [
+          "svg,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "marks": 17
+      },
+      "dependencies": [],
+      "bytes": 1121,
+      "sha256": "803ab0d37261d16c951e21445409d1437b4660376fd3fb50563d4ed7155d54a7"
+    },
+    {
+      "path": "chart.data.json",
+      "kind": "chart",
+      "markers": {
+        "selectors": [
+          "svg,canvas"
+        ],
+        "text": []
+      },
+      "meta": {
+        "marks": 17
+      },
+      "dependencies": [],
+      "bytes": 978,
+      "sha256": "607325dcee9d5342b446bed47e940f9c57730efc0c4fce822c884be392e50e2f"
+    },
+    {
+      "path": "notes.md",
+      "kind": "md",
+      "markers": {
+        "selectors": [
+          "h1",
+          "strong"
+        ],
+        "text": [
+          "Orbit 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 34,
+      "sha256": "40f00a44f3f27dc2657ea7f50a611952ca03ba2e8e5d74d789fc15421c320931"
+    },
+    {
+      "path": "notes.txt",
+      "kind": "txt",
+      "markers": {
+        "selectors": [
+          "pre,article"
+        ],
+        "text": [
+          "Orbit 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 27,
+      "sha256": "1de3fbe76ce41fe2a1c0cf43d0e57f40182e61c8715d6d2c666a4284abf59abc"
+    },
+    {
+      "path": "orbit.rs",
+      "kind": "code",
+      "markers": {
+        "selectors": [
+          "pre code,pre"
+        ],
+        "text": [
+          "Orbit 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 37,
+      "sha256": "95fc902044076b060aa4b0cd238d2c2932a80910dfef6d6cc4843d2aa2767f05"
+    },
+    {
+      "path": "orbit.diff",
+      "kind": "diff",
+      "markers": {
+        "selectors": [
+          "pre,code,[role=\"table\"]"
+        ],
+        "text": [
+          "+Orbit 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 96,
+      "sha256": "9a2cba8d141dd63cc4ba7f92a5d72df0b7d83e3ef6aaa1834176d8d031823ad0"
+    },
+    {
+      "path": "orbit.patch",
+      "kind": "patch",
+      "markers": {
+        "selectors": [
+          "pre,code,[role=\"table\"]"
+        ],
+        "text": [
+          "+Orbit 731"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 61,
+      "sha256": "19ed36f96a1e04263c5d4bb6d5d4cc268502c143dc77b55939917f08de508d1d"
+    },
+    {
+      "path": "orbit.ipynb",
+      "kind": "ipynb",
+      "markers": {
+        "selectors": [
+          "pre,code",
+          "h1"
+        ],
+        "text": [
+          "762"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 418,
+      "sha256": "01402bdc6185bf729040c118b4bb624624b8d313a36e4cdc0662475668862039"
+    },
+    {
+      "path": "orbit.pdf",
+      "kind": "pdf",
+      "markers": {
+        "selectors": [
+          "canvas,embed,object,iframe"
+        ],
+        "text": []
+      },
+      "meta": {
+        "pages": 1
+      },
+      "dependencies": [],
+      "bytes": 663,
+      "sha256": "ae2bc8c5c0f91f0574257d52b349f7010fece43a54f332983f2a2cd12f33f00c"
+    },
+    {
+      "path": "triangle.gltf",
+      "kind": "gltf",
+      "markers": {
+        "selectors": [
+          "canvas,model-viewer"
+        ],
+        "text": []
+      },
+      "meta": {
+        "vertices": 3
+      },
+      "dependencies": [],
+      "bytes": 630,
+      "sha256": "641123536bb3d74ff103a7cdea2663cff661e8cfe451f00c6c737e265e5b2e5e"
+    },
+    {
+      "path": "triangle.glb",
+      "kind": "glb",
+      "markers": {
+        "selectors": [
+          "canvas,model-viewer"
+        ],
+        "text": []
+      },
+      "meta": {
+        "vertices": 3
+      },
+      "dependencies": [],
+      "bytes": 600,
+      "sha256": "8200bf872c980576545c06e6f2dcdbb54e712d4ba4eafb20073030a71ffeef56"
+    },
+    {
+      "path": "triangle.obj",
+      "kind": "obj",
+      "markers": {
+        "selectors": [
+          "canvas,model-viewer"
+        ],
+        "text": []
+      },
+      "meta": {
+        "vertices": 3
+      },
+      "dependencies": [],
+      "bytes": 53,
+      "sha256": "9b3d4f3de14837e42996f5e93cc5e813340344284c71b2677d1b83a7283a47cc"
+    },
+    {
+      "path": "orbit.otf",
+      "kind": "otf",
+      "markers": {
+        "selectors": [
+          "[contenteditable],canvas,[aria-label*=\"specimen\" i]"
+        ],
+        "text": []
+      },
+      "meta": {
+        "glyphs": 96
+      },
+      "dependencies": [],
+      "bytes": 5028,
+      "sha256": "52ff099a983bc548f10479a45c4a6a25e147051a5d7cd960894944724cc64fab"
+    },
+    {
+      "path": "orbit.ttf",
+      "kind": "ttf",
+      "markers": {
+        "selectors": [
+          "[contenteditable],canvas,[aria-label*=\"specimen\" i]"
+        ],
+        "text": []
+      },
+      "meta": {
+        "glyphs": 96
+      },
+      "dependencies": [],
+      "bytes": 4496,
+      "sha256": "dce6437317013ac482aaac8deeccc67aadb772a208f901ea5de26e73f23f988b"
+    },
+    {
+      "path": "orbit.woff2",
+      "kind": "woff2",
+      "markers": {
+        "selectors": [
+          "[contenteditable],canvas,[aria-label*=\"specimen\" i]"
+        ],
+        "text": []
+      },
+      "meta": {
+        "glyphs": 96
+      },
+      "dependencies": [],
+      "bytes": 320,
+      "sha256": "6225d68314fe336fd4bdb131e6ac9b7b9c37953e68193da449f8550670b8cbfd"
+    },
+    {
+      "path": "workflow.api.json",
+      "kind": "comfyui",
+      "markers": {
+        "selectors": [
+          "svg,canvas,[role=\"tree\"]"
+        ],
+        "text": [
+          "LoadImage",
+          "SaveImage"
+        ]
+      },
+      "meta": {
+        "nodes": 2
+      },
+      "dependencies": [],
+      "bytes": 151,
+      "sha256": "75ec931718af977e0d0479760caef49a8771419474aa4270289e8e7478291654"
+    },
+    {
+      "path": "workflow.ui.json",
+      "kind": "comfyui",
+      "markers": {
+        "selectors": [
+          "svg,canvas,[role=\"tree\"]"
+        ],
+        "text": [
+          "LoadImage",
+          "SaveImage"
+        ]
+      },
+      "meta": {
+        "nodes": 2
+      },
+      "dependencies": [],
+      "bytes": 612,
+      "sha256": "e7360a38bd90d4330065238f619f6a0d1f1330007ea9eb89432826b6b7a38321"
+    },
+    {
+      "path": "orbit.run.jsonl",
+      "kind": "agent-run",
+      "markers": {
+        "selectors": [
+          "[role=\"log\"],ol,[role=\"tree\"]"
+        ],
+        "text": [
+          "Keep the gold?"
+        ]
+      },
+      "meta": {},
+      "dependencies": [],
+      "bytes": 247,
+      "sha256": "020923cf2dccde1ef8ae3b900e9311abf59e67f8d2ae354e0d4374fe2dd3a7b6"
+    },
+    {
+      "path": "orbit.zip",
+      "kind": "zip",
+      "markers": {
+        "selectors": [
+          "[role=\"tree\"],ul,table"
+        ],
+        "text": [
+          "notes.txt",
+          "spectrum.png"
+        ]
+      },
+      "meta": {
+        "entries": 2
+      },
+      "dependencies": [],
+      "bytes": 3455,
+      "sha256": "207e7c65b3576f59be9be1998781ef9c81dce181cbf7d156281b8f2bad126cba"
+    },
+    {
+      "path": "unknown.bin",
+      "kind": "binary",
+      "markers": {
+        "selectors": [
+          "pre,code,table"
+        ],
+        "text": [
+          "ORBIT_731_USEFUL_STRING"
+        ]
+      },
+      "meta": {
+        "bytes": 287
+      },
+      "dependencies": [],
+      "bytes": 287,
+      "sha256": "ad886dc6668601a2168ec43aeb62649c3fa2b24c7291222f17497b8390a625cb"
+    }
+  ]
+}
