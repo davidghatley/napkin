@@ -12,9 +12,11 @@ Status: placeholder name · written 2026-10-17 from David's direction; Phase 4 s
 - **Agent-editable**: agents read and write the same documents David edits, live.
 - Files on disk are the source of truth (diffable, versionable).
 
+- **Since 2026-11-12 (decision 0017): the shared surface for all agentic work.** Any media or data an agent produces (UI, images, video, audio, animation, datasets, charts, documents) is an item on the canvas with its own viewer and instrument panel; items group and arrange any way; everything is keyboard-drivable; any agent harness connects; ComfyUI is the generative backend. The dream is [docs/DREAM3.md](docs/DREAM3.md).
+
 ## What it is not
 - Not a Figma clone with every feature.
-- Not a whiteboard.
+- Not a freehand whiteboard (free arrangement and grouping of real files is in scope since decision 0017).
 - Not hosted (for now): one person and their agents on localhost.
 - Not the old precision-canvas 'conformance harness' scope.
 
@@ -30,6 +32,8 @@ Reads/writes component files (HTML/CSS, TSX) and the CSS variables those files d
 - 2026-10-21: David approved the dream (all 104 criteria and Needs David items N1-N7) in the review page: a token panel and opening other repos' components are now in scope; the dialect widens (decision 0004); G2, G5 and G6 are answered in decision 0005. Hosting stays out until David says otherwise.
 
 - 2026-10-30: napkin is re-dreamed (David): HTML/CSS first, React also supported, render files as they are, nothing imposed (no required sidecar, config or token source); the TSX-only rule of decision 0003 is retired (decision 0013). The bar: a designer would choose napkin over Figma.
+
+- 2026-11-12: napkin widens to any media and data, instrument panels with depth, any agent harness and a ComfyUI backend (David; decision 0017, DREAM 3).
 
 ## Starting point
 The 18 Oct co-editing spike (decisions 0001, 0002). The precision-canvas spec and capability catalog are reference only (see docs/salvage.md).
