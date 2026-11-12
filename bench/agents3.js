@@ -1,4 +1,3 @@
-import { reviewEvidence } from "./lib3/reviews.mjs";
 import {
   run,
   assert,
@@ -11,12 +10,27 @@ import {
   snapshot,
   sleep,
   waitUntil,
+  eventStream,
 } from "./lib3/runtime.mjs";
 import { mcp } from "./lib3/mcp.mjs";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 export async function measure() {
-  return run("D5", async ({ book, f, s, restart }) => {
+  // Find an object anywhere in a value whose own fields satisfy `pred` (events arrive in many envelopes).
+  const deep = (v, pred) => {
+    if (Array.isArray(v)) return v.some((x) => deep(x, pred));
+    if (v && typeof v === "object")
+      return pred(v) || Object.values(v).some((x) => deep(x, pred));
+    if (typeof v === "string") {
+      try {
+        const j = JSON.parse(v);
+        if (j && typeof j === "object") return deep(j, pred);
+      } catch {}
+    }
+    return false;
+  };
+  const hasId = (o, id) => Object.values(o).some((x) => x === id);
+  return run("D5", async ({ book, f, s, restart, browser }) => {
     const clients = [];
     let agent,
       person,
@@ -184,15 +198,27 @@ export async function measure() {
               canonical(before) === canonical(snapshot(f.folder)),
               "proposal wrote before review",
             );
+            const comment = "Review " + nonce(),
+              outcome = n === 1 ? "rejected" : "accepted";
             await person.call("resolve_proposal", {
               proposal: id,
-              outcome: n === 1 ? "rejected" : "accepted",
-              comment: "Review " + nonce(),
+              outcome,
+              comment,
             });
             const events = await call("read_events", {});
             assert(
-              JSON.stringify(events).includes(id),
-              "agent did not read person answer",
+              deep(
+                events,
+                (o) =>
+                  hasId(o, id) &&
+                  o.comment === comment &&
+                  Object.values(o).some(
+                    (x) =>
+                      typeof x === "string" &&
+                      x.toLowerCase().startsWith(outcome.slice(0, 6)),
+                  ),
+              ),
+              "agent did not read the person's exact answer (id, outcome, comment) for this proposal",
             );
             if (n !== 1)
               assert(
@@ -227,7 +253,10 @@ export async function measure() {
           assert(id, "no question id");
           await person.call("answer_question", { question: id, answer: text });
           const events = await call("read_events", {});
-          assert(JSON.stringify(events).includes(text), "answer lost");
+          assert(
+            deep(events, (o) => hasId(o, id) && o.answer === text),
+            "the agent did not read the exact answer to this question (id and answer in one event)",
+          );
           await complete("Ask question");
           await complete("Read answer");
           return { ok: true, value: { id, answer: text } };
@@ -261,7 +290,16 @@ export async function measure() {
                 canonical(before[key]) === canonical(after[key]),
               "restart changed or omitted " + key,
             );
-          await call("resume_run", { run: runId });
+          const resumed = await call("resume_run", { run: runId });
+          assert(
+            JSON.stringify(resumed).includes("step-" + stepCount) &&
+              !JSON.stringify(resumed.next ?? resumed.pending ?? "").includes(
+                "step-" + (stepCount - 1) + '"',
+              ),
+            "resume_run does not hand back the next unfinished step (step-" +
+              stepCount +
+              ")",
+          );
           await complete("Resume");
           return { ok: true, value: { runId, steps: stepCount } };
         },
@@ -277,24 +315,19 @@ export async function measure() {
               ),
             ),
             expected = [];
-          const seen = [];
+          // Latency is delivery to the person's live stream, not an agent polling its own queue.
+          const stream = await eventStream(s);
+          const seen = {
+            get find() {
+              return (fn) =>
+                stream.events
+                  .map((e) => ({ at: e.at, value: JSON.stringify(e.value) }))
+                  .find(fn);
+            },
+          };
           let collecting = true,
             pollError;
-          const collect = (async () => {
-            while (collecting) {
-              try {
-                const value = await agent.call("read_events", {});
-                seen.push({
-                  at: performance.now(),
-                  value: JSON.stringify(value),
-                });
-              } catch (e) {
-                pollError = e;
-                break;
-              }
-              await sleep(10);
-            }
-          })();
+          const collect = Promise.resolve();
           try {
             await Promise.all(
               writers.map(async (w, n) => {
@@ -321,6 +354,7 @@ export async function measure() {
           } finally {
             collecting = false;
             await collect;
+            await stream.close();
           }
           const got = await call("list_items", {});
           for (const x of expected) {
@@ -372,6 +406,27 @@ export async function measure() {
               ) === canonical(values[n]),
               "clobbered shared control",
             );
+          // A restart re-parses every file: values must come from disk, not from process memory.
+          for (const c of clients) await c.stop();
+          clients.length = 0;
+          s = await restart();
+          agent = await connect("reread-" + nonce());
+          const fresh = await call("get_controls", { item: item.id });
+          for (let n = 0; n < 4; n++)
+            assert(
+              canonical(
+                fresh.sections
+                  .flatMap((x) => x.controls)
+                  .find((c) => c.id === controls[n].id)?.value,
+              ) === canonical(values[n]),
+              "concurrent shared-control edit is not in the files after a restart",
+            );
+          const files = await call("list_items", {});
+          for (const x of expected)
+            assert(
+              files.items.some((i) => i.path === x.path),
+              "an accepted artifact is not listed after a restart",
+            );
           return {
             ok: true,
             value: { writers: 4, accepted: 40, sharedControls: 4, lost: 0 },
@@ -403,19 +458,75 @@ export async function measure() {
         },
       );
       await book.check(
-        "real.codex-opencode",
-        "two real harnesses complete README proving task unaided",
-        () => {
-          const e = reviewEvidence("agents");
+        "surface.visible",
+        "the person sees run, steps, agent presence, a pending proposal and a question on screen, and they clear when answered",
+        async () => {
+          assert(!error, error);
+          const b = await browser();
+          const runName = "Visible " + nonce(),
+            agentName = "presence-" + nonce();
+          const watcher = await connect(agentName);
+          const r = await watcher.call("start_run", {
+            name: runName,
+            plan: [{ id: "a", label: "Alpha " + nonce(), status: "running" }],
+          });
+          const rid = r.id ?? r.run?.id;
+          const path = "visible-" + nonce() + ".txt",
+            qtext = "Which " + nonce() + "?";
+          const prop = await watcher.call("propose", {
+            run: rid,
+            path,
+            content: "x",
+          });
+          const pid = prop.id ?? prop.proposal;
+          const q = await watcher.call("ask_question", {
+            run: rid,
+            text: qtext,
+            options: ["one", "two"],
+          });
+          const qid = q.id ?? q.question;
+          await b.goto(s.base + "/");
+          const text = async () => b.eval(`document.body.innerText`);
+          await waitUntil(
+            async () => (await text()).includes(qtext),
+            2000,
+          ).catch(() => {});
+          const t = await text();
+          for (const need of [runName, agentName, qtext, path])
+            assert(t.includes(need), `"${need}" is not on screen`);
+          assert(
+            await b.eval(
+              `!![...document.querySelectorAll('[data-proposal-id]')].find(e=>e.dataset.proposalId===${JSON.stringify(pid)})`,
+            ),
+            "the pending proposal has no review card",
+          );
+          const answer = "two";
+          await person.call("answer_question", { question: qid, answer });
+          await person.call("resolve_proposal", {
+            proposal: pid,
+            outcome: "rejected",
+            comment: "no",
+          });
+          await waitUntil(async () => !(await text()).includes(qtext), 2000);
           return {
-            ok:
-              e.codex?.unaided === true &&
-              e.codex?.completed === true &&
-              e.opencode?.unaided === true &&
-              e.opencode?.completed === true,
-            value: e,
+            ok: true,
+            value: { run: rid, proposal: pid, question: qid },
           };
         },
+      );
+      await book.attest(
+        "real.codex-opencode",
+        "two real harnesses (Codex, opencode) complete the README proving task unaided from its one line",
+        "agents",
+        (e) =>
+          ["codex", "opencode"].every(
+            (h) =>
+              e[h]?.unaided === true &&
+              e[h]?.completed === true &&
+              /^[0-9a-f]{64}$/.test(e[h]?.transcriptSha256 || "") &&
+              e[h]?.readmeLine &&
+              e[h]?.runId,
+          ),
       );
     } finally {
       for (const c of clients) await c.stop();
