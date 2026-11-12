@@ -43,7 +43,7 @@ export const agentPermission = (dir, name) => { const c = agentsConfig(dir); ret
 const res = (status, json) => ({ status, json });
 const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error), ...extra });
 
-export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}) } = {}) {
+export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}), inFolder = true } = {}) {
   const sessions = new Map(); // token -> name
   const renderer = createRenderer();
 
@@ -52,7 +52,8 @@ export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, c
   // A folder with a napkin.json is a napkin project: its proposals live in <dir>/.napkin (private, self-ignoring). A folder napkin merely
   // opened keeps its promise to leave no trace: its proposals go to napkin's own state dir, outside the repo (NAPKIN_STATE_DIR, else
   // $XDG_STATE_HOME/napkin, else ~/.local/state/napkin), under a hash of the folder's real path.
-  const isProject = () => [dir, dirname(dir)].some((d) => existsSync(join(d, 'napkin.json')));
+  // inFolder: false (the CLI's default, decision 0013) keeps them in the state dir even for a project: nothing is written into the folder.
+  const isProject = () => inFolder && [dir, dirname(dir)].some((d) => existsSync(join(d, 'napkin.json')));
   const stateFolder = () => join(process.env.NAPKIN_STATE_DIR || join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'napkin'), createHash('sha256').update(realpathSync(dir)).digest('hex').slice(0, 24));
   const place = () => (isProject() ? { folder: join(dir, '.napkin'), project: true } : { folder: stateFolder(), project: false });
   const pfile = () => join(place().folder, 'proposals.json');

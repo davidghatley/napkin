@@ -21,6 +21,7 @@ test('static: only src/commit.js writes component files; other fs writers in src
     'codecs.js': 'sidecar .napkin.json only',
     'atomic-write.js': 'temp + fsync + rename helper that commit.js uses for sidecars (never a component .tsx)',
     'lock.js': '.napkin/lock files only',
+    'doc/state-rm.js': "deletes only inside napkin's own state dir, never in an opened folder (lead ruling for the film strip, 2026-10-30); refuses any other path",
     'docs.js': 'writes the static catalog into --out only, never into the components folder',
     'assets.js': 'image and SVG files in assets/ only (atomic temp + rename), never a component .tsx',
     'render-png.js': "its own Chromium profile in the OS temp dir",

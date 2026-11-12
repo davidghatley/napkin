@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<HTML lang="en">
+<HEAD>
+<META charset="utf-8">
+<TITLE>Edge: table, CRLF and tabs</TITLE>
+<STYLE>
+body { margin: 0; padding: 16px; font: 14px/20px system-ui, sans-serif; background: #ffffff; }
+table { border-collapse: collapse; }
+th, td { border: 1px solid #c9ccd2; padding: 6px 10px; text-align: left; }
+caption { caption-side: bottom; color: #5f636b; padding-top: 6px; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+</STYLE>
+</HEAD>
+<BODY>
+<TABLE class="t">
+	<CAPTION>Rows have no tbody tag; the browser adds one.</CAPTION>
+	<TR><TH>Guide</TH><TH class="num">Sections</TH></TR>
+	<TR><TD>Portfolio</TD><TD class="num">23</TD></TR>
+	<TR><TD>Design systems</TD><TD class="num">19</TD></TR>
+	<TR><TD colspan="2">Total · 42</TD></TR>
+</TABLE>
+</BODY>
+</HTML>

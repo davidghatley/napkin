@@ -8,7 +8,10 @@
 //          'canvas'  { component, canvas }    the component was moved on the canvas (sidecar only)
 // workspace.activity(): the last 200 { at, kind: 'change'|'added'|'removed', component, name, by, summary, revision? }
 import { explainError } from './errors.js';
-import { watch, existsSync, readFileSync } from 'node:fs';
+import { watch, existsSync, readFileSync, realpathSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
+import { writeAtomic } from './atomic.js';
 import { basename, dirname, join, resolve, relative, sep, isAbsolute } from 'node:path';
 import { EventEmitter } from 'node:events';
 import { openStore, brokenMessage } from './store.js';
@@ -31,13 +34,43 @@ async function until(fn, ms = 4000) { const t0 = Date.now(); while (Date.now() -
 
 // Every file-level commit names a real caller (AGT-05).
 // the saved frame position; reading never creates a sidecar (a deleted component must stay deleted)
-const previewOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).preview ?? {}; } catch { return {}; } };
-const slotsOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).slots ?? {}; } catch { return {}; } }; // preview content for ReactNode slots (sidecar only)
-const canvasOf = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).canvas ?? { x: 0, y: 0 }; } catch { return { x: 0, y: 0 }; } };
+const previewInSidecar = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).preview ?? {}; } catch { return {}; } };
+const slotsInSidecar = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).slots ?? {}; } catch { return {}; } }; // preview content for ReactNode slots (sidecar only)
+const canvasInSidecar = (e) => { try { return JSON.parse(readFileSync(sidecarPath(e.file), 'utf8')).canvas ?? { x: 0, y: 0 }; } catch { return { x: 0, y: 0 }; } };
 const needBy = (by) => { if (typeof by !== 'string' || !by.trim() || by.trim().toLowerCase() === 'unknown') throw new CreateError('a caller name is required: every commit names who made it'); };
+
+// Decision 0013: a folder opened without sidecar writes keeps each component's canvas settings (frame position, preview
+// widths, slot texts) in napkin's state dir, keyed by the file's path, so they survive a restart and nothing is written
+// into the folder. An existing sidecar is still read for what the state dir does not have.
+function openSettings(dir) {
+  let real = dir; try { real = realpathSync(dir); } catch { /* not there yet */ }
+  const folder = join(process.env.NAPKIN_STATE_DIR || join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'napkin'), createHash('sha256').update(real).digest('hex').slice(0, 24));
+  const file = join(folder, 'workspace.json');
+  let data = {}; try { data = JSON.parse(readFileSync(file, 'utf8')).components || {}; } catch { /* nothing saved yet */ }
+  const save = () => { mkdirSync(folder, { recursive: true }); writeAtomic(file, JSON.stringify({ folder: real, components: data }, null, 2) + '\n'); };
+  return {
+    get: (rel) => data[rel],
+    patch(rel, patch) { const next = { ...(data[rel] || {}), ...patch }; for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k]; if (Object.keys(next).length) data[rel] = next; else delete data[rel]; save(); },
+    move(from, to) { if (!data[from]) return; data[to] = data[from]; delete data[from]; save(); },
+    remove(rel) { if (!data[rel]) return; delete data[rel]; save(); },
+  };
+}
 
 export async function openWorkspace(dir, { only, recursive = false, writeSidecars = true, progressive = false } = {}) {
   dir = resolve(dir);
+  const settings = writeSidecars ? null : openSettings(dir);
+  const relOf = (e) => relative(dir, e.file);
+  const stateHas = (e, k) => settings?.get(relOf(e))?.[k] !== undefined;
+  const previewOf = (e) => (stateHas(e, 'preview') ? settings.get(relOf(e)).preview : previewInSidecar(e));
+  const slotsOf = (e) => (stateHas(e, 'slots') ? settings.get(relOf(e)).slots : slotsInSidecar(e));
+  const canvasOf = (e) => (stateHas(e, 'canvas') ? settings.get(relOf(e)).canvas : canvasInSidecar(e));
+  // one setting of a component: into its sidecar (project mode), or into the state dir
+  const saveSetting = (e, key, value) => {
+    if (settings) return settings.patch(relOf(e), { [key]: value === undefined || (value && typeof value === 'object' && !Object.keys(value).length && key !== 'canvas') ? undefined : value });
+    const side = readSidecar(e.file, e.name), next = { ...side, [key]: value };
+    if (value === undefined || (value && typeof value === 'object' && !Object.keys(value).length && key !== 'canvas')) delete next[key];
+    writeSidecar(sidecarPath(e.file), JSON.stringify(next, null, 2) + '\n');
+  };
   const readSidecar = (file, name, options) => loadSidecar(file, name, { identityPath: relative(dir, file), ...options });
   const events = new EventEmitter();
   const tokens = openTokens(dir);
@@ -267,15 +300,12 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     // The text a ReactNode slot shows on the canvas, per prop. Sidecar only (never the .tsx).
     setSlotPreview(e, prop, text, { by } = {}) {
       needBy(by);
-      if (!writeSidecars) throw new CreateError(`${e.path}: sidecar writes are disabled. Next: reopen with --write-sidecars to save slot previews.`, 403);
       const slot = docs.get(e.file)?.props.find((p) => p.name === prop);
       if (!slot || slot.type !== 'node') throw new CreateError(`"${prop}" is not a slot prop of ${e.name}. Next: use the name of a ReactNode prop.`);
       if (text !== null && (typeof text !== 'string' || text.length > 500)) throw new CreateError('slot preview text must be a string of at most 500 characters, or null to clear it');
-      const side = readSidecar(e.file, e.name), slots = { ...(side.slots || {}) };
+      const slots = { ...slotsOf(e) };
       if (text === null) delete slots[prop]; else slots[prop] = text;
-      const next = { ...side, slots };
-      if (!Object.keys(slots).length) delete next.slots;
-      writeSidecar(sidecarPath(e.file), JSON.stringify(next, null, 2) + '\n');
+      saveSetting(e, 'slots', slots);
       events.emit('slots', { component: e.id, slots });
       return slots;
     },
@@ -342,12 +372,10 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
     // CAN-02: where the component's frame sits on the canvas. Only the sidecar changes, never the .tsx.
     setCanvas(e, x, y, { by } = {}) {
       needBy(by);
-      if (!writeSidecars) throw new CreateError(`${e.path}: sidecar writes are disabled. Next: reopen with --write-sidecars to save frame positions.`, 403);
       const ok = (n) => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) <= 1e6; // null, strings and NaN are refused, not turned into 0
       if (!ok(x) || !ok(y)) throw new CreateError('canvas x and y must be numbers');
-      const side = readSidecar(e.file, e.name);
       const canvas = { x: Math.round(x), y: Math.round(y) };
-      writeSidecar(sidecarPath(e.file), JSON.stringify({ ...side, canvas }, null, 2) + '\n');
+      saveSetting(e, 'canvas', canvas);
       events.emit('canvas', { component: e.id, canvas });
       return canvas;
     },
@@ -357,11 +385,9 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       needBy(by);
       if (!variant || typeof variant !== 'object' || Array.isArray(variant)) throw new CreateError('variant must be an object like {"size":"sm"}');
       if (width !== null && !(typeof width === 'number' && Number.isFinite(width) && width >= 16 && width <= 20000)) throw new CreateError('width must be a number from 16 to 20000, or null');
-      const side = readSidecar(e.file, e.name), preview = { ...(side.preview || {}) }, key = JSON.stringify(variant);
+      const preview = { ...previewOf(e) }, key = JSON.stringify(variant);
       if (width === null) delete preview[key]; else preview[key] = Math.round(width);
-      const next = { ...side, preview };
-      if (!Object.keys(preview).length) delete next.preview;
-      writeSidecar(sidecarPath(e.file), JSON.stringify(next, null, 2) + '\n');
+      saveSetting(e, 'preview', preview);
       events.emit('preview', { component: e.id, preview });
       return preview;
     },
@@ -425,7 +451,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       if (users.length) throw new CreateError(`${e.name} is used by ${users.join(', ')}. Next: remove or swap those instances first.`, 409);
       const { id, name, file } = e;
       removals.set(file, { by, summary: `deleted ${name}` });
-      removeComponent(file); if (writeSidecars) removeSidecar(sidecarPath(file));
+      removeComponent(file); if (writeSidecars) removeSidecar(sidecarPath(file)); else settings.remove(relative(dir, file));
       if (!(await until(() => !find(id)))) throw new Error(explainError(`deleted ${name}.tsx but the workspace did not notice`));
       return { id, name };
     },
@@ -456,6 +482,7 @@ export async function openWorkspace(dir, { only, recursive = false, writeSidecar
       removals.set(oldFile, { by, summary: `renamed ${old} to ${newName}` });
       if (writeSidecars) writeSidecar(sidecarPath(file), side);
       moveComponent(oldFile, file, text); removeSidecar(sidecarPath(oldFile));
+      settings?.move(relative(dir, oldFile), relative(dir, file));
       if (!(await until(() => byFile(file) && !byFile(oldFile)))) throw new Error(explainError('renamed the file but the workspace did not notice'));
       const now = byFile(file); // (without saved sidecars the id comes from the path, so it changes with the file)
       for (const { u } of swaps) {

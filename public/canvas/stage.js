@@ -14,8 +14,9 @@
 import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
+import { createDocFrame } from './doc-frames.js';
 
-let SHELF_W = 2400; const GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
+let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function createStage(ctx, root, world, view) {
@@ -36,6 +37,7 @@ export function createStage(ctx, root, world, view) {
   function cellElement(id, node, variant) {
     const sec = sections.get(id);
     if (!sec) return null;
+    if (sec.docFrame) return sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js)
     const css = `.mount [data-n="${CSS.escape(node)}"]`;
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
@@ -48,7 +50,7 @@ export function createStage(ctx, root, world, view) {
     if (sec) return sec;
     const el = document.createElement('section');
     el.className = 'cmp'; el.dataset.component = id;
-    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="badge" hidden></span><span class="rev"></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
+    el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="cmp-path" hidden></span><span class="badge" hidden></span><span class="rev"></span><span class="cmp-note" hidden></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
     sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false };
     sections.set(id, sec);
     world.append(el);
@@ -146,15 +148,23 @@ export function createStage(ctx, root, world, view) {
     header(id);
     if (!force && ctx.state.components.size > CULL_AFTER) {
       if (!sec.pos) {
-        sec.frame.innerHTML = '<div class="bundle-pending">Preview loads when in view</div>';
+        sec.frame.innerHTML = c.kind === 'html' ? `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>` : '<div class="bundle-pending">Preview loads when in view</div>';
         measure(sec); placeNew(id);
       }
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
+    // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
+    if (c.kind === 'html' && !sec.docFrame && ctx.state.components.size > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
+      sec.pending = true; sec.el.dataset.ready = '1';
+      if (!sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
+      return;
+    }
     sec.pending = false;
+    if (c.kind === 'html') return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
+      if (ctx.docs?.takeOver(id)) return; // the dialect could not build it: the engine draws the file as /view (which says why)
       sec.unmounts.forEach(u => u()); sec.unmounts = [];
       sec.frame.replaceChildren(errorCard(`build failed: ${(await res.json().catch(() => ({}))).error || res.status}`));
       finish(sec, id, c.revision);
@@ -191,9 +201,42 @@ export function createStage(ctx, root, world, view) {
     refreshOverlays();
   }
 
+  // A frame taken out of memory: its iframe goes, its place and size stay, and it says what it is until it is in view again.
+  function unloadDoc(id, sec) {
+    const c = ctx.state.components.get(id);
+    const w = sec.frame.offsetWidth, h = sec.frame.offsetHeight;
+    sec.docFrame?.destroy(); sec.docFrame = null; sec.pending = true;
+    sec.frame.style.minWidth = `${w}px`; sec.frame.style.minHeight = `${h}px`;
+    sec.frame.innerHTML = `<div class="bundle-pending">${esc(c?.name ?? id)} · ${esc(c?.path ?? '')}<br>loads when you scroll to it</div>`;
+  }
+
+  // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
+  async function renderDoc(id, c, sec, token) {
+    if (!sec.docFrame) {
+      sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
+      sec.el.dataset.kind = 'html';
+      const path = sec.el.querySelector('.cmp-path'); path.textContent = (c.path || '').split('/').slice(-2).join('/'); path.title = c.path || ''; path.hidden = false;
+    }
+    let ok = false;
+    try { ok = await sec.docFrame.load(c.revision); }
+    catch (e) { if (token === sec.token) { sec.docFrame.cell.querySelector('.build-error')?.remove(); sec.docFrame.cell.append(errorCard(`could not load ${c.path}: ${e.message}`)); } }
+    if (token !== sec.token) return;
+    sec.el.dataset.revision = c.revision; sec.el.dataset.ready = '1';
+    sec.el.querySelector('.rev').textContent = `r${String(c.revision).slice(0, 7)}`;
+    finish(sec, id, c.revision);
+    if (ok) {
+      const sels = ctx.state.selections.filter((s) => !(s.component === id && !sec.docFrame.has(s.node)));
+      if (sels.length !== ctx.state.selections.length) ctx.selectMany(sels);
+      else if (ctx.state.selection?.component === id) ctx.emit('select', ctx.state.selection); // the panel reads the new values
+    }
+    refreshOverlays();
+  }
+
   function remove(id) {
     const sec = sections.get(id);
     if (!sec) return;
+    sec.docFrame?.destroy();
     sec.token++; sec.unmounts.forEach((u) => u()); sec.el.remove(); sections.delete(id); auto.delete(id);
     if (ctx.state.selections.some((s) => s.component === id)) ctx.selectMany(ctx.state.selections.filter((s) => s.component !== id));
   }
@@ -247,8 +290,20 @@ export function createStage(ctx, root, world, view) {
     let y = taken.length ? Math.max(...taken.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + CLEAR : 0;
     const boxes = new Map(ids.map((id) => [id, headBox(sections.get(id), z)]));
     const area = ids.reduce((a, id) => a + (boxes.get(id).w + GAP_X) * (sections.get(id).size.h + boxes.get(id).top), 0);
-    const width = Math.max(1400, ...ids.map((id) => boxes.get(id).w), Math.round(Math.sqrt(area * 1.7)));
+    const width = Math.max(ids.every((id) => sections.get(id).el.dataset.kind === 'html') ? 1300 : 1400, ...ids.map((id) => boxes.get(id).w), Math.round(Math.sqrt(area * 1.7)));
     const out = new Map();
+    // Frames of files only: they vary in height, so they stack in columns (shortest first) as wide as the canvas shows, and read at a larger zoom
+    if (!taken.length && ids.length > 2 && ids.every((id) => sections.get(id).el.dataset.kind === 'html')) {
+      const sb = view.stageBox(), colW = Math.max(...ids.map((id) => sections.get(id).size.w)) + MASONRY_GAP; // (far out a title drops its path, so it fits its column)
+      const stack = (n) => { const heights = Array(n).fill(0), at = new Map(); for (const id of ids) { const c = heights.indexOf(Math.min(...heights)), top = boxes.get(id).top; at.set(id, { x: c * colW, y: heights[c] + top }); heights[c] += top + sections.get(id).size.h; } return { heights, at }; };
+      // as many columns as read largest on the canvas you have
+      const zoomOf = (n, heights) => Math.min((sb.width - 144) / (n * colW), (sb.height - 144) / Math.max(1, Math.max(...heights)));
+      let n = 1, best = stack(1);
+      for (let k = 2; k <= Math.min(8, ids.length); k++) { const t = stack(k); if (zoomOf(k, t.heights) > zoomOf(n, best.heights)) { n = k; best = t; } }
+      const heights = best.heights;
+      for (const [id, p] of best.at) out.set(id, p);
+      return { out, width: n * colW, bottom: Math.max(...heights) };
+    }
     const rows = [[]];
     for (const id of ids) {
       const { w } = boxes.get(id);
@@ -266,7 +321,31 @@ export function createStage(ctx, root, world, view) {
     }
     return { out, width, bottom: y };
   }
+  // A frame that changes width keeps its place; the frames nobody placed make way, right for a neighbouring column and down for
+  // the one below, and go back as it shrinks. Worked out from where each was packed, so the canvas never drifts. Saved positions stay.
+  const home = new Map();
+  let rearrangeQueued = 0;
+  const rearrangeSoon = (id) => { if (!rearrangeQueued) rearrangeQueued = requestAnimationFrame(() => { rearrangeQueued = 0; rearrange(id); }); };
+  function rearrange(changed) {
+    if (!laidOut) return;
+    const z = view.get().z, gapX = MASONRY_GAP;
+    const list = [...sections].filter(([, s]) => s.pos).map(([id, s]) => { if (!home.has(id)) home.set(id, { ...s.pos }); return { id, s, h: home.get(id) }; }).sort((a, b) => a.h.x - b.h.x || a.h.y - b.h.y);
+    const done = []; let moved = false;
+    for (const { id, s, h } of list) {
+      let x = id === changed || !auto.has(id) ? s.pos.x : h.x, y = id === changed || !auto.has(id) ? s.pos.y : h.y;
+      const w = s.size.w, ht = s.size.h, top = headBox(s, z).top;
+      if (id !== changed && auto.has(id)) for (let tries = 0; tries < 40; tries++) {
+        const a = done.find((o) => x < o.x + o.w + 24 && x + w + 24 > o.x && y - 30 < o.y + o.h + o.pad && y + ht > o.y - 30); // (the title above; below the frame in hand, its caption too)
+        if (!a) break;
+        if (a.hx < h.x - 1) x = a.x + a.w + gapX; else y = a.y + a.h + a.pad + Math.min(top, 60);
+      }
+      if (x !== s.pos.x || y !== s.pos.y) { moveTo(id, x, y); moved = true; }
+      done.push({ x, y, w, h: ht, hx: h.x, pad: id === changed ? 26 : 0 });
+    }
+    if (moved) { refreshOverlays(); ctx.emit('layout', {}); }
+  }
   function layoutAll() {
+    home.clear();
     const ids = [...sections.keys()];
     // Frames placed one by one while the first renders were still on their way were placed by a placeholder size; now that
     // the sizes are known, the ones without a saved position are packed once, together (WPC-23: no overlaps after a reload).
@@ -436,9 +515,27 @@ export function createStage(ctx, root, world, view) {
     }
     return out;
   };
+  // On a frame of the engine the name and size sit above the box, or below it when that lands on fewer lines of text.
+  function docTagSide(selEl) {
+    const r = selEl.getBoundingClientRect(), H = 22, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
+    const frame = selEl.closest('.doc-cell'), fr = frame?.querySelector('iframe.doc-frame')?.getBoundingClientRect(), z = view.get().z;
+    if (!fr) return 'above';
+    if (z < 0.45) { for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top'); return 'none'; } // an overview: the name is in the layers, the frame's title stays readable
+    const sec = selEl.closest('section.cmp'), tight = r.top - fr.top < H + 9;
+    for (const other of world.querySelectorAll('.cmp[data-chip-top]')) if (other !== sec || !tight) other.removeAttribute('data-chip-top');
+    if (tight) sec.setAttribute('data-chip-top', '');
+    const lines = [];
+    try { const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), rg = doc.createRange(); for (let n = walker.nextNode(), i = 0; n && i < 600; n = walker.nextNode(), i++) { if (!/\S/.test(n.nodeValue)) continue; rg.selectNodeContents(n); for (const c of rg.getClientRects()) lines.push({ l: fr.left + c.left * z, r: fr.left + c.right * z, t: fr.top + c.top * z, b: fr.top + c.bottom * z }); } } catch { return 'above'; }
+    const onText = (top) => lines.filter((c) => c.l < r.left + lw && c.r > r.left && c.t < top + H && c.b > top).length;
+    selectBox.style.setProperty('--nk-tagw', `${lw + 4 + sizeChip.textContent.length * 6.4 + 14}px`); // a small box: the size goes beside the name, never over the title
+    return onText(r.top - 7 - H) <= onText(r.bottom + 7) ? 'above' : 'below';
+  }
   function tagSide(selEl) {
     let side = 'below';
-    if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
+    selectBox.toggleAttribute('data-doc', !!selEl?.docFrame);
+    if (!selEl?.docFrame) for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top');
+    if (selectBox.style.display === 'block' && selEl?.docFrame) side = docTagSide(selEl);
+    else if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
       const caps = captionRects(selEl.closest('section.cmp'));
       if (caps.length) {
         const r = selEl.getBoundingClientRect(), narrow = r.width < 190, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), cw = sizeChip.textContent.length * 6.4 + 14, H = 20, pad = 3;
@@ -452,12 +549,22 @@ export function createStage(ctx, root, world, view) {
     }
     if (selectBox.dataset.tags !== side) selectBox.dataset.tags = side;
   }
+  // How a designer names an element of a file: its tag and first class ("span.ss-note__tag"), never a path through the tree.
+  const elementName = (el) => (el ? `${el.localName}${el.id ? `#${el.id}` : ''}${el.classList?.length ? `.${el.classList[0]}` : ''}` : '');
+  // The edit being staged, said on the canvas: on the selection's chip ("class scope · 1 of 3") and in the frame's title row.
+  let editNote = null;
+  function setEditNote(note) { // { component, chip, title } or null
+    if (editNote?.component && editNote.component !== note?.component) { const n = sections.get(editNote.component)?.el.querySelector('.cmp-note'); if (n) { n.hidden = true; n.textContent = ''; } }
+    editNote = note;
+    if (note) { const n = sections.get(note.component)?.el.querySelector('.cmp-note'); if (n) { n.textContent = note.title || ''; n.hidden = !note.title; } }
+    refreshOverlays();
+  }
   function refreshOverlays() {
     const sels = ctx.state.selections, sel = ctx.state.selection;
     if (!sels.length && !hoverEl && !measuring && !selectBox.style.display.includes('block') && !hoverBox.style.display.includes('block')) return; // nothing is shown, so there is nothing to place (and no layout to force)
     const base = overlays.getBoundingClientRect();
     const selEl = selectedElement(sel);
-    place(selectBox, selEl, sel && `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`, base);
+    place(selectBox, selEl, sel && (selEl?.docFrame ? elementName(selEl.el) + (editNote?.chip ? ` ${editNote.chip}` : '') : `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`), base);
     if (selEl?.isConnected && selectBox.style.display === 'block') { const r = selEl.getBoundingClientRect(), z = view.get().z; sizeChip.textContent = `${Math.round(r.width / z)} × ${Math.round(r.height / z)}`; }
     tagSide(selEl);
     const others = sels.filter((s) => s !== sel);
@@ -473,7 +580,8 @@ export function createStage(ctx, root, world, view) {
   function drawMeasure(base) {
     const a = measuring && selectedElement(ctx.state.selection), b = measuring && hoverEl;
     measureBox.replaceChildren();
-    if (!a || !b || a === b || !a.isConnected || !b.isConnected || a.closest('[data-cull]') || b.closest('[data-cull]')) { measureBox.dataset.active = ''; return; }
+    const nested = a?.docFrame && b?.docFrame && a.el?.ownerDocument === b.el?.ownerDocument && (a.el.contains(b.el) || b.el.contains(a.el)); // inside its own selection the box model says it all
+    if (!a || !b || a === b || nested || !a.isConnected || !b.isConnected || a.closest('[data-cull]') || b.closest('[data-cull]')) { measureBox.dataset.active = ''; return; }
     measureBox.dataset.active = '1';
     const A = a.getBoundingClientRect(), B = b.getBoundingClientRect(), z = view.get().z;
     const put = (axis, from, to, cross, value) => {
@@ -525,8 +633,22 @@ export function createStage(ctx, root, world, view) {
     const near = box(NEAR), wide = box(WIDE), far = box(1); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
     const ahead = [];
+    // A frame of the document engine is a whole page, so they load progressively and under a budget: a few per pass for the frames in view (at fit-all too), never more than
+    // DOC_BUDGET at once. When the frames in view want more than the budget, the loaded ones farthest from the view are unloaded (they keep their size and their name).
+    const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html';
+    let docs = [...sections.values()].filter((x) => x.docFrame).length, started = 0, wanting = false;
     for (const [id, sec] of sections) {
-      if (sec.pending && visible(sec)) render(id, true).catch(console.error);
+      if (sec.pending && visible(sec) && isDocSec(id)) {
+        if (docs < DOC_BUDGET && started < DOC_BATCH) { docs++; started++; render(id, true).catch(console.error); } else wanting = true;
+      } else if (sec.pending && visible(sec)) render(id, true).catch(console.error);
+    }
+    if (wanting) { // unload the farthest loaded frames to make room, then come back for the rest
+      const cy = (-y + b.height / 2) / z, cx = (-x + b.width / 2) / z;
+      const away = [...sections].filter(([id, sec]) => sec.docFrame && sec.pos && !keep.has(id) && !visible(sec)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
+      for (const [id, sec] of away.slice(0, DOC_BATCH)) unloadDoc(id, sec);
+      setTimeout(() => queueCull(), 120);
+    }
+    for (const [id, sec] of sections) {
       if (!sec.pos || !sec.size.w) continue;
       let off;
       if (mode !== 'exact') { // a gesture (pan or zoom): nothing is taken out, what comes into view is drawn within a frame
@@ -572,6 +694,7 @@ export function createStage(ctx, root, world, view) {
   }
   ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.el.style.removeProperty('--nk-ls'); sec.headLf = undefined; sec.chipLs = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
   ctx.on('select', () => {
+    for (const [gid, gsec] of sections) if (gsec.docFrame) gsec.docFrame.grip.tabIndex = ctx.state.selections.some((q) => q.component === gid) ? 0 : -1; // only the selected frame's grip is a Tab stop
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
     for (const [id, sec] of sections) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }
@@ -582,15 +705,22 @@ export function createStage(ctx, root, world, view) {
   ctx.on('layout', () => queueCull());
 
   // ---------------------------------------------------------------------------------------------- pointer: hover, click, marquee, frame drag
-  const hit = (target) => {
+  const hit = (target, ev) => {
     const el = target.closest?.('.mount [data-n]');
     const cell = el?.closest('.cell');
+    if (!el && ev && !document.body.dataset.play) { // an HTML component's frame: hit-test the document inside it
+      const dc = target.closest?.('.doc-cell');
+      const id = dc?.closest('.cmp')?.dataset.component;
+      const p = id && sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY);
+      return p ? { el: p, id, variant: {} } : null;
+    }
     return el && cell && { el, id: cell.closest('.cmp').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
   root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
   const setHoverEl = (el, h) => { hoverEl = el; ctx.emit('hover', h ? { component: h.id, node: h.el.dataset.n } : null); refreshOverlays(); };
-  root.addEventListener('mouseover', (ev) => { if (document.body.dataset.play) return; const h = hit(ev.target); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mouseover', (ev) => { if (document.body.dataset.play) return; const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mousemove', (ev) => { if (document.body.dataset.play || !ev.target.closest?.('.doc-cell')) return; const h = hit(ev.target, ev); if ((h?.el ?? null) !== hoverEl) setHoverEl(h?.el ?? null, h); });
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
   function hoverNode(sel) {
@@ -601,7 +731,7 @@ export function createStage(ctx, root, world, view) {
   root.addEventListener('click', (ev) => {
     if (document.body.dataset.play) return; // play mode: the click belongs to the component
     if (suppressClick && Date.now() - suppressClick < 300) { suppressClick = 0; return; }
-    const h = hit(ev.target);
+    const h = hit(ev.target, ev);
     if (h) ev.preventDefault();
     if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
@@ -684,6 +814,7 @@ export function createStage(ctx, root, world, view) {
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
+      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; if (first) ctx.select({ component: d.id, node: first.node, variant: {} }); }
       else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
     }
@@ -694,7 +825,9 @@ export function createStage(ctx, root, world, view) {
     if (c) c.canvas = { ...pos };
     auto.delete(d.id);
     try {
-      const r = await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
+      const r = c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
+        ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, x: pos.x, y: pos.y }) })
+        : await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     } catch (e) { document.querySelector('#error').textContent = `Could not save the position: ${plain(e.message)}`; }
     ctx.emit('moved', { component: d.id, ...pos });
@@ -711,7 +844,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

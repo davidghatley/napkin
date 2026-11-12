@@ -46,6 +46,18 @@ import { initTabs } from './tabs.js';
 import { initInstances } from './instances.js';
 import { initSlots } from './slots.js';
 import { initAgentsLane } from './agents-lane.js';
+import { initDocs } from './docs.js';
+import { initTimeStrip } from './time-strip.js';
+import { initCopyCode } from './copy-code.js';
+import { initLive } from './stage-live.js';
+import { initHighlight } from './stage-highlight.js';
+import { initLegend } from './legend.js';
+import { initStylesTab } from './styles-tab.js';
+import { initWidths } from './stage-ruler.js';
+import { initTheme } from './stage-theme.js';
+import { initChrome } from './stage-chrome.js';
+import { initBreakpoints } from './stage-breakpoints.js';
+import { initInspector } from './doc-panel.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -81,7 +93,8 @@ const ctx = {
     return r;
   },
   hint(text) { const h = $('#hint'); h.textContent = plain(text); clearTimeout(ctx._hint); ctx._hint = setTimeout(() => { h.textContent = ''; }, 3200); },
-  title(c) { return nameCounts.get(c.name) > 1 && c.path ? `${c.name} · ${c.path}` : c.name; },
+  // two components with one name show their paths (the dialect's names are counted as they arrive; the engine's are counted here)
+  title(c) { return c.path && (nameCounts.get(c.name) > 1 || (c.kind === 'html' && [...ctx.state.components.values()].filter((x) => x.name === c.name).length > 1)) ? `${c.name} · ${c.path.replace(/#.*$/, '')}` : c.name; },
   named(name) { return [...(idsByName.get(name) || [])].map(id => ctx.state.components.get(id)).filter(Boolean); },
   find(idOrName) { return ctx.state.components.get(idOrName) ?? [...ctx.state.components.values()].find((c) => c.name === idOrName); },
   on(event, cb) { if (!handlers.has(event)) handlers.set(event, new Set()); handlers.get(event).add(cb); return () => handlers.get(event).delete(cb); },
@@ -106,7 +119,11 @@ window.napkin = ctx; // for tests and the console
 const view = createView(ctx, $('#stage'), $('#world'));
 const stage = createStage(ctx, $('#stage'), $('#world'), view);
 Object.assign(ctx, { view, stage });
+initLive(ctx); // M1: Space-P holds play mode (registered before play.js so it sees P first)
+initLegend(ctx);
+initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
+ctx.live.mountButton(); // the Play control, after the tools have built the toolbar
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));
@@ -117,17 +134,25 @@ const nav = initNav(ctx);
 initHandles(ctx);
 initMatrix(ctx); // CMP-10: filter chips and collapsible groups on big matrices
 initPlay(ctx); // CMP-09: P makes the cells live
+initStylesTab(ctx); // the sidebar's Styles tab
+initBreakpoints(ctx); // M4: the breakpoints panel and the widths strip
+initWidths(ctx); // M4: next / previous breakpoint, back to 640 px
+initTheme(ctx); // M5: the theme wipe
+initChrome(ctx); // M11: Tab hides every bit of chrome
 initTabs(ctx); // WPC-07: cell content stays out of the Tab order outside play mode
 initInstances(ctx); // CMP-04, 06..08: composition
 initSlots(ctx); // CMP-05: slot drop zones
 initHistoryLane(ctx); // drawer: code strip, history, inspect, assets, changes
 await initTokens(ctx); // token source, theme preview and Tokens drawer
 ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
+initTimeStrip(ctx);   // moment 9: the film strip of a component's versions (H)
+initCopyCode(ctx);    // moment 10: Cmd-C gives the file's own HTML/JSX and CSS; Cmd-V inserts it
 initAgentsLane(ctx);  // presence, proposals tray + ghost cells, Activity tab, clash chip
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 // #revision shows 8 characters (the frame title shows 7); the full revision is its tooltip
 ctx.on('render', ({ component, revision }) => { $('#revision').parentElement.hidden = !ctx.state.selection; $('#revision').textContent = String(revision).slice(0, 8); $('#revision').title = `revision ${revision}`; if (!ctx.state.selection || ctx.state.selection.component === component) renderPanel(ctx); counts(); });
 
+const claimedIds = new Set(), seenIds = new Set();
 const sync = id => {
   if (!id) return;
   const s = client.state(id), old = nameById.get(id);
@@ -135,14 +160,18 @@ const sync = id => {
     if (old) { nameCounts.set(old, nameCounts.get(old) - 1); idsByName.get(old)?.delete(id); nameById.delete(id); }
     if (s) { nameCounts.set(s.name, (nameCounts.get(s.name) || 0) + 1); nameById.set(id, s.name); if (!idsByName.has(s.name)) idsByName.set(s.name, new Set()); idsByName.get(s.name).add(id); }
   }
-  s ? ctx.state.components.set(id, s) : ctx.state.components.delete(id);
+  // A file is drawn once: the engine's frame takes over a dialect file it claims (read-only, or a build that failed). docs.js decides.
+  const claimed = !!ctx.docs?.claims(s);
+  if (s && !claimed) ctx.state.components.set(id, s); else { ctx.state.components.delete(id); if (claimed) ctx.stage?.remove(id); }
+  if (ctx.docs && (claimed !== claimedIds.has(id) || (s && !claimed && !seenIds.has(id)))) { if (claimed) claimedIds.add(id); else { if (claimedIds.delete(id) && s) ctx.docs.release(s); } ctx.docs.reconcileSoon(); }
+  s ? seenIds.add(id) : seenIds.delete(id);
 };
 
 function counts() {
   // WPC-35: counted from the documents, not from the cells on screen (frames far off screen are not drawn), so zoom never changes it
   let cells = 0; for (const c of ctx.state.components.values()) if (c.doc) cells += variantGrid(c.doc).length;
   const n = ctx.state.components.size;
-  $('#counts').textContent = `${n} component${n === 1 ? '' : 's'} · ${cells} variant${cells === 1 ? '' : 's'}`;
+  $('#counts').textContent = `${n} component${n === 1 ? '' : 's'}${cells ? ` · ${cells} variant${cells === 1 ? '' : 's'}` : ''}`;
 }
 
 // The change log has a fixed number of rows that are rewritten in place, so a new entry never moves the rows (FEEL-04).
@@ -161,7 +190,7 @@ client.onChange((f) => {
   if (f.type === 'progress') { ctx.state.progress = f; $('#scan-progress').textContent = f.done ? '' : `Scanning components… ${f.scanned} / ${f.total}`; ctx.emit('progress', f); }
   else if (f.type === 'tokens') { ctx.emit('tokens', f); }
   else if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
-  else if (f.type === 'problem') { stage.header(f.component); ctx.emit('problem', f); }
+  else if (f.type === 'problem') { if (ctx.state.components.has(f.component) && !stage.sections.has(f.component)) stage.render(f.component).catch(console.error); else stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'preview') { ctx.emit('preview', f); }
   else if (f.type === 'connection') { document.body.dataset.connection = f.connected ? 'ok' : 'lost'; ctx.emit('connection', f); }
@@ -172,9 +201,13 @@ client.onChange((f) => {
   else if (f.type === 'presence') ctx.emit('presence', f); // presence.js
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); counts(); }
+  else if (typeof f.type === 'string' && f.type.startsWith('doc-')) ctx.emit(f.type, f); // the document engine (docs.js)
 });
 
 for (const c of client.components()) sync(c.component);
+const docs = initDocs(ctx);
+initInspector(ctx); // the inspector's scope keys, measuring and checks (doc-panel.js)
+await docs.load(); // the folder's HTML components (decision 0014), drawn with the rest
 await Promise.all([...ctx.state.components.keys()].map((id) => stage.render(id).catch(console.error)));
 stage.layoutAll();
 nav.restore();
@@ -183,3 +216,4 @@ counts();
 initEmpty(ctx, $('#stage'));
 $('#revision').parentElement.hidden = !ctx.state.selection;
 document.body.dataset.ready = '1';
+docs.ask();

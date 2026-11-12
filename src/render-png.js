@@ -72,22 +72,29 @@ async function launch() {
 
 // A small pool of pages in one warm Chromium, so concurrent renders do not queue behind each other.
 export function createRenderer({ pages = Number(process.env.NAPKIN_RENDER_PAGES || 4) } = {}) {
-  let browser = null, closed = false, made = 0;
+  let browser = null, closed = false, made = 0, warming = null;
   const idle = [], waiters = [];
 
   const getBrowser = async () => {
     if (closed) throw new RenderError('renderer is closed');
-    if (browser) { try { const b = await browser; if (!b.isDead()) return b; } catch { browser = null; } idle.length = 0; made = 0; }
+    if (browser) { try { const b = await browser; if (!b.isDead()) return b; } catch { browser = null; } idle.length = 0; made = 0; warming = null; }
     browser = launch();
     try { return await browser; } catch (e) { browser = null; throw e; }
   };
+  const release = (page) => { const w = waiters.shift(); if (w) w.res(page); else idle.push(page); };
+  // A new page takes about 100 ms to open. Opening the rest of the pool behind the first render means a later burst of
+  // concurrent renders never waits for that on top of queueing (it was the whole slow tail of the first burst).
+  function warmPool(b) {
+    warming ??= (async () => {
+      while (made < pages && !closed && !b.isDead()) { made++; try { release(await b.newPage()); } catch (e) { made--; warming = null; if (!made) for (const w of waiters.splice(0)) w.rej(e); return; } }
+    })();
+  }
   async function acquire() {
     const b = await getBrowser();
+    warmPool(b);
     if (idle.length) return idle.pop();
-    if (made < pages) { made++; try { return await b.newPage(); } catch (e) { made--; throw e; } }
-    return new Promise((res) => waiters.push(res));
+    return new Promise((res, rej) => waiters.push({ res, rej }));
   }
-  const release = (page) => { const w = waiters.shift(); if (w) w(page); else idle.push(page); };
 
   // Every cell is drawn as a first paint (the page is blanked and painted empty first), because a repaint over an earlier cell rasterises
   // rounded corners with slightly different edge pixels than a fresh page does. A fresh app drawing the same cell matches byte for byte (INS-03).

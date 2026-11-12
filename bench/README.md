@@ -1,4 +1,118 @@
-# Engine measurements
+# Measures
+
+## P0 locked measures (DREAM 2: D1, D2, D4)
+
+These four scripts are the gates for the engine rebuild (`.dream-gauntlet/plan.md`, P0). They are **locked**:
+builders never edit them, the edge corpus, or `bench/p0-lib.js`. They talk to napkin only through the engine
+contract in the plan (`node src/cli.js open <folder> --port P`, then `/api/files`, `/api/component/<id>`,
+`/view/<id>`, `/api/edit`, `/api/undo`, `/api/styles`) and start Chromium only through `src/chromium.js`.
+The lead (Claude, Opus) wrote them on 2026-10-30; the corpus choice and the pass lines come from DREAM.md, which
+David approved.
+
+Every script prints one JSON object as its last line and exits 0 on pass, 1 on fail, 2 if the harness itself
+could not run. The line carries `harness` (a hash of the locked files and the edge corpus) and `official`
+(false when `NAPKIN_P0_ENGINE` points the harness at something other than `src/cli.js`). Only official runs
+with the default options count. Check `df -i /tmp` first; each script uses one headless Chromium (CPU).
+
+```sh
+node bench/corpus.js                 # assemble the corpus; prints the folder (remove it when done)
+node bench/fidelity.js               # D1, about 4 min
+node bench/edits.js                  # D2, about 2 min plus napkin's restart time x 60
+node bench/imposed.js                # D4, under 1 min
+node bench/edits.js --selftest       # checks the edit table against the corpus (no napkin)
+NAPKIN_P0_ENGINE=bench/p0-mock.js node bench/fidelity.js   # harness proof: a contract stand-in passes (official: false)
+```
+
+Each measure assembles a fresh corpus under `/tmp/claude-1000/` and removes it at the end (`--keep` keeps it,
+`--corpus DIR` reuses one; `fidelity.js --folder ss-ds,edge` and `edits.js --only E01,E02` narrow a run, which
+then reports `fullRun: false`).
+
+### The corpus (`bench/corpus.js`)
+
+Copies only, read with `git archive` at pinned commits (`--latest` takes each repo's HEAD); nothing is written
+into another repo. `manifest.json` records each source commit and a content hash per folder.
+
+| Folder | What | Components | Applied stylesheets |
+|---|---|---|---|
+| `ss-ds` | secret-sauce `ds/project` + `tokens.css` + `components.css` at its root | 22 `components/*/preview.html` | `tokens.css`, `components.css` |
+| `recipes` | secret-sauce `recipes/*.html` + `tokens.css`, `components.css` and the fonts they name | 4 | none (they link their own) |
+| `edge` | `bench/corpus/edge`: 10 hand-written files (below) + one local woff2 (secret-sauce Hoop Bold, OFL) | 10 | none |
+| `tsx` | sample-40 from `tools/sample-repo.js` as it was at napkin 3181316 | 40 | none |
+| `shadcn` | playdough `app/src/components` + `tsconfig.json`; `node_modules` is a symlink to playdough's | 6 files | none |
+
+Edge files: `inline-style.html` (odd spacing, comments, `!important`, quote styles, unquoted and bare
+attributes, UTF-8), `import.html` (+ `css/`: a `<link>` that `@import`s, and `@import` in `<style>`),
+`media.html` (`@media` by width and by colour scheme), `custom-element.html` (shadow DOM, slot),
+`svg.html` (inline SVG, `<defs>`/`<use>`), `font.html` (`@font-face` from a local file), `vars.html`
+(fallbacks, nested fallbacks, undefined variables, an inline custom property), `hover.html` (`:hover`,
+`:focus-visible`), `grid.html` (named lines, areas, `auto-fill`), `table.html` (no `<tbody>` tag, uppercase
+tags, tabs, CRLF line endings; `.gitattributes` keeps the bytes).
+
+### D1 fidelity (`bench/fidelity.js`)
+
+For each folder: open it, answer `POST /api/styles { applied }` (then `GET /api/styles` must echo it), list
+`GET /api/files`. Every component file in the table must be listed with at least one component. Every
+component napkin lists in an html/tsx/jsx file is shot at widths 360 and 1024, light and dark:
+
+- napkin: `GET /view/<id>?width=W&theme=T` must answer 200, then Chromium loads it.
+- reference, HTML: the file's own `file://` URL with the applied stylesheets inserted first in `<head>`.
+- reference, TSX/JSX: a plain React page (doctype, UTF-8 meta, the applied stylesheets, `<div id="root">`), the
+  named export (else default) rendered with no props, built by esbuild with the folder's `node_modules`.
+  If the reference itself throws (for example a Next.js router hook), the component is listed as
+  `noReference` and only has to render.
+
+Both sides: viewport W x 900, `prefers-color-scheme` = T, animations frozen at their start, wait for load,
+fonts in every same-origin frame, images and two animation frames, then resize to the page's own height
+(max 8000) and capture. A pixel differs when any channel differs by more than 2/255; sizes that differ count
+every uncovered pixel. For HTML files, every element in `<body>` (by source start tag; not script, style or
+template) must have a node in `GET /api/component/<id>` whose `start` is that byte offset.
+
+**Pass:** 100% rendered; every measured component's worst config at most 0.1% pixels differing; napkin's view
+throws no error the reference did not; 100% of HTML elements selectable; 0 contract errors.
+
+### D2 edits (`bench/edits.js`)
+
+60 edits, 6 per op (text, attr, class, style, rule, var, insert, move, delete, prop), over ss-ds, recipes,
+edge, tsx and shadcn. Each starts from the pristine file. Nodes are found in `GET /api/component/<id>` by the
+byte offset of their start tag (the harness also checks that the node's tag really starts there). Each edit
+is chosen to catch reformatting: single-quoted, unquoted and bare attributes, irregular spaces in a class
+list, CSS with odd spacing and comments, alignment spaces in a variable block, CRLF and tabs, multi-byte
+UTF-8, multi-line JSX with arrow-function props and spreads. Checks:
+
+1. **span**: the edited file equals the expected result. Bytes outside the edit are compared exactly; inside,
+   only what the op asks for (values replace values; whitespace may vary only where an element is inserted,
+   moved or deleted, or a declaration or attribute is added or removed; a new attribute goes after the
+   existing ones; a class list keeps its order).
+2. **others**: no other file in the folder changes, appears or disappears.
+3. **reopen**: `/view` (800, light) right after the edit equals `/view` after napkin is stopped and the
+   folder opened again (at most 0.1% pixels differing).
+4. **undo**: `POST /api/undo { component }` restores the file and the folder byte for byte.
+
+**Pass:** all 60 edits pass all four. `--selftest` proves the table is sound against the pinned corpus:
+anchors unique, each canonical result matches its own expectation, the unedited file does not, and a stray
+byte before or after the span, or CRLF turned into LF, is rejected.
+
+### D4 nothing imposed (`bench/imposed.js`)
+
+Each folder is committed to a fresh git repo, then `node src/cli.js open <folder> --port P`. Timed from the
+command: the first 200 from `GET /api/files`, and the first `/view` of the folder's first component drawn in
+Chromium (fonts and images loaded; Chromium is started before the clock). Then `POST /api/styles`, one edit
+(`attr` on HTML, `prop` on TSX: `data-bench="one"` on the component's first node), and napkin is stopped.
+`git status --porcelain --untracked-files=all --ignored` must be empty after opening, exactly
+` M <edited file>` after the edit, and the same after napkin stops.
+
+**Pass:** every folder passes, and ss-ds's first `/view` is drawn within 2000 ms of the command.
+
+### Notes for whoever reads a failure
+
+- `startNapkin` waits up to 30 s for `GET /api/files`; a 404 from a running server ends the wait at once.
+- If an engine answers 401, the harness asks for an identity once with `POST /api/session { as: 'napkin-bench' }`
+  (today's engine needs it). This is not in the contract; it is tolerated, never required.
+- Failing captures are kept in the `out` folder the summary names (`*.napkin.png`, `*.reference.png`).
+- `bench/p0-mock.js` is not an engine: it serves files as they are and "edits" by writing the expected result.
+  It exists to show the measures can pass (all three pass with it, `official: false`).
+
+## Engine measurements (older, TSX era)
 
 These scripts drive the real server, store, esbuild and canvas page. Chromium is headless with
 `--disable-gpu` (CPU only). Every listener starts on port 0, except the restart tests, which

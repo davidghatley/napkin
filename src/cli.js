@@ -41,8 +41,11 @@ async function main() {
     components = resolve(dir, config.components || 'components');
     if (!existsSync(components)) throw new Error(`${components} does not exist (napkin.json). Next: create the components folder or correct the components path.`);
   }
-  if (external && !values['write-sidecars']) console.log('Opening without sidecar writes. Frame positions stay in this session; component edits and accepted adoptions still write the selected TSX file.');
-  const args = [...SERVER_FLAGS, join(ROOT, 'src/server.js'), '--dir', components, '--port', String(port), '--recursive', '--next-port', '--stream', '--watch-parent', String(process.pid), ...(external && !values['write-sidecars'] ? ['--no-sidecars'] : [])];
+  // Decision 0013: napkin writes nothing into the folder except the edits you make, napkin.json or not. Sidecars are
+  // written only when asked for (--write-sidecars).
+  const sidecars = !!values['write-sidecars'];
+  if (!sidecars) console.log('Opening without sidecar writes. Frame positions stay in this session; component edits and accepted adoptions still write the selected TSX file.');
+  const args = [...SERVER_FLAGS, join(ROOT, 'src/server.js'), '--dir', components, '--root', dir, '--port', String(port), '--recursive', '--next-port', '--stream', '--watch-parent', String(process.pid), ...(!sidecars ? ['--no-sidecars'] : [])];
   const child = spawn(process.execPath, args, { stdio: ['inherit', 'pipe', 'inherit'] });
   let printed = false, buffer = '';
   child.stdout.on('data', (b) => {

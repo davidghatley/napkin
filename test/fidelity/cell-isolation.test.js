@@ -58,6 +58,8 @@ const COLLECT = (rootSel) => `JSON.stringify([...document.querySelector(${JSON.s
 }))`;
 const BOX = (rootSel) => `JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(rootSel)}).getBoundingClientRect(); return { x: r.left + scrollX, y: r.top + scrollY, w: Math.ceil(r.width), h: Math.ceil(r.height), rw: r.width, rh: r.height }; })())`;
 
+// Rewritten for decision 0013 (lead ruling 2026-10-30): was the dialect cell of Probe (`.mount`), now Probe's /view frame (an iframe of the file as the
+// browser draws it); the comparison with a plain no-CSS React page, the tolerance and the isolation checks are unchanged; intent unchanged.
 test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style of every node and pixels at 100%', { timeout: 120000 }, async (t) => {
   const repo = tempRepo(['Card']);
   writeFileSync(join(repo.compDir, 'Probe.tsx'), PROBE);
@@ -77,19 +79,26 @@ test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style 
 
     await canvas.goto(server.url);
     await canvas.waitFor('document.body.dataset.ready === "1"');
-    await canvas.waitFor(`!!document.querySelector('section[data-name="Probe"] .mount [data-n=root]')`);
+    // Probe's frame: the document of /view/<id>; `inFrame` runs an expression with `document` and `getComputedStyle` of that document
+    const PID = await canvas.eval(`napkin.find('Probe').component`);
+    const FD = `napkin.stage.sections.get(${JSON.stringify(PID)}).docFrame`;
+    await canvas.waitFor(`!!${FD}?.doc()?.querySelector('[data-n=root]')`);
+    await canvas.eval(`document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))`);
+    const inFrame = (expr) => `(() => { const document = ${FD}.doc(), getComputedStyle = (e) => document.defaultView.getComputedStyle(e); return ${expr}; })()`;
+    const frameRoot = `${FD}.element(${FD}.doc().querySelector('[data-n=root]').dataset.n === 'root' ? ${FD}.tree().tree[0].node : '')`;
     await canvas.eval(`napkin.view.set({ x: 0, y: 0, z: 1 })`);
     await sleep(300);
-    const sel = 'section[data-name="Probe"] .mount [data-n=root]';
+    const rootRect = `(() => { const r = ${frameRoot}.getBoundingClientRect(); return r; })()`;
+    const sel = '[data-n=root]'; // inside the frame's document
     // move the root into the middle of the stage, on whole pixels, so nothing overlaps it and antialiasing is identical
-    const cur = JSON.parse(await canvas.eval(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(), v = napkin.view.get(); return { x: v.x, y: v.y, z: v.z, l: r.left, t: r.top }; })())`));
+    const cur = JSON.parse(await canvas.eval(`JSON.stringify((() => { const r = ${rootRect}, v = napkin.view.get(); return { x: v.x, y: v.y, z: v.z, l: r.left, t: r.top }; })())`));
     assert.equal(cur.z, 1, 'canvas at 100%');
     await canvas.eval(`napkin.view.set({ x: ${cur.x + Math.round(420 - cur.l) + (0)}, y: ${cur.y + Math.round(140 - cur.t)}, z: 1 })`);
     await sleep(300);
-    const fr = JSON.parse(await canvas.eval(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return [r.left, r.top]; })())`));
+    const fr = JSON.parse(await canvas.eval(`JSON.stringify((() => { const r = ${rootRect}; return [r.left, r.top]; })())`));
     t.diagnostic(`root at ${fr} on the canvas`);
 
-    const a = JSON.parse(await canvas.eval(COLLECT(sel))), b = JSON.parse(await app.eval(COLLECT('#m [data-n=root]')));
+    const a = JSON.parse(await canvas.eval(inFrame(COLLECT(sel)))), b = JSON.parse(await app.eval(COLLECT('#m [data-n=root]')));
     assert.equal(a.length, b.length, 'same node count');
     const diffs = [];
     for (let i = 0; i < a.length; i++) {
@@ -100,15 +109,15 @@ test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style 
     assert.deepEqual(diffs, [], 'every node computes the same as in a blank page');
 
     const SB = (r) => `(() => { const e = document.querySelector(${JSON.stringify(r)} + ' [data-n=scroll]'); return [e.offsetWidth - e.clientWidth, e.scrollHeight, e.clientHeight].join(); })()`;
-    t.diagnostic(`scrollbar gutter/scrollH/clientH: canvas ${await canvas.eval(SB(sel))} app ${await app.eval(SB('#m'))}`);
+    t.diagnostic(`scrollbar gutter/scrollH/clientH: canvas ${await canvas.eval(inFrame(SB('').replace(/^\(\(\) => /, '(() => ').replace("' [data-n=scroll]'", "'[data-n=scroll]'")))} app ${await app.eval(SB('#m'))}`);
     // the same must hold in dark chrome, in play mode, and inside a ghost/preview layer (proposals, history preview)
-    const RE = (c) => c.eval(COLLECT(sel));
+    const RE = (c) => c.eval(inFrame(COLLECT(sel)));
     const same = async (what) => { const x = JSON.parse(await RE(canvas)); const bad = []; for (let i = 0; i < x.length; i++) for (const p in x[i][1]) if (x[i][1][p] !== b[i][1][p]) bad.push(`${x[i][0]} ${p}: ${x[i][1][p]} vs ${b[i][1][p]}`); assert.deepEqual(bad, [], what); };
-    await canvas.eval(`document.documentElement.dataset.theme = 'dark'`); await same('dark chrome');
+    await canvas.eval(`document.documentElement.dataset.theme = 'dark'`); await same('dark chrome (the frame\'s own document)');
     await canvas.eval(`document.documentElement.dataset.theme = 'light'`); await same('light chrome');
-    await canvas.eval(`document.body.dataset.play = '1'`); await same('play mode'); await canvas.eval(`delete document.body.dataset.play`);
+    await canvas.eval(`napkin.play.set(true)`); await same('play mode (the frame\'s own document, with the real play mode on)'); await canvas.eval(`napkin.play.set(false)`);
     const ghost = (c, host) => c.eval(`(() => { const h = ${host}; const box = document.createElement('div'); box.className = 'preview-layer'; box.innerHTML = '<div class="preview-inner"><div id="gprobe"><p>x</p><button>b</button><code>c</code><input></div></div>'; h.append(box); return true; })()`);
-    await ghost(canvas, `document.querySelector('section[data-name="Probe"] .cell')`);
+    await ghost(canvas, `document.querySelector('section[data-name="Plain"] .cell')`); // (a dialect cell: the ghost layers live in cells)
     await app.eval(`document.body.insertAdjacentHTML('beforeend', '<div id="gprobe2"><p>x</p><button>b</button><code>c</code><input></div>')`);
     const g1 = JSON.parse(await canvas.eval(COLLECT('#gprobe'))), g2 = JSON.parse(await app.eval(COLLECT('#gprobe2')));
     const gbad = []; for (let i = 0; i < g1.length; i++) for (const p in g1[i][1]) if (p !== 'pointer-events' && g1[i][1][p] !== g2[i][1][p]) gbad.push(`${g1[i][0]} ${p}: ${g1[i][1][p]} vs ${g2[i][1][p]}`);
@@ -116,9 +125,9 @@ test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style 
     // editor custom properties never reach a cell: a component's var(--accent, fallback) gets its fallback; only token variables may arrive
     const EDITOR_VARS = 'accent accent-soft accent-text bg cell-line chrome chrome-2 chrome-3 dot frame frame-ink frame-shadow h head-line kbd line line-2 measure mono ok on-accent sans select shadow-pop text text-2 text-3 warn w c ink ls lf gz split gap gut stage panel git chip title slot out lift dir d off fh cols gcols head swatch-line stage-line dot-changed token-mode-count'.split(' ');
     const leaks = JSON.parse(await canvas.eval(`JSON.stringify((() => { const out = [];
-      for (const host of [document.querySelector('section[data-name="Probe"] .mount'), document.querySelector('.preview-inner')]) {
-        for (const n of ${JSON.stringify(EDITOR_VARS)}) { const e = document.createElement('i'); e.style.color = 'var(--' + n + ', rgb(1, 2, 3))'; host.append(e); if (getComputedStyle(e).color !== 'rgb(1, 2, 3)') out.push(host.className + ' --' + n); e.remove(); }
-        const cs = getComputedStyle(host); for (const p of cs) if (p.startsWith('--') && !p.startsWith('--nk-')) out.push(host.className + ' defines ' + p);
+      for (const host of [document.querySelector('section[data-name="Plain"] .mount'), document.querySelector('.preview-inner'), ${FD}.doc().body]) { // the frame's own document is a host too: editor variables must not reach it
+        for (const n of ${JSON.stringify(EDITOR_VARS)}) { const e = host.ownerDocument.createElement('i'); e.style.color = 'var(--' + n + ', rgb(1, 2, 3))'; host.append(e); if (host.ownerDocument.defaultView.getComputedStyle(e).color !== 'rgb(1, 2, 3)') out.push(host.className + ' --' + n); e.remove(); }
+        const cs = host.ownerDocument.defaultView.getComputedStyle(host); for (const p of cs) if (p.startsWith('--') && !p.startsWith('--nk-')) out.push(host.className + ' defines ' + p);
       } return out; })())`));
     assert.deepEqual(leaks, [], 'no editor custom property (and no un-prefixed one at all, with no tokens loaded) reaches a cell or a ghost');
     await canvas.eval(`document.querySelector('.preview-layer')?.remove()`);
@@ -128,7 +137,7 @@ test('WPC-01/02: a canvas cell equals a plain no-CSS React page, computed style 
     await canvas.waitFor(`!!document.querySelector('#boxhint-width')`).catch(async () => { throw new Error('no hint: ' + await canvas.eval(`document.querySelector('#panel')?.textContent.slice(0, 400)`)); });
     assert.match(await canvas.eval(`document.querySelector('#boxhint-width').textContent`), /content-box: outer = W \+ padding \+ border/);
     await canvas.eval(`napkin.select(null)`); await sleep(200);
-    const boxC = JSON.parse(await canvas.eval(BOX(sel))), boxA = JSON.parse(await app.eval(BOX('#m [data-n=root]')));
+    const boxC = JSON.parse(await canvas.eval(`JSON.stringify((() => { const r = ${rootRect}; return { x: r.left + scrollX, y: r.top + scrollY, w: Math.ceil(r.width), h: Math.ceil(r.height), rw: r.width, rh: r.height }; })())`)), boxA = JSON.parse(await app.eval(BOX('#m [data-n=root]')));
     assert.deepEqual([boxC.rw, boxC.rh], [boxA.rw, boxA.rh], 'same layout size (280 wide + padding 16 = 312 content-box in an app)');
     const shot = async (b, box) => Buffer.from((await b.send('Page.captureScreenshot', { format: 'png', clip: { x: box.x, y: box.y, width: box.w, height: box.h, scale: 1 }, captureBeyondViewport: b === app })).data, 'base64');
     const pc = await shot(canvas, boxC), pa = await shot(app, boxA);

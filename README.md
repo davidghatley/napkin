@@ -1,24 +1,25 @@
 # napkin
 
-napkin is a local canvas for React TSX components. Edit a component in the browser,
-in a text editor, or through an agent over MCP. The file on disk is the component
-your app imports. There is no export step or napkin runtime dependency.
+napkin is a local canvas for components: plain HTML/CSS first, React TSX/JSX too.
+Edit a component in the browser, in a text editor, or through an agent over MCP.
+The file on disk is the component your app or page uses. There is no export step,
+no napkin runtime dependency, and nothing napkin needs inside your folder.
 
 ## Quickstart
 
-Use Node.js 26 or newer, npm, and git. Run these commands from this checkout:
+Use Node.js 26 or newer, npm, and git. From this checkout:
 
 <!-- quickstart:start -->
 ```sh
 npm ci
-node src/cli.js init ../my-napkin
+cp -r examples/starter ../my-napkin
 node src/cli.js open ../my-napkin
 ```
 <!-- quickstart:end -->
 
-`init` requires an empty destination, and the example puts it next to this
-checkout (`../my-napkin`), not inside it. It creates `napkin.json` and
-`components/Welcome.tsx`, then exits. `open` starts the server and prints the
+`open` takes any folder: point it at your own components instead of the copied
+starter (`node src/cli.js open path/to/your/folder`). Nothing in the folder is
+required and napkin writes nothing there except the edits you make. It prints the
 canvas address and a `.mcp.json` object for Claude Code. The default port is 4810;
 napkin tries the next port if it is occupied. Use `--port 0` for a free random port.
 Open the printed address. Stop the server with Ctrl+C.
@@ -27,6 +28,32 @@ Press **N** to create a component. **F**, **T**, and **I** draw a frame, text, o
 image inside a component. **Ctrl/Cmd+K** finds components, layers, and actions.
 **?** opens the shortcut sheet. The [user guide](docs/guide/README.md) covers the
 canvas, variants, agents, files, tokens, and undo.
+
+## Open any folder
+
+```sh
+node src/cli.js open path/to/your/components
+```
+
+Every `.html` file is a component (drawn exactly as the browser draws that file,
+in its own frame, so `@media` answers to the frame's width), and so is every
+exported component of a `.tsx`/`.jsx` file. Click an element to edit its text,
+classes, inline style and the CSS rules that match it; each change is a small edit
+in place, with undo. If the files use CSS variables that nothing they load defines
+(a design system whose previews rely on a host page), napkin asks once which of the
+folder's stylesheets apply and remembers the answer outside the folder. napkin
+writes nothing into the folder except the edits you make. The engine and its HTTP
+contract are described in [decision 0014](docs/decisions/0014-document-engine.md).
+
+### Optional: a starter project
+
+`init` writes a `napkin.json` and `components/Welcome.tsx` into an empty folder
+and exits. It is not needed to open anything; it only gives you a fresh folder to
+start from (outside this checkout):
+
+```sh
+node src/cli.js init ../my-napkin
+```
 
 ## A 40-component sample
 

@@ -18,8 +18,11 @@ import { createPresence } from './presence.js';
 import { nodeOfEdit } from './model.js';
 import { acquireWorkspaceLock, LockError } from './lock.js';
 import { resolveAsset, TYPES as IMAGE_TYPES } from './assets.js';
+import { openFolder } from './doc/folder.js';
+import { createDocRoutes } from './doc/routes.js';
+import { agentPermission } from './api.js';
 
-const { values: args } = parseArgs({ options: { dir: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, 'watch-parent': { type: 'string' }, stream: { type: 'boolean' } } });
+const { values: args } = parseArgs({ options: { dir: { type: 'string' }, root: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, 'watch-parent': { type: 'string' }, stream: { type: 'boolean' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 let dir, only, demoDir;
@@ -49,6 +52,11 @@ if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: cho
 let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
 try { lock = acquireWorkspaceLock(dir, { writeSidecars: !args['no-sidecars'] }); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
 if (!args['no-sidecars']) process.once('exit', () => cleanPrivate(dir)); // WPC-37: after the lock is released (its exit hook ran first), tidy what napkin left
+// The document engine (decision 0014) opens the whole folder as it is: HTML, CSS and any TSX/JSX, behind the engine
+// contract (/api/files, /api/component, /view, /api/edit, /api/undo, /api/styles). The TSX-dialect workspace below
+// keeps serving the canvas's dialect components (variants, props, sidecars) as before.
+const docRoot = resolve(args.root || (only ? dirname(only) : dir));
+const docs = openFolder(docRoot);
 const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'], progressive: args.stream });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
@@ -58,7 +66,7 @@ const presence = createPresence({ broadcast });
 // A proposal is work in progress too: show the agent on its node while it proposes.
 const PEOPLE = new Set(['you', 'file', 'git', 'unknown']);
 const tint = (by) => (PEOPLE.has(by) || !by ? {} : presence.color(by)); // agents get their presence colour on every frame that names them
-const api = createApi(ws, { dir, colorOf: tint, broadcast: (f) => {
+const api = createApi(ws, { dir, colorOf: tint, inFolder: !args['no-sidecars'], broadcast: (f) => {
   if (f.type === 'proposal') {
     broadcast({ ...f, proposal: { ...f.proposal, ...tint(f.proposal.by) } });
     if (!f.proposal.adoption && !f.proposal.create && !f.proposal.updated) presence.set(f.proposal.by, { component: f.component, node: nodeOfEdit(f.proposal.edits?.[0]), variant: f.proposal.edits?.[0]?.variant ?? null });
@@ -82,6 +90,8 @@ ws.events.on('added', async ({ component, by, summary }) => {
   if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)), ...(by && { by, summary }) });
 });
 
+const docRoutes = createDocRoutes(docs, { identify: (t) => api.identify(t), permission: (name) => agentPermission(dir, name), broadcast, legacy: (id) => !!ws.find(id),
+  legacyNewest: (verb, by) => { let at = null; for (const x of ws.entries()) { const t = x.store[verb + 'Top']?.(by); if (t && (at === null || t.at > at)) at = t.at; } return at; } });
 const json = (res, code, body) => { if (body?.error) body.error = explainError(body.error); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 const STATIC = { '/': 'public/index.html', '/brand/napkin-favicon.svg': 'public/brand/napkin-favicon.svg', '/brand/napkin-glyph.svg': 'public/brand/napkin-glyph.svg', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js', '/src/css-props.js': 'src/css-props.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml' };
@@ -107,6 +117,7 @@ const server = createServer(async (req, res) => {
       return res.end(r.code);
     }
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
+    if (await docRoutes(req, res, url)) return;
     if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
 
@@ -195,7 +206,7 @@ const server = createServer(async (req, res) => {
 
     // Components, edits, proposals, history, search, render, guide (src/api.js).
     if (path.startsWith('/api/')) {
-      let body = ''; if (req.method !== 'GET' && req.method !== 'HEAD') for await (const chunk of req) body += chunk;
+      let body = req.napkinBody ?? ''; if (req.napkinBody === undefined && req.method !== 'GET' && req.method !== 'HEAD') for await (const chunk of req) body += chunk;
       const token = /^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1];
       const r = await api.handle({ method: req.method, path, query: url.searchParams, body, token });
       if (r?.bytes) { res.writeHead(r.status, { 'content-type': r.type, 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', 'content-security-policy': 'sandbox' }); return res.end(r.bytes); }
@@ -217,4 +228,4 @@ server.listen(listenPort, '127.0.0.1', () => {
   if (args.stream) ws.ready.then(async () => { if (!server.listening) return; console.log(await ws.report()); });
 });
 let stopping = false;
-shutdown = () => { if (stopping) return; stopping = true; for (const c of clients) c.end(); server.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
+shutdown = () => { if (stopping) return; stopping = true; for (const c of clients) c.end(); server.close(); docs.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };

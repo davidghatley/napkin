@@ -24,15 +24,23 @@ export function initPlay(ctx) {
       if (p.type === 'boolean') return `<span class="pfield">${label}<input type="checkbox" id="play-prop-${esc(p.name)}" data-play-prop="${esc(p.name)}" data-kind="boolean"${v ? ' checked' : ''}></span>`;
       return `<span class="pfield">${label}<input id="play-prop-${esc(p.name)}" data-play-prop="${esc(p.name)}" data-kind="${p.type}" autocomplete="off" value="${esc(v ?? '')}"></span>`;
     }).join('');
-    bar.innerHTML = `<strong id="play-title">Play</strong><span class="pname">${esc(c?.name ?? '')}</span>${fields || '<span class="phint">No settings to try.</span>'}<button type="button" id="play-reset"${live.get(id) ? '' : ' disabled'}>Reset</button><button type="button" id="play-exit" aria-label="Leave play mode">Done <kbd>P</kbd></button>`;
+    bar.innerHTML = `<strong id="play-title">Play</strong><span class="pname">${esc(c?.name ?? '')}</span>${fields || '<span class="phint">No settings to try.</span>'}<button type="button" id="play-replay" title="Start the animations over">Replay</button><button type="button" id="play-reset"${live.get(id) ? '' : ' disabled'}>Reset</button><button type="button" id="play-exit" aria-label="Leave play mode">Done <kbd>P</kbd></button>`;
     if (focus?.id) { const f = bar.querySelector('#' + CSS.escape(focus.id)); if (f) { f.focus({ preventScroll: true }); try { f.setSelectionRange(focus.s, focus.e); } catch {} } }
   }
 
+  // A one-shot animation has finished long before you press P: entering play starts them over, and Replay does so at any time.
+  function restartAnimations() {
+    for (const s of ctx.stage.sections.values()) {
+      const d = s.docFrame?.doc(); if (!d?.head) continue;
+      const st = d.createElement('style'); st.setAttribute('data-napkin', ''); st.textContent = '*,*::before,*::after{animation:none!important}';
+      d.head.append(st); void d.documentElement.offsetWidth; st.remove();
+    }
+  }
   const rerender = (id) => ctx.stage.render(id, true).catch(console.error);
   function set(next) {
     if (next === on) return;
     on = next;
-    if (on) { document.body.dataset.play = '1'; bar.hidden = false; paint(); }
+    if (on) { document.body.dataset.play = '1'; bar.hidden = false; paint(); restartAnimations(); }
     else {
       delete document.body.dataset.play; bar.hidden = true;
       const ids = [...live.keys()]; live.clear();
@@ -42,7 +50,7 @@ export function initPlay(ctx) {
     ctx.stage.refreshOverlays();
   }
   const api = {
-    active: () => on,
+    active: () => on, replay: restartAnimations,
     set, toggle: () => set(!on),
     props: (id) => (on ? live.get(id) || {} : {}),
     setProp(id, name, value) { const v = live.get(id) || {}; v[name] = value; live.set(id, v); if (bar.contains(document.activeElement)) { /* keep typing */ } rerender(id); paint(); },
@@ -57,7 +65,8 @@ export function initPlay(ctx) {
     api.setProp(id, name, t.dataset.kind === 'boolean' ? t.checked : t.dataset.kind === 'number' ? (t.value.trim() === '' ? undefined : Number(t.value)) : t.value);
   });
   bar.addEventListener('click', (ev) => {
-    if (ev.target.closest('#play-exit')) set(false);
+    if (ev.target.closest('#play-replay')) restartAnimations();
+    else if (ev.target.closest('#play-exit')) set(false);
     else if (ev.target.closest('#play-reset')) { const id = target(); if (id) api.reset(id); }
   });
   ctx.on('select', () => { if (on) paint(); });

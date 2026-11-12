@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge: @import chain</title>
+<link rel="stylesheet" href="css/base.css">
+<style>
+@import "css/extra.css";
+.box { margin: 16px }
+</style>
+</head>
+<body>
+<div class="box">
+  <h3 class="box__title">Imported twice over</h3>
+  <p class="box__body">base.css imports import-tokens.css; this page's style block imports extra.css.</p>
+  <span class="tag">extra</span>
+</div>
+</body>
+</html>

@@ -28,7 +28,8 @@ test('OPN-01: every nested TSX classified, opening and bundling writes zero repo
       const greet = list.find((c) => c.name === 'Greeting');
       assert.equal((await fetch(new URL(`bundle/${greet.id}.js`, s.url))).status, 200);
       const tok = await session(s.url, 'you');
-      assert.equal((await http(s.url, `/api/components/${greet.id}/canvas`, { method: 'POST', token: tok, body: { x: 20, y: 20 } })).status, 403);
+      // Lead amendment (decision 0013, D4, 2026-10-30): a canvas move is saved outside the folder, not refused.
+      assert.equal((await http(s.url, `/api/components/${greet.id}/canvas`, { method: 'POST', token: tok, body: { x: 20, y: 20 } })).status, 200);
       assert.deepEqual(hashes(dir), before);
       const competing = await startMcp('http://127.0.0.1:0/', { NAPKIN_DIR: dir });
       try { const r = await competing.call('list_components'); assert.equal(r.isError, true); assert.match(r.text, /another napkin process/); }
@@ -36,7 +37,7 @@ test('OPN-01: every nested TSX classified, opening and bundling writes zero repo
       assert.deepEqual(hashes(dir), before, 'a competing fallback cannot create a repository lock');
     } finally { await s.stop(); }
     assert.deepEqual(hashes(dir), before);
-    evidence('OPN-01', 'Re-run: EVIDENCE=1 node --test test/onboarding/open.test.js\n3/3 nested TSX files classified: 1 editable, 2 read-only.\nAll 7 repository files SHA-256 unchanged after open, bundle, session, refused sidecar write and shutdown. Zero added paths.\n');
+    evidence('OPN-01', 'Re-run: EVIDENCE=1 node --test test/onboarding/open.test.js\n3/3 nested TSX files classified: 1 editable, 2 read-only.\nAll 7 repository files SHA-256 unchanged after open, bundle, session, a saved canvas move and shutdown. Zero added paths.\n');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

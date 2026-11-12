@@ -41,21 +41,37 @@ test('an overridden row names the base value it would reset to', { timeout: 9000
   } finally { await L.close(); }
 });
 
-test('a read-only file refuses with "read-only: line N: reason", and its panel says so, disabled', { timeout: 90000 }, async () => {
-  const L = await lab({ Free: 'export function Free() { return <div className="x">hi</div>; }\n', Edited: fx('Button').replace(/Button/g, 'Edited') });
+// Rewritten for decision 0013 (lead ruling 2026-10-30): was a read-only dialect file refused as a whole ("read-only: line N: reason", panel disabled),
+// now a /view frame that refuses one spot at a time ("line N: reason") and whose panel shows that spot disabled; intent unchanged.
+test('a file outside the dialect refuses the spot computed in code with "line N: reason", its panel says so, disabled; the rest edits', { timeout: 90000 }, async () => {
+  const SRC = (n) => `export function ${n}({ label }) { return <div className="x">hi {label}</div>; }\n`;
+  const L = await lab({ Free: SRC('Free'), Edited: fx('Button').replace(/Button/g, 'Edited') });
   try {
     // a file that is valid TSX but outside the dialect: from the start, and after a hand edit takes it out of the dialect
-    writeFileSync(join(L.compDir, 'Edited.tsx'), 'export function Edited() { return <div className="x">hi</div>; }\n');
+    writeFileSync(join(L.compDir, 'Edited.tsx'), SRC('Edited'));
     await sleep(600);
     for (const n of ['Free', 'Edited']) {
-      const r = JSON.parse(await L.q(`napkin.sendEdits(napkin.find('${n}').component, [{ op: 'set', path: 'root.padding', value: 4 }]).then(JSON.stringify)`));
-      assert.match(r.error, /^read-only: line \d+: /, n);
+      // Free is read-only from the start (a /view frame); Edited was in the dialect and a hand edit took it out: the dialect keeps its last good cell and says why,
+      // and the file's own edit path (the engine's) refuses and accepts the same way for both.
+      const id = `${n}.tsx#${n}`;
+      const tree = JSON.parse(await L.q(`fetch('/api/component/' + encodeURIComponent(${JSON.stringify(id)})).then((r) => r.text())`)), node = tree.tree[0].node;
+      const post = (edits) => L.q(`napkin.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: ${JSON.stringify(id)}, baseRevision: ${JSON.stringify(tree.revision)}, edits: ${JSON.stringify(edits)} }) }).then((r) => r.json()).then(JSON.stringify)`).then(JSON.parse);
+      const before = readFileSync(join(L.compDir, `${n}.tsx`), 'utf8');
+      const r = await post([{ op: 'text', node, run: 1, value: 'z' }]);
+      assert.equal(r.ok, false, n);
+      assert.match(r.error, /line \d+/, n); assert.match(r.error, /computed in code/, n);
       assert.doesNotMatch(r.error, /has a syntax error/);
+      assert.equal(readFileSync(join(L.compDir, `${n}.tsx`), 'utf8'), before, 'nothing written');
+      const ok = await post([{ op: 'style', node, prop: 'padding', value: '4px' }]); // the editable spots of the same file work
+      assert.ok(ok.ok !== false, JSON.stringify(ok));
+      const was = before.split('\n'), now = readFileSync(join(L.compDir, `${n}.tsx`), 'utf8').split('\n');
+      assert.equal(now.filter((l, i) => l !== was[i]).length, 1, `${n}: one line changed`);
     }
     const c = await centerOf(L.browser, `document.querySelector('section[data-name=Free] .cmp-head h3')`);
-    await L.io.click(c.x, c.y); await sleep(200);
-    assert.match(await L.q(`document.querySelector('#sel-readonly').textContent`), /^read-only: line 1: /);
-    assert.equal(await L.q(`document.querySelectorAll('#panel input:not([disabled]), #panel select:not([disabled])').length`), 0);
+    await L.io.click(c.x, c.y); await sleep(300);
+    await L.browser.waitFor(`document.querySelector('#panel .doc-run[disabled]')`);
+    assert.match(await L.q(`document.querySelector('#panel .doc-run[disabled]').title`), /Computed in code/);
+    assert.equal(await L.q(`document.querySelectorAll('#panel .doc-run:not([disabled])').length`), 1, 'the other run stays editable');
   } finally { await L.close(); }
 });
 

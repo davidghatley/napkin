@@ -32,7 +32,7 @@
 #changes-placeholder { display: none; }                           /* no big "No changes yet." block */
 #changes, #changes[open] { height: 33px; position: relative; }       /* always one quiet header: entries open upward over the layers, so nothing shifts when one arrives */
 #changes > :not(summary) { position: absolute; left: 0; right: 0; bottom: 33px; max-height: 190px; overflow: auto; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); z-index: 4; }
-#changes:not(:has(#log li)) > :not(summary) { display: none; }
+#changes:not(:has(#log li:not(:empty))) > :not(summary) { display: none; } /* (the log keeps empty rows ready: they are nothing to show) */
 
 /* ---- bottom bar: summary, panels, hints, zoom, in groups ---- */
 #statusbar { gap: 14px; }

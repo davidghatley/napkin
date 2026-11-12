@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Edge: local web font</title>
+<style>
+@font-face {
+  font-family: "Edge Sans";
+  src: url("fonts/edge-sans.woff2") format("woff2");
+  font-weight: 700;
+  font-display: block;
+}
+body { margin: 0; padding: 24px; background: #ffffff; color: #16181d; }
+.display { font: 700 44px/52px "Edge Sans", serif; margin: 0; }
+.fallback { font: 16px/24px serif; }
+</style>
+</head>
+<body>
+<h1 class="display">Small legible worlds</h1>
+<p class="fallback">This line stays in the fallback serif.</p>
+</body>
+</html>

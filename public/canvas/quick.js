@@ -88,7 +88,7 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
     const controls = panelControls();
     if (panel?.querySelector('#add-axis, [id^="add-value-"], [id^="axis-name-"]') && !controls.some((p) => /^make-base-/.test(p.id))) // none can be used: say so instead of matching nothing
       out.push({ kind: 'property', label: 'Make base (not possible here)', hint: where, note: 'Make base needs a variant value that is not the base yet. There is none here.', boost: 5 });
-    for (const p of controls) out.push({ kind: 'property', keys: [...(KEYS[p.section] ?? []), ...(/^(remove|eye)-(fill|stroke)$/.test(p.id) ? ['clear'] : [])], label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, add: p.add, boost: 14 - p.label.length * 0.25 - (/^(value-(up|down|name)|grip-value|remove-value|make-base|axis-(up|down|name)|remove-axis)-/.test(p.id) ? 4 : 0) + (/^size-height-/.test(p.id) ? 0.6 : 0) + (p.add ? 3 : p.button ? 0 : 0.5) - Math.min(p.order, 8) * 0.02 });
+    for (const p of controls.filter((x) => !/^chk-/.test(x.id))) out.push({ kind: 'property', keys: [...(KEYS[p.section] ?? []), ...(/^(remove|eye)-(fill|stroke)$/.test(p.id) ? ['clear'] : [])], label: p.label, hint: `${p.alias ? p.alias + ' · ' : ''}${where}`, field: p.id, add: p.add, boost: 14 - p.label.length * 0.25 - (/^(value-(up|down|name)|grip-value|remove-value|make-base|axis-(up|down|name)|remove-axis)-/.test(p.id) ? 4 : 0) + (/^size-height-/.test(p.id) ? 0.6 : 0) + (p.add ? 3 : p.button ? 0 : 0.5) - Math.min(p.order, 8) * 0.02 });
     return out;
   }
   function build() {
@@ -159,7 +159,7 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
     if (returnTo?.isConnected && returnTo !== document.body) returnTo.focus?.({ preventScroll: true });
     returnTo = null;
   }
-  function go(r) {
+  async function go(r) {
     const item = r?.item;
     if (!item) return;
     close();
@@ -185,6 +185,13 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
     const c = ctx.state.components.get(item.component);
     if (!c) return;
     ctx.stage.live(c.component);
+    if (c.kind === 'html') { // a file drawn by the engine: its first element is selected and the view goes there, whatever was selected before
+      let node = ctx.stage.rootNode(c.component);
+      for (let i = 0; i < 40 && !node; i++) { await new Promise((r) => setTimeout(r, 50)); node = ctx.stage.rootNode(c.component); } // a frame still loading
+      if (node) ctx.select({ component: c.component, node, variant: {} });
+      const rect = ctx.stage.componentRect(c.component); if (rect) ctx.view.flyTo(rect, { pad: 96, max: 1.5 });
+      return;
+    }
     if (!c.doc) {
       ctx.hint(`${c.name} is read-only${c.readOnly ? ` (${String(c.readOnly).replace(/\.$/, '')})` : ''}, so there is nothing to select. Open it in your editor to change it.`);
       const rect = ctx.stage.componentRect(c.component); if (rect) ctx.view.flyTo(rect, { pad: 96, max: 1.5 }); return; }
