@@ -1,6 +1,5 @@
 // The layers tree (CAN-04): every component, and under it the JSX tree of its nodes, as the file has it.
 // Selection syncs both ways. Rename (F2 / double-click) is one `rename` edit; dragging a row is one `move`.
-import { keyLabel } from './keylabel.js';
 import { plain } from './words.js';
 import { index, VOID } from '/src/model.js';
 
@@ -138,7 +137,7 @@ export function initLayers(ctx, el) {
       if (n && !c.readOnly) await ctx.sendEdits(c.component, [{ op: 'set', path: `${n.id}.visibility`, value: n.style?.visibility === 'hidden' ? null : 'hidden' }]);
       return;
     }
-    if (ev.target.closest('.lmore')) { ev.stopPropagation(); pick(row); openMenu(ev.target.closest('.lmore')); return; }
+    if (ev.target.closest('.lmore')) { ev.stopPropagation(); openMenu(ev.target.closest('.lmore')); return; }
     if (ev.target.closest('.twirl')) {
       if (row.dataset.kind === 'component') { const id = row.dataset.component; if (expanded.has(id)) { expanded.delete(id); keptOpen.delete(id); } else { expanded.add(id); keptOpen.add(id); } }
       else { const k = `${row.dataset.component}|${row.dataset.node}`; if (row.getAttribute('aria-expanded') === 'true') { folded.add(k); opened.delete(k); } else { folded.delete(k); opened.add(k); } }
@@ -157,48 +156,8 @@ export function initLayers(ctx, el) {
     else startRename(row);
   });
 
-  // ---- row actions: rename, duplicate, delete ----
-  const menu = document.createElement('div');
-  menu.id = 'lmenu'; menu.setAttribute('role', 'menu'); menu.hidden = true; document.body.append(menu);
-  const closeMenu = () => { menu.hidden = true; };
-  function openMenu(btn) {
-    const row = btn.closest('.lrow'), c = ctx.state.components.get(row.dataset.component);
-    if (row.dataset.kind === 'component') { // a component row: rename or delete the whole component
-      menu.innerHTML = `<button type="button" role="menuitem" data-do="crename"${c?.readOnly ? ' disabled title="This file is read-only"' : ''}>Rename component…<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="cdelete"${c?.readOnly ? ' disabled title="This file is read-only"' : ''}>Delete component…</button>`;
-      const r = btn.getBoundingClientRect();
-      Object.assign(menu.style, { left: `${r.right - 164}px`, top: `${r.bottom + 4}px` });
-      menu.dataset.component = row.dataset.component; menu.dataset.node = '';
-      menu.hidden = false; menu.querySelector('button:not(:disabled)')?.focus();
-      return;
-    }
-    const isRoot = c?.doc?.root.id === row.dataset.node, ro = !!c?.readOnly;
-    const hid = (c?.doc && index(c.doc).byId.get(row.dataset.node)?.style?.visibility === 'hidden');
-    const off = (why) => (ro || why ? ` disabled title="${why || 'This file is read-only'}"` : '');
-    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${off('')}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${off(isRoot ? "The root can't be duplicated" : '')}>Duplicate<kbd>${keyLabel('Mod+D')}</kbd>${isRoot ? '<small>The root can’t be duplicated</small>' : ''}</button><button type="button" role="menuitem" data-do="copy"${isRoot ? ' disabled title="The root can\'t be copied"' : ''}>Copy<kbd>${keyLabel('Mod+C')}</kbd></button><button type="button" role="menuitem" data-do="hide"${off('')}>${hid ? 'Show' : 'Hide'}</button><button type="button" role="menuitem" data-do="delete"${off(isRoot ? "The root can't be deleted" : '')}>Delete${isRoot ? '<small>The root can’t be deleted</small>' : '<kbd>' + keyLabel('Backspace') + '</kbd>'}</button>`;
-    const r = btn.getBoundingClientRect();
-    Object.assign(menu.style, { left: `${r.right - 164}px`, top: `${r.bottom + 4}px` });
-    menu.dataset.component = row.dataset.component; menu.dataset.node = row.dataset.node;
-    menu.hidden = false; menu.querySelector('button:not(:disabled)')?.focus();
-  }
-  menu.addEventListener('click', async (ev) => {
-    const b = ev.target.closest('button[data-do]');
-    if (!b) return;
-    const { component, node } = menu.dataset; closeMenu();
-    if (b.dataset.do === 'crename') ctx.cmpOps.rename(component, { fromRow: true });
-    else if (b.dataset.do === 'cdelete') ctx.cmpOps.remove(component, { fromRow: true });
-    else if (b.dataset.do === 'rename') { const r = el.querySelector(`.lrow[data-component="${CSS.escape(component)}"][data-node="${CSS.escape(node)}"]`); if (r) startRename(r); }
-    else if (b.dataset.do === 'duplicate') await ctx.ops.duplicate();
-    else if (b.dataset.do === 'copy') { try { document.execCommand('copy'); } catch {} ctx.hint('Copied. Paste into any component with ' + keyLabel('Mod+V')); }
-    else if (b.dataset.do === 'hide') await ctx.ops.hide();
-    else if (b.dataset.do === 'delete') await ctx.sendEdits(component, [{ op: 'delete', id: node }]);
-  });
-  menu.addEventListener('keydown', (ev) => {
-    const items = [...menu.querySelectorAll('button:not(:disabled)')], i = items.indexOf(document.activeElement);
-    if (ev.key === 'ArrowDown') { ev.preventDefault(); items[(i + 1) % items.length]?.focus(); }
-    else if (ev.key === 'ArrowUp') { ev.preventDefault(); items[(i - 1 + items.length) % items.length]?.focus(); }
-    else if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeMenu(); }
-  });
-  document.addEventListener('pointerdown', (ev) => { if (!menu.hidden && !ev.target.closest('#lmenu, .lmore')) closeMenu(); }, true);
+  // ---- row actions: the row's "More" button opens the context menu of its item (context-menu.js), as a right-click does ----
+  function openMenu(btn) { const row = btn.closest('.lrow'), r = btn.getBoundingClientRect(); ctx.menu?.openRow(row, { x: r.left, y: r.bottom + 4 }, { anchor: btn }); }
 
   // ---- hover: the row and the element light each other up ----
   el.addEventListener('mouseover', (ev) => {
@@ -293,7 +252,6 @@ export function initLayers(ctx, el) {
       if (row.getAttribute('aria-expanded') === 'true') row.querySelector('.twirl').click();
       else { const lvl = Number(row.getAttribute('aria-level')); go(rows.slice(0, i).reverse().find((r) => Number(r.getAttribute('aria-level')) < lvl)); }
     } else if (ev.key === 'F2') { ev.preventDefault(); if (row.dataset.kind === 'component' && frameRow(row)) fileRename(row); else if (row.dataset.kind === 'component') ctx.cmpOps.rename(row.dataset.component); else startRename(row); }
-    else if (ev.key === 'ContextMenu' || (ev.shiftKey && ev.key === 'F10')) { ev.preventDefault(); const b = row.querySelector('.lmore'); if (b) openMenu(b); }
     else if (ev.key === 'Enter') { ev.preventDefault(); focusKey = rowKey(row); pick(row); ctx.nav?.focus(row.dataset.component, row.dataset.node); }
   });
 
@@ -368,5 +326,26 @@ export function initLayers(ctx, el) {
   let seeded = false; // a small repo opens fully expanded, once
   ctx.on('render', () => { if (!seeded && ctx.state.components.size <= 8) { seeded = true; for (const id of ctx.state.components.keys()) expanded.add(id); } });
   draw();
-  return { redraw: draw, expand: (id) => expanded.add(id) };
+  // For the context menu and the palette: the row of a selection, select it as a click does, rename it, open or close it.
+  const rowOf = (sel) => sel && [...el.querySelectorAll('.lrow')].find((r) => r.dataset.component === sel.component && (sel.card ? r.dataset.kind === 'component' : r.dataset.node === sel.node));
+  function rename(sel = ctx.state.selection) {
+    if (!sel) return false;
+    if (sel.card) { ctx.cmpOps.rename(sel.component, { fromRow: true }); return true; }
+    let row = rowOf(sel);
+    if (!row) { expanded.add(sel.component); lastHtml = ''; draw(); row = rowOf(sel); } // a row inside a closed file opens first
+    if (!row) return false;
+    row.scrollIntoView({ block: 'nearest' });
+    startRename(row);
+    return true;
+  }
+  function toggle(row = document.activeElement?.closest?.('#layers .lrow') || rowOf(ctx.state.selection)) {
+    const t = row?.querySelector('.twirl');
+    if (!t || !row.hasAttribute('aria-expanded')) return false;
+    focusKey = rowKey(row);
+    t.click();
+    return true;
+  }
+  const api = { redraw: draw, expand: (id) => expanded.add(id), pick, rename, toggle, rowOf, key: rowKey, find: (key) => [...el.querySelectorAll('.lrow')].find((r) => rowKey(r) === key) };
+  ctx.layers = api;
+  return api;
 }

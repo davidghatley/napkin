@@ -17,6 +17,7 @@ import { parseJsx, componentTree } from './jsx.js';
 import { classLiteral, planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf, runsOf, decodeText } from './edit.js';
 import { writeAtomic, cleanStaleTmp, sweepDir, removeFile, moveFile } from '../atomic.js';
 import { buildDom, matches as selMatches } from './select.js';
+import { toComponent, componentName } from './to-component.js';
 import { createCascade } from '../../public/canvas/inspector-cascade.js';
 import { explainError } from '../errors.js';
 
@@ -370,11 +371,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
 
   // ---------- edits ----------
   const sheetsIn = (path, s) => (kindOf(path) === 'css' ? [{ from: 0, to: s.length }] : kindOf(path) === 'html' ? parseHtml(s).styles.map((n) => ({ from: n.openEnd, to: n.closeStart })) : []);
-  function nodeIn(comp, s, start) {
-    const e = { s, rev: null };
-    if (comp.kind === 'html') e.html = parseHtml(s); else e.jsx = parseJsx(s, extname(comp.path));
-    const { flat } = nodesOf(comp, e);
-    return flat.find((n) => n.start === start) || null;
+  function nodeIn(comp, s, start, e = { s, rev: null }) { // (pass one `e` for several lookups in the same text: they share one parse)
+    if (!e.flat) { if (comp.kind === 'html') e.html = parseHtml(s); else e.jsx = parseJsx(s, extname(comp.path)); e.flat = nodesOf(comp, e).flat; }
+    return e.flat.find((n) => n.start === start) || null;
   }
   // Apply a batch: { baseRevision, edits, by } -> { ok, revision, changed } (throws DocError/EditRefused).
   // { dryRun }: plan the edit and say what the files would hold, writing nothing (the canvas previews with exactly these bytes).
@@ -430,7 +429,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
         } else {
           path = comp.path;
           const s = textOf(path);
-          const find = (start, what) => { const n = nodeIn(comp, s, map(path, start)); if (!n) throw new DocError(`edit #${k}: the ${what} is gone after an earlier edit of this batch. Next: send it as a separate batch`, 409); return n; };
+          const one = { s, rev: null }; // one parse for the whole edit: a move's node and parent must be nodes of the same tree, or the node is not found among the parent's children
+          const find = (start, what) => { const n = nodeIn(comp, s, map(path, start), one); if (!n) throw new DocError(`edit #${k}: the ${what} is gone after an earlier edit of this batch. Next: send it as a separate batch`, 409); return n; };
           if (e.op === 'insert') splices = planInsert(s, find(refs[k].parent, 'parent'), e.index ?? 0, e.html ?? e.jsx);
           else if (e.op === 'move') splices = planMove(s, find(refs[k].node, 'node'), find(refs[k].parent, 'parent'), e.index ?? 0);
           else splices = planNodeEdit(s, find(refs[k].node, 'node'), e);
@@ -605,6 +605,76 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
     return fileDone(p, by, st, 'edit');
   }
+  // POST /api/frames/component: { from, node, name? } -> the element `node` of the HTML frame `from` becomes a component of its
+  // own: <Name>.tsx beside the frame, holding the element as JSX and the CSS rules that reach it. The frame is left as it is
+  // (plain HTML cannot hold an instance); the component lands on the canvas to the frame's right. One undo step removes it.
+  function componentFrom({ from, node, name, by = 'unknown' } = {}) {
+    const comp = component(frameFile(from));
+    const t = tree(comp.id);
+    const dom = buildDom(t.tree || []);
+    const el = dom.el(node);
+    if (!el || el.synthetic) throw new DocError(`no element ${node} in ${comp.path}. Next: select the element again`, 404);
+    if (['html', 'head', 'body'].includes(el.tag)) throw new DocError('select an element inside the frame, not the whole frame. Next: double-click into the frame and pick the part you want', 400);
+    const entry = read(comp.path);
+    const html = fromL(entry.s.slice(el.src.start, el.src.end));
+    // every element of the selection, and the rules whose selector reaches any of them, in cascade order
+    const subtree = []; (function walk(e) { subtree.push(e); e.children.forEach(walk); })(el);
+    const base = rulesOf(comp.id);
+    const textOf = (r) => fromL(read(r.file).s.slice(r.start, r.end));
+    const css = [];
+    for (const r of base.rules) {
+      if (r.kind !== 'style') continue;
+      if (r.parts.some((p) => subtree.some((e) => { try { return selMatches(e, p.selector); } catch { return false; } }))) css.push({ text: textOf(r), context: r.context });
+    }
+    // what the selection gets from outside itself, so it looks the same on its own:
+    // (1) animations its rules name
+    const all = () => css.map((c) => c.text).join('\n') + '\n' + html;
+    const frames = new Map();
+    for (const r of base.rules) {
+      const at = r.kind === 'keyframe' && r.context.find((c) => /^@(-\w+-)?keyframes\s/.test(c));
+      if (at) (frames.get(at) || frames.set(at, []).get(at)).push(textOf(r));
+    }
+    for (const [at, steps] of frames) {
+      const nm = at.replace(/^@(-\w+-)?keyframes\s+/, '').trim();
+      if (new RegExp(`(^|[\\s,:])${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[\\s,;])`).test(all())) css.push({ text: `${at} {\n${steps.map((x) => '  ' + x).join('\n')}\n}`, context: [] });
+    }
+    // (2) what it inherits from the elements around it (type and colour), and (3) the custom properties it reads. Both are
+    // written once on the component's own root, before its rules, so nothing leaks onto the page that uses it.
+    const INHERITED = /^(color|font|font-(family|size|weight|style|stretch|variant|variant-numeric|feature-settings|kerning)|line-height|letter-spacing|word-spacing|text-align|text-transform|text-indent|white-space|direction|-webkit-font-smoothing|-moz-osx-font-smoothing)$/;
+    const decls = (text) => [...text.slice(text.indexOf('{') + 1).matchAll(/([\w-]+)\s*:\s*([^;}]+)/g)].map((m) => [m[1].toLowerCase() === m[1] ? m[1] : m[1], m[2].trim()]);
+    const around = []; for (let a = el.parent; a; a = a.parent) around.unshift(a);
+    const got = new Map();
+    const vars = new Set([...all().matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
+    const ownVars = new Set([...all().matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+    for (const a of around) {
+      for (const r of base.rules) {
+        if (r.kind !== 'style' || r.context.length) continue;
+        if (!r.parts.some((p) => { try { return selMatches(a, p.selector); } catch { return false; } })) continue;
+        for (const [k, v] of decls(textOf(r))) if (INHERITED.test(k) || (k.startsWith('--') && vars.has(k) && !ownVars.has(k))) { got.delete(k); got.set(k, v); }
+      }
+      for (const [k, v] of decls(`{${a.attrs.style || ''}}`)) if (INHERITED.test(k) || (k.startsWith('--') && vars.has(k) && !ownVars.has(k))) { got.delete(k); got.set(k, v); }
+    }
+    if (got.size) {
+      const cls = (el.attrs.class || '').trim().split(/\s+/)[0];
+      const sel = cls && /^-?[_a-zA-Z][\w-]*$/.test(cls) ? `.${cls}` : el.attrs.id && /^[_a-zA-Z][\w-]*$/.test(el.attrs.id) ? `#${el.attrs.id}` : el.tag;
+      css.unshift({ text: `${sel} {\n${[...got].map(([k, v]) => `  ${k}: ${v};`).join('\n')}\n}`, context: [] });
+    }
+    const dir = dirname(comp.path);
+    let taken = []; try { taken = readdirSync(abs(dir)).filter((n) => /\.(tsx|jsx)$/i.test(n)).map((n) => n.replace(/\.(tsx|jsx)$/i, '')); } catch { /* new folder */ }
+    const seed = (el.attrs.class || '').trim().split(/\s+/)[0] || el.attrs.id || el.tag;
+    const wanted = name === undefined || name === null || name === '' ? componentName(seed, taken) : String(name).trim();
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(wanted)) throw new DocError(`"${wanted}" cannot be a component name. Next: use letters and digits starting with a capital, like Card`, 400);
+    if (taken.some((x) => x.toLowerCase() === wanted.toLowerCase())) throw new DocError(`${wanted} already exists in this folder; napkin never overwrites a file. Next: choose another name`, 409);
+    let made; try { made = toComponent({ name: wanted, html, css, from: `${comp.path}:${el.src.line}` }); } catch (e) { throw new DocError(e.message, 400); }
+    const p = posix.join(dir, `${wanted}.tsx`).replace(/^\.\//, '');
+    const text = toL(made.source);
+    const at = layout[comp.path];
+    const place = at && Number.isFinite(at.x) ? placeOf(at.x + (at.width || 480) + 64, at.y, undefined) : {};
+    put(p, text, place);
+    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `made ${wanted} from ${comp.path}` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((x) => x.by !== by));
+    return { ...fileDone(p, by, st, 'edit'), path: p, name: wanted, from: comp.path, node: el.id, dropped: made.dropped, rules: css.length, canvas: layout[p] || null };
+  }
   // POST /api/frames/rename: { from, to } where `to` is a name ("hero") or a file name ("hero.html"), in the same folder.
   function renameFrame(from, to, { by = 'unknown' } = {}) {
     const f = frameFile(from);
@@ -694,7 +764,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       return best;
     },
     undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'), pendingStep,
-    createFrame, removeFrame, renameFrame, nextFrame,
+    createFrame, removeFrame, renameFrame, nextFrame, componentFrom,
     history: (id) => [...(history.get(has(id) ? component(id).id : id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,
     rescan: () => { scan(); watchDirs(); },
