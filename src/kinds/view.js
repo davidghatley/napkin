@@ -153,20 +153,20 @@ function model(ctx) {
   let gltf, bin;
   if (ctx.kind === 'glb') {
     const b = window(ctx.file, 0, 8 * LIMIT);
-    if (b.length < 20) throw new Error('Truncated GLB');
+    if (b.length < 20) throw new Error('Truncated GLB. Next: open the model or archive in its own application, or request a smaller entry.');
     const n = b.readUInt32LE(12);
-    if (n > LIMIT) throw new Error('GLB JSON exceeds 1 MiB');
+    if (n > LIMIT) throw new Error('GLB JSON exceeds 1 MiB. Next: open the model or archive in its own application, or request a smaller entry.');
     gltf = JSON.parse(b.toString('utf8', 20, 20 + n).trim());
     const p = 20 + n;
     if (p + 8 <= b.length) bin = b.subarray(p + 8, p + 8 + b.readUInt32LE(p));
   } else gltf = jsonData(ctx);
   const buffers = (gltf.buffers || []).map((b, i) => {
     if (i === 0 && bin) return bin;
-    if (b.byteLength > 8 * LIMIT) throw new Error('Model buffer exceeds 8 MiB preview limit');
+    if (b.byteLength > 8 * LIMIT) throw new Error('Model buffer exceeds 8 MiB preview limit. Next: open the model or archive in its own application, or request a smaller entry.');
     if (b.uri?.startsWith('data:'))
       return Buffer.from(b.uri.slice(b.uri.indexOf(',') + 1), 'base64');
     if (!b.uri || /^(?:https?:|\/)/.test(b.uri))
-      throw new Error('Model buffer must be in the opened folder');
+      throw new Error('Model buffer must be in the opened folder. Next: open the model or archive in its own application, or request a smaller entry.');
     return window(ctx.resolveRelative(b.uri), 0, 8 * LIMIT);
   });
   const accessor = (index) => {
@@ -175,7 +175,7 @@ function model(ctx) {
       b = buffers[v.buffer],
       dim = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[a.type],
       width = { 5121: 1, 5123: 2, 5125: 4, 5126: 4 }[a.componentType];
-    if (!dim || !width) throw new Error('Unsupported model accessor');
+    if (!dim || !width) throw new Error('Unsupported model accessor. Next: open the model or archive in its own application, or request a smaller entry.');
     const read = (p) => (a.componentType === 5126 ? b.readFloatLE(p) : b.readUIntLE(p, width));
     return Array.from({ length: Math.min(a.count, 50000) }, (_, i) =>
       Array.from({ length: dim }, (_, j) =>
@@ -208,7 +208,7 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     const name = query.get('entry');
     if (name !== null) {
       const e = entries.find((e) => e.name === name);
-      if (!e) throw new Error('No archive entry with that name');
+      if (!e) throw new Error('No archive entry with that name. Next: open the model or archive in its own application, or request a smaller entry.');
       const b = zipEntry(ctx.file, e);
       return {
         name,

@@ -3,6 +3,7 @@ import { posix } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { kinds, registerKind } from './registry.js';
 import { ItemError } from './items.js';
+import { explainError } from '../errors.js';
 export async function loadKindPlugins(paths) {
   for (const file of paths) {
     const plugin = await import(pathToFileURL(file).href);
@@ -25,7 +26,7 @@ export function createKindRoutes(
         length = 0;
       for await (const c of req) {
         length += c.length;
-        if (length > 2 * 1024 * 1024) throw new ItemError('Request exceeds 2 MiB', 413);
+        if (length > 2 * 1024 * 1024) throw new ItemError('Request exceeds 2 MiB. Next: check the request against /api/kinds and retry.', 413);
         b += c;
       }
       req.napkinBody = b;
@@ -40,11 +41,11 @@ export function createKindRoutes(
     const by = identify?.(/^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1]);
     if (!by)
       throw new ItemError(
-        'Identity required: POST /api/session { as } gives you a bearer token',
+        'Identity required. Next: POST /api/session { as } and send the bearer token.',
         401,
       );
     if (permission(by) !== 'write')
-      throw new ItemError('This caller does not have write permission', 403);
+      throw new ItemError('This caller does not have write permission. Next: check the request against /api/kinds and retry.', 403);
     return by;
   }
   return async (req, res, url) => {
@@ -142,7 +143,7 @@ export function createKindRoutes(
           .slice(2)
           .flatMap((part) => decodeURIComponent(part).split(/[\\/]/));
         if (asked.some((part) => part.startsWith('.')))
-          throw new ItemError('No file at that path', 404);
+          throw new ItemError('No file at that path. Next: check the request against /api/kinds and retry.', 404);
         const headers = {
           'content-type': item.mime,
           'accept-ranges': 'bytes',
@@ -188,7 +189,7 @@ export function createKindRoutes(
         return true;
       }
     } catch (e) {
-      json(res, e.status || 400, { ok: false, error: e.message });
+      json(res, e.status || 400, { ok: false, error: explainError(e) });
       return true;
     }
     return false;

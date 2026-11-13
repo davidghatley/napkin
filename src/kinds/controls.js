@@ -32,7 +32,7 @@ export function jsonLeaves(text) {
       }
       if (text[at++] === '"') return JSON.parse(text.slice(start, at));
     }
-    throw new Error('Unterminated JSON string');
+    throw new Error('Unterminated JSON string. Next: fix the quote in the file, then retry.');
   };
   function value(path) {
     ws();
@@ -47,7 +47,7 @@ export function jsonLeaves(text) {
         if (c === '{') {
           k = string();
           ws();
-          if (text[at++] !== ':') throw new Error('Invalid JSON');
+          if (text[at++] !== ':') throw new Error('Invalid JSON. Next: fix the syntax in the file, then retry.');
         }
         value([...path, k]);
         ws();
@@ -69,7 +69,7 @@ export function jsonLeaves(text) {
   }
   value([]);
   ws();
-  if (at !== text.length) throw new Error('Invalid JSON');
+  if (at !== text.length) throw new Error('Invalid JSON. Next: fix the syntax in the file, then retry.');
   return out;
 }
 export function nativeControls(ctx) {
@@ -263,8 +263,8 @@ export function validate(c, value) {
   if (['text', 'color', 'textarea', 'select'].includes(c.type) && typeof value !== 'string')
     throw new Error('Send text');
   if (typeof value === 'string' && Buffer.byteLength(value) > 1024 * 1024)
-    throw new Error('Value exceeds 1 MiB');
+    throw new Error('Value exceeds 1 MiB. Next: send a shorter value.');
   if ((c.min !== undefined && value < c.min) || (c.max !== undefined && value > c.max))
-    throw new Error('Value is outside the control range');
+    throw new Error('Value is outside the control range. Next: send a value between the control\'s min and max.');
   if (c.options && !c.options.includes(value)) throw new Error('Choose one of the listed options');
 }

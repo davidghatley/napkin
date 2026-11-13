@@ -45,7 +45,7 @@ export function writeTokens(file, text, generated) {
 // identity, permissions, revisions and format values before reaching this boundary.
 export function writeItemValue(file, bytes, options) { writeFileAtomic(file, bytes, options); }
 export function removeItemRecipe(file, check) {
-  if (!file.endsWith('.napkin-recipe.json')) throw new Error('Only an item recipe may be removed');
+  if (!file.endsWith('.napkin-recipe.json')) throw new Error('Only an item recipe may be removed. Next: pass a .napkin-recipe.json path.');
   check?.();
   unlinkSync(file);
 }

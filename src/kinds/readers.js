@@ -112,12 +112,12 @@ export function zipDirectory(file) {
       end = i;
       break;
     }
-  if (end < 0) throw new Error('ZIP end directory is missing');
+  if (end < 0) throw new Error('ZIP end directory is missing. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   const count = tail.readUInt16LE(end + 10),
     length = tail.readUInt32LE(end + 12),
     offset = tail.readUInt32LE(end + 16);
   if (length > 8 * LIMIT || count === 65535)
-    throw new Error('ZIP64 or a directory over 8 MiB needs an archive adapter');
+    throw new Error('ZIP64 or a directory over 8 MiB needs an archive adapter. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   const b = window(file, offset, length),
     entries = [];
   for (let at = 0; at + 46 <= b.length && entries.length < count;) {
@@ -139,9 +139,9 @@ export function zipDirectory(file) {
 }
 export function zipEntry(file, entry) {
   if (entry.bytes > LIMIT || entry.compressed > LIMIT || entry.encrypted)
-    throw new Error('Preview is limited to unencrypted entries under 1 MiB');
+    throw new Error('Preview is limited to unencrypted entries under 1 MiB. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   const h = window(file, entry.offset, 30);
-  if (h.length < 30 || h.readUInt32LE(0) !== 0x04034b50) throw new Error('Invalid ZIP entry');
+  if (h.length < 30 || h.readUInt32LE(0) !== 0x04034b50) throw new Error('Invalid ZIP entry. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   const b = window(
     file,
     entry.offset + 30 + h.readUInt16LE(26) + h.readUInt16LE(28),
@@ -149,13 +149,13 @@ export function zipEntry(file, entry) {
   );
   if (entry.method === 0) return b;
   if (entry.method === 8) return inflateRawSync(b, { maxOutputLength: LIMIT });
-  throw new Error('This ZIP compression method has no preview decoder');
+  throw new Error('This ZIP compression method has no preview decoder. Next: open the file in its own application; napkin still shows its metadata and bytes.');
 }
 // Thrift compact protocol, used for the Parquet footer and page headers.
 export function compact(b, start = 0) {
   let at = start;
   const byte = () => {
-    if (at >= b.length) throw new Error('Truncated Parquet metadata');
+    if (at >= b.length) throw new Error('Truncated Parquet metadata. Next: open the file in its own application; napkin still shows its metadata and bytes.');
     return b[at++];
   };
   const vint = () => {
@@ -167,7 +167,7 @@ export function compact(b, start = 0) {
       if (!(v & 128)) return x;
       shift += 7n;
     }
-    throw new Error('Invalid integer');
+    throw new Error('Invalid integer. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   };
   const signed = () => {
     const n = vint();
@@ -179,14 +179,14 @@ export function compact(b, start = 0) {
     if (t === 3) return byte();
     if (t === 4 || t === 5 || t === 6) return signed();
     if (t === 7) {
-      if (at + 8 > b.length) throw new Error('Truncated double');
+      if (at + 8 > b.length) throw new Error('Truncated double. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       const n = b.readDoubleLE(at);
       at += 8;
       return n;
     }
     if (t === 8) {
       const n = Number(vint());
-      if (n > 8 * LIMIT || at + n > b.length) throw new Error('Invalid binary length');
+      if (n > 8 * LIMIT || at + n > b.length) throw new Error('Invalid binary length. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       const r = b.subarray(at, at + n);
       at += n;
       return r;
@@ -194,12 +194,12 @@ export function compact(b, start = 0) {
     if (t === 9 || t === 10) {
       const h = byte(),
         n = h >> 4 === 15 ? Number(vint()) : h >> 4;
-      if (n > 100000) throw new Error('Metadata list too long');
+      if (n > 100000) throw new Error('Metadata list too long. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       return Array.from({ length: n }, () => value(h & 15));
     }
     if (t === 11) {
       const n = Number(vint());
-      if (n > 10000) throw new Error('Metadata map too long');
+      if (n > 10000) throw new Error('Metadata map too long. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       if (!n) return [];
       const h = byte();
       return Array.from({ length: n }, () => [value(h >> 4), value(h & 15)]);
@@ -215,7 +215,7 @@ export function compact(b, start = 0) {
       }
       return o;
     }
-    throw new Error('Unknown compact type');
+    throw new Error('Unknown compact type. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   };
   const result = value(12);
   return { value: result, bytes: at - start };
@@ -224,9 +224,9 @@ export function parquetMeta(file) {
   const size = statSync(file).size,
     tail = window(file, Math.max(0, size - 8), 8);
   if (tail.length !== 8 || tail.toString('ascii', 4) !== 'PAR1')
-    throw new Error('Parquet footer is missing');
+    throw new Error('Parquet footer is missing. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   const length = tail.readUInt32LE(0);
-  if (length > 8 * LIMIT || length > size - 8) throw new Error('Parquet footer exceeds 8 MiB');
+  if (length > 8 * LIMIT || length > size - 8) throw new Error('Parquet footer exceeds 8 MiB. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   const meta = compact(window(file, size - 8 - length, length)).value;
   return {
     rows: meta[3],
@@ -245,9 +245,9 @@ function snappy(b) {
     size |= (n & 127) << s;
     if (!(n & 128)) break;
     s += 7;
-    if (s > 28) throw new Error('Invalid Snappy size');
+    if (s > 28) throw new Error('Invalid Snappy size. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   }
-  if (size > 8 * LIMIT) throw new Error('Snappy page exceeds 8 MiB');
+  if (size > 8 * LIMIT) throw new Error('Snappy page exceeds 8 MiB. Next: open the file in its own application; napkin still shows its metadata and bytes.');
   const out = Buffer.alloc(size);
   let p = 0;
   while (at < b.length && p < size) {
@@ -260,11 +260,11 @@ function snappy(b) {
       if (n < 60) n++;
       else {
         const bytes = n - 59;
-        if (bytes > 4) throw new Error('Invalid Snappy literal');
+        if (bytes > 4) throw new Error('Invalid Snappy literal. Next: open the file in its own application; napkin still shows its metadata and bytes.');
         n = b.readUIntLE(at, bytes) + 1;
         at += bytes;
       }
-      if (at + n > b.length || p + n > size) throw new Error('Truncated Snappy literal');
+      if (at + n > b.length || p + n > size) throw new Error('Truncated Snappy literal. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       b.copy(out, p, at, at + n);
       at += n;
       p += n;
@@ -278,7 +278,7 @@ function snappy(b) {
         offset = b.readUIntLE(at, k);
         at += k;
       }
-      if (offset < 1 || offset > p || p + n > size) throw new Error('Invalid Snappy copy');
+      if (offset < 1 || offset > p || p + n > size) throw new Error('Invalid Snappy copy. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       for (let i = 0; i < n; i++) out[p + i] = out[p + i - offset];
       p += n;
     }
@@ -302,12 +302,12 @@ function hybrid(b, width, count) {
     let v = 0,
       s = 0;
     for (;;) {
-      if (at >= b.length) throw new Error('Truncated RLE');
+      if (at >= b.length) throw new Error('Truncated RLE. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       const n = b[at++];
       v += (n & 127) * 2 ** s;
       if (!(n & 128)) return v;
       s += 7;
-      if (s > 49) throw new Error('Invalid RLE');
+      if (s > 49) throw new Error('Invalid RLE. Next: open the file in its own application; napkin still shows its metadata and bytes.');
     }
   };
   while (at < b.length && out.length < count) {
@@ -350,10 +350,10 @@ function plain(b, type, count) {
     } else if (type === 6) {
       const n = b.readUInt32LE(at);
       at += 4;
-      if (n > LIMIT || at + n > b.length) throw new Error('Invalid Parquet string');
+      if (n > LIMIT || at + n > b.length) throw new Error('Invalid Parquet string. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       v = b.toString('utf8', at, at + n);
       at += n;
-    } else throw new Error('This Parquet physical type needs an adapter');
+    } else throw new Error('This Parquet physical type needs an adapter. Next: open the file in its own application; napkin still shows its metadata and bytes.');
     out.push(v);
   }
   return out;
@@ -372,7 +372,7 @@ export function parquetTable(file, groupIndex = 0) {
     cols.push(name);
     const schema = m.schema.find((s) => s[4]?.toString() === name);
     if (c[3]?.length !== 1 || schema?.[3] === 2)
-      throw new Error('Nested Parquet columns need an adapter');
+      throw new Error('Nested Parquet columns need an adapter. Next: open the file in its own application; napkin still shows its metadata and bytes.');
     const offset = Math.min(c[9] ?? Infinity, c[11] ?? Infinity),
       length = Math.min(c[7] || LIMIT, 8 * LIMIT);
     const b = window(file, offset, length);
@@ -385,7 +385,7 @@ export function parquetTable(file, groupIndex = 0) {
       const p = h.value,
         n = p[3];
       if (n < 0 || n > 8 * LIMIT || at + n > b.length)
-        throw new Error('Parquet page exceeds preview window');
+        throw new Error('Parquet page exceeds preview window. Next: open the file in its own application; napkin still shows its metadata and bytes.');
       let page = b.subarray(at, at + n);
       at += n;
       const decode = (x) =>
@@ -398,7 +398,7 @@ export function parquetTable(file, groupIndex = 0) {
               : c[4] === 4
                 ? brotliDecompressSync(x, { maxOutputLength: 8 * LIMIT })
                 : (() => {
-                    throw new Error('This Parquet compression codec needs an adapter');
+                    throw new Error('This Parquet compression codec needs an adapter. Next: open the file in its own application; napkin still shows its metadata and bytes.');
                   })();
       if (p[1] === 2) {
         dict = plain(decode(page), c[1], p[7][1]);
@@ -435,7 +435,7 @@ export function parquetTable(file, groupIndex = 0) {
           : (enc === 8 || enc === 2) && dict
             ? hybrid(page.subarray(1), page[0], nonnull).map((i) => dict[i])
             : (() => {
-                throw new Error('This Parquet encoding needs an adapter');
+                throw new Error('This Parquet encoding needs an adapter. Next: open the file in its own application; napkin still shows its metadata and bytes.');
               })();
       let j = 0;
       for (let i = 0; i < take; i++) values.push(defs && !defs[i] ? null : (decoded[j++] ?? null));

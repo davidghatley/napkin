@@ -69,11 +69,11 @@ test('live viewers draw their contents and mixed items join the canvas and panel
   assert.ok(counts.items >= 40, JSON.stringify(counts));
   assert.ok(await browser.eval('document.querySelectorAll(".kind-compact").length>0'));
   await browser.eval('napkin.nav.focus("observations.csv")');
-  await browser.waitFor('!!document.querySelector(".kind-panel [data-control]")');
+  await browser.waitFor('!!document.querySelector(".kind-panel [data-control]") && document.querySelector(".kind-panel").textContent.includes("File values")');
   await browser.waitFor('!!document.querySelector(".kind-frame:not(.doc-next)")');
   assert.equal(await browser.eval('napkin.state.selection.component'), 'observations.csv');
-  assert.ok(
-    await browser.eval('document.querySelector(".kind-panel").textContent.includes("File values")'),
+  await browser.waitFor(`document.querySelector(".kind-panel")?.textContent.includes("File values")`, 10000); const panelText = await browser.eval(`document.querySelector(".kind-panel")?.textContent.slice(0,200)`); assert.ok(
+    panelText?.includes("File values"), String(panelText)
   );
   await browser.eval('napkin.nav.unfocus({animate:false});napkin.view.fitAll({animate:false})');
   writeFileSync(join(evidence, 'canvas.png'), await browser.screenshot());

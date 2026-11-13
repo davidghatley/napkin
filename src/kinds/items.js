@@ -10,6 +10,7 @@ import { resolve, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { writeItemValue, removeItemRecipe, writeItemLayout } from '../commit.js';
 import { context, detectKind } from './registry.js';
+import { explainError } from '../errors.js';
 import { window, LIMIT } from './readers.js';
 import { validate } from './controls.js';
 import { stateRoot } from '../doc/folder.js';
@@ -74,7 +75,7 @@ export function openItems(
     const next = {};
     for (const k of ['x', 'y']) {
       if (typeof value[k] !== 'number' || !Number.isFinite(value[k]) || Math.abs(value[k]) > 1e7)
-        throw new ItemError('Position must be finite canvas coordinates');
+        throw new ItemError('Position must be finite canvas coordinates. Next: send numeric x and y.');
       next[k] = Math.round(value[k]);
     }
     frames[id] = next;
@@ -84,14 +85,14 @@ export function openItems(
   function abs(path) {
     const p = resolve(root, path);
     if (!p.startsWith(root + sep) || path.split(/[\\/]/).some((x) => x.startsWith('.')))
-      throw new ItemError('No item at that path', 404);
+      throw new ItemError('No item at that path. Next: list GET /api/items and use a current id.', 404);
     let real;
     try {
       real = realpathSync(p);
     } catch {
-      throw new ItemError('Item no longer exists', 404);
+      throw new ItemError('Item no longer exists. Next: list GET /api/items and use a current id.', 404);
     }
-    if (!real.startsWith(root + sep)) throw new ItemError('Item is outside the opened folder', 404);
+    if (!real.startsWith(root + sep)) throw new ItemError('Item is outside the opened folder. Next: use a path inside the folder.', 404);
     return real;
   }
   function scan() {
@@ -120,7 +121,7 @@ export function openItems(
     if (typeof id !== 'string') throw new ItemError('Send an item id', 400);
     const file = abs(id),
       st = statSync(file);
-    if (!st.isFile()) throw new ItemError('This item is not a file', 404);
+    if (!st.isFile()) throw new ItemError('This item is not a file. Next: choose a file item.', 404);
     const key = `${st.dev}:${st.ino}:${st.size}:${st.mtimeNs ?? st.mtimeMs}:${st.ctimeMs}`;
     let cached = cache.get(id);
     if (!cached || cached.key !== key) {
@@ -134,7 +135,7 @@ export function openItems(
       try {
         meta = definition.metadata(ctx) || {};
       } catch (e) {
-        meta = { error: e.message };
+        meta = { error: explainError(e) };
       }
       cached = {
         key,
@@ -180,12 +181,12 @@ export function openItems(
     if (existsSync(recipeFile)) {
       // Recipes cannot escape through a symlink either.
       abs(id + '.napkin-recipe.json');
-      if (statSync(recipeFile).size > LIMIT) throw new ItemError('Recipe exceeds 1 MiB');
+      if (statSync(recipeFile).size > LIMIT) throw new ItemError('Recipe exceeds 1 MiB. Next: delete the recipe file or shrink it.');
       recipeBytes = readFileSync(recipeFile);
       try {
         recipe = JSON.parse(recipeBytes);
       } catch {
-        throw new ItemError('Recipe is not valid JSON', 422);
+        throw new ItemError('Recipe is not valid JSON. Next: fix or delete the .napkin-recipe.json file.', 422);
       }
     }
     const head = window(item.file, 0, Math.min(LIMIT, item.bytes));
@@ -220,11 +221,11 @@ export function openItems(
       .controls(c)
       .flatMap((s) => s.controls)
       .find((x) => x.id === name);
-    if (!ctrl) throw new ItemError('No control with that id', 404);
+    if (!ctrl) throw new ItemError('No control with that id. Next: read GET /api/controls/<id> and use a listed control id.', 404);
     validate(ctrl, value);
     const result = c.definition.apply(c, ctrl, value);
     if (!result || (result.source === undefined && !result.recipe))
-      throw new ItemError('Kind did not return an edit');
+      throw new ItemError('Kind did not return an edit. Next: check the kind\'s apply function returns bytes.');
     let target, before, after;
     if (result.source !== undefined) {
       if (c.bytes > LIMIT)
@@ -242,7 +243,7 @@ export function openItems(
       ...(before === null ? { exclusive: true } : { guard: before.toString('utf8') }),
       check: () => {
         if (ctx(id).revision !== baseRevision)
-          throw new ItemError('The item changed while saving', 409);
+          throw new ItemError('The item changed while saving. Next: read the controls again and retry on the new revision.', 409);
       },
     });
     cache.delete(id);
@@ -258,16 +259,16 @@ export function openItems(
   function undo(id, by) {
     const steps = history.get(id) || [],
       step = steps.at(-1);
-    if (!step) throw new ItemError('No item edit to undo', 404);
-    if (step.by !== by) throw new ItemError('The latest item edit belongs to another caller', 409);
+    if (!step) throw new ItemError('No item edit to undo. Next: make an edit first.', 404);
+    if (step.by !== by) throw new ItemError('The latest item edit belongs to another caller. Next: ask that caller to undo it.', 409);
     const c = ctx(id);
     if (
       c.revision !== step.revision ||
       !existsSync(step.target) ||
       !readFileSync(step.target).equals(step.after)
     )
-      throw new ItemError('The item changed after that edit. Undo would overwrite it.', 409);
-    const check = () => { if (ctx(id).revision !== step.revision) throw new ItemError('The item changed while undoing',409); };
+      throw new ItemError('The item changed after that edit. Undo would overwrite it. Next: read the item again and retry.', 409);
+    const check = () => { if (ctx(id).revision !== step.revision) throw new ItemError('The item changed while undoing. Next: read the item again and retry.',409); };
     if (step.before === null) removeItemRecipe(step.target, check);
     else writeItemValue(step.target, step.before, {guard:step.after.toString('utf8'),check});
     steps.pop();
@@ -285,7 +286,7 @@ export function openItems(
     const file = get(id).file + '.napkin-recipe.json';
     if (!existsSync(file)) return {};
     abs(id + '.napkin-recipe.json');
-    if (statSync(file).size > LIMIT) throw new ItemError('Recipe exceeds 1 MiB');
+    if (statSync(file).size > LIMIT) throw new ItemError('Recipe exceeds 1 MiB. Next: delete the recipe file or shrink it.');
     return JSON.parse(readFileSync(file, 'utf8'));
   }
   return {

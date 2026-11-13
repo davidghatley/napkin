@@ -5,10 +5,10 @@ import { cardMetadata } from './metadata.js';
 const entries = [];
 export function registerKind(definition) {
   if (!/^[a-z][a-z0-9-]*$/.test(definition.id) || entries.some((d) => d.id === definition.id))
-    throw new Error('Kind ids must be unique lowercase names');
+    throw new Error('Kind ids must be unique lowercase names. Next: fix the kind definition and register it again.');
   for (const key of ['detect', 'metadata', 'viewer', 'controls', 'apply'])
     if (typeof definition[key] !== 'function')
-      throw new Error(`Kind ${definition.id} needs ${key}()`);
+      throw new Error(`Kind ${definition.id} needs ${key}(). Next: add it and register again.`);
   entries.push(Object.freeze(definition));
   return definition;
 }
@@ -25,7 +25,7 @@ export function detectKind(ctx) {
     }
   }
   if (best) return best;
-  throw new Error('No binary fallback registered');
+  throw new Error('No binary fallback registered. Next: fix the kind definition and register it again.');
 }
 const textMime = 'text/plain; charset=utf-8';
 function define(id, extensions, mime, family, magic) {

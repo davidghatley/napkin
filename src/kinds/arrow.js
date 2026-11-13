@@ -32,9 +32,9 @@ export function arrowTable(file, offset = 0, count = 80) {
   const size = statSync(file).size,
     tail = window(file, size - 10, 10);
   if (tail.toString('ascii', 4) !== 'ARROW1')
-    throw new Error('Arrow stream files need a stream adapter');
+    throw new Error('Arrow stream files need a stream adapter. Next: convert to the Arrow file format or register a kind plugin.');
   const n = tail.readUInt32LE(0);
-  if (n > 8 * LIMIT) throw new Error('Arrow footer exceeds 8 MiB');
+  if (n > 8 * LIMIT) throw new Error('Arrow footer exceeds 8 MiB. Next: re-export the file with fewer batches.');
   const f = fb(window(file, size - 10 - n, n)),
     sf = f.field(f.root, 1),
     schema = f.ref(sf),
@@ -70,15 +70,15 @@ export function arrowTable(file, offset = 0, count = 80) {
     block = blocks + 4 + i * 24;
     const start = f.i64(block),
       ml = f.b.readInt32LE(block + 8);
-    if (ml > 8 * LIMIT) throw new Error('Arrow message exceeds limit');
+    if (ml > 8 * LIMIT) throw new Error('Arrow message exceeds the read limit. Next: re-export the file with smaller batches.');
     const m = window(file, start, ml),
       prefix = m.readInt32LE(0) === -1 ? 8 : 4;
     msg = fb(m.subarray(prefix));
     const headerType = msg.field(msg.root, 1);
     if (!headerType || msg.b[headerType] !== 3)
-      throw new Error('Arrow dictionary batches need an adapter');
+      throw new Error('Arrow dictionary batches need an adapter. Next: export without dictionary encoding or register a kind plugin.');
     batch = msg.ref(msg.field(msg.root, 2));
-    if (msg.field(batch, 3)) throw new Error('Compressed Arrow IPC needs an adapter');
+    if (msg.field(batch, 3)) throw new Error('Compressed Arrow IPC needs an adapter. Next: export uncompressed or register a kind plugin.');
     const lf = msg.field(batch, 0),
       rows = lf ? msg.i64(lf) : 0;
     total += rows;
@@ -106,7 +106,7 @@ export function arrowTable(file, offset = 0, count = 80) {
   };
   for (const col of cols) {
     if (![2, 3, 4, 5, 6, 8, 10, 19, 20].includes(col.type))
-      throw new Error('Nested or dictionary Arrow values need an adapter');
+      throw new Error('Nested or dictionary Arrow values need an adapter. Next: flatten the columns or register a kind plugin.');
     const valid = buf(),
       validBits = valid.length
         ? window(file, valid.at + Math.floor(skip / 8), Math.ceil((count + (skip % 8)) / 8))
@@ -123,7 +123,7 @@ export function arrowTable(file, offset = 0, count = 80) {
       if (available) {
         const start = read(0),
           length = read(available) - start;
-        if (length > LIMIT) throw new Error('Arrow text window exceeds 1 MiB');
+        if (length > LIMIT) throw new Error('Arrow text window exceeds 1 MiB. Next: request a smaller row window.');
         const text = window(file, data.at + start, length);
         for (let i = 0; i < available; i++)
           values.push(text.toString('utf8', read(i) - start, read(i + 1) - start));
