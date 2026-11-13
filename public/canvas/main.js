@@ -64,6 +64,7 @@ import { initInstruments } from './surface-panel.js';
 import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
 import { initContextMenu } from './context-menu.js';
+import { initRightPanel } from './right-panel.js';
 import { initCreate } from './create.js';
 
 const $ = (s) => document.querySelector(s);
@@ -150,6 +151,7 @@ initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variabl
 initTools(ctx);
 initCreate(ctx); // basics pass 2: draw a frame, text or image on the canvas or into an HTML frame (create.js)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
+initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));

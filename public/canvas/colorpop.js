@@ -30,9 +30,15 @@ export function openColorPicker(opts) {
     ${opts.swatches?.length ? `<div class="cp-docs"><span class="cp-cap">In this file</span><div class="cp-sw">${opts.swatches.map((s) => `<button type="button" class="cp-s" data-c="${esc(s)}" title="${esc(s)}" aria-label="${esc(s)}"><i style="background:${esc(s)}"></i></button>`).join('')}</div></div>` : ''}`;
   document.body.append(el);
   const $ = (s) => el.querySelector(s);
-  const r = opts.anchor.getBoundingClientRect(), W = 236;
+  // Anchored to its field and kept inside the panel the field is in (standards section 7 rule 11): it never covers the canvas.
+  // In a panel narrower than the picker, the picker takes the panel's width; it opens below the field, or above it when there is no room.
+  const r = opts.anchor.getBoundingClientRect(), side = opts.anchor.closest('#inspector, #sidebar')?.getBoundingClientRect();
+  const lo = side ? side.left + 8 : 8, hi = side ? side.right - 8 : innerWidth - 8;
+  const W = Math.max(160, Math.min(236, hi - lo));
   el.style.width = `${W}px`;
-  const left = Math.max(8, Math.min(innerWidth - W - 8, r.left - W - 12)), top = Math.max(8, Math.min(innerHeight - el.offsetHeight - 8, r.top - 20));
+  const h = el.offsetHeight, below = r.bottom + 4, above = r.top - 4 - h;
+  const left = side ? Math.max(lo, Math.min(hi - W, r.right - W)) : Math.max(8, Math.min(innerWidth - W - 8, r.left - W - 12));
+  const top = side ? (below + h <= innerHeight - 8 ? below : above >= 8 ? above : Math.max(8, innerHeight - h - 8)) : Math.max(8, Math.min(innerHeight - h - 8, r.top - 20));
   Object.assign(el.style, { left: `${left}px`, top: `${top}px` });
 
   const text = () => formatColor({ ...c, ...(space === 'oklch' && like.oklch ? { oklch: like.oklch } : {}) }, space, like);

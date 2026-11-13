@@ -65,7 +65,7 @@ test('OPN-02: read-only default render, missing import, CSS and missing context 
     await shot(b, 'OPN-02-read-only');
     for (const name of ['Default', 'Context', 'Missing', 'Css']) {
       await b.eval(`napkin.nav.focus('${name}', null, { animate: false }); true`);
-      if (['Missing', 'Css'].includes(name)) assert.ok(await b.eval(`(() => { const df = napkin.stage.sections.get(napkin.find('${name}').component).docFrame, p = df.doc().querySelector('[data-napkin-error]').getBoundingClientRect(), f = df.iframe().getBoundingClientRect(), z = f.width / df.iframe().offsetWidth, s = document.querySelector('#stage').getBoundingClientRect(); return f.left + p.left * z >= s.left && f.left + p.right * z <= s.right; })()`), `${name} build error fits within the stage`);
+      if (['Missing', 'Css'].includes(name)) assert.ok(await b.eval(`(() => { const df = napkin.stage.sections.get(napkin.find('${name}').component).docFrame, p = df.cell.querySelector('.card-state[data-state="error"]').getBoundingClientRect(), s = document.querySelector('#stage').getBoundingClientRect(); return p.width > 0 && p.left >= s.left && p.right <= s.right; })()`), `${name} build error fits within the stage`); // (drawn by the card's error state, card-state.js)
       await shot(b, 'OPN-02-' + name.toLowerCase());
     }
     assert.deepEqual(hashes(dir), before);

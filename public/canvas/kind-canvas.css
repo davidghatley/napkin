@@ -309,8 +309,8 @@
   }
 }
 .cell.doc-cell.kind-cell {
-  width: 480px;
-  height: 340px;
+  width: var(--nk-w, 480px); /* the card's size by kind (kinds.js cardSize), set on the section */
+  height: var(--nk-h, 340px);
   overflow: hidden;
   contain: layout paint style;
 }
@@ -328,7 +328,7 @@
   object-fit: cover;
   object-position: top;
 }
-.item-card{position:absolute;left:0;top:0;transform-origin:0 0}.item-card:not([data-pos]),.item-card[data-awaiting]{display:none}.item-card[data-cull] .frame{box-sizing:border-box;width:480px;height:340px}.item-card[data-cull] .frame>*{display:none}.item-card[data-far]{visibility:hidden}.item-card[data-far] .cmp-head{transform:none}.item-card .cmp-head{transform:scale(min(4,var(--nk-lf,1)))}.item-card .rev{font:10.5px var(--nk-mono);color:var(--nk-text-3)}.item-card[data-sel] .cmp-title h3{color:var(--nk-accent-text)}body[data-focus] .item-card:not([data-focused]){opacity:.16;pointer-events:none;transition:opacity .18s}#item-count:empty{display:none}#item-count{margin-left:12px}
+.item-card{position:absolute;left:0;top:0;transform-origin:0 0}.item-card:not([data-pos]),.item-card[data-awaiting]{display:none}.item-card[data-cull] .frame{box-sizing:border-box;width:var(--nk-w,480px);height:var(--nk-h,340px)}.item-card[data-cull] .frame>*{display:none}.item-card[data-far]{visibility:hidden}.item-card[data-far] .cmp-head{transform:none}.item-card .cmp-head{transform:scale(min(4,var(--nk-lf,1)))}.item-card .rev{font:10.5px var(--nk-mono);color:var(--nk-text-3)}body[data-focus] .item-card:not([data-focused]){opacity:.16;pointer-events:none;transition:opacity .18s}#item-count:empty{display:none}#item-count{margin-left:12px}
 
 #item-count{white-space:nowrap;font:10px var(--nk-mono);color:var(--nk-text-3);margin-left:8px;flex-shrink:0}
 /* The start of a component's file, shown until its live page is drawn. */
@@ -350,3 +350,22 @@ body[data-focus] .item-card:not([data-focused]) .kind-compact pre,body[data-play
 
 .kind-chart-host{padding:6px;color:#262a29;background:#faf9f6;height:340px;overflow:hidden}.kind-chart-host svg{width:100%;height:100%}.kind-pdf-page{display:block;width:480px;height:340px;object-fit:contain;background:#fff}.kind-wave{color:#35836a}
 @media (prefers-color-scheme: dark){.kind-chart-host{background:#202724;color:#e5e8e0}}
+
+/* ---- the design-core kinds (decision 0023): a clean card, sized to what it shows (kinds.js cardSize). Chrome tokens from canvas.css. ---- */
+.item-card .cell.doc-cell.kind-cell { border: 0; border-radius: 0; background: var(--nk-frame); color: var(--nk-frame-ink); }
+.kind-compact:has(> .kind-page), .kind-compact:has(> img) { background: var(--nk-frame); }
+.kind-compact > img { display: block; object-fit: contain; }
+.kind-page { box-sizing: border-box; width: 100%; height: 100%; margin: 0; padding: var(--nk-s4) var(--nk-s5); overflow: hidden; background: var(--nk-frame); color: var(--nk-frame-ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.kind-compact .kind-page.kind-text { font: var(--nk-w-regular) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); }
+.kind-compact .kind-page.kind-code { font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-loose) var(--nk-mono); background: var(--nk-frame); color: var(--nk-frame-ink); }
+.kind-page.kind-prose { white-space: normal; font: var(--nk-w-regular) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); }
+.kind-page.kind-prose :is(h1, h2, h3) { margin: 0 0 var(--nk-s2); font-weight: var(--nk-w-strong); color: var(--nk-frame-ink); }
+.kind-page.kind-prose h1 { font-size: 16px; line-height: 24px; }
+.kind-page.kind-prose h2 { font-size: var(--nk-fs-empty); line-height: var(--nk-lh-loose); }
+.kind-page.kind-prose h3 { font-size: var(--nk-fs-title); line-height: var(--nk-lh-loose); }
+.kind-page.kind-prose p { margin: 0 0 var(--nk-s2); }
+.kind-page.kind-prose p.li { padding-left: var(--nk-s4); text-indent: calc(var(--nk-s4) * -1); }
+.kind-page.kind-prose p.li::before { content: "•"; display: inline-block; width: var(--nk-s4); text-indent: 0; }
+.kind-page.kind-prose code { font: var(--nk-fs-body) var(--nk-mono); }
+/* a page longer than its card fades out at the foot rather than stopping mid-line */
+.kind-page.kind-clip { mask-image: linear-gradient(to bottom, black calc(100% - var(--nk-s6)), transparent); }
