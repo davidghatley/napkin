@@ -15,6 +15,7 @@ import { scopeOptions, defaultScope, normalizeTyped } from './inspector-scope.js
 import { stripsHtml, wireStrips, askProp } from './inspector-vars.js';
 import { initMeasure } from './measure-overlay.js';
 import { usersOfVariable } from './stage-highlight.js';
+import { capList } from './panel-height.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const normSel = (t) => String(t).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\s*([,>+~])\s*/g, '$1').trim();
@@ -211,8 +212,9 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const where = (s2) => (s2.kind === 'inline' ? `<code class="selp">inline style</code> ${loc(`${comp.path}:${node.line}`)}` : `<button type="button" class="selp lit" data-lit-sel="${esc(s2.selector)}" data-lit-file="${esc(s2.file)}" title="Light up every place this rule applies"><code>${esc(s2.selector)}</code></button> ${loc(`${base(s2.file)}:${s2.declLine ?? s2.line}${s2.media?.length ? ` · @media ${s2.media.at(-1)}` : ''}`)}`);
   const sayBy = (b) => (b.kind === 'inline' ? 'the inline style' : `${b.selector} ${base(b.file)}:${b.declLine ?? b.line}`);
 
-  function valueRow([prop, w]) {
+  function valueRow([prop, w], name = prop) {
     const s2 = w.source;
+    if (!s2 || s2.kind === 'none') return ghostRow(prop, w, name);
     const lost = (beats.get(`${prop.toLowerCase()}|${srcKey(s2)}`) || []).slice(0, 2).map((b) => line('', k('beats'), `<s>${esc(b.value)}</s>`, k(`from ${b.selector} :${b.line}`))).join('');
     const part = w.state === 'partial' ? (w.lost || []).map((l) => line('lost', `<code>${esc(l.props.join(', '))}</code>`, k(`from ${sayBy(l.by)}`))).join('') : '';
     const v = firstVar(w.value), info = v && explain.vars[v];
@@ -220,15 +222,100 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const offs = offScale(prop, w.value, groups).slice(0, 3);
     const flag = offs.map((off) => `<div class="pflag"><span class="k">${esc(off.token)} ${off.exact ? 'is exactly' : 'is close to'}</span><button type="button" class="pbind" data-prop="${esc(prop)}" data-token="${esc(off.token)}" data-var="${esc(off.name)}" title="Write var(${esc(off.name)}) in place of ${esc(off.token)}">${esc(off.name)} <span class="k">${esc(off.value)}</span></button></div>`).join('');
     const shown = w.resolved ?? w.value;
-    return `<div class="vrow${offs.length ? ' off' : ''}${w.state === 'partial' ? ' partial' : ''}" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}">${esc(prop)}</label>${w.state === 'partial' ? '<span class="pstate">partly overridden</span>' : ''}${w.important ? '<span class="imp">!important</span>' : ''}${w.resolved && w.resolved !== w.value ? `<span class="res${String(w.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(w.resolved)}">${esc(w.resolved)}</span>` : ''}</div>
-      <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="${esc(w.value)}" aria-label="${esc(prop)}" spellcheck="false" title="${esc(w.value)}"></div>
+    return `<div class="vrow${lenCls(w.value)}${offs.length ? ' off' : ''}${w.state === 'partial' ? ' partial' : ''}" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}"${name !== prop ? ` title="${esc(prop)}"` : ''}>${esc(name)}</label>${w.state === 'partial' ? '<span class="pstate">partly overridden</span>' : ''}${w.important ? '<span class="imp">!important</span>' : ''}${w.resolved && w.resolved !== w.value ? `<span class="res${String(w.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(w.resolved)}">${esc(w.resolved)}</span>` : ''}</div>
+      <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="${esc(w.value)}" aria-label="${esc(prop)}" spellcheck="false" title="${esc(w.value)}">${advToggle(prop)}</div>
       <div class="pmore">${line('', where(s2))}${part}${lost}${varLine}${flag}</div></div>`;
   }
+  // A value nothing sets on this element: its field holds what the browser works out, dimmed, and typing in it stages a new
+  // declaration like any other (the scope picker says where it goes).
+  function ghostRow(prop, w, name = prop) {
+    return `<div class="vrow ghost" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}"${name !== prop ? ` title="${esc(prop)}"` : ''}>${esc(name)}</label></div>
+      <div class="pval"><input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="" placeholder="${esc(w.shown ?? w.value)}" aria-label="${esc(prop)} (not set here, now ${esc(w.shown ?? w.value)})" spellcheck="false">${advToggle(prop)}</div></div>`;
+  }
+
+  // ---------- the panel's width and height levers (standards section 7 rules 6 and 7) ----------
+  // The values sit in Figma's order, each group a small heading. At the default width every row is a label and a field;
+  // from 360 px related fields pair up (X beside Y, W beside H, the sides of a padding or the corners of a radius) and
+  // from 480 px the spacing gets its live box figure. Narrower than 360, a padding's sides and a radius's corners wait
+  // behind a small toggle at the right of the row, inline, unless they differ (then they show). (inspector-doc.css)
+  const GROUPS = [
+    ['layout', 'Layout', /^(display|position|inset|top|right|bottom|left|z-index|float|clear|box-sizing|(min-|max-)?(width|height)|aspect-ratio|flex(-.*)?|order|align-.*|justify-.*|place-.*|grid(-.*)?|gap|row-gap|column-gap|vertical-align|object-.*)$/],
+    ['spacing', 'Spacing', /^(padding|margin)(-.*)?$/],
+    ['appearance', 'Appearance', /^(opacity|border(-(top|bottom)-(left|right))?-radius|overflow(-.*)?|visibility|mix-blend-mode|cursor|isolation)$/],
+    ['type', 'Typography', /^(font(-.*)?|line-height|letter-spacing|word-spacing|text-(?!shadow).*|white-space|color|hyphens|tab-size|direction)$/],
+    ['fill', 'Fill', /^background(-.*)?$/],
+    ['stroke', 'Stroke', /^(border(?!.*radius)(-.*)?|outline(-.*)?)$/],
+    ['effects', 'Effects', /^(box-shadow|text-shadow|filter|backdrop-filter|transform.*|translate|rotate|scale|transition(-.*)?|animation(-.*)?)$/],
+  ];
+  const groupOf = (p) => (GROUPS.find(([, , re]) => re.test(p)) || ['other'])[0];
+  const SIDES = { padding: [['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']], margin: [['top', 'Top'], ['right', 'Right'], ['bottom', 'Bottom'], ['left', 'Left']], 'border-radius': [['top-left', 'Top left'], ['top-right', 'Top right'], ['bottom-right', 'Bottom right'], ['bottom-left', 'Bottom left']] };
+  const partProp = (prop, side) => (prop === 'border-radius' ? `border-${side}-radius` : `${prop}-${side}`);
+  const ghosts = new Map(); // values nothing sets here that the panel still offers (W, H, the sides): staged like any other
+  const ghost = (prop) => { const v = cs?.getPropertyValue(prop).trim() || ''; const w = { value: v, shown: v.replace(/^(-?[\d.]+)px$/, '$1'), source: { kind: 'none' }, important: false, state: 'computed' }; ghosts.set(prop, w); return w; };
+  const winOf = (prop) => explain.props[prop] ?? ghost(prop);
+  const advOpen = (prop) => (openFolds.has('adv:' + prop) ? openFolds.get('adv:' + prop) : null);
+  function advToggle(prop) {
+    if (!SIDES[prop]) return '';
+    return `<button type="button" class="pl-adv" data-adv="${esc(prop)}" aria-controls="pl-sides-${esc(prop)}" aria-expanded="false" aria-label="${esc(prop)}: each ${prop === 'border-radius' ? 'corner' : 'side'}" title="Each ${prop === 'border-radius' ? 'corner' : 'side'}"><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="${prop === 'border-radius' ? 'M1.5 5V3a1.5 1.5 0 011.5-1.5h2M7 1.5h2A1.5 1.5 0 0110.5 3v2M10.5 7v2A1.5 1.5 0 019 10.5H7M5 10.5H3A1.5 1.5 0 011.5 9V7' : 'M1.5 1.5h9v9h-9zM4 4h4v4H4z'}" fill="none" stroke="currentColor" stroke-width="1.1"/></svg></button>`;
+  }
+  // a padding, margin or radius with its four parts under it (each its own field, staged on its own longhand)
+  function sidesBlock(prop) {
+    const w = winOf(prop), parts = SIDES[prop].map(([side, name]) => [partProp(prop, side), name, winOf(partProp(prop, side))]);
+    const uneven = new Set(parts.map(([, , x]) => x.value)).size > 1;
+    const open = advOpen(prop) ?? uneven;
+    return `<div class="pl-adv-host${open ? ' open' : ''}${uneven ? ' uneven' : ''}" data-adv-host="${esc(prop)}">${valueRow([prop, w])}
+      <div class="pl-pair pl-sides" id="pl-sides-${esc(prop)}" role="group" aria-label="${esc(prop)}: each ${prop === 'border-radius' ? 'corner' : 'side'}">${parts.map(([p, name, x]) => valueRow([p, x], name)).join('')}</div></div>`;
+  }
+  // X and Y (where the box is in its positioned parent, measured) beside W and H (staged as width and height)
+  function geometry() {
+    if (!target) return '';
+    const n = (v) => String(Math.round(v * 10) / 10);
+    const ro = (key, name, v, what) => `<div class="vrow ro" data-geo="${key}"><div class="phead"><label for="pg-${key}">${name}</label></div><div class="pval"><input class="ro" id="pg-${key}" value="${n(v)}" readonly aria-label="${what}" title="${what}; it follows from the layout"></div></div>`;
+    const size = (prop, name) => valueRow([prop, winOf(prop)], name);
+    return `<div class="pl-pair pl-geo" data-pair="xy">${ro('x', 'X', target.offsetLeft, 'X, measured from its positioned parent')}${ro('y', 'Y', target.offsetTop, 'Y, measured from its positioned parent')}</div>
+      <div class="pl-pair pl-geo" data-pair="wh">${size('width', 'W')}${size('height', 'H')}</div>`;
+  }
+  // the box this element is: margin, border, padding and content, each with its numbers (from 480 px)
+  function boxFigure() {
+    if (!cs || !target) return '';
+    const px = (p) => Math.round(parseFloat(cs.getPropertyValue(p)) || 0);
+    const side = (p) => ['top', 'right', 'bottom', 'left'].map((s) => px(p === 'border' ? `border-${s}-width` : `${p}-${s}`));
+    const m = side('margin'), b = side('border'), pd = side('padding');
+    const cw = Math.round(target.clientWidth - pd[1] - pd[3]), ch = Math.round(target.clientHeight - pd[0] - pd[2]);
+    const t = (x, y, v, cls = '') => `<text x="${x}" y="${y}" class="${cls}">${v}</text>`;
+    const label = `Box: margin ${m.join(' ')}, border ${b.join(' ')}, padding ${pd.join(' ')}, content ${cw} by ${ch}`;
+    return `<figure class="pl-box" role="img" aria-label="${esc(label)}"><svg viewBox="0 0 320 144" aria-hidden="true">
+      <rect x="1" y="1" width="318" height="142" rx="4" class="bm-m"/><rect x="40" y="24" width="240" height="96" rx="2" class="bm-b"/><rect x="56" y="40" width="208" height="64" class="bm-p"/><rect x="104" y="58" width="112" height="28" class="bm-c"/>
+      ${t(8, 14, 'margin', 'cap')}${t(160, 16, m[0])}${t(160, 136, m[2])}${t(20, 76, m[3])}${t(300, 76, m[1])}
+      ${t(46, 36, 'border', 'cap')}${t(160, 35, b[0])}${t(160, 117, b[2])}
+      ${t(62, 52, 'padding', 'cap')}${t(160, 54, pd[0])}${t(160, 100, pd[2])}${t(80, 76, pd[3])}${t(240, 76, pd[1])}
+      ${t(160, 76, `${cw} × ${ch}`, 'cnt')}</svg></figure>`;
+  }
+  function valuesHtml() {
+    const by = new Map(GROUPS.map(([id]) => [id, []]).concat([['other', []]]));
+    const taken = new Set(['width', 'height']);
+    for (const prop of Object.keys(SIDES)) if (explain.props[prop] || SIDES[prop].some(([sd]) => explain.props[partProp(prop, sd)])) { taken.add(prop); for (const [sd] of SIDES[prop]) taken.add(partProp(prop, sd)); }
+    for (const pw of props) if (!taken.has(pw[0])) by.get(groupOf(pw[0])).push(valueRow(pw));
+    const head = (name, extra = '') => `<h4 class="pl-gh">${name}${extra}</h4>`;
+    const groupHtml = (id, name, body) => (body ? `<div class="pl-group" data-group="${id}">${head(name)}${body}</div>` : '');
+    const sideList = (names) => names.filter((p) => taken.has(p)).map(sidesBlock).join('');
+    const out = [
+      groupHtml('layout', 'Layout', geometry() + by.get('layout').join('')),
+      // padding is offered on every element (Figma shows it on every frame); margin and a radius once something sets them
+      groupHtml('spacing', 'Spacing', (taken.has('padding') ? '' : sidesBlock('padding')) + sideList(['padding', 'margin']) + by.get('spacing').join('') + boxFigure()),
+      groupHtml('appearance', 'Appearance', sideList(['border-radius']) + by.get('appearance').join('')),
+      ...GROUPS.slice(3).map(([id, name]) => groupHtml(id, name, by.get(id).join(''))),
+      groupHtml('other', 'Other', by.get('other').join('')),
+    ];
+    return out.join('');
+  }
   // what this element takes from an ancestor because nothing sets it here, with a link that selects that ancestor
+  // How long a value reads: a long one takes its own line under its name when the panel is too narrow for both (inspector-doc.css).
+  const lenCls = (v) => { const n = String(v ?? '').length; return n > 30 ? ' long xlong' : n > 12 ? ' long' : ''; };
   function inheritedRow(e) {
     const link = typeof e.from === 'string' && frame.has(e.from) ? `<button type="button" class="plink" data-node="${esc(e.from)}" title="Select the element it comes from"><span class="selp">${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)}</span> ${e.source.kind === 'inline' ? '' : loc(`${base(e.source.file)}:${e.source.declLine ?? e.source.line}`)}</button>` : `<code class="selp">${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)}</code>`;
     const shown = e.resolved ?? e.value, name = e.sets.length > 1 && e.sets.length < 6 ? e.sets.join(', ') : e.prop;
-    return `<div class="vrow inh" data-prop="${esc(e.prop)}"><div class="phead"><label for="pv-${esc(e.prop)}">${esc(name)}</label><span class="pstate">inherited</span>${e.resolved && e.resolved !== e.value ? `<span class="res${String(e.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(e.resolved)}">${esc(e.resolved)}</span>` : ''}</div>
+    return `<div class="vrow inh${lenCls(e.value)}" data-prop="${esc(e.prop)}"><div class="phead"><label for="pv-${esc(e.prop)}">${esc(name)}</label><span class="pstate">inherited</span>${e.resolved && e.resolved !== e.value ? `<span class="res${String(e.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(e.resolved)}">${esc(e.resolved)}</span>` : ''}</div>
       <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(e.prop)}" data-key="pv-${esc(e.prop)}" data-prop="${esc(e.prop)}" value="${esc(e.value)}" aria-label="${esc(e.prop)} (inherited)" spellcheck="false" title="${esc(e.value)}"></div>
       <div class="pmore"><div class="pfrom"><span class="k">inherited from</span> ${link}</div></div></div>`;
   }
@@ -239,11 +326,11 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const v = explain.vars[name];
     if (!v) return `<div class="decl ro"><code class="prop">${esc(name)}</code><span class="val">${esc(cs?.getPropertyValue(name).trim() || 'not defined')}</span><span class="src">not defined</span></div>`;
     const s = v.source;
-    if (s.kind !== 'rule') return `<div class="decl ro" data-ro="${esc(name)}"><code class="prop">${esc(name)}</code><span class="val">${esc(v.value)}</span><span class="src">set inline on ${v.inherited ? 'an ancestor' : 'this element'}</span></div>`;
+    if (s.kind !== 'rule') return `<div class="decl ro${lenCls(v.value)}" data-ro="${esc(name)}"><code class="prop">${esc(name)}</code><span class="val">${esc(v.value)}</span><span class="src">set inline on ${v.inherited ? 'an ancestor' : 'this element'}</span></div>`;
     const defs = (data.vars?.[name] || []).filter((x) => !x.inline);
     const bucket = defs.filter((x) => x.file === s.file && normMedia(x.media.at(-1)) === normMedia(s.media.at(-1)));
     const k = Math.max(0, bucket.findIndex((x) => x.line === s.declLine && normSel(x.selector) === normSel(s.selector)));
-    return `<div class="decl" data-kind="var" data-prop="${esc(name)}" data-file="${esc(s.file)}" data-index="${k}" data-media="${esc(s.media.at(-1) ?? '')}">
+    return `<div class="decl${lenCls(v.raw)}" data-kind="var" data-prop="${esc(name)}" data-file="${esc(s.file)}" data-index="${k}" data-media="${esc(s.media.at(-1) ?? '')}">
       <button type="button" class="lit prop" data-lit-var="${esc(name)}" title="Light up every place this variable is used"><code>${esc(name)}</code></button><input class="val" data-key="v-${esc(name)}" value="${esc(v.raw)}" aria-label="${esc(name)}" spellcheck="false" title="now ${esc(v.value)}"><span class="src" title="${esc(s.file)}:${s.declLine} · ${esc(s.selector)}">${esc(base(s.file))}:${s.declLine}${v.inherited ? ' ↑' : ''}</span></div>`;
   }
 
@@ -251,7 +338,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const k = kind === 'rule' ? `r${rule}-${prop}` : `s-${prop}`;
     const src = kind === 'rule' ? `<span class="src">:${line}</span>` : '';
     const why = (over || partial) && by ? `${partial ? 'partly overridden by' : 'beaten by'} ${by.kind === 'inline' ? 'the inline style' : `${by.selector} (${base(by.file)}:${by.declLine ?? by.line})`}` : '';
-    return `<div class="decl${over ? ' over' : ''}${partial ? ' partial' : ''}" data-kind="${kind}" data-prop="${esc(prop)}"${kind === 'rule' ? ` data-rule="${rule}" data-index="${idx}"` : ''}>
+    return `<div class="decl${lenCls(value)}${over ? ' over' : ''}${partial ? ' partial' : ''}" data-kind="${kind}" data-prop="${esc(prop)}"${kind === 'rule' ? ` data-rule="${rule}" data-index="${idx}"` : ''}>
       <code class="prop"${why ? ` title="${esc(why)}"` : ''}>${esc(prop)}</code><input class="val" data-key="${esc(k)}" value="${esc(value)}" aria-label="${esc(prop)}" spellcheck="false"${resolved ? ` title="now ${esc(resolved)}"` : why ? ` title="${esc(why)}"` : ''}>${important ? '<span class="imp">!important</span>' : ''}<button type="button" class="decl-x" aria-label="Remove ${esc(prop)}">×</button>${src}</div>`;
   }
   const rulesStrong = [...explain.rules].reverse();
@@ -274,7 +361,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
           <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>
       </section>
       <section class="dsec" id="doc-values"><h3>Where each value comes from${mainFile ? `<span class="where hfile">${esc(mainFile)}</span>` : ''}</h3>
-        ${props.length ? props.map(valueRow).join('') : computed ? `<p class="hint">Its classes are worked out in code: <code>${esc(computed)}</code> at line ${node.line} of ${esc(base(comp.path))}. No stylesheet rule of this folder matches it here. Change them in that file.</p>` : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : '<p class="hint">Nothing styles this element yet.</p>'}
+        ${props.length || target ? valuesHtml() : ''}${props.length ? '' : computed ? `<p class="hint">Its classes are worked out in code: <code>${esc(computed)}</code> at line ${node.line} of ${esc(base(comp.path))}. No stylesheet rule of this folder matches it here. Change them in that file.</p>` : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : '<p class="hint">Nothing styles this element yet.</p>'}
       </section>
       ${explain.inherited.length ? `<section class="dsec soft" id="doc-inherited" data-soft="inherited"${soft('inherited')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('inherited')}">Inherited <span class="where">${explain.inherited.length} from the elements around it</span></button></h3><div class="soft-b">${explain.inherited.map(inheritedRow).join('')}</div></section>` : ''}
       <details class="dsec fold" data-fold="inline"${fold('inline', inlineDecls.length > 0)}><summary><h3>Inline style <span class="where">${inlineDecls.length ? `${inlineDecls.length} set` : 'none yet'}</span></h3></summary>
@@ -282,11 +369,11 @@ export async function renderDocPanel(ctx, el, sel, comp) {
           <div class="decl add"><input class="prop" data-key="inline-new-prop" placeholder="property" aria-label="New inline property" spellcheck="false"><input class="val" data-key="inline-new-val" placeholder="value" aria-label="New inline value" spellcheck="false"></div></div>
       </details>
       <details class="dsec fold" data-fold="rules"${fold('rules', false)}><summary><h3>Rules <span class="where">${rulesStrong.length} matching, strongest first</span></h3></summary>
-        ${rulesStrong.length ? rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
+        ${rulesStrong.length ? '<div class="rules-list">' + rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
           <div class="rhead"><button type="button" class="lit" data-lit-sel="${esc(r.selector)}" data-lit-file="${esc(r.file)}" title="Light up every place this rule applies"><code class="sel">${esc(r.selector)}</code></button>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line} · specificity ${r.specificity.join(',')}">${esc(base(r.file))}:${r.line}</span></div>
           <div class="decls">${r.decls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'rule', rule: r.order, idx: index(data.rules[r.order]), line: d.line, over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
             <div class="decl add"><input class="prop" data-key="r${r.order}-new-prop" data-rule="${r.order}" placeholder="property" aria-label="New property in ${esc(r.selector)}" spellcheck="false"><input class="val" data-key="r${r.order}-new-val" data-rule="${r.order}" placeholder="value" aria-label="New value in ${esc(r.selector)}" spellcheck="false"></div></div>
-        </div>`).join('') : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>'}
+        </div>`).join('') + '</div>' : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>'}
       </details>
       ${varNames.length ? `<section class="dsec soft" data-soft="vars-here"${soft('vars-here')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('vars-here')}">Variables here <span class="where">${varNames.length}, the definition that applies</span></button></h3><div class="soft-b"><div class="decls">${varNames.map(varRow).join('')}</div></div></section>` : ''}
       <section class="dsec" id="doc-vars"><h3>Your variables <span class="where">${Object.keys(folderVars).length} in this folder</span></h3>
@@ -309,6 +396,16 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     sec.querySelector('.soft-h').addEventListener('click', () => set(!sec.hasAttribute('data-open')));
     sec.querySelector('.soft-b').addEventListener('focusin', () => set(true));
   });
+  el.querySelectorAll('.pl-adv').forEach((b) => {
+    const hostEl = b.closest('.pl-adv-host'), prop = b.dataset.adv;
+    if (!hostEl) { b.remove(); return; }
+    b.setAttribute('aria-expanded', String(hostEl.classList.contains('open')));
+    b.addEventListener('click', () => { const on = !hostEl.classList.contains('open'); hostEl.classList.toggle('open', on); b.setAttribute('aria-expanded', String(on)); openFolds.set('adv:' + prop, on); });
+  });
+  // the height lever: a long list shows six rows, its bottom edge drags for more (panel-height.js)
+  const kindKey = comp.fileKind || 'html';
+  const rl = el.querySelector('#doc-values ~ details[data-fold="rules"] .rules-list'); if (rl) capList(rl, { key: `${kindKey}.rules`, label: 'Rules', rows: () => [...rl.children] });
+  for (const [sel2, key2, name2] of [['#doc-inline', 'inline', 'Inline style'], ['[data-soft="vars-here"] .decls', 'vars-here', 'Variables here']]) { const l = el.querySelector(sel2); if (l) capList(l, { key: `${kindKey}.${key2}`, label: name2, rows: () => [...l.children].filter((r) => !r.classList.contains('add')) }); }
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
   else if (backTo?.key === selKey) { el.querySelector(`.vrow input[data-prop="${CSS.escape(backTo.prop)}"]`)?.focus({ preventScroll: true }); backTo = null; }
   wireKeys(el);
@@ -369,6 +466,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
 
   // ---------- the staged value: scope, the change, Apply ----------
   const winners = explain.props;
+  for (const [p, w] of ghosts) winners[p] ??= w; // W, H and the sides offered though nothing sets them
   for (const e of explain.inherited) winners[e.prop.toLowerCase()] ??= { value: e.value, ...(e.resolved !== undefined && { resolved: e.resolved }), important: false, source: e.source, state: 'inherited', from: e.from }; // an inherited value stages like any other
   const uses = {
     rule: (r) => usage.get(`r:${r.file}:${r.line}`) ?? null,
