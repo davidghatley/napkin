@@ -34,7 +34,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   const cap = document.createElement('figcaption');
   // The frame's width is the document's viewport: drag the grip and the component reflows for real (its own @media).
   const grip = document.createElement('div'); grip.className = 'cell-grip'; grip.dataset.nodrag = '1'; grip.title = 'Drag to change the frame width. Double-click for 640 px. With the keyboard: arrows 1 px, Shift 10 px, Page Up and Page Down the next breakpoint.';
-  grip.tabIndex = -1; grip.setAttribute('role', 'slider'); grip.setAttribute('aria-label', 'Frame width'); grip.setAttribute('aria-valuemin', '120'); grip.setAttribute('aria-valuemax', '2400');
+  grip.tabIndex = -1; grip.setAttribute('role', 'slider'); grip.setAttribute('aria-label', 'Frame width'); grip.setAttribute('aria-valuemin', '48'); grip.setAttribute('aria-valuemax', '2400');
   const ruler = createRuler({ doc: () => iframe?.contentDocument || null, commitWidth: (w) => { api.setWidth(w); saveWidth(); }, get width() { return width; } });
   cell.append(cap, ruler.el, grip);
   // Until the live page is drawn the card shows the start of the file's own text, so it is never an empty box.
@@ -186,7 +186,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     iframe: () => iframe, doc: () => iframe?.contentDocument || null, tree: () => tree,
     get width() { return width; },
     grip, ruler, commitWidth: (w) => { api.setWidth(w); saveWidth(); },
-    setWidth(w, snapped = false) { widthAt = Date.now(); width = Math.max(120, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(true); grip.setAttribute('aria-valuenow', String(width)); grip.setAttribute('aria-valuetext', `${width} px`); ctx.emit('framewidth', { component: id, width }); },
+    setWidth(w, snapped = false) { widthAt = Date.now(); width = Math.max(48, Math.min(2400, Math.round(w))); say(width, snapped); ruler.paint(); if (iframe) { iframe.style.width = `${width}px`; size(); } onResize(true); grip.setAttribute('aria-valuenow', String(width)); grip.setAttribute('aria-valuetext', `${width} px`); ctx.emit('framewidth', { component: id, width }); },
     destroy() { gen++; ro?.disconnect(); iframe?.remove(); },
   };
   const w = ctx.state.components.get(id)?.width;

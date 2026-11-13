@@ -139,6 +139,7 @@ export function createView(ctx, stageEl, worldEl) {
     }, 120);
   };
   ctx.on('render', refit); ctx.on('layout', refit);
+  view.hold = () => { lastFit = null; }; // something placed by hand (a frame drawn on the canvas) ends the fit too: it must stay where it was drawn
   let lastWork = false;
   view.fitAll = (opts = {}) => {
     lastWork = !!opts.work;
