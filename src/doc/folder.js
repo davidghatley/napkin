@@ -17,6 +17,7 @@ import { parseJsx, componentTree } from './jsx.js';
 import { classLiteral, planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf, runsOf, decodeText } from './edit.js';
 import { writeAtomic, cleanStaleTmp, sweepDir, removeFile, moveFile } from '../atomic.js';
 import { buildDom, matches as selMatches } from './select.js';
+import { toComponent, componentName } from './to-component.js';
 import { createCascade } from '../../public/canvas/inspector-cascade.js';
 import { explainError } from '../errors.js';
 
@@ -524,7 +525,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return done2(comp, step, 'edit');
   }
 
-  // ---------- frame files: make, remove, rename (decision 0023) ----------
+  // ---------- the whole text of a component's file, and the lines each element spans (the code strip shows and highlights them) ----------
+  function source(id) {
+    const comp = component(id), e = read(comp.path);
+    let lines = {}, cols = {};
+    try {
+      const { flat } = nodesOf(comp), at = flat.filter((n) => n.id !== undefined && n.start !== undefined);
+      lines = Object.fromEntries(at.map((n) => [n.id, [lineOf(e.s, n.start), lineOf(e.s, Math.max(n.start, n.end - 1))]]));
+      cols = Object.fromEntries(at.map((n) => [n.id, fromL(e.s.slice(e.s.lastIndexOf('\n', n.start - 1) + 1, n.start)).length])); // its first character's column (text, not bytes)
+    } catch { /* a file that does not parse: the text alone */ }
+    return { ok: true, component: comp.id, file: comp.path, kind: comp.kind, revision: e.rev, source: fromL(e.s), lines, cols };
+  }
+
+  // ---------- frame files: make, duplicate, remove, rename (decision 0023) ----------
   // Each is one step on the caller's undo stack of that file, so Ctrl+Z after drawing a frame removes the file and its card,
   // and redo brings both back. Nothing is ever overwritten: a new file is written exclusively, a rename is a hard link then an
   // unlink (refused when the name is taken), and a removal or an undo checks the file still holds what napkin wrote.
@@ -604,6 +617,76 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
     return fileDone(p, by, st, 'edit');
   }
+  // POST /api/frames/component: { from, node, name? } -> the element `node` of the HTML frame `from` becomes a component of its
+  // own: <Name>.tsx beside the frame, holding the element as JSX and the CSS rules that reach it. The frame is left as it is
+  // (plain HTML cannot hold an instance); the component lands on the canvas to the frame's right. One undo step removes it.
+  function componentFrom({ from, node, name, by = 'unknown' } = {}) {
+    const comp = component(frameFile(from));
+    const t = tree(comp.id);
+    const dom = buildDom(t.tree || []);
+    const el = dom.el(node);
+    if (!el || el.synthetic) throw new DocError(`no element ${node} in ${comp.path}. Next: select the element again`, 404);
+    if (['html', 'head', 'body'].includes(el.tag)) throw new DocError('select an element inside the frame, not the whole frame. Next: double-click into the frame and pick the part you want', 400);
+    const entry = read(comp.path);
+    const html = fromL(entry.s.slice(el.src.start, el.src.end));
+    // every element of the selection, and the rules whose selector reaches any of them, in cascade order
+    const subtree = []; (function walk(e) { subtree.push(e); e.children.forEach(walk); })(el);
+    const base = rulesOf(comp.id);
+    const textOf = (r) => fromL(read(r.file).s.slice(r.start, r.end));
+    const css = [];
+    for (const r of base.rules) {
+      if (r.kind !== 'style') continue;
+      if (r.parts.some((p) => subtree.some((e) => { try { return selMatches(e, p.selector); } catch { return false; } }))) css.push({ text: textOf(r), context: r.context });
+    }
+    // what the selection gets from outside itself, so it looks the same on its own:
+    // (1) animations its rules name
+    const all = () => css.map((c) => c.text).join('\n') + '\n' + html;
+    const frames = new Map();
+    for (const r of base.rules) {
+      const at = r.kind === 'keyframe' && r.context.find((c) => /^@(-\w+-)?keyframes\s/.test(c));
+      if (at) (frames.get(at) || frames.set(at, []).get(at)).push(textOf(r));
+    }
+    for (const [at, steps] of frames) {
+      const nm = at.replace(/^@(-\w+-)?keyframes\s+/, '').trim();
+      if (new RegExp(`(^|[\\s,:])${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[\\s,;])`).test(all())) css.push({ text: `${at} {\n${steps.map((x) => '  ' + x).join('\n')}\n}`, context: [] });
+    }
+    // (2) what it inherits from the elements around it (type and colour), and (3) the custom properties it reads. Both are
+    // written once on the component's own root, before its rules, so nothing leaks onto the page that uses it.
+    const INHERITED = /^(color|font|font-(family|size|weight|style|stretch|variant|variant-numeric|feature-settings|kerning)|line-height|letter-spacing|word-spacing|text-align|text-transform|text-indent|white-space|direction|-webkit-font-smoothing|-moz-osx-font-smoothing)$/;
+    const decls = (text) => [...text.slice(text.indexOf('{') + 1).matchAll(/([\w-]+)\s*:\s*([^;}]+)/g)].map((m) => [m[1].toLowerCase() === m[1] ? m[1] : m[1], m[2].trim()]);
+    const around = []; for (let a = el.parent; a; a = a.parent) around.unshift(a);
+    const got = new Map();
+    const vars = new Set([...all().matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
+    const ownVars = new Set([...all().matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
+    for (const a of around) {
+      for (const r of base.rules) {
+        if (r.kind !== 'style' || r.context.length) continue;
+        if (!r.parts.some((p) => { try { return selMatches(a, p.selector); } catch { return false; } })) continue;
+        for (const [k, v] of decls(textOf(r))) if (INHERITED.test(k) || (k.startsWith('--') && vars.has(k) && !ownVars.has(k))) { got.delete(k); got.set(k, v); }
+      }
+      for (const [k, v] of decls(`{${a.attrs.style || ''}}`)) if (INHERITED.test(k) || (k.startsWith('--') && vars.has(k) && !ownVars.has(k))) { got.delete(k); got.set(k, v); }
+    }
+    if (got.size) {
+      const cls = (el.attrs.class || '').trim().split(/\s+/)[0];
+      const sel = cls && /^-?[_a-zA-Z][\w-]*$/.test(cls) ? `.${cls}` : el.attrs.id && /^[_a-zA-Z][\w-]*$/.test(el.attrs.id) ? `#${el.attrs.id}` : el.tag;
+      css.unshift({ text: `${sel} {\n${[...got].map(([k, v]) => `  ${k}: ${v};`).join('\n')}\n}`, context: [] });
+    }
+    const dir = dirname(comp.path);
+    let taken = []; try { taken = readdirSync(abs(dir)).filter((n) => /\.(tsx|jsx)$/i.test(n)).map((n) => n.replace(/\.(tsx|jsx)$/i, '')); } catch { /* new folder */ }
+    const seed = (el.attrs.class || '').trim().split(/\s+/)[0] || el.attrs.id || el.tag;
+    const wanted = name === undefined || name === null || name === '' ? componentName(seed, taken) : String(name).trim();
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(wanted)) throw new DocError(`"${wanted}" cannot be a component name. Next: use letters and digits starting with a capital, like Card`, 400);
+    if (taken.some((x) => x.toLowerCase() === wanted.toLowerCase())) throw new DocError(`${wanted} already exists in this folder; napkin never overwrites a file. Next: choose another name`, 409);
+    let made; try { made = toComponent({ name: wanted, html, css, from: `${comp.path}:${el.src.line}` }); } catch (e) { throw new DocError(e.message, 400); }
+    const p = posix.join(dir, `${wanted}.tsx`).replace(/^\.\//, '');
+    const text = toL(made.source);
+    const at = layout[comp.path];
+    const place = at && Number.isFinite(at.x) ? placeOf(at.x + (at.width || 480) + 64, at.y, undefined) : {};
+    put(p, text, place);
+    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `made ${wanted} from ${comp.path}` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((x) => x.by !== by));
+    return { ...fileDone(p, by, st, 'edit'), path: p, name: wanted, from: comp.path, node: el.id, dropped: made.dropped, rules: css.length, canvas: layout[p] || null };
+  }
   // POST /api/frames/rename: { from, to } where `to` is a name ("hero") or a file name ("hero.html"), in the same folder.
   function renameFrame(from, to, { by = 'unknown' } = {}) {
     const f = frameFile(from);
@@ -618,6 +701,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const st = { op: 'rename', by, at: Date.now(), from: f, to: t, summary: `renamed ${f} to ${t}` };
     push(undo, t, st); redo.set(t, (redo.get(t) || []).filter((s) => s.by !== by));
     return fileDone(t, by, st, 'edit');
+  }
+  // POST /api/frames/duplicate: { from, x?, y? } -> a copy beside the file, named with the next free number (orbit.html ->
+  // orbit-2.html), its card at x, y with the original's width. It is a create step: one undo removes the copy and its card.
+  function duplicateFrame(from, { x, y, by = 'unknown' } = {}) {
+    const f = frameFile(from);
+    let text; try { text = read(f).s; } catch { throw new DocError(`${f} is gone. Next: check the file list`, 404); }
+    const dir = posix.dirname(f), ext = extname(f), stem = basename(f, ext).replace(/-\d+$/, '');
+    let n = 2, p; do p = posix.join(dir, `${stem}-${n++}${ext}`).replace(/^\.\//, ''); while (existsSync(abs(p)));
+    const place = placeOf(x, y, layout[f]?.width);
+    put(p, text, place);
+    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `created ${p} (a copy of ${f})` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
+    return { ...fileDone(p, by, st, 'edit'), path: p, from: f, canvas: layout[p] };
   }
   // Undo or redo a file step. A create undone removes the file (if it still holds what napkin wrote); a delete undone writes it back.
   function fileStep(id, k, by, kind) {
@@ -686,14 +782,14 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   scan(); watchDirs();
   return {
     root, state, events,
-    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout,
+    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout, source,
     latest(verb, by) { // the newest step this caller can undo (or redo) in any component: { component, at } | null
       let best = null;
       for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };
       return best;
     },
     undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'), pendingStep,
-    createFrame, removeFrame, renameFrame, nextFrame,
+    createFrame, duplicateFrame, removeFrame, renameFrame, nextFrame, componentFrom,
     history: (id) => [...(history.get(has(id) ? component(id).id : id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,
     rescan: () => { scan(); watchDirs(); },

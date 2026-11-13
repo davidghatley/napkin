@@ -178,7 +178,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     ro?.disconnect();
     try { ro = new next.contentWindow.ResizeObserver(() => size()); ro.observe(next.contentDocument.documentElement); } catch { ro = null; }
     // keyboard focus never stays inside a frame while editing: the canvas's keys keep working
-    next.contentWindow.addEventListener('focus', () => { if (!document.body.dataset.play) next.blur(); });
+    next.contentWindow.addEventListener('focus', () => { if (!document.body.dataset.play && !cell.dataset.textEdit) next.blur(); }); // (text being edited in it keeps it: text-edit.js)
     // in play the keyboard is inside the frame: Escape, and P outside a text field, still leave play
     next.contentWindow.addEventListener('keydown', (ev) => {
       if (!document.body.dataset.play || document.body.dataset.playHold) return;
