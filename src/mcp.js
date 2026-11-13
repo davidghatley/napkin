@@ -10,6 +10,7 @@ import { connectCanvas } from './canvas-client.js';
 import { nodeOfEdit } from './model.js';
 import { GUIDE } from './guide.js';
 import { editItemSchema } from './mcp-schema.js';
+import { TOOLS as AGENT_TOOLS, RUNS_GUIDE, runAgentTool, isAgentTool } from './agents/tools.js'; // runs, review, board, items (D5)
 
 const BASE = process.env.NAPKIN_URL || 'http://127.0.0.1:4810/';
 const AGENT = process.env.NAPKIN_AGENT || 'agent';
@@ -20,6 +21,7 @@ const editSchema = editItemSchema(NO_GUIDE);
 const comp = { type: 'string', description: 'component name or id' };
 const obj = (properties, required = []) => ({ type: 'object', properties, required });
 const TOOLS = [
+  ...AGENT_TOOLS,
   { name: 'list_tokens', description: 'Read every configured token, its per-mode values, resolved values, group, type, usage and source revision.', inputSchema: obj({}) },
   { name: 'propose_adoption', description: 'Propose a faithful dialect rewrite of a read-only component. Returns source and diff in a proposal; only review Accept writes it. Unsupported logic is refused.', inputSchema: obj({ component: comp }, ['component']) },
   { name: 'list_components', description: 'List the napkin components in this folder: [{ id, name, readOnly? }].', inputSchema: obj({}) },
@@ -219,8 +221,14 @@ async function callTool(name, a = {}) {
   }
   throw new Error(explainError(`unknown tool ${name}`));
 }
+const callAny = async (name, a) => {
+  if (!isAgentTool(name)) return callTool(name, a);
+  const b = await backend();
+  if (b.mode !== 'server') throw new Error(explainError('runs, review and the board need a running napkin canvas. Next: run node src/cli.js open <folder> and set NAPKIN_URL to its printed address.'));
+  return runAgentTool(name, a, b);
+};
 
-const INSTRUCTIONS = NO_GUIDE ? 'napkin edits React components. Use the tools.' : `napkin edits real React components. This text is also served as the napkin://guide resource and the napkin_guide prompt.\n\n${GUIDE}`;
+const INSTRUCTIONS = NO_GUIDE ? 'napkin edits React components. Use the tools.' : `napkin edits real React components. This text is also served as the napkin://guide resource and the napkin_guide prompt.\n\n${GUIDE}\n${RUNS_GUIDE}`;
 const PROMPT = { name: 'napkin_guide', description: 'How to edit napkin components: the dialect, edit ops with examples, propose mode and stale handling.' };
 
 createInterface({ input: process.stdin }).on('line', async (line) => {
@@ -237,16 +245,16 @@ createInterface({ input: process.stdin }).on('line', async (line) => {
   if (method === 'resources/list') return send({ id, result: { resources: NO_GUIDE ? [] : [{ uri: 'napkin://guide', name: 'napkin guide', description: PROMPT.description, mimeType: 'text/markdown' }] } });
   if (method === 'resources/read') {
     if (params?.uri !== 'napkin://guide') return send({ id, error: { code: -32002, message: `no such resource: ${params?.uri}` } });
-    return send({ id, result: { contents: [{ uri: 'napkin://guide', mimeType: 'text/markdown', text: GUIDE }] } });
+    return send({ id, result: { contents: [{ uri: 'napkin://guide', mimeType: 'text/markdown', text: GUIDE + RUNS_GUIDE }] } });
   }
   if (method === 'prompts/list') return send({ id, result: { prompts: NO_GUIDE ? [] : [PROMPT] } });
   if (method === 'prompts/get') {
     if (params?.name !== PROMPT.name) return send({ id, error: { code: -32602, message: `no such prompt: ${params?.name}` } });
-    return send({ id, result: { description: PROMPT.description, messages: [{ role: 'user', content: { type: 'text', text: GUIDE } }] } });
+    return send({ id, result: { description: PROMPT.description, messages: [{ role: 'user', content: { type: 'text', text: GUIDE + RUNS_GUIDE } }] } });
   }
   if (method === 'tools/call') {
     try {
-      const data = await callTool(params.name, params.arguments);
+      const data = await callAny(params.name, params.arguments);
       if (data?.image) return send({ id, result: { content: [{ type: 'image', data: data.image.toString('base64'), mimeType: 'image/png' }, { type: 'text', text: JSON.stringify(data.info) }], structuredContent: data.info } });
       return send({ id, result: { content: [{ type: 'text', text: JSON.stringify(data) }], structuredContent: Array.isArray(data) ? { components: data } : data } });
     } catch (e) {

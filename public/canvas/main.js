@@ -59,6 +59,7 @@ import { initChrome } from './stage-chrome.js';
 import { initBreakpoints } from './stage-breakpoints.js';
 import { initInspector } from './doc-panel.js';
 import { initKinds } from './kinds.js';
+import { initRuns } from './run-panel.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -160,6 +161,7 @@ await initTokens(ctx); // token source, theme preview and Tokens drawer
 ctx.on('token-preview', () => { if (ctx.state.selection) { renderPanel(ctx); stage.refreshOverlays(); } });
 initTimeStrip(ctx);   // moment 9: the film strip of a component's versions (H)
 initCopyCode(ctx);    // moment 10: Cmd-C gives the file's own HTML/JSX and CSS; Cmd-V inserts it
+initRuns(ctx);        // runs, the review queue and what the person sees (run-panel.js)
 initAgentsLane(ctx);  // presence, proposals tray + ghost cells, Activity tab, clash chip
 ctx.on('select', () => { $('#revision').parentElement.hidden = !ctx.state.selection; renderPanel(ctx); });
 // #revision shows 8 characters (the frame title shows 7); the full revision is its tooltip
@@ -217,6 +219,7 @@ client.onChange((f) => {
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; ctx.emit('agents', f); }
   else if (f.type === 'presence') ctx.emit('presence', f); // presence.js
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
+  else if (f.type.startsWith('run-')) ctx.emit('run-frame', f); // runs, steps, artifacts, proposals, questions (run-panel.js)
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); counts(); }
   else if (typeof f.type === 'string' && f.type.startsWith('doc-')) ctx.emit(f.type, f); // the document engine (docs.js)
   else if (f.type === 'item-change' || f.type === 'items-changed') ctx.emit(f.type, f);

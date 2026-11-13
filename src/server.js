@@ -23,6 +23,9 @@ import { createDocRoutes } from './doc/routes.js';
 import { agentPermission } from './api.js';
 import { openItems } from './kinds/items.js';
 import { createKindRoutes, loadKindPlugins } from './kinds/routes.js';
+import { createRuns } from './agents/store.js';
+import { createBoard } from './agents/board.js';
+import { createAgentRoutes } from './agents/routes.js';
 
 const { values: args } = parseArgs({ options: { dir: { type: 'string' }, root: { type: 'string' }, file: { type: 'string' }, port: { type: 'string', default: '4810' }, recursive: { type: 'boolean' }, 'no-sidecars': { type: 'boolean' }, 'next-port': { type: 'boolean' }, 'watch-parent': { type: 'string' }, stream: { type: 'boolean' } } });
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -99,6 +102,10 @@ const json = (res, code, body) => { if (body?.error) body.error = explainError(b
 await loadKindPlugins((process.env.NAPKIN_KIND_PLUGINS || '').split(',').filter(Boolean).map(p => resolve(p)));
 const items = openItems(docRoot, { broadcast, watchFiles: true });
 const kindRoutes = createKindRoutes(items, { identify: t => api.identify(t), permission: name => agentPermission(dir, name), hasComponent: id => docs.has(id) });
+// Runs, steps, artifacts, proposals, questions, the board and the event log for agents (src/agents/).
+const runs = createRuns({ root: docRoot, items, broadcast, colorOf: tint });
+const board = createBoard({ root: items.root, emit: (type, d) => runs.emit(type, d), broadcast, runSections: () => runs.runs().map((r) => ({ id: `run:${r.id}`, name: r.name, run: r.id, derived: true, items: [...new Set(r.artifacts.map((a) => a.path))] })) });
+const agentRoutes = createAgentRoutes({ runs, board, items, identify: t => api.identify(t), permission: name => agentPermission(dir, name) });
 const STATIC = { '/': 'public/index.html', '/brand/napkin-favicon.svg': 'public/brand/napkin-favicon.svg', '/brand/napkin-glyph.svg': 'public/brand/napkin-glyph.svg', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js', '/src/css-props.js': 'src/css-props.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml' };
 const send = (res, file) => {
@@ -127,6 +134,7 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === 'GET' && STATIC[path]) return send(res, STATIC[path]);
     if (await kindRoutes(req, res, url)) return;
+    if (await agentRoutes(req, res, url)) return;
     if (await docRoutes(req, res, url)) return;
     if (req.method === 'GET' && /^\/fonts\/[a-z-]+\.woff2$/.test(path)) { res.writeHead(200, { 'content-type': 'font/woff2', 'cache-control': 'public, max-age=86400' }); return res.end(readFileSync(join(ROOT, 'public' + path))); }
     if (req.method === 'GET' && /^\/canvas\/[a-z-]+\.(js|css)$/.test(path)) return send(res, 'public' + path);
@@ -141,6 +149,7 @@ const server = createServer(async (req, res) => {
       if (isAgent) presence.connect(who);
       res.write(frame(presence.agentsFrame()));
       for (const f of presence.frames()) res.write(frame(f));
+      if (url.searchParams.get('since')) for (const e of runs.replay(url.searchParams.get('since'))) res.write(frame(e)); // a reconnecting client catches up on runs, answers and approvals
       res.write(frame({ type: 'ready' }));
       clients.add(res);
       if (isAgent) broadcast(presence.agentsFrame());
@@ -238,4 +247,4 @@ server.listen(listenPort, '127.0.0.1', () => {
   if (args.stream) ws.ready.then(async () => { if (!server.listening) return; console.log(await ws.report()); });
 });
 let stopping = false;
-shutdown = () => { if (stopping) return; stopping = true; for (const c of clients) c.end(); server.close(); docs.close(); items.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
+shutdown = () => { if (stopping) return; stopping = true; runs.dispose(); for (const c of clients) c.end(); server.close(); docs.close(); items.close(); api.close().then(() => ws.close()).then(() => { lock.release(); process.exit(0); }); };
