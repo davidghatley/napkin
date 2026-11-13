@@ -314,10 +314,9 @@ main {
 .subject-gen p {
   margin: 0;
   font-size: 11px;
+  line-height: 1.35;
   color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .subject-gen p b {
   color: var(--text);
