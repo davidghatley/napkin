@@ -49,11 +49,13 @@ export function initKinds(ctx) {
         seen = new Set(),
         owned = [...ctx.state.components.values()].filter((c) => c.path).map((c) => c.path),
         paths = new Set(owned);
+      // A TSX or JSX module that exports no component (a config, a hook, constants) has no component frame: it gets its own card
+      // with its source, like any other file. Every other HTML, TSX and JSX file is drawn once, as a component.
+      const noComponent = new Set((ctx.docs?.files || []).filter((f) => f.noComponent).map((f) => f.path));
       for (const item of items) {
         if (item.meta?.family === 'component') ctx.glances.set(item.path, { kind: item.kind, text: item.meta.preview || '' });
-        // HTML, TSX and JSX files are always drawn as components (the TSX dialect or the document engine), never twice.
-        // They stay items for the API; the canvas draws each of them once, as a component.
-        if ((item.meta?.family === 'component' && /\.(html?|tsx|jsx)$/i.test(item.path)) || paths.has(item.path) || item.path.endsWith('.napkin.json')) continue; // (a component's own sidecar is part of that component)
+        const componentFile = item.meta?.family === 'component' && /\.(html?|tsx|jsx)$/i.test(item.path) && !noComponent.has(item.path);
+        if (componentFile || paths.has(item.path) || item.path.endsWith('.napkin.json')) continue; // (a component's own sidecar is part of that component)
         seen.add(item.id);
         const old = ctx.state.components.get(item.id);
         const revision = String(item.meta.modifiedAt) + ':' + item.bytes;
@@ -137,23 +139,7 @@ export function compactItem(c) {
   else if (family === 'font')
     content = `<style>@font-face{font-family:'k${enc(c.id).replaceAll('%', '')}';src:url('${raw}')}</style><pre class="kind-type" style="font-family:'k${enc(c.id).replaceAll('%', '')}'">Aa Bb
 012345</pre>`;
-  else if (c.meta.table)
-    content = `<div class="kind-mini-table"><div>${c.meta.table.columns
-      .slice(0, 5)
-      .map(
-        (col) =>
-          `<span><b>${esc(col.name)}</b><small>${esc(col.type)}</small>${miniHist(col.bins || [])}</span>`,
-      )
-      .join('')}</div>${c.meta.table.rows
-      .slice(0, 6)
-      .map(
-        (row) =>
-          `<div>${row
-            .slice(0, 5)
-            .map((v) => `<span>${esc(String(v ?? '∅').slice(0, 35))}</span>`)
-            .join('')}</div>`,
-      )
-      .join('')}</div><p class="kind-caption">${esc(c.meta.summary || 'Sampled values')}</p>`;
+  else if (c.meta.table) content = miniTable(c.meta.table, c.meta.summary);
   else if (family === 'binary')
     content = `<pre class="kind-code">${esc(text.match(/.{1,32}/g)?.join('\n'))}</pre><p class="kind-caption">${esc(c.meta.strings?.join(' · ') || 'No printable strings in this window')}</p>`;
   else if (family === 'audio')
@@ -200,6 +186,25 @@ export function compactItem(c) {
   if (!plain && !c.meta.spec && family !== 'pdf' && !['image', 'video', 'font', 'audio'].includes(family)) content = cachedSurface(content);
   return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}">${content}${headline(c)}<span class="kind-stamp">${esc(c.kind)} · ${c.bytes.toLocaleString()} bytes</span></div>`;
 }
+// The first rows of a table as the file holds them, with each column's type and distribution.
+function miniTable(t, summary) {
+  return `<div class="kind-mini-table"><div>${t.columns
+      .slice(0, 5)
+      .map(
+        (col) =>
+          `<span><b>${esc(col.name)}</b><small>${esc(col.type)}</small>${miniHist(col.bins || [])}</span>`,
+      )
+      .join('')}</div>${t.rows
+      .slice(0, 6)
+      .map(
+        (row) =>
+          `<div>${row
+            .slice(0, 5)
+            .map((v) => `<span>${esc(String(v ?? '∅').slice(0, 35))}</span>`)
+            .join('')}</div>`,
+      )
+      .join('')}</div><p class="kind-caption">${esc(summary || 'Sampled values')}</p>`;
+}
 function cachedSurface(content) {
   const style = `*{box-sizing:border-box}body,div{color:#263e33}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 monospace;padding:18px;margin:0}small{font:10px monospace;color:#74957f}p{font:12px/1.5 system-ui;margin:8px 0}h3{font:600 24px system-ui}svg{width:100%;height:300px;display:block}.kind-mini-table{font:12px/1.6 monospace;padding:12px}.kind-mini-table>div{display:flex;border-bottom:1px solid #d8e1d6}.kind-mini-table span{flex:1;padding:8px;overflow:hidden}.kind-mini-table small{display:block}.kind-mini-table svg{height:25px;width:70px}.kind-mini-table>div:first-child{background:#e1eadd}.kind-caption{font:11px monospace;padding:6px 18px}.kind-archive,.kind-prose,.kind-timeline{padding:16px 22px}.kind-archive p{padding:7px;border-bottom:1px solid #d6e0d4}.kind-archive small,.kind-timeline small{float:right}.kind-notebook{padding:12px}.kind-notebook>div{border:1px solid #d2e0d1;border-radius:4px;margin-bottom:10px}.kind-notebook small{display:block;background:#e2ebdd;padding:5px 8px}.kind-notebook pre{padding:10px}.kind-timeline>div{border-left:2px solid #9bbaa4;padding:0 0 14px 18px}.kind-motion{background:#e0e9d9;min-height:340px;display:grid;place-content:center}.kind-motion>div{background:#35836a;color:white;border-radius:16px;padding:25px;font:30px system-ui}.kind-paper{margin:18px 70px;padding:30px;background:white;min-height:290px}.kind-paper h2{font:26px Georgia;color:#2c7155}.kind-paper-lines{height:80px;background:repeating-linear-gradient(transparent,transparent 15px,#d5dfd2 15px,#d5dfd2 16px)}`;
   const xml = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="340"><foreignObject width="480" height="340"><div xmlns="http://www.w3.org/1999/xhtml" style="width:480px;height:340px;overflow:hidden;background:#f5f5ee"><style>${style}</style>${content.replaceAll('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')}</div></foreignObject></svg>`;
@@ -232,6 +237,12 @@ function enhance(cell, c) {
     getData(c.id, '?page=1&dpi=60').then((d) => {
       const el = host.querySelector('.kind-pdf-host');
       if (el && d.image) el.outerHTML = `<img class="kind-pdf-page" alt="First page of ${esc(c.name)}" src="${d.image}">`;
+    }).catch(() => {});
+  else if (c.meta.table && !c.meta.table.rows?.length)
+    // A large Parquet or Arrow file has no rows in its metadata: the card reads its first window when it comes near the screen.
+    getData(c.id).then((d) => {
+      const el = host.querySelector('.kind-surface');
+      if (el && d.rows?.length) el.outerHTML = cachedSurface(miniTable({ columns: d.columns.slice(0, 8), rows: d.rows.slice(0, 6) }, c.meta.summary));
     }).catch(() => {});
   else if (c.meta.spec)
     Promise.all([import('./vega-lite.js'), import('./chart-spec.js')]).then(async ([vl, cs]) => {

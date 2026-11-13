@@ -63,20 +63,6 @@ function source(text, kind = 'code') {
     )
     .join('')}</pre>`;
 }
-function inline(t) {
-  return esc(t)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(
-      /!\[([^\]]*)\]\(([^)]+)\)/g,
-      (_, alt, url) => `<img alt="${alt}" src="${safeUrl(url, true)}">`,
-    )
-    .replace(
-      /\[([^\]]+)\]\(([^)]+)\)/g,
-      (_, name, url) => `<a href="${safeUrl(url)}" rel="noreferrer" target="_blank">${name}</a>`,
-    );
-}
 function safeUrl(u, image = false) {
   if (/^https?:\/\//.test(u) || u.startsWith('#')) return u;
   if (/^[a-z]+:/i.test(u)) return '#';
@@ -84,51 +70,39 @@ function safeUrl(u, image = false) {
   parts.pop();
   return '/raw/' + [...parts, ...u.split('/')].map(enc).join('/');
 }
+// Markdown is rendered by marked (public/canvas/markdown-runtime.js, MIT) with GitHub's dialect: tables, task lists,
+// strikethrough, autolinks, nested lists, fenced code. Raw HTML inside the file is shown as text, never run, and links and images
+// resolve inside the opened folder.
+let md = null;
+async function loadMarkdown() {
+  if (md) return md;
+  const { Marked } = await import('./markdown-runtime.js');
+  md = new Marked({
+    gfm: true,
+    renderer: {
+      html: ({ text }) => esc(text),
+      link({ href, title, tokens }) {
+        return `<a href="${esc(safeUrl(href))}"${title ? ` title="${esc(title)}"` : ''} rel="noreferrer" target="_blank">${this.parser.parseInline(tokens)}</a>`;
+      },
+      image: ({ href, title, text }) => `<img alt="${esc(text)}" src="${esc(safeUrl(href, true))}"${title ? ` title="${esc(title)}"` : ''}>`,
+      code: ({ text }) => `<pre><code>${highlight(text)}</code></pre>`,
+    },
+  });
+  return md;
+}
 function markdown(t) {
   t = t.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
-  let html = '',
-    code = false,
-    block = [],
-    list = false;
-  for (const line of t.split('\n')) {
-    if (line.startsWith('```')) {
-      if (code) {
-        html += `<pre><code>${highlight(block.join('\n'))}</code></pre>`;
-        block = [];
-      }
-      code = !code;
-      continue;
-    }
-    if (code) {
-      block.push(line);
-      continue;
-    }
-    const m = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (!/^\s*[-*]\s/.test(line) && list) {
-      html += '</ul>';
-      list = false;
-    }
-    if (m) html += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`;
-    else if (/^\s*[-*]\s/.test(line)) {
-      if (!list) {
-        html += '<ul>';
-        list = true;
-      }
-      html += `<li>${inline(line.replace(/^\s*[-*]\s/, ''))}</li>`;
-    } else if (line.startsWith('>')) html += `<blockquote>${inline(line.slice(1))}</blockquote>`;
-    else if (line.trim()) html += `<p>${inline(line)}</p>`;
-  }
-  if (list) html += '</ul>';
-  if (code) html += `<pre>${esc(block.join('\n'))}</pre>`;
-  return `<article class="prose" style="--font-size:${Number(r.fontSize) || 15}px">${html}</article>`;
+  return `<article class="prose" style="--font-size:${Number(r.fontSize) || 15}px">${md.parse(t)}</article>`;
 }
 function hist(bins) {
   const max = Math.max(1, ...bins);
   return `<svg class="hist" data-distribution viewBox="0 0 100 27" aria-label="Column distribution">${bins.map((v, i) => `<rect x="${(i * 100) / bins.length}" y="${27 - (v / max) * 25}" width="${Math.max(1, 100 / bins.length - 1)}" height="${(v / max) * 25}"/>`).join('')}</svg>`;
 }
+// Cells arrive as the exact text of the file; the column type only decides alignment and the distribution.
 function table(d, numbered = false) {
-  const first = d.rowStart ?? d.offset ?? 0;
-  return `<div class="table-scroll"><table><thead><tr>${numbered ? '<th scope="col" data-type="number" class="rownum">row<small>number</small></th>' : ''}${(d.columns || []).map((c) => `<th scope="col" data-type="${esc(c.type)}">${esc(c.name)}<small>${esc(c.type)}${c.distinct !== undefined ? ` · ${c.distinct} distinct` : ''}${c.missing ? ` · ${c.missing} missing` : ''}</small>${hist(c.bins || [])}${c.min !== null && c.min !== undefined ? `<small>${esc(c.min)} — ${esc(c.max)}</small>` : ''}</th>`).join('')}</tr></thead><tbody>${(d.rows || []).map((row, n) => `<tr>${numbered ? `<td class="num rownum">${fmt(first + n + 1)}</td>` : ''}${row.map((v) => `<td class="${typeof v === 'number' ? 'num' : v === null ? 'null' : ''}">${v === null ? '∅' : esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const first = d.rowStart ?? d.offset ?? 0,
+    numeric = (d.columns || []).map((c) => /int|num|float|double|decimal/i.test(c.type));
+  return `<div class="table-scroll"><table><thead><tr>${numbered ? '<th scope="col" data-type="number" class="rownum">row<small>number</small></th>' : ''}${(d.columns || []).map((c) => `<th scope="col" data-type="${esc(c.type)}">${esc(c.name)}<small>${esc(c.type)}${c.distinct !== undefined ? ` · ${c.distinct} distinct` : ''}${c.missing ? ` · ${c.missing} missing` : ''}</small>${hist(c.bins || [])}${c.min !== null && c.min !== undefined ? `<small>${esc(c.min)} — ${esc(c.max)}</small>` : ''}</th>`).join('')}</tr></thead><tbody>${(d.rows || []).map((row, n) => `<tr>${numbered ? `<td class="num rownum">${fmt(first + n + 1)}</td>` : ''}${row.map((v, i) => `<td class="${v === null ? 'null' : numeric[i] ? 'num' : ''}">${v === null ? '∅' : esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 const ROW_H = 26, WINDOW_H = 380;
 async function showTable(params = {}) {
@@ -206,18 +180,70 @@ function virtualRows(d, params) {
     }, 60);
   });
 }
-function jsonTree(v, key = 'root', depth = 0) {
-  if (v === null || typeof v !== 'object')
-    return `<div class="json-leaf"><span class="json-key">${esc(key)}</span> <span class="tok-${typeof v === 'string' ? 'string' : 'number'}">${esc(JSON.stringify(v))}</span></div>`;
-  const entries = Object.entries(v);
-  return `<details${depth < 2 ? ' open' : ''}><summary><span class="json-key">${esc(key)}</span> <span class="meta">${Array.isArray(v) ? '[' : '{'} ${entries.length} ${Array.isArray(v) ? ']' : '}'}</span></summary>${
-    depth < 12
-      ? entries
-          .slice(0, 200)
-          .map(([k, x]) => jsonTree(x, k, depth + 1))
-          .join('')
-      : note('Expand this value in the source')
-  }${entries.length > 200 ? note('Showing 200 entries') : ''}</details>`;
+// JSON is parsed from the file's text with each number's own digits (a 19-digit id or 1.50 is shown as written).
+class Exact {
+  constructor(source) {
+    this.source = source;
+  }
+}
+const parseExact = (t) =>
+  JSON.parse(t, (k, v, c) => (typeof v === 'number' && typeof c?.source === 'string' && String(v) !== c.source ? new Exact(c.source) : v));
+// Every value of the file is reachable: a branch draws its children when it is opened, 200 at a time, with a button for the next
+// 200, so a list of a million entries opens as fast as a list of ten and its last entry is still one click range away.
+const PAGE = 200;
+function jsonLeaf(v, key) {
+  const text = v instanceof Exact ? v.source : JSON.stringify(v),
+    type = typeof v === 'string' ? 'string' : 'number';
+  return `<div class="json-leaf"><span class="json-key">${esc(key)}</span> <span class="tok-${type}">${esc(text)}</span></div>`;
+}
+function jsonNode(v, key, depth) {
+  if (v === null || typeof v !== 'object' || v instanceof Exact) return jsonLeaf(v, key);
+  const n = Array.isArray(v) ? v.length : Object.keys(v).length;
+  return `<details data-depth="${depth}"${depth < 2 ? ' open' : ''}><summary><span class="json-key">${esc(key)}</span> <span class="meta">${Array.isArray(v) ? '[' : '{'} ${fmt(n)} ${Array.isArray(v) ? ']' : '}'}</span></summary></details>`;
+}
+function jsonTree(host, value) {
+  const values = new WeakMap();
+  const fill = (el, v, depth, from = 0) => {
+    const entries = Array.isArray(v) ? v : Object.keys(v),
+      n = entries.length,
+      to = Math.min(n, from + PAGE);
+    let html = '';
+    for (let i = from; i < to; i++) {
+      const k = Array.isArray(v) ? i : entries[i];
+      html += jsonNode(v[k], String(k), depth + 1);
+    }
+    el.querySelector(':scope > .json-more')?.remove();
+    const before = el.querySelectorAll(':scope > details').length;
+    el.insertAdjacentHTML('beforeend', html + (to < n ? `<button type="button" class="json-more">Show entries ${fmt(to + 1)}–${fmt(Math.min(n, to + PAGE))} of ${fmt(n)}</button>` : ''));
+    const kids = [...el.querySelectorAll(':scope > details')].slice(before);
+    let j = 0;
+    for (let i = from; i < to; i++) {
+      const k = Array.isArray(v) ? i : entries[i],
+        x = v[k];
+      if (x !== null && typeof x === 'object' && !(x instanceof Exact)) {
+        const d = kids[j++];
+        values.set(d, { v: x, depth: depth + 1 });
+        if (d.open) fill(d, x, depth + 1);
+      }
+    }
+    el.dataset.filled = to;
+  };
+  host.innerHTML = jsonNode(value, 'root', 0);
+  const top = host.querySelector('details');
+  if (!top) return;
+  values.set(top, { v: value, depth: 0 });
+  fill(top, value, 0);
+  host.addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (d.tagName === 'DETAILS' && d.open && !d.dataset.filled && values.has(d)) fill(d, values.get(d).v, values.get(d).depth);
+  }, true);
+  host.addEventListener('click', (e) => {
+    const more = e.target.closest('.json-more');
+    if (!more) return;
+    const d = more.parentElement,
+      { v, depth } = values.get(d);
+    fill(d, v, depth, Number(d.dataset.filled));
+  });
 }
 async function chartView(j) {
   const rel = (u) => {
@@ -407,11 +433,51 @@ function groupLoose(layers) {
     l.shapes = rest;
   }
 }
+// Defaults the Lottie format allows a file to leave out but lottie-web reads without a fallback (a layer with no start time
+// "st" draws nothing at all). Filling them changes nothing the file says; the file on disk is untouched.
+function lottieDefaults(comp) {
+  const prop = (p) => {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+    if (p.a === undefined && 'k' in p) p.a = Array.isArray(p.k) && p.k.length && typeof p.k[0] === 'object' && p.k[0] !== null && 't' in p.k[0] ? 1 : 0;
+  };
+  const shapes = (list) => {
+    for (const x of list || []) {
+      for (const v of Object.values(x)) prop(v);
+      if (x.ty === 'gr') shapes(x.it);
+    }
+  };
+  const layers = (list, ip, op) =>
+    (list || []).forEach((l, i) => {
+      l.st ??= 0;
+      l.sr ??= 1;
+      l.ind ??= i + 1;
+      l.ddd ??= 0;
+      l.ip ??= ip;
+      l.op ??= op;
+      l.ks ??= {};
+      for (const k of ['a', 'p', 's', 'r', 'o']) l.ks[k] ??= { a: 0, k: k === 's' ? [100, 100, 100] : k === 'o' ? 100 : k === 'r' ? 0 : [0, 0, 0] };
+      for (const v of Object.values(l.ks)) prop(v);
+      shapes(l.shapes);
+    });
+  layers(comp.layers, comp.ip, comp.op);
+  for (const asset of comp.assets || []) if (asset.layers) layers(asset.layers, comp.ip, comp.op);
+}
+// Image assets name a folder (u) and a file (p) relative to the animation; they are read through the folder's own file route.
+function lottieAssets(comp) {
+  for (const asset of comp.assets || []) {
+    if (asset.layers || !asset.p || asset.e === 1 || /^data:/.test(asset.p)) continue;
+    const ref = (asset.u || '') + asset.p;
+    asset.u = '';
+    asset.p = /^(https?:)?\/\//i.test(ref) ? '#' : safeUrl(ref, true);
+  }
+}
 async function lottie(j) {
   const lib = await loadLottie();
   j = JSON.parse(JSON.stringify(j));
+  lottieDefaults(j);
   groupLoose(j.layers);
   for (const a of j.assets || []) groupLoose(a.layers);
+  lottieAssets(j);
   root.innerHTML =
     bar(label, `${j.w} × ${j.h} · ${j.fr} fps`) +
     '<div class="motion-stage"><div class="lottie-host" tabindex="0" role="img" aria-label="Vector animation. Space plays or pauses, arrow keys step."></div></div>';
@@ -433,6 +499,20 @@ async function lottie(j) {
   anim.setSpeed(Number(r.speed) || 1);
   if (isReduced || r.paused) anim.goToAndStop(Number(j.ip) || 0, true);
   anim.addEventListener('data_failed', () => root.insertAdjacentHTML('beforeend', note('Some of this animation could not be loaded.')));
+  // A drawing with no visible geometry is reported, never left as a silent blank stage.
+  anim.addEventListener('DOMLoaded', () => {
+    const svg = host.querySelector('svg'),
+      drawn = [...(svg?.querySelectorAll('path,image,text') || [])].some((el) => (el.tagName === 'path' ? (el.getAttribute('d') || '').replace(/[^0-9]/g, '').length > 0 : true));
+    if (!drawn) root.insertAdjacentHTML('beforeend', note('The player drew nothing for this animation: its layers have no shapes, images or text it can show at this frame.'));
+    const missing = [...(svg?.querySelectorAll('image') || [])].filter((im) => !im.getAttribute('href') && !im.getAttribute('xlink:href'));
+    if (missing.length) root.insertAdjacentHTML('beforeend', note(missing.length + ' image layers have no picture.'));
+  });
+  for (const asset of j.assets || [])
+    if (asset.p && !asset.layers && asset.p !== '#' && !/^data:/.test(asset.p)) {
+      const probe = new Image();
+      probe.onerror = () => root.insertAdjacentHTML('beforeend', note('Image ' + asset.id + ' (' + decodeURIComponent(asset.p.split('/').pop()) + ') could not be found next to the animation.'));
+      probe.src = asset.p;
+    }
   if ((j.layers || []).some((l) => l.ddd === 1 || l.ty === 13)) notes.push('3D layers and cameras are drawn flat');
   if (notes.length) root.insertAdjacentHTML('beforeend', note('Partly drawn: ' + notes.join('. ') + '.'));
   host.addEventListener('keydown', (e) => {
@@ -617,15 +697,18 @@ async function run() {
     return;
   }
   if (item.family === 'markdown') {
+    await loadMarkdown();
     root.innerHTML = markdown(d.text) + (d.limited ? note('Showing the first 1 MiB') : '');
     return;
   }
   if (item.family === 'json') {
     root.innerHTML =
-      (d.asTable ? bar(label, `${fmt(d.total)} records · ${d.columns.length} columns`) + table(d) : bar(label, 'Structured values') + `<div class="json-tree">${jsonTree(d.data)}</div>`);
+      (d.asTable ? bar(label, `${fmt(d.total)} records · ${d.columns.length} columns`) + table(d) : bar(label, 'Structured values') + '<div class="json-tree"></div>');
+    if (!d.asTable) jsonTree(root.querySelector('.json-tree'), parseExact(d.text));
     return;
   }
   if (item.family === 'notebook') {
+    await loadMarkdown();
     root.innerHTML = bar(label, `${d.data.cells?.length || 0} cells`) + notebook(d.data);
     return;
   }

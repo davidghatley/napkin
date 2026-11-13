@@ -9,8 +9,22 @@ export function registerKind(definition) {
   for (const key of ['detect', 'metadata', 'viewer', 'controls', 'apply'])
     if (typeof definition[key] !== 'function')
       throw new Error(`Kind ${definition.id} needs ${key}(). Next: add it and register again.`);
-  entries.push(Object.freeze(definition));
-  return definition;
+  // Every kind's card shows the file's own content from the start: a kind whose metadata gives no preview gets the start of
+  // its text (or its first bytes in hex), so a newly registered kind never shows a name sheet instead of the file.
+  const own = definition.metadata;
+  const wrapped = {
+    ...definition,
+    metadata(ctx) {
+      const meta = own.call(definition, ctx) || {};
+      if (meta.preview === undefined && !['image', 'video', 'font', 'pdf'].includes(definition.family)) {
+        const binary = /[\x00-\x08\x0e-\x1f]/.test(ctx.text.slice(0, 512));
+        meta.preview = binary ? ctx.head.subarray(0, 128).toString('hex') : ctx.text.slice(0, 1400);
+      }
+      return meta;
+    },
+  };
+  entries.push(Object.freeze(wrapped));
+  return wrapped;
 }
 export const kinds = () => [...entries];
 export function detectKind(ctx) {
