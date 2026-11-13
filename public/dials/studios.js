@@ -517,7 +517,24 @@ function colorStudio(ctx, host) {
   host.append(el("div", { class: "d-cx" }, main, side));
   // Sampling, the token and history live in the rail, beside the rows they came from.
   ctx.rail.append(...side.querySelectorAll(".d-cx-image, .d-cx-tokens, .d-cx-history"));
-  side.append(harmonies);
+  // Pairs: the colour as text on common grounds, and common text on the colour, each with its ratio.
+  const pairsHost = el("div", { class: "d-cx-pairs" });
+  const drawPairs = (v) => {
+    const grounds = [["white", "#ffffff"], ["paper", "#f5f4ef"], ["ink", "#16161a"]];
+    const tile = (fg, bg, name) => {
+      const ratio = contrast(parseColor(fg, ctx.host), parseColor(bg, ctx.host));
+      return el(
+        "div",
+        { class: "d-cx-pair", style: `background:${bg};color:${fg}`, role: "img", "aria-label": `${name}: ${ratio.toFixed(2)} to 1` },
+        el("b", { text: "Aa" }),
+        el("span", { text: `${ratio.toFixed(1)} : 1 ${ratio >= 4.5 ? "AA" : ratio >= 3 ? "large" : "fails"}` }),
+        el("small", { text: name }),
+      );
+    };
+    const c = cssLch(v);
+    pairsHost.replaceChildren(...grounds.map(([n, g]) => tile(c, g, `on ${n}`)), ...grounds.filter(([n]) => n !== "paper").map(([n, g]) => tile(g, c, `${n} text`)));
+  };
+  side.append(harmonies, section("Pairs", "d-cx-pairs-block", el("header", {}, el("h3", { text: "Pairs" }), el("small", { class: "d-note", text: "text on grounds, grounds under text" })), pairsHost));
   image.classList.add("d-cx-well");
   const dropper = el("span", { class: "d-cx-dropper", "aria-hidden": "true" });
   dropper.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22"><path d="M14.5 5.5l4 4M16.5 3.5a2.1 2.1 0 013 3l-2 2-3-3zM14.5 7.5L6 16l-1 3 3-1 8.5-8.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
@@ -815,6 +832,7 @@ function colorStudio(ctx, host) {
       ratio = contrast(v, back),
       Lc = apca(v, back);
     channels.update();
+    drawPairs(v);
     sample.style.background = background;
     sample.style.color = cssLch(v);
     sample.setAttribute(

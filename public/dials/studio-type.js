@@ -56,6 +56,19 @@ export function typeStudio(ctx, host) {
     n.b.click();
   });
 
+  /** As many whole words of the specimen as fit the rung: nothing is cut mid-word or faded out. */
+  const fitWords = (node, text) => {
+    const words = String(text || "Sphinx of black quartz").split(/\s+/).filter(Boolean);
+    let n = words.length;
+    node.textContent = words.join(" ");
+    while (n > 1 && node.scrollWidth > node.clientWidth + 1) node.textContent = words.slice(0, --n).join(" ");
+  };
+  /* ---- in use: the setting at work in a heading over body copy ---- */
+  const useHead = el("div", { class: "kt-use-head" }),
+    useBody = el("p", { class: "kt-use-body", text: "Body copy stays at 15 px in the same family, so the heading's size, weight and tracking can be judged against it. Leading follows the line height you set." }),
+    useNote = el("p", { class: "kt-use-note" });
+  const inUse = el("div", { class: "kt-use" }, useHead, useBody, useNote);
+
   /* ---- axis lab: weight across, size up ---- */
   const pad = s("svg", { class: "k-svg kt-pad", "aria-label": "Weight across, size up" }),
     cells = s("g", {}),
@@ -138,7 +151,7 @@ export function typeStudio(ctx, host) {
         el("section", { class: "k-block" }, el("h3", { class: "k-title" }, "Axis lab", el("small", { text: "weight across, size up" })), pad),
       ),
     ),
-    el("div", { class: "k-side" }, big.node, block("Weight", weightChips.node), el("section", { class: "k-block" }, el("h3", { class: "k-title", text: "Set" }), el("div", { class: "k-fields" }, ...fields.map((f) => f.node)))),
+    el("div", { class: "k-side" }, big.node, block("Weight", weightChips.node), el("section", { class: "k-block" }, el("h3", { class: "k-title", text: "Set" }), el("div", { class: "k-fields" }, ...fields.map((f) => f.node))), block("In use", inUse)),
   );
 
   function draw() {
@@ -157,10 +170,19 @@ export function typeStudio(ctx, host) {
     for (const r of rungs) {
       font(r.b.lastChild);
       r.b.lastChild.style.fontSize = `${Math.min(r.px, 40)}px`;
+      fitWords(r.b.lastChild, v.text);
       const on = r.px === v.size;
       r.b.setAttribute("aria-checked", String(on));
       r.b.tabIndex = on || (!rungs.some((x) => x.px === v.size) && r.px === 12) ? 0 : -1;
     }
+    for (const n of [useHead, useBody]) n.style.fontFamily = v.family;
+    useHead.style.fontWeight = v.weight;
+    useHead.style.fontVariationSettings = spec.style.fontVariationSettings;
+    useHead.style.fontSize = `${Math.min(v.size, 44)}px`;
+    useHead.style.letterSpacing = `${v.tracking}px`;
+    useHead.style.lineHeight = String(v.lineHeight);
+    useHead.textContent = v.text;
+    useNote.textContent = v.size > 44 ? `Heading shown at 44 px here; it is set at ${fx(v.size, 0)} px.` : `Heading at ${fx(v.size, 0)} px over 15 px body.`;
     weightChips.set(v.weight);
     for (const t of weightChips.node.querySelectorAll(".kt-chip-ag")) t.style.fontFamily = v.family;
     big.set(`${fx(v.size, 0)}/${fx(v.weight, 0)}`, "", `${fx(v.size * v.lineHeight, 1)} px leading`, "quiet");
