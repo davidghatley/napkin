@@ -1032,9 +1032,12 @@
 }
 
 /* Rows outside the visible area are not styled, laid out or painted until they scroll in. */
-.d-section .d-row {
+/* Whole sections, not single rows: one skipped box per section keeps the frame after a swap to a
+   single style and layout pass (row-by-row skipping unlocked rows one lifecycle at a time). The
+   placeholder height is the section's shown row count until its real height is known. */
+.d-section:not([data-depth="3"]) {
   content-visibility: auto;
-  contain-intrinsic-size: auto var(--d-row);
+  contain-intrinsic-size: auto calc(36px + var(--d-rows-shown, 0) * var(--d-row));
 }
 
 /* ---------- Colour studio ---------- */
@@ -2718,7 +2721,7 @@
   border-radius: 3px;
 }
 .k-svg .kt-cell {
-  fill: color-mix(in srgb, var(--d-text) 22%, transparent);
+  fill: var(--d-muted);
 }
 .kt-cross {
   stroke: var(--d-accent);
@@ -2999,7 +3002,16 @@
 }
 .ki-layer-text {
   font: 700 32px var(--d-pixel) !important;
-  fill: var(--d-on-accent) !important;
+  fill: var(--d-text) !important;
+}
+.ki-layer-tag {
+  fill: var(--d-surface);
+  stroke: var(--d-rule);
+}
+/* The lamp is always a light colour (oklch lightness 0.78 to 0.9), so its word is fixed dark ink. */
+.ki-lamp-text {
+  font-weight: 600;
+  fill: #15161a !important;
 }
 .ki-lamp {
   stroke: var(--d-line);
@@ -4392,24 +4404,27 @@ ul.ki-tags {
 .k-side .k-fields:not(.k-one) {
   grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
 }
-/* Batch: the chosen tiles are a contact sheet of seeded sketches. */
+/* Batch: the chosen tiles, each named by the seed it will use. */
 .ki-tile.is-on {
   fill: color-mix(in oklab, var(--d-accent) 16%, var(--d-surface));
   stroke: var(--d-accent);
   stroke-width: 1.5;
 }
-.ki-batch-sun,
-.ki-batch-hill,
 .ki-batch-seed {
   pointer-events: none;
 }
-.ki-batch-hill {
-  fill: var(--d-accent);
-  fill-opacity: 0.85;
+/* Unused capacity: a strip of small slots under the batch, one per image it could make. */
+.ki-tile.is-slot {
+  stroke-width: 1;
+}
+.ki-svg text.ki-batch-cap {
+  fill: var(--d-muted);
+  font: 500 11px/1 var(--d-sans);
 }
 .ki-svg text.ki-batch-seed {
-  fill: var(--d-on-accent);
-  font: 500 11px/1 var(--d-mono);
+  fill: var(--d-text);
+  font: 500 12px/1 var(--d-mono);
+  font-variant-numeric: tabular-nums;
 }
 /* Point size: the section's data at true size. */
 .ki-plot {
@@ -4470,14 +4485,31 @@ ul.ki-tags {
 .ki-choice-preview .ki-line-2 {
   stroke: color-mix(in oklab, var(--d-accent) 45%, var(--d-faint));
 }
+/* An alignment preview is text in columns: it takes the height it needs, not the whole stage. */
+.ki-choice:has(.ki-align-text) {
+  grid-template-rows: auto auto;
+  align-content: start;
+}
+.ki-choice-preview:has(.ki-align-text) {
+  display: grid;
+  place-items: stretch;
+  align-content: start;
+  min-height: 0;
+  gap: 4px;
+}
+.ki-choice-preview .ki-measure:first-child {
+  border-top: 0;
+}
+.ki-choice-preview .ki-measure > span {
+  color: var(--d-muted);
+}
 .ki-align-text {
-  width: 100%;
-  max-width: 24em;
-  padding: 14px 16px;
-  border-inline: 1px dashed var(--d-line);
+  box-sizing: border-box;
+  max-width: 100%;
   margin: 0;
+  border-inline: 1px dashed var(--d-faint);
   color: var(--d-text);
-  font: 400 17px/1.5 var(--d-sans);
+  overflow-wrap: anywhere;
 }
 .ki-choice .ki-cards {
   grid-auto-rows: 112px;
@@ -4632,4 +4664,164 @@ ul.ki-tags {
   font-size: 11px;
   color: var(--d-muted);
   margin-right: 4px;
+}
+/* Playhead: the scrubbable time on the keyframe track. */
+.km-playhead .k-handle-dot {
+  display: none;
+}
+.km-playhead-cap {
+  fill: var(--d-accent);
+  stroke: var(--d-surface);
+  stroke-width: 1;
+}
+.km-playhead:focus-visible .km-playhead-cap {
+  stroke: var(--d-text);
+  stroke-width: 2;
+}
+.km-ruler {
+  fill: transparent;
+  cursor: ew-resize;
+}
+.km-trail-box {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-dasharray: 2 2;
+}
+
+/* A picture or data the host has not supplied: said in words, where the picture would be. */
+.ki-missing {
+  margin: 0;
+  padding: 16px 20px;
+  max-width: 46ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--d-muted);
+  text-align: center;
+}
+.ki-stage .ki-missing {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  max-width: none;
+}
+.ki-stage .ki-missing[hidden] {
+  display: none;
+}
+.ki-stage.is-missing .ki-over {
+  opacity: 0.55;
+}
+/* Labels on real marks: theme text on a surface halo, so they read on any background. */
+.ki-svg text.ki-pt-label,
+.ki-pair-svg text.ki-pt-label {
+  fill: var(--d-text);
+  font: 500 9px var(--d-sans);
+  font-variant-numeric: tabular-nums;
+  paint-order: stroke;
+  stroke: var(--d-surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.ki-pair-svg text.ki-pair-note {
+  fill: var(--d-muted);
+  font: 500 9px var(--d-sans);
+}
+.k-look-art {
+  display: block;
+}
+.k-look-art svg {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 2px;
+  background: var(--d-well);
+}
+.ki-look-axis {
+  fill: none;
+  stroke: var(--d-line);
+}
+.ki-look-curve {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 2;
+}
+/* Prompt: words are weighed where they sit, by dragging them up or down. */
+.ki-tokens .ki-token {
+  cursor: ns-resize;
+  touch-action: none;
+}
+/* Caption: the text as the section sets it, in three real column widths. */
+.ki-measure {
+  display: grid;
+  gap: 4px;
+  padding: 10px 0;
+  border-top: 1px solid var(--d-line);
+  min-width: 0;
+  overflow-x: auto;
+}
+.ki-measure > span,
+.ki-measure > small {
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.ki-measure p {
+  margin: 0;
+  box-sizing: border-box;
+  max-width: 100%;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  color: var(--d-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ki-content-text {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  display: grid;
+  align-content: center;
+  padding: 0;
+  color: var(--d-text);
+  line-height: 1.2;
+}
+/* Radius loupe: the corner magnified, with a pixel grid. */
+.ki-loupe-bg {
+  fill: var(--d-surface);
+}
+.ki-loupe-frame,
+.ki-loupe-mark {
+  fill: none;
+  stroke: var(--d-rule);
+}
+.ki-loupe-mark {
+  stroke: var(--d-accent);
+  stroke-dasharray: 2 2;
+}
+.ki-loupe-grid {
+  stroke: color-mix(in srgb, var(--d-text) 12%, transparent);
+  stroke-width: 0.5;
+  fill: none;
+}
+.ki-svg text.ki-loupe-note {
+  fill: var(--d-muted);
+  font: 500 11px/1 var(--d-sans);
+}
+.d-eye-read[hidden],
+.d-color-code[hidden],
+.d-cx-token [hidden] {
+  display: none;
+}
+.ki-asset-preview[hidden] {
+  display: none;
+}
+.ki-asset.is-empty .d-drop {
+  padding: 28px 20px;
+}
+/* Options without a picture of their own: cards at a readable size, not stretched over the stage. */
+.ki-cards {
+  align-content: start;
+}
+.ki-cards:not(.ki-choice .ki-cards) {
+  grid-auto-rows: 132px;
 }
