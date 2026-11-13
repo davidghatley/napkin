@@ -90,6 +90,8 @@ export function initKinds(ctx) {
         }
       ctx.kindsLoaded = true;
       ctx.emit('glances', {});
+      // A module with no component export has its own card: its Layers row is that card's row, and it keeps the reason.
+      for (const s of ctx.docs.skipped) { const it = ctx.state.components.items.get(s.path); if (it) it.noComponent = s.note; }
       ctx.docs.skipped = ctx.docs.skipped.filter((k) => !seen.has(k.path));
     })();
     try {

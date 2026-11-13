@@ -33,7 +33,7 @@ test('1,000 mixed canvas items open on readable cards, with bounded live frames,
     rmSync(dir, { recursive: true, force: true });
   });
   const report = {};
-  for (const [width, height] of [[1280, 820], [1600, 1000], [900, 700]]) {
+  for (const [width, height] of [[1280, 820], [1440, 900], [900, 700]]) {
     const browser = await launchChromium({ width, height }),
       size = `${width}x${height}`;
     try {

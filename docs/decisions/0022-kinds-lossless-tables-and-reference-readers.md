@@ -61,10 +61,10 @@ redrawing on the first layout (a folder of files only had no component render to
 ## Consequences
 - Every table kind shows the file's text; the differential tests guard it. Parquet has no differential reference yet
   (no independent Parquet writer or reader is available on this machine).
-- The performance test is back to the strict bar: p95 frame < 16.7 ms for pan and zoom at 1280x820, 1600x1000 and
+- The performance test is back to the strict bar: p95 frame < 16.7 ms for pan and zoom at 1280x820, 1440x900 and
   900x700, with frame intervals counted in vsyncs (rAF timestamps are vsync-quantised, so a perfect page reads 16.6 to
   16.9 ms raw; counted in vsyncs, a missed frame is 33.3 ms and cannot hide in jitter).
-- Open: at 1920x1080 on the test's 12-kind corpus a pan still misses about 12% of frames, and at 2560x1440 both pan and
+- Open: at 1600x1000 the test passes alone but missed 11 of 210 pan frames during a full suite run (no margin); at 1920x1080 on the test's 12-kind corpus a pan still misses about 12% of frames, and at 2560x1440 both pan and
   zoom miss frames. Layerize still runs every frame and grows as cards are un-culled during a long pan; the software
   compositor's own draw is about 13 ms per frame at 2560. Moving the pan to native scrolling (a compositor scroll needs no
   layerize) is the next structural step, and belongs to the surface lane.

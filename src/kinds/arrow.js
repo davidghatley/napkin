@@ -144,7 +144,7 @@ async function fileBatches(file, ix, need) {
     for (const b of need) {
       const i = ix.batches.indexOf(b),
         batch = await reader.readRecordBatch(i);
-      if (!batch || batch.numRows !== b.rows) throw new Error('its footer and its record batches disagree');
+      if (!batch || batch.numRows !== b.rows) throw new Error('This Arrow file\'s footer and its record batches disagree. Next: re-export the file, or open it in its own application.');
       out.push(batch);
     }
     return { schema: reader.schema, table: new Table(reader.schema, out) };
@@ -162,7 +162,7 @@ function streamBatches(file, ix, need) {
     for (const m of [...ix.dicts.filter((d) => d.before <= last), ...need].sort((a, b) => a.at - b.at)) parts.push(bytes(fd, m.at, m.length));
     const sum = parts.reduce((n, p) => n + p.length, 0);
     if (sum > MAX_WINDOW)
-      throw new Error(`the record batch that holds these rows is ${(sum / 1048576).toFixed(0)} MiB, over the 256 MiB a window may read; re-export the file with smaller record batches`);
+      throw new Error(`The record batch that holds these rows is ${(sum / 1048576).toFixed(0)} MiB, over the 256 MiB a window may read. Next: re-export the file with smaller record batches.`);
     parts.push(Buffer.from([255, 255, 255, 255, 0, 0, 0, 0]));
     const table = tableFromIPC(Buffer.concat(parts));
     return { schema: table.schema, table };
@@ -181,7 +181,7 @@ export async function arrowTable(file, offset = 0, count = 80) {
   try {
     t = ix.format === 'file' ? await fileBatches(file, ix, need) : streamBatches(file, ix, need);
   } catch (e) {
-    throw new Error(`Arrow could not read this file: ${e.message}. Next: open it in its own application; napkin still shows its metadata and bytes.`);
+    throw new Error(/Next:/.test(e.message) ? e.message : `Arrow could not read this file: ${e.message}. Next: open it in its own application; napkin still shows its metadata and bytes.`);
   }
   const fields = t.schema.fields,
     from = need.length ? start - need[0].start : 0,
