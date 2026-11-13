@@ -15,6 +15,12 @@ export function s(tag, attrs = {}, ...kids) {
   return e;
 }
 export const fx = (n, d = 2) => String(Number(Number(n).toFixed(d)));
+/** A number as ARIA wants it: finite, plain decimal (no 1e-7), never NaN. */
+export const ariaNum = (n) => {
+  n = Number(n);
+  if (!Number.isFinite(n)) return "0";
+  return Math.abs(n) >= 1e21 ? n.toLocaleString("en-US", { useGrouping: false }) : Math.abs(n) < 1e-6 && n !== 0 ? n.toFixed(20).replace(/\.?0+$/, "") : String(n);
+};
 /** Pointer position in an SVG's own user units. */
 export function svgPoint(svg, e) {
   const m = svg.getScreenCTM();
@@ -207,7 +213,7 @@ export function field(ctx, spec) {
         p = clamp((n - min) / (max - min || 1), 0, 1);
       node.style.setProperty("--p", p.toFixed(4));
       if (track) node.style.setProperty("--track", typeof track === "function" ? track(v) : track);
-      bar.setAttribute("aria-valuenow", fx(n, digits));
+      bar.setAttribute("aria-valuenow", ariaNum(fx(n, digits)));
       bar.setAttribute("aria-valuetext", text(n));
       if (document.activeElement !== input) input.value = text(n);
     },

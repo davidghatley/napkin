@@ -9,7 +9,7 @@
 import { el, pointerSurface, filePick } from "./dom.js";
 import { clamp, same, format, humane, looseJson, validateValue } from "./values.js";
 import { figureMarkup, choiceGlyphs, hash } from "./figures.js";
-import { s, fx, block, hero, field, handle, fitSvg, keyHint, stillLife, adjust, svgPoint } from "./kit.js";
+import { s, fx, block, hero, field, handle, fitSvg, keyHint, stillLife, adjust, svgPoint, ariaNum } from "./kit.js";
 import { motionAt } from "./motion.js";
 import { parseColor, cssLch } from "./color.js";
 import { paintSeed } from "./studio-sampler.js";
@@ -378,7 +378,7 @@ function ruler(api, svg, { label, range, get, put, unit = "", y0 = () => 0, heig
       ghost.setAttribute("d", typeof dv === "number" ? `M${fx(X(dv), 1)} ${mid + 5}l-4 6h8z` : "");
       h.at(X(clamp(n, min, max)), mid);
       h.text(`${format(n)}${unit}`);
-      h.node.setAttribute("aria-valuenow", n);
+      h.node.setAttribute("aria-valuenow", ariaNum(n));
       h.node.setAttribute("aria-valuemin", min);
       h.node.setAttribute("aria-valuemax", max);
     },
@@ -704,7 +704,7 @@ const stages = {
       object.setAttribute("transform", `translate(${g.cx} ${g.cy}) rotate(${v})`);
       tip.at(nx, ny);
       tip.text(`${v} degrees`);
-      tip.node.setAttribute("aria-valuenow", v);
+      tip.node.setAttribute("aria-valuenow", ariaNum(v));
     }
     const quarter = [-180, -90, -45, 0, 45, 90, 135, 180, 270, 360].filter((a) => a >= min && a <= max);
     return {
@@ -1508,7 +1508,7 @@ const stages = {
           tx = clamp(x - w / 2, P.l, size.w - P.r - w);
         tag.append(s("rect", { x: fx(tx), y: fx(y - 30), width: fx(w), height: 18, rx: 3 }), s("text", { x: fx(tx + w / 2), y: fx(y - 17), "text-anchor": "middle", text: label }));
       }
-      svg.setAttribute("aria-valuenow", v[focus] ?? 0);
+      svg.setAttribute("aria-valuenow", ariaNum(v[focus] ?? 0));
       svg.setAttribute("aria-valuetext", n ? `item ${focus + 1} of ${n}: ${v[focus]}` : "no values");
     }
     const tools = el(

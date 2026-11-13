@@ -195,9 +195,17 @@ function updateSwatches(host, label, colors, onPick, lines) {
     b.title = css;
     b.setAttribute("aria-label", `${label}: ${css}`);
     try {
-      const L = (typeof color === "string" ? parseColor(color) : color)[0];
-      b.style.setProperty("--ink", L > 0.68 ? "#16181d" : "#ffffff");
-    } catch {}
+      // The ink with more contrast on this plate (WCAG ratio, measured, not guessed from lightness).
+      const lch = typeof color === "string" ? parseColor(color) : color;
+      const dark = contrast(parseColor("#16181d"), lch),
+        light = contrast(parseColor("#ffffff"), lch);
+      b.style.setProperty("--ink", dark >= light ? "#16181d" : "#ffffff");
+      // Mid tones where neither ink reaches 4.5 : 1 set their words on a small backing.
+      // (A small margin: the browser maps out-of-gamut plates slightly differently from this measure.)
+      b.classList.toggle("is-mid", Math.max(dark, light) < 4.75);
+    } catch {
+      b.classList.add("is-mid");
+    }
     if (lines) {
       let lch;
       try {
@@ -211,6 +219,24 @@ function updateSwatches(host, label, colors, onPick, lines) {
       );
     }
   });
+}
+/** Text drawn as a picture: a specimen of a colour that may not pass, inside a role=img that states the ratio. */
+function specimen(text, size, weight, cls = "") {
+  const NS = "http://www.w3.org/2000/svg",
+    svg = document.createElementNS(NS, "svg"),
+    t = document.createElementNS(NS, "text");
+  svg.setAttribute("class", "d-specimen " + cls);
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("height", String(Math.ceil(size * 1.3)));
+  svg.style.setProperty("--w", String(Math.ceil(text.length * size * (weight > 500 ? 0.66 : 0.56))));
+  t.setAttribute("x", "0");
+  t.setAttribute("y", String(Math.round(size)));
+  t.setAttribute("fill", "currentColor");
+  t.setAttribute("font-size", String(size));
+  t.setAttribute("font-weight", String(weight));
+  t.textContent = text;
+  svg.append(t);
+  return svg;
 }
 function colorStudio(ctx, host) {
   // One plane carries the colour: lightness up, chroma across, at the current hue.
@@ -297,7 +323,8 @@ function colorStudio(ctx, host) {
   );
   // Proof: the colour as text on its background, graded in the two systems.
   const sampleBig = el("strong", { text: "Aa" }),
-    sampleSmall = el("p", { text: "Small text reads like this at twelve pixels." }),
+    // The small line is a picture of the colour as text (its ratio is read out beside it), so it is drawn, not set.
+    sampleSmall = specimen("Small text reads like this at twelve pixels.", 12, 400, "d-cx-sample-line"),
     sample = el("div", { class: "d-cx-sample", role: "img" }, sampleBig, sampleSmall);
   const grade = (name) => {
     const b = el("b"),
@@ -525,10 +552,10 @@ function colorStudio(ctx, host) {
       const ratio = contrast(parseColor(fg, ctx.host), parseColor(bg, ctx.host));
       return el(
         "div",
-        { class: "d-cx-pair", style: `background:${bg};color:${fg}`, role: "img", "aria-label": `${name}: ${ratio.toFixed(2)} to 1` },
-        el("b", { text: "Aa" }),
-        el("span", { text: `${ratio.toFixed(1)} : 1 ${ratio >= 4.5 ? "AA" : ratio >= 3 ? "large" : "fails"}` }),
-        el("small", { text: name }),
+        { class: "d-cx-pair", role: "img", "aria-label": `${name}: ${ratio.toFixed(2)} to 1` },
+        // The specimen is the colour itself; the caption under it is set in the panel ink so it always reads.
+        el("div", { class: "d-cx-pair-spec", style: `background:${bg};color:${fg}` }, specimen("Aa", 22, 700), specimen("text", 12, 400)),
+        el("div", { class: "d-cx-pair-cap" }, el("span", { text: `${ratio.toFixed(1)} : 1 ${ratio >= 4.5 ? "AA" : ratio >= 3 ? "large" : "fails"}` }), el("small", { text: name })),
       );
     };
     const c = cssLch(v);

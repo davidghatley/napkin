@@ -59,3 +59,55 @@ test(
     }
   },
 );
+
+// Every tab of every studio, both themes: the six samples, the lamp rig the library was never
+// written for, and every documented and hostile value shape. axe runs on the open studio.
+test("every tab of every studio passes axe in both themes", { timeout: 600000 }, async (t) => {
+  const { hostileSchemas } = await import("./hostile.js");
+  const source = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+  const server = await serve(),
+    browser = await launchChromium({ width: 1440, height: 1000 }),
+    failures = [];
+  let tabs = 0;
+  try {
+    await browser.goto(server.url);
+    await browser.waitFor("dialsDemo.panels.length===6");
+    await browser.eval(source);
+    const sweep = `async (panelExpr) => {
+      const p = eval(panelExpr), out = [];
+      const sid = [...p.sections.keys()][0];
+      for (const c of p.schema.sections[0].controls) {
+        if (!p.rows.has(c.id)) continue;
+        p.open(c.id);
+        await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 60)));
+        const s = p.root.querySelector('.d-section[data-depth="3"]');
+        const r = await axe.run(s, { resultTypes: ["violations"] });
+        out.push({ id: c.id, v: r.violations.map((v) => v.id + " " + v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")) });
+      }
+      p.setDepth(sid, 2, false);
+      return out;
+    }`;
+    const extra = [`dialsDemo.lampRig`, ...hostileSchemas(6).map((s) => JSON.stringify(s))];
+    for (const theme of ["light", "dark"]) {
+      if (theme === "dark") await browser.eval('document.querySelector("#theme").click()');
+      for (let i = 0; i < 6; i++) {
+        for (const x of await browser.eval(`(${sweep})("dialsDemo.panels[${i}]")`)) {
+          tabs++;
+          if (x.v.length) failures.push(`${theme} / panel ${i} / ${x.id}: ${x.v.join("; ")}`);
+        }
+      }
+      for (const schema of extra) {
+        const res = await browser.eval(`(async()=>{const h=document.createElement("div");h.className="t-axe";h.style.cssText="position:absolute;left:0;top:0;width:1100px";document.body.append(h);window.tAxe=new dialsDemo.Dials(h,{studio:"inline"}).render(${schema});const r=await (${sweep})("window.tAxe");tAxe.destroy();h.remove();return r})()`);
+        for (const x of res) {
+          tabs++;
+          if (x.v.length) failures.push(`${theme} / extra / ${x.id}: ${x.v.join("; ")}`);
+        }
+      }
+    }
+    await t.test(`${tabs} studio tabs, 0 violations`, () => assert.deepEqual(failures, []));
+    assert.ok(tabs > 150, `swept ${tabs} tabs`);
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});

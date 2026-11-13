@@ -534,6 +534,15 @@ export function repairSchema(schema) {
       }
       // Motion values are completed silently so every studio can read them whole.
       if (["motion", "bezier", "spring"].includes(c.type)) for (const key of ["value", "default"]) if (c[key] !== undefined) c[key] = fit(c, c[key]);
+      // Other records keep their fields; a field that is not a number where a number belongs is noted and replaced.
+      else if (objectDefaults[c.type])
+        for (const key of ["value", "default"]) {
+          if (c[key] === undefined || c[key] === null) continue;
+          const fixed = fit(c, c[key]),
+            bad = Object.keys(objectDefaults[c.type]).filter((k) => k in c[key] && JSON.stringify(c[key][k]) !== JSON.stringify(fixed[k]));
+          if (bad.length) notes.push(`its ${key} had ${bad.map((k) => `${k} ${short(c[key][k])}`).join(", ")}; showing ${bad.map((k) => `${k} ${short(fixed[k])}`).join(", ")}`);
+          c[key] = fixed;
+        }
       if (notes.length) {
         c.invalid = notes.join("; ");
         problems.push({ control: c.id, problem: c.invalid });

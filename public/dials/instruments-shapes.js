@@ -171,8 +171,7 @@ function matrix(api) {
         if (cell.querySelector("input")) return;
         const t = clamp((x - lo) / (hi - lo || 1), 0, 1);
         cell.textContent = humane(x);
-        cell.style.setProperty("--heat", `${Math.round(t * 85)}%`);
-        cell.classList.toggle("is-hot", t > 0.55);
+        cell.style.setProperty("--t", t.toFixed(3));
         cell.setAttribute("aria-label", `Row ${i + 1}, column ${j + 1}: ${x}`);
       }),
     );
