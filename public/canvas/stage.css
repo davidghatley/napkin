@@ -267,7 +267,7 @@ body[data-bp] #hint { bottom: 126px; }
 .cmp[data-chip-top] .cell-ruler { transform: translateY(calc(-22px * var(--nk-ls, 1))); }
 #overlay-select[data-tags="none"]::after, #overlay-select[data-tags="none"] .osize { display: none; }
 body[data-wipe] #grid { visibility: hidden; }
-#stage[data-hdr="strip"] .cmp-title .cmp-path, #stage[data-hdr="strip"] .cmp-title .cmp-note { display: none; }
+#stage[data-hdr="strip"] .cmp-title .cmp-note { display: none; } /* (the extension stays at every zoom: it tells Orbit.jsx from Orbit.tsx) */
 /* the frame you are on is above its neighbours, with its grip */
 .cmp[data-sel] { z-index: 5; }
 .cmp:has(.doc-cell[data-resizing]) { z-index: 6; }
