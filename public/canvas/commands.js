@@ -13,6 +13,7 @@
 import { ACTIONS } from './actions.js';
 import { eventChord, normalizeKeys } from './keynames.js';
 import { variantGrid } from '/src/model.js';
+import { plain } from './words.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const norm = (s) => String(s ?? '').trim().toLowerCase();
@@ -163,7 +164,7 @@ export function initSurface(ctx) {
   async function readBoard() { try { board = await fetch('/api/board').then((r) => r.json()); } catch {} return board; }
   async function arrange(by) {
     const r = await json('/api/board', { arrange: { by } });
-    if (r.ok === false) { ctx.hint(r.error); return; }
+    if (r.ok === false) { ctx.hint(plain(r.error)); return; }
     board = r;
     if (by === 'manual') ctx.stage.layoutAll(); else layoutArranged();
     drawGroups();
@@ -176,7 +177,7 @@ export function initSurface(ctx) {
     if (!name) { ctx.hint('Name the group: Group <name>'); return; }
     if (!items.length) { ctx.hint('Select the cards to group first (Shift+arrows adds the next card)'); return; }
     const r = await json('/api/board', { group: { name, items } });
-    if (r.ok === false) { ctx.hint(r.error); return; }
+    if (r.ok === false) { ctx.hint(plain(r.error)); return; }
     board = r;
     drawGroups();
     ctx.hint(`Grouped ${items.length} card${items.length === 1 ? '' : 's'} as “${name}”`);
@@ -251,20 +252,20 @@ export function initSurface(ctx) {
     id = String(id ?? '').trim();
     if (!id) { ctx.hint(`Name the proposal: ${action === 'accept' ? 'Approve' : 'Reject'} <id>`); return; }
     const r = await json(`/api/proposals/${encodeURIComponent(id)}/${action}`, {});
-    ctx.hint(r.ok === false || r.status >= 400 ? (r.error || 'That proposal could not be answered') : `Proposal ${action === 'accept' ? 'approved' : 'rejected'}`);
+    ctx.hint(plain(r.ok === false || r.status >= 400 ? (r.error || 'That proposal could not be answered') : `Proposal ${action === 'accept' ? 'approved' : 'rejected'}`));
     ctx.emit('proposals-refresh', { id });
   }
   async function generate(path) {
     const workflow = String(path ?? '').trim();
     if (!workflow) { ctx.hint('Name the workflow: Generate <file>'); return; }
     const r = await json('/api/generate', { workflow });
-    ctx.hint(r.ok === false || r.status >= 400 ? (r.status === 404 ? 'Generating is not available on this server yet' : r.error) : `Queued ${workflow}; the result lands on the canvas`);
+    ctx.hint(plain(r.ok === false || r.status >= 400 ? (r.status === 404 ? 'Generating is not available on this server yet' : r.error) : `Queued ${workflow}, the result lands on the canvas`));
   }
   async function openFolder(path) {
     const folder = String(path ?? '').trim();
     if (!folder) { ctx.hint('Name the folder: Open folder <path>'); return; }
     const r = await json('/api/folder', { folder });
-    if (r.ok === false || r.status >= 400) { ctx.hint(r.status === 404 ? 'This napkin cannot switch folders from the canvas yet: run napkin <folder>' : r.error); return; }
+    if (r.ok === false || r.status >= 400) { ctx.hint(plain(r.status === 404 ? 'This napkin cannot switch folders from the canvas yet: run napkin <folder>' : r.error)); return; }
     location.reload();
   }
   async function rebind(text) {
@@ -273,7 +274,7 @@ export function initSurface(ctx) {
     const keys = normalizeKeys(m[2]);
     if (!keys) { ctx.hint(`“${m[2]}” is not a key I can read: try Alt+Y or "A K"`); return; }
     const r = await json('/api/keys', { command: m[1].trim(), keys });
-    if (r.ok === false) { ctx.hint(r.error); return; }
+    if (r.ok === false) { ctx.hint(plain(r.error)); return; }
     if (Array.isArray(r.bindings)) bindings = r.bindings;
     ctx.emit('keys', bindings);
     ctx.hint(`${byId.get(r.command)?.label ?? r.command}: ${keys}`);

@@ -91,46 +91,46 @@ export function createSurfaceRoutes({ items, dir, identify, permission = () => '
   const json = (res, status, data) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(data)); };
   async function body(req) {
     let b = '';
-    for await (const c of req) { b += c; if (b.length > 1 << 20) throw new SurfaceError('Request exceeds 1 MiB.', 413); }
+    for await (const c of req) { b += c; if (b.length > 1 << 20) throw new SurfaceError('Request exceeds 1 MiB. Next: send a smaller body.', 413); }
     try { return JSON.parse(b || '{}'); } catch { throw new SurfaceError('Send valid JSON.'); }
   }
   function who(req) {
     const by = identify?.(/^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1]);
     if (!by) throw new SurfaceError('Identity required. Next: POST /api/session { as } and send the bearer token.', 401);
-    if (permission(by) === 'read') throw new SurfaceError('This caller is read-only.', 403);
+    if (permission(by) === 'read') throw new SurfaceError('This caller is read-only. Next: ask the person to grant write in napkin.json.', 403);
     return by;
   }
   const strings = (a) => Array.isArray(a) && a.every((x) => typeof x === 'string');
 
   function patch(m) {
     let save = false;
-    if (m.selection !== undefined) { if (!strings(m.selection)) throw new SurfaceError('selection is a list of item ids.'); board.selection = [...new Set(m.selection)].slice(0, 5000); }
+    if (m.selection !== undefined) { if (!strings(m.selection)) throw new SurfaceError('selection is a list of item ids. Next: send { selection: ["path"] }.'); board.selection = [...new Set(m.selection)].slice(0, 5000); }
     if (m.presentation !== undefined) board.presentation = !!m.presentation;
     if (m.compare !== undefined) {
-      if (m.compare !== null && (typeof m.compare?.item !== 'string' || !Array.isArray(m.compare.variants))) throw new SurfaceError('compare is { item, variants: [...] } or null.');
+      if (m.compare !== null && (typeof m.compare?.item !== 'string' || !Array.isArray(m.compare.variants))) throw new SurfaceError('compare is { item, variants: [...] } or null. Next: send that shape.');
       board.compare = m.compare && { item: m.compare.item, variants: m.compare.variants.slice(0, 64) };
     }
     if (m.arrange !== undefined) {
       const by = String(m.arrange?.by ?? '');
-      if (!ARRANGE.includes(by) && !/^meta\.[\w. -]+$/.test(by)) throw new SurfaceError(`Arrange by one of ${ARRANGE.join(', ')} or meta.<column>.`);
+      if (!ARRANGE.includes(by) && !/^meta\.[\w. -]+$/.test(by)) throw new SurfaceError(`Arrange by one of ${ARRANGE.join(', ')} or meta.<column>. Next: use one of those names.`);
       board.arrange = { by }; save = true;
     }
     if (m.group !== undefined) { // add one named group: { name, items }
       const name = String(m.group?.name ?? '').trim();
-      if (!name || !strings(m.group?.items) || !m.group.items.length) throw new SurfaceError('group is { name, items: [ids] } with at least one item.');
+      if (!name || !strings(m.group?.items) || !m.group.items.length) throw new SurfaceError('group is { name, items: [ids] } with at least one item. Next: send that shape.');
       const id = 'group:' + digest(Buffer.from(name + Date.now() + Math.random())).slice(0, 10);
       board.groups = board.groups.filter((g) => g.name !== name).concat({ id, name, items: [...new Set(m.group.items)], ...(m.group.pinned && { pinned: m.group.pinned }) });
       save = true;
     }
     if (m.groups !== undefined) {
-      if (!Array.isArray(m.groups)) throw new SurfaceError('groups is a list.');
+      if (!Array.isArray(m.groups)) throw new SurfaceError('groups is a list. Next: send an array.');
       board.groups = m.groups.filter((g) => !String(g.id || '').startsWith('arrange:')).map((g) => ({ id: String(g.id || 'group:' + digest(Buffer.from(String(g.name) + Math.random())).slice(0, 10)), name: String(g.name || 'Group'), items: strings(g.items) ? g.items : [], ...(g.groups && { groups: g.groups }), ...(g.pinned && { pinned: g.pinned }) }));
       save = true;
     }
-    if (m.views !== undefined) { if (!Array.isArray(m.views)) throw new SurfaceError('views is a list.'); board.views = m.views.slice(0, 100); save = true; }
+    if (m.views !== undefined) { if (!Array.isArray(m.views)) throw new SurfaceError('views is a list. Next: send an array.'); board.views = m.views.slice(0, 100); save = true; }
     if (m.depth !== undefined) { // { item, section, depth }
       const { item, section, depth } = m.depth || {};
-      if (typeof item !== 'string' || typeof section !== 'string' || ![1, 2, 3].includes(depth)) throw new SurfaceError('depth is { item, section, depth: 1|2|3 }.');
+      if (typeof item !== 'string' || typeof section !== 'string' || ![1, 2, 3].includes(depth)) throw new SurfaceError('depth is { item, section, depth: 1|2|3 }. Next: send that shape.');
       (board.depths[item] ||= {})[section] = depth; save = true;
     }
     if (save) persist();
@@ -159,13 +159,13 @@ export function createSurfaceRoutes({ items, dir, identify, permission = () => '
           if (m.keys === null || m.keys === '') delete board.rebinds[a.id];
           else {
             const keys = normalizeKeys(m.keys);
-            if (!keys) throw new SurfaceError('Those keys cannot be read. Write a chord such as Alt+Y, or a sequence such as "A K".');
+            if (!keys) throw new SurfaceError('Those keys cannot be read. Next: write a chord such as Alt+Y, or a sequence such as "A K".');
             board.rebinds[a.id] = keys;
           }
           persist();
           return json(res, 200, { ok: true, command: a.id, ...keyMap(board.rebinds) }), true;
         }
-        throw new SurfaceError('method not allowed', 405);
+        throw new SurfaceError('method not allowed. Next: use GET or POST.', 405);
       }
       if (path === '/api/board') {
         if (req.method === 'GET') { await settled(); return json(res, 200, view()), true; }
@@ -175,7 +175,7 @@ export function createSurfaceRoutes({ items, dir, identify, permission = () => '
           finally { inflight--; if (!inflight) { for (const w of waiters) w(); waiters.clear(); } }
           return json(res, 200, view()), true;
         }
-        throw new SurfaceError('method not allowed', 405);
+        throw new SurfaceError('method not allowed. Next: use GET or POST.', 405);
       }
       // The schema with the depth each section was last opened at on the canvas.
       if (req.method === 'GET' && path.startsWith('/api/controls/') && items?.controls) {
