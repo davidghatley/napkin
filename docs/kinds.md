@@ -66,6 +66,14 @@ events and binary strings. At reading scale or on selection, the same `/view` pa
 standalone becomes the live card. The stage keeps a budget of 40 live documents.
 Compact cards keep their geometry and content while the live viewers are unloaded.
 
+HTML, TSX and JSX files are items in the API but are drawn once, as components, by the
+TSX dialect or the document engine, so nothing about them changes. A component's own
+`.napkin.json` sidecar is part of that component and gets no card. File cards are packed
+after the components, never among them, so a component does not land somewhere else
+because other files exist. When components are present, the first view frames them;
+Shift+1 frames everything. Components take the live-frame budget first and file cards
+give their frame back when a component needs it.
+
 ## HTTP surface
 
 Use percent-encoded item IDs in URLs. IDs are relative paths, and remain stable while
