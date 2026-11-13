@@ -1115,7 +1115,7 @@ const stages = {
       alignC = api.sibling("align"),
       padC = api.sibling("spacing");
     const below = prompt
-      ? el("div", { class: "ki-prompt-below" }, block("Words", el("p", { class: "ki-help", text: "Drag a word up or down, or focus it and press up or down; it is written back as (word:1.2)." }), tokens))
+      ? el("div", { class: "ki-prompt-below" }, block("Words", el("p", { class: "ki-help", text: "Each column fills to its word's weight, 0 to 2; the line is 1. Drag a word up or down, or focus it and press up or down; it is written back as (word:1.2)." }), tokens))
       : block(typeC || alignC || padC ? "Set as this section sets it" : "Set at three measures", specimen);
     const node = el("div", { class: "ki-text" }, area, below);
     const words = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);

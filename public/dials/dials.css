@@ -3349,29 +3349,36 @@
   font-size: 11.5px;
   color: var(--d-muted);
 }
+/* Prompt words as a weight profile: each word stands on a column whose fill is its weight (0 to 2,
+   the line marks 1). The column is the handle: drag it up or down. */
 .ki-tokens {
   flex: 1 1 auto;
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-end;
   align-content: flex-start;
-  gap: 10px 8px;
-  padding: 16px;
+  gap: 14px 8px;
+  padding: 14px 16px;
   border-radius: 8px;
   background: var(--d-well);
 }
 .ki-token {
-  display: inline-grid;
-  grid-template-columns: auto auto;
-  grid-template-areas: "word w" "bar bar";
-  gap: 3px 8px;
-  align-items: baseline;
-  padding: 6px 10px 8px;
+  display: grid;
+  grid-template-areas: "bar" "word" "w";
+  grid-template-rows: 96px auto auto;
+  justify-items: center;
+  gap: 4px;
+  min-width: 44px;
+  padding: 6px 6px 4px;
   border-radius: 6px;
   background: var(--d-surface);
-  font-size: calc(15px + var(--w) * 18px);
+  font-size: calc(12px + var(--w) * 8px);
   line-height: 1.1;
   font-weight: calc(300 + var(--w) * 400);
   cursor: default;
+}
+.ki-token > span {
+  grid-area: word;
 }
 .ki-token:focus-visible {
   outline: 2px solid var(--d-accent);
@@ -3384,9 +3391,12 @@
 }
 .ki-token i {
   grid-area: bar;
-  height: 3px;
+  width: 22px;
+  height: 100%;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--d-accent) calc(var(--w) * 100%), var(--d-line) 0);
+  background:
+    linear-gradient(to top, transparent calc(50% - 0.5px), var(--d-text) 0, var(--d-text) calc(50% + 0.5px), transparent 0),
+    linear-gradient(to top, var(--d-accent) calc(var(--w) * 100%), var(--d-line) 0);
 }
 /* Gradient: the band, its stops beneath. */
 .ki-gradient {
