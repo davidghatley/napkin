@@ -219,7 +219,7 @@ client.onChange((f) => {
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; ctx.emit('agents', f); }
   else if (f.type === 'presence') ctx.emit('presence', f); // presence.js
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
-  else if (f.type.startsWith('run-')) ctx.emit('run-frame', f); // runs, steps, artifacts, proposals, questions (run-panel.js)
+  else if (f.type.startsWith('run-') || f.type === 'board') ctx.emit('run-frame', f); // runs, steps, artifacts, proposals, questions (run-panel.js)
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); counts(); }
   else if (typeof f.type === 'string' && f.type.startsWith('doc-')) ctx.emit(f.type, f); // the document engine (docs.js)
   else if (f.type === 'item-change' || f.type === 'items-changed') ctx.emit(f.type, f);

@@ -1,8 +1,10 @@
 /* Runs and the review queue (run-panel.js). Canvas tokens only; each agent's colour arrives as --rp-c / --rp-ink. */
-#runs-panel { position: fixed; z-index: 30; left: 260px; bottom: 36px; width: 372px; max-width: calc(100vw - 600px); min-width: 300px; max-height: min(64vh, 640px); display: flex; flex-direction: column;
-  background: var(--nk-chrome); color: var(--nk-text); border: 1px solid var(--nk-line-2); border-radius: 10px; box-shadow: var(--nk-shadow-pop); font: 12px/1.45 var(--nk-sans); overflow: hidden; }
+#runs-panel { position: fixed; z-index: 30; left: 248px; right: 320px; bottom: 26px; max-height: min(42vh, 440px); display: flex; flex-direction: column;
+  background: var(--nk-chrome); color: var(--nk-text); border-top: 1px solid var(--nk-line-2); font: 12px/1.45 var(--nk-sans); overflow: hidden; }
+/* docked: the stage gives up the room, so the drawer never sits on top of work */
+body:has(#runs-panel:not([hidden])) #stage { margin-bottom: var(--rp-h, 0px); }
 #runs-panel[hidden] { display: none; }
-#runs-panel[data-waiting="1"] { border-color: var(--nk-accent); }
+#runs-panel[data-waiting="1"] { border-top-color: var(--nk-accent); box-shadow: 0 -2px 0 var(--nk-accent); }
 .rp-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; min-width: 0; border-bottom: 1px solid transparent; }
 #runs-panel[data-open="1"] .rp-head { border-bottom-color: var(--nk-line); }
 .rp-toggle { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: 6px; cursor: pointer; flex: none; }
@@ -16,7 +18,8 @@
 .rp-who i { width: 8px; height: 8px; border-radius: 50%; background: var(--rp-c, var(--nk-text-3)); flex: none; }
 .rp-who small { color: var(--nk-text-3); font-weight: 400; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .rp-who.live:not(:only-child) small { display: none; }
-.rp-body { overflow: auto; padding: 8px 10px 10px; display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.rp-body { overflow: auto; padding: 8px 10px 10px; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr); gap: 12px 18px; align-items: start; min-height: 0; }
+.rp-body > :only-child { grid-column: 1 / -1; }
 .rp-body[hidden] { display: none; }
 .rp-queue h3 { margin: 0 0 6px; font: 650 11px var(--nk-sans); color: var(--nk-text-2); }
 .rp-cards, .rp-steps, .rp-arts, .rp-log { list-style: none; margin: 0; padding: 0; }
@@ -69,8 +72,9 @@
 .rp-steps li[data-status="running"] .rp-mark { color: var(--nk-accent-text); }
 .rp-mark { text-align: center; }
 .rp-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.rp-arts { display: flex; flex-wrap: wrap; gap: 4px; max-height: 96px; overflow: auto; }
-.rp-art { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; max-width: 170px; padding: 2px 7px 2px 3px; border-radius: 5px; background: var(--nk-chrome-2); border: 1px solid var(--nk-line); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.rp-arts { display: flex; flex-wrap: wrap; gap: 4px; max-height: 180px; overflow: auto; }
+.rp-art small { color: var(--nk-text-3); }
+.rp-art { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 2px 7px 2px 3px; border-radius: 5px; background: var(--nk-chrome-2); border: 1px solid var(--nk-line); cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .rp-art:hover { background: var(--nk-chrome-3); }
 .rp-art:focus-visible { outline: 2px solid var(--nk-accent); }
 .rp-kind { font: 600 9.5px var(--nk-mono); color: var(--nk-text-2); background: var(--nk-kbd); border-radius: 3px; padding: 1px 4px; }
@@ -78,5 +82,34 @@
 .rp-log b { color: var(--nk-text); font-weight: 600; } .rp-log i { font-style: normal; color: var(--nk-text-3); }
 .rp-empty { margin: 0; color: var(--nk-text-3); }
 [data-item-id][data-run] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--nk-run-c, var(--nk-accent)) 60%, transparent); }
-@media (max-width: 1100px) { #runs-panel { left: 8px; max-width: calc(100vw - 16px); } }
+@media (max-width: 1100px) { #runs-panel { left: 0; right: 0; } .rp-body { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .rp-bar i { transition: none; } }
+
+/* Docked: a drawer along the bottom of the canvas. It shrinks the stage instead of covering work. */
+/* The full diff */
+.rd-back { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .45); display: grid; place-items: center; }
+.rd { width: min(960px, calc(100vw - 48px)); max-height: calc(100vh - 64px); display: flex; flex-direction: column; background: var(--nk-chrome); color: var(--nk-text); border: 1px solid var(--nk-line-2); border-radius: 10px; box-shadow: var(--nk-shadow-pop); font: 12px/1.45 var(--nk-sans); overflow: hidden; }
+.rd-top { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--nk-line); }
+.rd-top b { font: 600 12.5px var(--nk-mono); overflow-wrap: anywhere; }
+.rd-sum { font-weight: 600; } .rd-keys { color: var(--nk-text-3); margin-left: auto; font-size: 11px; }
+.rd-body { overflow: auto; min-height: 120px; padding: 6px 0; font: 11.5px/1.5 var(--nk-mono); outline: none; }
+.rd-line { display: grid; grid-template-columns: 44px 44px 16px 1fr; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rd-line code { font: inherit; }
+.rd-n { text-align: right; padding-right: 8px; color: var(--nk-text-3); user-select: none; }
+.rd-s { text-align: center; font-weight: 700; }
+.rd-line[data-t="add"] { background: color-mix(in srgb, var(--nk-ok) 16%, transparent); } .rd-line[data-t="add"] .rd-s { color: var(--nk-ok); }
+.rd-line[data-t="del"] { background: color-mix(in srgb, var(--nk-measure) 16%, transparent); } .rd-line[data-t="del"] .rd-s { color: var(--nk-measure); }
+.rd-line[data-current] { box-shadow: inset 3px 0 0 var(--nk-accent); }
+.rd-fold { padding: 3px 14px; color: var(--nk-text-3); background: var(--nk-chrome-2); font: 11px var(--nk-sans); }
+.rd-img { max-width: 100%; max-height: 70vh; margin: 8px auto; display: block; }
+.rd-actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--nk-line); }
+.rp-diffbar { display: flex; align-items: center; gap: 8px; color: var(--nk-text-2); font-size: 11px; }
+.rp-pre .add, .rp-pre .del { display: block; } .rp-pre .add { color: var(--nk-ok); } .rp-pre .del { color: var(--nk-measure); }
+.rp-pre[data-diff] { max-height: 150px; overflow: auto; }
+
+/* Group and run regions behind the cards (run-groups.js) */
+#run-groups { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.rg-box { position: absolute; box-sizing: border-box; border: 1.5px dashed var(--nk-line-2); border-radius: 14px; background: color-mix(in srgb, var(--nk-accent) 4%, transparent); }
+.rg-box[data-kind="run"] { border-style: solid; border-color: color-mix(in srgb, var(--nk-accent) 45%, var(--nk-line-2)); }
+.rg-label { position: absolute; left: 14px; top: 8px; display: inline-flex; gap: 10px; align-items: baseline; font: 600 22px var(--nk-sans); color: var(--nk-text-2); max-width: calc(100% - 28px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rg-label small { font-weight: 400; font-size: 16px; color: var(--nk-text-3); }

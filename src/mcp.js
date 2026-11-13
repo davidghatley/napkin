@@ -103,7 +103,7 @@ async function makeRemote() {
   };
   catching = fetchAnswers();
   ackAnswers = (at) => authed(new URL(`api/proposals/answered?by=${encodeURIComponent(AGENT)}&ack=${at}`, BASE), { method: 'GET', headers: {} }).catch(() => {});
-  const refused = async (r) => r.status === 401 && /identity required/.test(await r.clone().text().catch(() => ''));
+  const refused = async (r) => r.status === 401 && /identity required/i.test(await r.clone().text().catch(() => ''));
   const refusedToConnect = (e) => ['ECONNREFUSED', 'ECONNRESET', 'UND_ERR_SOCKET'].includes(e?.cause?.code ?? e?.code);
   // fetch with the current token; one fresh session on an identity refusal; a few short waits while the server is coming back
   async function authed(url, init) {

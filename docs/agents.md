@@ -91,3 +91,11 @@ proposals, a question, a checkpoint and a resume. `--auto-answer` answers for yo
 
 `node --test test/agents3/` (server, MCP, and a browser run of the review queue by keyboard) and
 `node bench/agents3.js` (the 30-step script over MCP only).
+
+## Round 2 changes
+
+- Board groups: `set_board` accepts `addGroups`, `removeGroups` and `moveItems`, which apply to the current list and never drop another writer's groups. Replacing the whole `groups` list needs `baseRevision` once any group exists (otherwise a 409 says so).
+- Review: text proposals show the changed lines on the card; `D` (or the Full diff button) opens the complete diff with line numbers, `N`/`P` jump between changes, and `A`/`X`/`S` decide from inside it.
+- The runs panel is docked along the bottom and the canvas shrinks to make room. Every file a run made is listed with its folder. Groups and runs are drawn as labelled regions behind their cards, and "Arrange by run" (command, or `set_board` with `arrange: { by: "run" }`) packs each section together.
+- Direct control writes (`POST /api/control`) appear in the audit as `item-control` events and show their writer as present.
+- The MCP client refreshes its session on any identity refusal, in either letter case, so a restart is invisible to a connected agent.

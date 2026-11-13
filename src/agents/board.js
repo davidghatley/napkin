@@ -49,7 +49,38 @@ export function createBoard({ root, stateDir = stateRoot(), emit = () => {}, bro
       if (!body.arrange || typeof body.arrange.by !== 'string' || !body.arrange.by || body.arrange.by.length > 80) bad('arrange must be { by: "kind" | "folder" | "date" | "similarity" | "tag" | "status" | "run" | "meta.<column>" }. Next: send arrange.by.');
       next.arrange = { ...body.arrange }; changed.push('arrange');
     }
-    if (body.groups !== undefined) { next.groups = checkGroups(body.groups); changed.push('groups'); }
+    // Replacing the whole list without saying which revision you read would drop other writers' groups without a word.
+    if (body.groups !== undefined) {
+      checkGroups(body.groups); // a malformed list is a 400 whatever the revision
+      if (s.groups.length && body.baseRevision === undefined)
+        bad(`the board already holds ${s.groups.length} group(s) and replacing them without baseRevision could drop another writer's work. Next: send baseRevision: ${s.revision} (from get_board), or add groups with addGroups: [{ id, name, items }] which never replaces.`, 409);
+      next.groups = checkGroups(body.groups); changed.push('groups');
+    }
+    // Atomic group operations: applied to the current list under one revision, so concurrent writers all keep their work.
+    if (body.addGroups !== undefined || body.removeGroups !== undefined || body.moveItems !== undefined) {
+      let list = JSON.parse(JSON.stringify(next.groups));
+      if (body.addGroups !== undefined) {
+        const add = checkGroups(body.addGroups);
+        for (const g of add) {
+          const at = list.findIndex((x) => x.id === g.id);
+          if (at < 0) list.push(g);
+          else list[at] = { ...list[at], ...g, items: [...new Set([...list[at].items, ...g.items])] };
+        }
+      }
+      if (body.removeGroups !== undefined) {
+        if (!Array.isArray(body.removeGroups) || body.removeGroups.some((x) => typeof x !== 'string')) bad('removeGroups is an array of group ids. Next: send removeGroups: ["g1"].');
+        list = list.filter((g) => !body.removeGroups.includes(g.id));
+      }
+      if (body.moveItems !== undefined) {
+        const m = body.moveItems;
+        if (!m || typeof m.to !== 'string' || !Array.isArray(m.items) || m.items.some((x) => typeof x !== 'string')) bad('moveItems is { to: groupId, items: [item ids] }. Next: fix moveItems.');
+        const dest = list.find((g) => g.id === m.to);
+        if (!dest) bad(`no group ${JSON.stringify(m.to)}. Next: add it with addGroups first.`, 404);
+        for (const g of list) if (g !== dest) g.items = g.items.filter((x) => !m.items.includes(x));
+        dest.items = [...new Set([...dest.items, ...m.items])];
+      }
+      next.groups = checkGroups(list); changed.push('groups');
+    }
     if (body.views !== undefined) {
       if (!Array.isArray(body.views) || body.views.length > 200) bad('views must be an array of up to 200 saved views. Next: send views: [].');
       next.views = body.views; changed.push('views');
@@ -69,7 +100,7 @@ export function createBoard({ root, stateDir = stateRoot(), emit = () => {}, bro
       if (!v || ![v.x, v.y, v.z].every(Number.isFinite)) bad('view must be { x, y, z } numbers. Next: fix view.');
       next.view = { x: v.x, y: v.y, z: v.z }; changed.push('view');
     }
-    if (!changed.length) bad('send at least one of arrange, groups, views, selection, compare, presentation. Next: add a field.');
+    if (!changed.length) bad('send at least one of arrange, groups, addGroups, removeGroups, moveItems, views, selection, compare, presentation. Next: add a field.');
     if (JSON.stringify(next).length > MAX_BYTES) bad('the board is over 1 MiB. Next: send fewer groups or views.', 413);
     // The person's own state (selection, view, compare, presentation) is shown live but not written to the audit log.
     const persisted = changed.some((k) => ['arrange', 'groups', 'views'].includes(k));

@@ -9,6 +9,8 @@
 // Also reports the person's selection and viewport to POST /api/board so agents can read what they see.
 import { h } from './drawer.js';
 import { plain } from './words.js';
+import { initRunGroups } from './run-groups.js';
+import { diffLines, hunks, changeCount, openDiff } from './run-diff.js';
 
 const JSON_POST = { method: 'POST', headers: { 'content-type': 'application/json' } };
 const ago = (at) => { const s = Math.max(0, Math.round((Date.now() - at) / 1000)); return s < 5 ? 'now' : s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
@@ -18,7 +20,7 @@ const LABEL = { pending: 'pending', running: 'running', complete: 'done', failed
 export function initRuns(ctx) {
   const link = h('link', { rel: 'stylesheet', href: '/canvas/run-panel.css' });
   document.head.append(link);
-  const S = { runs: new Map(), review: { proposals: [], questions: [] }, agents: new Map(), open: true, userFolded: false, errors: new Map(), busy: new Set(), runToggle: new Map(), focus: null, announce: '' };
+  const S = { runs: new Map(), review: { proposals: [], questions: [] }, agents: new Map(), open: true, userFolded: false, errors: new Map(), busy: new Set(), runToggle: new Map(), focus: null, announce: '', diffs: new Map() };
   try { S.userFolded = localStorage.getItem('napkin.runs.folded') === '1'; } catch { /* storage may be blocked */ }
 
   const root = h('section', { id: 'runs-panel', role: 'region', 'aria-label': 'Runs and review', hidden: true, 'data-open': '1' });
@@ -48,6 +50,18 @@ export function initRuns(ctx) {
     const missing = [...new Set([...r.proposals, ...r.questions].map((x) => x.run).filter((id) => id && !S.runs.has(id)))];
     await Promise.all(missing.map(loadRun));
     S.review = r; schedule();
+    for (const p of r.proposals) if (p.texty && p.kind !== 'control' && !S.diffs.has(p.id) && (p.bytes ?? 0) <= 2_000_000) prefetchDiff(p);
+  }
+  // The whole proposed text and the file it would replace, so the card shows what changed and D opens everything.
+  async function prefetchDiff(p) {
+    S.diffs.set(p.id, 'loading');
+    try {
+      const next = await fetch(`/api/review/${encodeURIComponent(p.id)}/content`).then((x) => x.text());
+      let old = '';
+      if (p.baseSha) { const r = await get(`/api/read?item=${encodeURIComponent(p.path)}&length=4194304`); old = r?.encoding === 'utf8' ? r.content : null; }
+      S.diffs.set(p.id, { old, next, lines: old == null ? null : diffLines(old, next) });
+    } catch { S.diffs.set(p.id, null); }
+    schedule(true);
   }
   const pending = new Map();
   const later = (key, fn, ms = 60) => { clearTimeout(pending.get(key)); pending.set(key, setTimeout(fn, ms)); };
@@ -106,7 +120,7 @@ export function initRuns(ctx) {
     const media = p.kind === 'control'
       ? h('p', { class: 'rp-change' }, h('b', { text: p.label ?? p.control }), ' ', h('span', { class: 'rp-from', text: show(p.before) }), ' → ', h('span', { class: 'rp-to', text: show(p.value) }))
       : p.image ? h('img', { class: 'rp-img', src: `/api/review/${encodeURIComponent(p.id)}/content`, alt: `Proposed ${p.path}`, loading: 'lazy' })
-      : p.texty && p.preview != null ? h('pre', { class: 'rp-pre', text: p.preview.split('\n').slice(0, 7).join('\n') })
+      : p.texty && p.preview != null ? textMedia(p)
       : h('p', { class: 'rp-meta', text: `${p.bytes} bytes` });
     const card = h('li', { class: 'rp-card', 'data-proposal-id': p.id, 'data-kind': p.kind, tabindex: '0', 'aria-label': `Proposal: ${p.path}, from ${p.by}` },
       h('div', { class: 'rp-line' }, chip(p.by), h('span', { class: 'rp-when', text: [S.runs.get(p.run)?.name, ago(p.at)].filter(Boolean).join(' · ') })),
@@ -117,9 +131,35 @@ export function initRuns(ctx) {
       noteField(p.id),
       h('div', { class: 'rp-actions', role: 'group', 'aria-label': 'Review' },
         btn('Approve', 'A', () => resolve(p, 'accepted'), 'primary'), btn('Reject', 'X', () => resolve(p, 'rejected')),
-        btn('Send back', 'S', () => resolve(p, 'sent-back')), btn('Comment', 'C', () => resolve(p, 'comment'))),
+        btn('Send back', 'S', () => resolve(p, 'sent-back')), btn('Comment', 'C', () => resolve(p, 'comment')), p.kind !== 'control' && btn('Full diff', 'D', () => showDiff(p))),
       S.errors.has(p.id) && h('p', { class: 'rp-err', role: 'alert', text: S.errors.get(p.id) }));
     return tint(card, S.agents.get(p.by) ?? p);
+  }
+  // A text proposal shows what changes (changed lines with a little context) once the whole text is here, never just the opening lines.
+  function textMedia(p) {
+    const d = S.diffs.get(p.id);
+    if (!d || d === 'loading' || !d.lines) return h('pre', { class: 'rp-pre', text: p.preview.split('\n').slice(0, 7).join('\n') + (p.bytes > 1600 ? '\n…' : '') });
+    const n = changeCount(d.lines);
+    if (!p.baseSha) return h('div', {}, h('pre', { class: 'rp-pre', text: d.next.split('\n').slice(0, 7).join('\n') }), diffBar(p, `New file, ${d.lines.length} lines`));
+    if (!n) return diffBar(p, 'No text changes');
+    const rows = []; let prev = -1;
+    for (const r of hunks(d.lines, 1)) {
+      if (r.from - prev > 1) rows.push(h('span', { text: `… ${r.from - prev - 1} unchanged lines` }));
+      for (let i = r.from; i <= r.to; i++) { const l = d.lines[i]; rows.push(h('span', { class: l.t === '+' ? 'add' : l.t === '-' ? 'del' : '', text: `${l.t === ' ' ? ' ' : l.t} ${l.text}` })); }
+      prev = r.to;
+    }
+    const pre = h('pre', { class: 'rp-pre', 'data-diff': '1', tabindex: '-1' }); pre.append(...rows);
+    return h('div', {}, pre, diffBar(p, `${d.lines.filter((l) => l.t === '+').length} added, ${d.lines.filter((l) => l.t === '-').length} removed`));
+  }
+  const diffBar = (p, text) => h('p', { class: 'rp-diffbar' }, h('span', { text }), btn('Full diff', 'D', () => showDiff(p)));
+  let closeDiff = null;
+  function showDiff(p) {
+    const d = S.diffs.get(p.id);
+    if (p.kind !== 'control' && !p.image && !(d && d !== 'loading')) { prefetchDiff(p).then(() => showDiff(p)); return; }
+    closeDiff?.();
+    closeDiff = openDiff({ proposal: p, old: p.baseSha ? d?.old : null, next: d?.next, image: p.image ? `/api/review/${encodeURIComponent(p.id)}/content` : null,
+      actions: [{ text: 'Approve', key: 'A', kind: 'primary', run: () => resolve(p, 'accepted') }, { text: 'Reject', key: 'X', run: () => resolve(p, 'rejected') }, { text: 'Send back', key: 'S', run: () => resolve(p, 'sent-back') }],
+      onClose: () => { closeDiff = null; } });
   }
   const show = (v) => (v === undefined ? '' : typeof v === 'string' ? v : JSON.stringify(v));
   function noteField(id) {
@@ -153,7 +193,7 @@ export function initRuns(ctx) {
     if (bar) el.append(bar);
     if (open) {
       if (total) el.append(h('ol', { class: 'rp-steps' }, r.steps.map((s) => h('li', { 'data-status': s.status, 'data-step-id': s.id }, h('span', { class: 'rp-mark', 'aria-hidden': 'true', text: MARK[s.status] }), h('span', { class: 'rp-step-label', text: s.label }), h('span', { class: 'rp-sr', text: ` ${LABEL[s.status]}` }), s.note && h('small', { text: s.note })))));
-      if (r.artifacts.length) el.append(h('ul', { class: 'rp-arts', 'aria-label': `Files from ${r.name}` }, r.artifacts.slice(-40).map((a) => h('li', {}, h('button', { type: 'button', class: 'rp-art', 'data-path': a.path, title: `${a.kind}, ${a.bytes} bytes`, onclick: () => pick(a.path) }, h('span', { class: 'rp-kind', text: a.kind }), a.path.split('/').pop())))));
+      if (r.artifacts.length) el.append(h('p', { class: 'rp-meta', text: `${new Set(r.artifacts.map((a) => a.path)).size} files` }), h('ul', { class: 'rp-arts', 'aria-label': `Files from ${r.name}` }, [...new Map(r.artifacts.map((a) => [a.path, a])).values()].map((a) => h('li', {}, h('button', { type: 'button', class: 'rp-art', 'data-path': a.path, title: `${a.path}\n${a.kind}, ${a.bytes} bytes`, onclick: () => pick(a.path) }, h('span', { class: 'rp-kind', text: a.kind }), a.path.includes('/') && h('small', { text: a.path.slice(0, a.path.lastIndexOf('/') + 1) }), a.path.split('/').pop())))));
       const answered = r.questions.filter((q) => q.status === 'answered').slice(-3), resolved = r.proposals.filter((p) => p.status !== 'pending').slice(-3);
       if (answered.length || resolved.length) el.append(h('ul', { class: 'rp-log', 'aria-label': 'Answers' }, [...resolved.map((p) => h('li', {}, h('b', { text: p.status }), ` ${p.path}`, p.resolution && h('i', { text: ` “${p.resolution}”` }))), ...answered.map((q) => h('li', {}, h('b', { text: 'answered' }), ' ', h('i', { text: `“${Array.isArray(q.answer) ? q.answer.join(', ') : q.answer}”` })))]));
     }
@@ -173,7 +213,7 @@ export function initRuns(ctx) {
     const waiting = props.length + qs.length;
     const here = [...S.agents.values()].filter((a) => Date.now() - a.at < 90000).sort((a, b) => b.at - a.at);
     const anything = runs.length || waiting || here.length;
-    root.hidden = !anything;
+    root.hidden = !anything; if (!anything) sizeDock();
     if (!anything) return;
     const open = !S.userFolded;
     root.dataset.open = open ? '1' : '0';
@@ -191,6 +231,7 @@ export function initRuns(ctx) {
     if (runs.length) nodes.push(h('section', { class: 'rp-runs', 'aria-label': 'Runs' }, runs.slice(0, 8).map(runBlock)));
     else if (!waiting) nodes.push(h('p', { class: 'rp-empty', text: 'Agents are connected. Runs they start show up here.' }));
     body.replaceChildren(...nodes);
+    sizeDock();
     if (S.announce) { live.textContent = S.announce; S.announce = ''; clearTimeout(clearLive); clearLive = setTimeout(() => { live.textContent = ''; }, 3000); }
     if (keepFocus || typing || focusedId) {
       keepFocus = false;
@@ -200,6 +241,8 @@ export function initRuns(ctx) {
     }
     tagCards();
   }
+  // The stage gives the drawer its room (CSS: margin-bottom: var(--rp-h)).
+  const sizeDock = () => requestAnimationFrame(() => document.documentElement.style.setProperty('--rp-h', root.hidden ? '0px' : `${root.offsetHeight}px`));
   const fold = () => { S.userFolded = !S.userFolded; try { localStorage.setItem('napkin.runs.folded', S.userFolded ? '1' : '0'); } catch { /* blocked */ } schedule(); };
 
   // Cards made by a run say so: data-run and the agent's colour (the canvas draws the accent from these).
@@ -238,6 +281,7 @@ export function initRuns(ctx) {
     if (id) {
       const p = S.review.proposals.find((x) => x.id === id); if (!p) return;
       if (key === 'a') { ev.preventDefault(); resolve(p, 'accepted'); } else if (key === 'x' || key === 'r') { ev.preventDefault(); resolve(p, 'rejected'); }
+      else if (key === 'd' || key === 'enter') { ev.preventDefault(); showDiff(p); }
       else if (key === 's') { ev.preventDefault(); resolve(p, 'sent-back'); } else if (key === 'c') { ev.preventDefault(); focusNote(id); }
     } else if (qid) {
       const q = S.review.questions.find((x) => x.id === qid); if (!q) return;
@@ -275,4 +319,5 @@ export function initRuns(ctx) {
   // Ages in the cards tick quietly.
   setInterval(() => { if (!root.hidden && !root.contains(document.activeElement)) schedule(); }, 15000);
   loadAll();
+  initRunGroups(ctx);
 }

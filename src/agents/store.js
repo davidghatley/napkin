@@ -479,12 +479,20 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     pending.sort((a, b) => a.at - b.at); open.sort((a, b) => a.at - b.at);
     return { proposals: pending, questions: open, count: pending.length + open.length };
   }
+  // A write made straight to an item (a control on an SVG, an HTML artifact...) is work too: attributed, in the run's audit, and it shows the writer as present.
+  function itemWrite(by, item, control, value, revision) {
+    const prev = by && by !== 'you' ? agents.get(by) : null;
+    const run = prev?.run ? runs.get(prev.run) : null;
+    touch(by, run, `set ${control} on ${item}`);
+    const short = typeof value === 'string' ? value.slice(0, 120) : value;
+    return emit('item-control', { by, item, control, value: short, revision, ...(run ? { run: run.id } : {}) });
+  }
   const agentList = () => [...agents.values()].map((a) => ({ ...a, ...colorOf(a.name) })).sort((a, b) => b.at - a.at);
   const all = () => [...runs.values()].sort((a, b) => b.createdAt - a.createdAt);
 
   return {
     dir, emit, touch, runs: all, summary, get: (id) => view(getRun(id)), startRun, step, setStatus, artifact, propose, resolve: resolve_, content, ask, answer, waitAnswer,
-    checkpoint, resume, events, replay, review, agents: agentList, seq: () => seq, proposal: (id) => proposals.get(id), question: (id) => questions.get(id),
+    itemWrite, checkpoint, resume, events, replay, review, agents: agentList, seq: () => seq, proposal: (id) => proposals.get(id), question: (id) => questions.get(id),
     artifactsOf: () => all().flatMap((r) => r.artifacts.map((a) => ({ run: r.id, runName: r.name, ...a }))),
     audit: ({ run, limit = 200 } = {}) => ring.filter((e) => !run || e.run === run).slice(-Math.min(limit, 2000)),
     dispose() { waiters.clear(); },
