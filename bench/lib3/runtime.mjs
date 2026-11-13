@@ -894,3 +894,35 @@ export async function waitUntil(fn, ms = 5000) {
   throw Error("Outcome not observed within " + ms + " ms");
 }
 export { stress, diffPng, decodePng };
+// Main-thread work per frame and dropped frames during a canvas gesture (see bench/README.md,
+// "Frame budget"). For each animation frame: work = time from the frame's start (the rAF
+// timestamp) to a message posted from inside rAF, which runs only after that frame's rendering
+// task (rAF callbacks, style, layout, paint) has finished. Dropped = intervals over 1.5 vsyncs.
+export async function frameWork(b, mode = "pan", { events = 240, x = 520, y = 350 } = {}) {
+  const geometry = () =>
+    b.eval(
+      `JSON.stringify([...document.querySelectorAll('[data-item-id]')].slice(0,200).map(e=>{const r=e.getBoundingClientRect();return[r.x,r.y,r.width]}))`,
+    );
+  const before = await geometry();
+  await b.eval(
+    `window.__fw={work:[],intervals:[],stop:false};(()=>{let last;const tick=t=>{if(last!==undefined)window.__fw.intervals.push(t-last);last=t;const ch=new MessageChannel();ch.port1.onmessage=()=>window.__fw.work.push(performance.now()-t);ch.port2.postMessage(0);if(!window.__fw.stop)requestAnimationFrame(tick)};requestAnimationFrame(tick)})()`,
+  );
+  let moved = false;
+  for (let i = 0; i < events; i++) {
+    await b.send("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x,
+      y,
+      deltaX: mode === "pan" ? (i % 80 < 40 ? 24 : -24) : 0,
+      deltaY: mode === "pan" ? (i % 120 < 60 ? 8 : -8) : i % 40 < 20 ? -12 : 12,
+      modifiers: mode === "pan" ? 0 : 2,
+    });
+    await sleep(16);
+    if (i === 24) moved = before !== (await geometry());
+  }
+  assert(moved, "wheel gesture did not move or scale actual canvas items");
+  const r = await b.eval("window.__fw.stop=true;({work:window.__fw.work.slice(2),intervals:window.__fw.intervals.slice(2)})");
+  const sorted = [...r.intervals].sort((a, b) => a - b),
+    vsync = sorted[Math.floor(sorted.length / 2)] || 16.7;
+  return { ...r, vsync, dropped: r.intervals.filter((v) => v > Math.max(vsync, 16.6) * 1.5).length };
+}

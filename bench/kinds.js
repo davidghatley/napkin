@@ -13,8 +13,9 @@ import {
   waitUntil,
   sleep,
   frameGesture,
+  frameWork,
   processRSS,
-  FRAME_BUDGET,
+  chromiumMains,
   ROOT,
 } from "./lib3/runtime.mjs";
 import {
@@ -28,8 +29,11 @@ import {
   scrollEverything,
 } from "./lib3/semantic.mjs";
 import { randomInt } from "node:crypto";
+import { launchChromium } from "../test/helpers/cdp.js";
 import { join } from "node:path";
-import { readFileSync, statSync, mkdirSync } from "node:fs";
+import { readFileSync, statSync, mkdirSync, copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 // Accepted kind names per canonical kind: a small alias table in corpus3/manifest.json for
 // specialised kinds whose reasonable names differ (a diff is a patch). Generic kinds are never
@@ -199,21 +203,40 @@ async function oracle(b, file, item, r, f, s) {
       probe.fam,
       "no visible text is set in the loaded font " + probe.faces,
     );
-    try {
-      const ot = createRequire(
+    {
+      // A missing opentype.js is a failed check, not a skipped one.
+      let ot;
+      try {
+        ot = createRequire(
         (process.env.NAPKIN_D3_TOOLS || join(ROOT, "bench/tools")) +
           "/package.json",
       )("opentype.js");
-      const font = ot.parse(
-        Uint8Array.from(readFileSync(join(f.folder, file.path))).buffer,
-      );
+      } catch (e) {
+        throw Error("reference missing: opentype.js (npm ci in bench/tools): " + e.message.split("\n")[0]);
+      }
+      // opentype.js reads TTF/OTF/WOFF only; WOFF2 is decoded first by the woff2 reference
+      // CLI (woff2_decompress, the same project that made the corpus file). Missing = fail.
+      let bytes = readFileSync(join(f.folder, file.path));
+      if (file.kind === "woff2") {
+        const tmp = mkdtempSync(join(tmpdir(), "napkin-woff2-"));
+        try {
+          copyFileSync(join(f.folder, file.path), join(tmp, "f.woff2"));
+          try {
+            execFileSync("woff2_decompress", [join(tmp, "f.woff2")], { stdio: "pipe" });
+          } catch (e) {
+            throw Error("reference missing or failed: woff2_decompress: " + String(e.message).split("\n")[0]);
+          }
+          bytes = readFileSync(join(tmp, "f.ttf"));
+        } finally {
+          rmSync(tmp, { recursive: true, force: true });
+        }
+      }
+      const font = ot.parse(Uint8Array.from(bytes).buffer);
       const want = font.getAdvanceWidth(probe.text, probe.px);
       assert(
         want > 0 && Math.abs(probe.measured - want) / want < 0.03,
         `text drawn in "${probe.fam}" measures ${probe.measured}px, the font file says ${want}px`,
       );
-    } catch (e) {
-      if (/measures/.test(e.message)) throw e;
     }
     await sleep(150);
     const rect = await b.eval("window.__spec"),
@@ -527,7 +550,7 @@ export async function measure() {
       for (const mode of ["pan", "zoom"])
         await book.check(
           "mixed." + mode,
-          "p95 frame < 16.7 ms; no blank cards after 300 ms",
+          "at 1100x700, 1600x1000 and 1920x1080: p95 main-thread work per frame < 16.7 ms, <= 5% dropped frames over a 4 s gesture; no blank cards after 300 ms",
           async () => {
             // mixed.sample leaves the browser on a /view page: gestures run on the canvas.
             await wb.goto(ws.base + "/");
@@ -536,18 +559,32 @@ export async function measure() {
               10000,
             );
             await sleep(500);
-            const samples = await frameGesture(wb, mode);
-            await sleep(300);
-            const visible = await wb.eval(
-              `(()=>{const a=[...document.querySelectorAll('[data-item-id]')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight});return{n:a.length,blank:a.filter(e=>!${CARD_CONTENT}(e)).length}})()`,
-            );
+            // DREAM: p95 frame < 16.7 ms. rAF intervals are vsync-quantised (a perfect 60 Hz page
+            // reads 16.6 to 16.9 ms), so the budget is applied to what decides a frame: the
+            // main-thread work of each frame (frame start to the end of its rendering task) must
+            // have p95 < 16.7 ms, and at most 5% of frames may be dropped (an interval over 1.5
+            // vsyncs), over a 4 s gesture at each of three viewport sizes.
+            const sizes = [[1100, 700], [1600, 1000], [1920, 1080]],
+              runs = [];
+            try {
+              for (const [width, height] of sizes) {
+                await wb.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+                await sleep(400);
+                const m = await frameWork(wb, mode, { events: 240, x: width / 2, y: height / 2 });
+                await sleep(300);
+                const visible = await wb.eval(
+                  `(()=>{const a=[...document.querySelectorAll('[data-item-id]')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight});const bl=a.filter(e=>!${CARD_CONTENT}(e));return{n:a.length,blank:bl.length,blankIds:bl.slice(0,4).map(e=>e.dataset.itemId)}})()`,
+                );
+                runs.push({ viewport: width + "x" + height, workP95: +p95(m.work).toFixed(2), frames: m.intervals.length, dropped: m.dropped, droppedShare: +(m.dropped / Math.max(1, m.intervals.length)).toFixed(3), intervalP95: +p95(m.intervals).toFixed(2), visible });
+              }
+            } finally {
+              await wb.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 700, deviceScaleFactor: 1, mobile: false });
+            }
             return {
-              ok:
-                samples.length >= 30 &&
-                p95(samples) < FRAME_BUDGET &&
-                visible.n > 0 &&
-                !visible.blank,
-              value: { p95: p95(samples), samples: samples.length, visible },
+              ok: runs.every(
+                (x) => x.frames >= 120 && x.workP95 < 16.7 && x.droppedShare <= 0.05 && x.visible.n > 0 && !x.visible.blank,
+              ),
+              value: runs,
             };
           },
         );
@@ -587,7 +624,7 @@ export async function measure() {
     ])
       await book.check(
         "large." + (kind === "mov" ? "video" : "parquet"),
-        "real content, exact metadata; peak RSS increase < 60% of file bytes",
+        "real content, exact metadata (Parquet: a random row and the last row exact); isolated peak RSS increase (server, fresh browser heap and process tree) < 60% of file bytes",
         async () => {
           const empty = join(f.temp, "memory-empty-" + kind);
           mkdirSync(empty);
@@ -602,8 +639,30 @@ export async function measure() {
           } finally {
             await calibration.stop();
           }
-          const b = await browser();
-          await b.goto("about:blank");
+          // Isolated peak: a fresh Chromium for this file alone, its process tree sampled every
+          // 10 ms to the end of the check (never a final reading against a reused browser). The
+          // baseline is the same viewer showing a small file of the same kind, settled, so the
+          // increase is what the file's size costs, not what any page of that viewer costs.
+          const before = new Set(chromiumMains());
+          const b = await launchChromium();
+          b.pid = chromiumMains().find((p) => !before.has(p));
+          assert(b.pid, "cannot find the fresh Chromium's process to measure");
+          const small = join(f.temp, "memory-small-" + kind);
+          mkdirSync(small);
+          const smallName = kind === "mov" ? "orbit.mov" : "table.parquet";
+          copyFileSync(join(ROOT, "bench/corpus3", smallName), join(small, smallName));
+          const smallServer = await start(small, join(f.temp, "small-state-" + kind));
+          try {
+            const smallItem = (await items(smallServer)).find((x) => x.path === smallName);
+            assert(smallItem?.kind === kind, "small calibration item not listed with correct kind");
+            await observe(b, smallServer.base + "/view/" + encodeURIComponent(smallItem.id));
+            await sleep(800);
+          } catch (e) {
+            await b.close();
+            throw e;
+          } finally {
+            await smallServer.stop();
+          }
           await b.send("HeapProfiler.collectGarbage");
           const heapBytes = async () => {
             const h = await b.send("Runtime.getHeapUsage");
@@ -614,7 +673,9 @@ export async function measure() {
             );
           };
           const browserBaseline = await heapBytes();
-          const browserProc = b.pid ? processRSS(b.pid) : 0;
+          let browserProc = 0;
+          for (let n = 0; n < 10; n++) browserProc = Math.max(browserProc, processRSS(b.pid)), await sleep(30);
+          let browserProcPeak = browserProc;
           let browserPeak = browserBaseline,
             sampling = false,
             sampleError;
@@ -628,6 +689,7 @@ export async function measure() {
               if (sampling) return;
               sampling = true;
               try {
+                browserProcPeak = Math.max(browserProcPeak, processRSS(b.pid));
                 browserPeak = Math.max(browserPeak, await heapBytes());
               } catch (e) {
                 sampleError = e;
@@ -659,18 +721,24 @@ export async function measure() {
                   " ms",
               );
             } else {
-              const frac = 0.3 + randomInt(0, 60) / 100;
-              await scrollEverything(b, frac);
-              const txt = await b.eval("document.body.innerText");
-              const nums = (txt.match(/\b\d{1,7}\b/g) || []).map(Number);
-              assert(
-                nums.some(
-                  (n) => Math.abs(n - frac * 5_000_000) < 0.12 * 5_000_000,
-                ),
-                "scrolling to " +
-                  frac +
-                  " of 5 M rows does not show rows from there",
-              );
+              // Exact rows: a random row and the last row must be reachable, with both cells
+              // exactly what the writer put there (id = row index, value = (id*31+seed) % 100003).
+              const { seekRow, findRow, cellEq } = await import("./fidelity3.js");
+              const total = 5_000_000,
+                target = 1_000_000 + randomInt(0, 3_000_000);
+              const c = { ref: { header: ["id", "value"], total }, keyRe: { re: "^(\\d+)$" } };
+              for (const k of [target, total - 1]) {
+                const ref = { index: k, cells: [String(k), String((k * 31 + f.seed) % 100003)] };
+                const route = await seekRow(b, c, ref, k);
+                assert(route, `row ${k} of 5 M never reachable`);
+                const got = await findRow(b, c.ref.header, ref.cells[0]);
+                const shown = got.row.slice(got.off, got.off + 2);
+                assert(
+                  cellEq(shown[0], ref.cells[0]) && cellEq(shown[1], ref.cells[1]),
+                  `row ${k}: file id ${ref.cells[0]} value ${ref.cells[1]}, shown ${JSON.stringify(shown)}`,
+                );
+              }
+              seekMs = target;
             }
             assert(r.variance > 20, "large item is blank");
             const bytes = statSync(join(large, name)).size;
@@ -690,7 +758,7 @@ export async function measure() {
               ok:
                 server.peakRSS() - baseline < bytes * 0.6 &&
                 browserPeak - browserBaseline < bytes * 0.6 &&
-                (!b.pid || processRSS(b.pid) - browserProc < bytes * 0.6),
+                browserProcPeak - browserProc < bytes * 0.6,
               value: {
                 fileBytes: bytes,
                 baseline,
@@ -699,14 +767,16 @@ export async function measure() {
                 browserBaseline,
                 browserPeak,
                 browserIncrease: browserPeak - browserBaseline,
-                browserProcessIncrease: b.pid
-                  ? processRSS(b.pid) - browserProc
-                  : null,
+                browserProcessBaseline: browserProc,
+                browserProcessPeak: browserProcPeak,
+                browserProcessIncrease: browserProcPeak - browserProc,
+                ...(kind === "parquet" ? { exactRow: seekMs } : { seekMs }),
               },
             };
           } finally {
             clearInterval(monitor);
             await server.stop();
+            await b.close();
           }
         },
       );
