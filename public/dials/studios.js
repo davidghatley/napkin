@@ -238,7 +238,58 @@ function specimen(text, size, weight, cls = "") {
   svg.append(t);
   return svg;
 }
+// What a colour studio keeps beyond its own life (a tab switch or a depth change rebuilds it):
+// history, the palette and the ramp settings, per panel and control.
+const colorKeep = new WeakMap();
+export function colorObjects(panel, id) {
+  if (!colorKeep.has(panel)) colorKeep.set(panel, new Map());
+  const all = colorKeep.get(panel);
+  if (!all.has(id)) all.set(id, { history: [], palette: [], ramp: { steps: 9, anchor: true } });
+  return all.get(id);
+}
+/** The custom property a value is bound to (`var(--name)`), or null. */
+export const tokenOf = (v) => /^var\(\s*(--[\w-]+)\s*\)$/.exec(String(v ?? "").trim())?.[1] || null;
+/** Lightness steps for a ramp; with an anchor, the step nearest the colour is the colour itself. */
+export function rampOf(lch, steps = 9, anchor = true) {
+  const out = ramp(lch, steps);
+  if (anchor) {
+    let k = 0;
+    out.forEach((x, i) => Math.abs(x[0] - lch[0]) < Math.abs(out[k][0] - lch[0]) && (k = i));
+    out[k] = [lch[0], lch[1], lch[2], 1];
+  }
+  return out;
+}
 function colorStudio(ctx, host) {
+  // A colour bound to a token stays bound: edits write the token's value on the page root (and are
+  // announced as "token" events), so everything that uses the token follows. Unbind writes the literal.
+  const raw = ctx,
+    page = () => ctx.host.ownerDocument.documentElement,
+    tokenValue = (t) => getComputedStyle(page()).getPropertyValue(t).trim(),
+    keep = colorObjects(raw.panel, raw.control.id);
+  const writeToken = (t, v, phase) => {
+    page().style.setProperty(t, v);
+    raw.panel.paint?.(raw.control.id);
+    raw.panel.emit?.("token", { control: raw.control.id, name: t, value: v, phase });
+  };
+  ctx = {
+    ...raw,
+    set: (v) => {
+      const t = tokenOf(raw.get());
+      if (t && !tokenOf(v)) {
+        writeToken(t, v, "commit");
+        onCommit();
+      } else raw.set(v);
+    },
+    change: (v) => {
+      const t = tokenOf(raw.get());
+      if (t && !tokenOf(v)) writeToken(t, v, "change");
+      else raw.change(v);
+    },
+    commit: () => {
+      if (tokenOf(raw.get())) onCommit();
+      raw.commit();
+    },
+  };
   // One plane carries the colour: lightness up, chroma across, at the current hue.
   // Readouts ride the axes at the point; the gamut edges and the contrast threshold are drawn where they fall.
   const PW = 560,
@@ -251,7 +302,7 @@ function colorStudio(ctx, host) {
     harmony = "Complement",
     format = "OKLCH",
     cacheKey = "",
-    history = [ctx.get()],
+    history = keep.history,
     frame = 0,
     dead = false;
   const css = (name, fallback) =>
@@ -427,11 +478,74 @@ function colorStudio(ctx, host) {
     harmonyHost = el("div"),
     historyHost = el("div"),
     imageHost = el("div");
+  // The ramp is an object with settings that persist: its step count and whether the colour itself
+  // anchors the step nearest its lightness. Its steps export as custom properties.
+  const rampCode = el("output", { class: "d-color-code d-cx-ramp-code", "aria-live": "off" });
+  const rampSteps = choiceBox("Ramp steps", ["5", "7", "9", "11"], (v) => {
+    keep.ramp.steps = Number(v);
+    update();
+  });
+  rampSteps.value = String(keep.ramp.steps);
+  const rampAnchor = button("Anchored", "Anchor the ramp on this colour", () => {
+    keep.ramp.anchor = !keep.ramp.anchor;
+    update();
+  });
   const ramps = section(
     "Ramp",
     "d-cx-ramp",
-    el("header", {}, el("h3", { text: "Ramp" })),
+    el("header", {}, el("h3", { text: "Ramp" }), rampSteps, rampAnchor),
     rampHost,
+    rampCode,
+  );
+  // The palette: colours kept by name (--id-1 …), added from the current colour or any swatch,
+  // removed with Delete, and exported as custom properties. It survives studio rebuilds.
+  const paletteHost = el("div", { class: "d-cx-palette" }),
+    paletteCode = el("output", { class: "d-color-code", "aria-live": "off" }),
+    paletteStatus = el("output", { class: "d-note" });
+  const varBase = String(raw.control.id).replace(/[^\w-]/g, "-");
+  function drawPalette() {
+    const row = el("div", { class: "d-swatches", role: "list", "aria-label": "Palette" });
+    keep.palette.forEach((color, i) => {
+      const b = button(String(i + 1), `Palette ${i + 1}: ${color}. Enter applies; Delete removes`, () => ctx.set(color));
+      b.setAttribute("role", "listitem");
+      b.style.background = color;
+      b.dataset.color = color;
+      try {
+        const lch = parseColor(color, ctx.host);
+        b.style.setProperty("--ink", contrast(parseColor("#16181d"), lch) >= contrast(parseColor("#ffffff"), lch) ? "#16181d" : "#ffffff");
+      } catch {}
+      b.addEventListener("keydown", (e) => {
+        if (e.key !== "Delete" && e.key !== "Backspace") return;
+        e.preventDefault();
+        keep.palette.splice(i, 1);
+        paletteStatus.textContent = `Removed ${color}; ${keep.palette.length} kept`;
+        raw.panel.announce?.(paletteStatus.textContent);
+        drawPalette();
+        paletteHost.querySelectorAll("button")[Math.min(i, keep.palette.length - 1)]?.focus();
+      });
+      row.append(b);
+    });
+    paletteHost.replaceChildren(keep.palette.length ? row : el("p", { class: "d-note", text: "No colours kept yet. Add the current colour to start a palette." }));
+    paletteCode.value = keep.palette.map((c, i) => `--${varBase}-${i + 1}: ${c};`).join("\n");
+    paletteCode.hidden = !keep.palette.length;
+    raw.panel.emit?.("palette", { control: raw.control.id, palette: [...keep.palette] });
+  }
+  const addToPalette = button("+ Add colour", "Add the current colour to the palette", () => {
+    const v = literal();
+    if (keep.palette.includes(v)) paletteStatus.textContent = "Already in the palette";
+    else {
+      keep.palette.push(v);
+      paletteStatus.textContent = `Kept ${v} as --${varBase}-${keep.palette.length}`;
+    }
+    raw.panel.announce?.(paletteStatus.textContent);
+    drawPalette();
+  });
+  const palette = section(
+    "Palette",
+    "d-cx-palette-block",
+    el("header", {}, el("h3", { text: "Palette" }), paletteStatus, addToPalette),
+    paletteHost,
+    paletteCode,
   );
   const harmonies = section(
     "Harmony",
@@ -449,17 +563,61 @@ function colorStudio(ctx, host) {
   );
   // Sampling, binding and history.
   const sampleStatus = el("output", { class: "d-note" }),
-    eye = canvas("Sampled image. Click a pixel to use its color.", 300, 110, true);
+    eye = canvas("Sampled image. Click a pixel, or move the cursor with the arrows and press Enter, to use its colour.", 300, 110, true),
+    eyeRead = el("output", { class: "d-note d-eye-read", "aria-live": "polite" });
   eye.classList.add("d-eye");
+  eye.setAttribute("role", "application");
   eye.hidden = true;
-  let eyeData;
+  eyeRead.hidden = true;
+  // The eyedropper cursor: a pixel position on the sampled image, drawn as a ring over it.
+  let eyeData,
+    eyeImage,
+    cursor = [150, 55];
+  const eyeAt = ([x, y]) => {
+    const i = (clamp(y, 0, eyeData.height - 1) * eyeData.width + clamp(x, 0, eyeData.width - 1)) * 4;
+    return toHex([eyeData.data[i] / 255, eyeData.data[i + 1] / 255, eyeData.data[i + 2] / 255]);
+  };
+  const drawEye = () => {
+    if (!eyeImage) return;
+    const g = eye.getContext("2d");
+    g.drawImage(eyeImage, 0, 0, 300, 110);
+    const [x, y] = cursor;
+    g.lineWidth = 2;
+    g.strokeStyle = "#000";
+    g.beginPath();
+    g.arc(x + 0.5, y + 0.5, 7, 0, Math.PI * 2);
+    g.stroke();
+    g.lineWidth = 1;
+    g.strokeStyle = "#fff";
+    g.beginPath();
+    g.arc(x + 0.5, y + 0.5, 6, 0, Math.PI * 2);
+    g.stroke();
+    eyeRead.value = `x ${x}, y ${y}: ${eyeAt(cursor)}`;
+  };
+  const sampleAt = (p) => {
+    cursor = [clamp(p[0], 0, 299), clamp(p[1], 0, 109)];
+    drawEye();
+    const v = eyeAt(cursor);
+    ctx.set(v);
+    raw.panel.announce?.(`Sampled ${v} at x ${cursor[0]}, y ${cursor[1]}`);
+  };
   eye.addEventListener("click", (e) => {
     if (!eyeData) return;
-    const r = eye.getBoundingClientRect(),
-      x = Math.floor(((e.clientX - r.left) / r.width) * eyeData.width),
-      y = Math.floor(((e.clientY - r.top) / r.height) * eyeData.height),
-      i = (clamp(y, 0, eyeData.height - 1) * eyeData.width + clamp(x, 0, eyeData.width - 1)) * 4;
-    ctx.set(toHex([eyeData.data[i] / 255, eyeData.data[i + 1] / 255, eyeData.data[i + 2] / 255]));
+    const r = eye.getBoundingClientRect();
+    sampleAt([Math.floor(((e.clientX - r.left) / r.width) * 300), Math.floor(((e.clientY - r.top) / r.height) * 110)]);
+  });
+  eye.addEventListener("keydown", (e) => {
+    if (!eyeData) return;
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (d) {
+      e.preventDefault();
+      const k = e.shiftKey ? 10 : 1;
+      cursor = [clamp(cursor[0] + d[0] * k, 0, 299), clamp(cursor[1] + d[1] * k, 0, 109)];
+      drawEye();
+    } else if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      sampleAt(cursor);
+    }
   });
   const image = filePick(
     "Choose an image",
@@ -472,10 +630,14 @@ function colorStudio(ctx, host) {
         c.height = 96;
         const g = c.getContext("2d", { willReadFrequently: true });
         g.drawImage(bitmap, 0, 0, 96, 96);
-        const view = eye.getContext("2d");
-        view.drawImage(bitmap, 0, 0, 300, 110);
-        eyeData = view.getImageData(0, 0, 300, 110);
+        // The sampled pixels are read from a plain 300 × 110 copy, so the cursor ring never tints them.
+        eyeImage = Object.assign(document.createElement("canvas"), { width: 300, height: 110 });
+        const copy = eyeImage.getContext("2d", { willReadFrequently: true });
+        copy.drawImage(bitmap, 0, 0, 300, 110);
+        eyeData = copy.getImageData(0, 0, 300, 110);
         eye.hidden = false;
+        eyeRead.hidden = false;
+        drawEye();
         bitmap.close();
         const colors = paletteFromPixels(g.getImageData(0, 0, 96, 96).data);
         imageHost.replaceChildren(swatchRow("Image palette", colors, (v) => ctx.set(v)));
@@ -494,17 +656,33 @@ function colorStudio(ctx, host) {
     }),
     tokenStatus = el("output", { class: "d-note" });
   const bind = button("Bind", "Bind to CSS variable", () => {
-    if (!/^--[\w-]+$/.test(token.value)) {
+    const name = token.value.trim();
+    if (!/^--[\w-]+$/.test(name)) {
       tokenStatus.textContent = "A variable name starts with --";
       return;
     }
+    // A token the page does not define yet starts as the current colour.
+    if (!tokenValue(name)) page().style.setProperty(name, literal());
     try {
-      ctx.set(`var(${token.value})`);
-      tokenStatus.textContent = `Bound to ${token.value}`;
+      raw.set(`var(${name})`);
     } catch {
       tokenStatus.textContent = "That variable is not a colour here";
+      return;
     }
+    updateToken();
   });
+  const unbind = button("Unbind", "Unbind: keep the colour, drop the variable", () => {
+    raw.set(literal());
+    updateToken();
+  });
+  function updateToken() {
+    const t = tokenOf(raw.get());
+    unbind.hidden = !t;
+    if (t) {
+      if (document.activeElement !== token) token.value = t;
+      tokenStatus.textContent = `Bound to ${t} = ${tokenValue(t)}; edits change the token`;
+    } else tokenStatus.textContent = "Not bound";
+  }
   const side = el(
     "div",
     { class: "d-cx-side" },
@@ -515,7 +693,7 @@ function colorStudio(ctx, host) {
       "Token",
       "d-cx-tokens",
       el("header", {}, el("h3", { text: "Token" }), tokenStatus),
-      el("div", { class: "d-cx-token" }, token, bind),
+      el("div", { class: "d-cx-token" }, token, bind, unbind),
     ),
     section(
       "Sample",
@@ -523,8 +701,10 @@ function colorStudio(ctx, host) {
       el("header", {}, el("h3", { text: "From an image" }), sampleStatus),
       image,
       eye,
+      eyeRead,
       imageHost,
     ),
+    palette,
     section(
       "History",
       "d-cx-history",
@@ -543,7 +723,7 @@ function colorStudio(ctx, host) {
   );
   host.append(el("div", { class: "d-cx" }, main, side));
   // Sampling, the token and history live in the rail, beside the rows they came from.
-  ctx.rail.append(...side.querySelectorAll(".d-cx-image, .d-cx-tokens, .d-cx-history"));
+  ctx.rail.append(...side.querySelectorAll(".d-cx-image, .d-cx-tokens, .d-cx-palette-block, .d-cx-history"));
   // Pairs: the colour as text on common grounds, and common text on the colour, each with its ratio.
   const pairsHost = el("div", { class: "d-cx-pairs" });
   const drawPairs = (v) => {
@@ -631,13 +811,21 @@ function colorStudio(ctx, host) {
     });
   stripKeys(hue, 1, (v, d) => [v[0], v[1], (((v[2] + d) % 360) + 360) % 360, v[3]]);
   stripKeys(alpha, 0.01, (v, d) => [v[0], v[1], v[2], clamp(v[3] + d, 0, 1)]);
+  // History holds the colours themselves (a bound token's value, not its name), shared across rebuilds.
+  const literal = () => {
+    const v = raw.get(),
+      t = tokenOf(v);
+    return t ? tokenValue(t) || v : v;
+  };
+  if (!history.length) history.push(literal());
   const onCommit = () => {
-    const v = ctx.get();
+    const v = literal();
     if (history.at(-1) !== v) {
       history.push(v);
-      history = history.slice(-16);
+      history.splice(0, Math.max(0, history.length - 16));
     }
     updateHistory();
+    updateToken();
   };
   const updateHistory = () =>
     updateSwatches(historyHost, "Color history", history, (v) => ctx.set(v));
@@ -899,7 +1087,11 @@ function colorStudio(ctx, host) {
                 .map((x) => Math.round(clamp(x, 0, 1) * 255))
                 .join(" ")}${a})`
             : `oklch(${n(v[0] * 100, 1)}% ${n(v[1], 3)} ${n(v[2], 1)}${a})`;
-    updateSwatches(rampHost, "Ramp", ramp(v), (color) => ctx.set(color), (c, lch) => [
+    const steps = rampOf(v, keep.ramp.steps, keep.ramp.anchor);
+    rampAnchor.setAttribute("aria-pressed", String(keep.ramp.anchor));
+    rampAnchor.textContent = keep.ramp.anchor ? "Anchored" : "Free";
+    rampCode.value = steps.map((x, i) => `--${varBase}-${Math.round(((i + 1) / (steps.length + 1)) * 1000 / 50) * 50}: ${cssLch(x)};`).join("\n");
+    updateSwatches(rampHost, "Ramp", steps, (color) => ctx.set(color), (c, lch) => [
       lch ? `${Math.round(lch[0] * 100)}` : c,
       lch ? `${contrast(lch, back).toFixed(1)}` : "",
     ]);
@@ -922,6 +1114,8 @@ function colorStudio(ctx, host) {
     if (!frame) frame = requestAnimationFrame(draw);
   }
   updateHistory();
+  updateToken();
+  drawPalette();
   return {
     update,
     commit: onCommit,
