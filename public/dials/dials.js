@@ -982,6 +982,9 @@ export class Dials extends EventTarget {
     cancelAnimationFrame(s.depthFrame);
     s.depth = clamp(depth, 1, 3);
     s.node.dataset.depth = s.depth;
+    // Contract hook: the open studio names the control it is for.
+    if (s.depth === 3) s.node.dataset.studioFor = s.studioControl || s.schema.controls[0]?.id || "";
+    else delete s.node.dataset.studioFor;
     if (s.depth !== 3) {
       s.node.style.width = "";
       s.node.style.height = "";
