@@ -58,3 +58,13 @@ presentation describe what is on screen and start empty after a restart.
 - The element inspector of HTML and TSX components (cascade, tokens, layout, variables) still shows below the
   instrument panel instead of as dials sections.
 - `Open folder`, `Generate` and creating a proposal from the API need server routes that are not in this lane.
+- A text control's field takes its words as typed and Enter applies them (Shift+Enter adds a line). The dials field
+  parser still reads a `textarea` control as an expression, so it flags plain words as invalid while you type.
+
+## Measured (round 1)
+
+| Bench | Met | What fails and why |
+|---|---|---|
+| keys3 (D3) | 9/14 | Open folder and Generate need server routes; colour target needs a colour control on HTML; approve and reject need `POST /api/proposals { path, content }`. |
+| controls3 (D2) | 2/56 (beat 2/10) | The bench sends one browser tab to `/view/<item>` to compare pixels, then opens the palette on that page, so `Control <label>` cannot reach the canvas. The bench also undoes a panel edit as its own caller, and napkin keeps undo per caller (409). |
+| craft (D8) | 2/6 | Cold start opens a second server on a folder the bench's first server already holds, and napkin's folder lock refuses it. Dark-mode axe could not select the HTML card in that run. |
