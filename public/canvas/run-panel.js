@@ -218,6 +218,7 @@ export function initRuns(ctx) {
     const open = !S.userFolded;
     root.dataset.open = open ? '1' : '0';
     root.dataset.waiting = waiting ? '1' : '0';
+    root.dataset.dock = runs.length || waiting ? '1' : '0';
     const active = document.activeElement, cardOf = active && root.contains(active) ? active.closest('[data-proposal-id],[data-question-id]') : null, focusedId = cardOf ? (cardOf.dataset.proposalId ?? cardOf.dataset.questionId) : null;
     const typing = active?.matches?.('input') && root.contains(active) ? { id: active.dataset.noteFor, at: active.selectionStart } : null;
     head.replaceChildren(
@@ -241,8 +242,8 @@ export function initRuns(ctx) {
     }
     tagCards();
   }
-  // The stage gives the drawer its room (CSS: margin-bottom: var(--rp-h)).
-  const sizeDock = () => requestAnimationFrame(() => document.documentElement.style.setProperty('--rp-h', root.hidden ? '0px' : `${root.offsetHeight}px`));
+  // The stage gives the drawer its room (CSS: margin-bottom: var(--nk-rp-h)).
+  const sizeDock = () => requestAnimationFrame(() => { const st = document.querySelector('#stage'); if (st) st.style.marginBottom = !root.hidden && root.dataset.dock === '1' ? `${root.offsetHeight}px` : ''; });
   const fold = () => { S.userFolded = !S.userFolded; try { localStorage.setItem('napkin.runs.folded', S.userFolded ? '1' : '0'); } catch { /* blocked */ } schedule(); };
 
   // Cards made by a run say so: data-run and the agent's colour (the canvas draws the accent from these).
@@ -281,7 +282,7 @@ export function initRuns(ctx) {
     if (id) {
       const p = S.review.proposals.find((x) => x.id === id); if (!p) return;
       if (key === 'a') { ev.preventDefault(); resolve(p, 'accepted'); } else if (key === 'x' || key === 'r') { ev.preventDefault(); resolve(p, 'rejected'); }
-      else if (key === 'd' || key === 'enter') { ev.preventDefault(); showDiff(p); }
+      else if (key === 'd' || ev.key === 'Enter') { ev.preventDefault(); showDiff(p); }
       else if (key === 's') { ev.preventDefault(); resolve(p, 'sent-back'); } else if (key === 'c') { ev.preventDefault(); focusNote(id); }
     } else if (qid) {
       const q = S.review.questions.find((x) => x.id === qid); if (!q) return;

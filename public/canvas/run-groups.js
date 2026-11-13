@@ -8,8 +8,8 @@ const PAD = 28, GAP = 36, SECTION_GAP = 160, ROW_W = 2600;
 export function initRunGroups(ctx) {
   const world = document.querySelector('#world');
   if (!world) return;
-  const layer = h('div', { id: 'run-groups', 'aria-hidden': 'true' });
-  world.prepend(layer);
+  // The layer exists only while there is a region to draw: a canvas with no runs or groups has nothing added to it.
+  let layer = null;
   let board = { groups: [], runs: [], arrange: { by: 'kind' } }, raf = 0, timer = 0;
 
   const flat = (groups, out = []) => { for (const g of groups ?? []) { out.push(g); flat(g.groups, out); } return out; };
@@ -36,6 +36,8 @@ export function initRunGroups(ctx) {
       boxes.push(h('div', { class: 'rg-box', 'data-kind': s.kind, 'data-group': s.id, style: `left:${x0}px;top:${y0}px;width:${x1 - x0}px;height:${y1 - y0}px` },
         h('span', { class: 'rg-label' }, h('b', { text: s.name }), h('small', { text: `${s.items.length} item${s.items.length === 1 ? '' : 's'}` }))));
     }
+    if (!boxes.length) { layer?.remove(); layer = null; return; }
+    if (!layer) { layer = h('div', { id: 'run-groups', 'aria-hidden': 'true' }); world.prepend(layer); }
     layer.replaceChildren(...boxes);
   }
 

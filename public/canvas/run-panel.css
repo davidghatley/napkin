@@ -1,8 +1,7 @@
 /* Runs and the review queue (run-panel.js). Canvas tokens only; each agent's colour arrives as --rp-c / --rp-ink. */
 #runs-panel { position: fixed; z-index: 30; left: 248px; right: 320px; bottom: 26px; max-height: min(42vh, 440px); display: flex; flex-direction: column;
   background: var(--nk-chrome); color: var(--nk-text); border-top: 1px solid var(--nk-line-2); font: 12px/1.45 var(--nk-sans); overflow: hidden; }
-/* docked: the stage gives up the room, so the drawer never sits on top of work */
-body:has(#runs-panel:not([hidden])) #stage { margin-bottom: var(--rp-h, 0px); }
+/* docked: run-panel.js gives #stage a bottom margin of the drawer's height while there are runs or things waiting (a :has() rule here made every DOM change cost a style recalculation) */
 #runs-panel[hidden] { display: none; }
 #runs-panel[data-waiting="1"] { border-top-color: var(--nk-accent); box-shadow: 0 -2px 0 var(--nk-accent); }
 .rp-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 4px; min-width: 0; border-bottom: 1px solid transparent; }
@@ -87,22 +86,22 @@ body:has(#runs-panel:not([hidden])) #stage { margin-bottom: var(--rp-h, 0px); }
 
 /* Docked: a drawer along the bottom of the canvas. It shrinks the stage instead of covering work. */
 /* The full diff */
-.rd-back { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .45); display: grid; place-items: center; }
-.rd { width: min(960px, calc(100vw - 48px)); max-height: calc(100vh - 64px); display: flex; flex-direction: column; background: var(--nk-chrome); color: var(--nk-text); border: 1px solid var(--nk-line-2); border-radius: 10px; box-shadow: var(--nk-shadow-pop); font: 12px/1.45 var(--nk-sans); overflow: hidden; }
-.rd-top { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--nk-line); }
-.rd-top b { font: 600 12.5px var(--nk-mono); overflow-wrap: anywhere; }
-.rd-sum { font-weight: 600; } .rd-keys { color: var(--nk-text-3); margin-left: auto; font-size: 11px; }
-.rd-body { overflow: auto; min-height: 120px; padding: 6px 0; font: 11.5px/1.5 var(--nk-mono); outline: none; }
-.rd-line { display: grid; grid-template-columns: 44px 44px 16px 1fr; white-space: pre-wrap; overflow-wrap: anywhere; }
-.rd-line code { font: inherit; }
-.rd-n { text-align: right; padding-right: 8px; color: var(--nk-text-3); user-select: none; }
-.rd-s { text-align: center; font-weight: 700; }
-.rd-line[data-t="add"] { background: color-mix(in srgb, var(--nk-ok) 16%, transparent); } .rd-line[data-t="add"] .rd-s { color: var(--nk-ok); }
-.rd-line[data-t="del"] { background: color-mix(in srgb, var(--nk-measure) 16%, transparent); } .rd-line[data-t="del"] .rd-s { color: var(--nk-measure); }
-.rd-line[data-current] { box-shadow: inset 3px 0 0 var(--nk-accent); }
-.rd-fold { padding: 3px 14px; color: var(--nk-text-3); background: var(--nk-chrome-2); font: 11px var(--nk-sans); }
-.rd-img { max-width: 100%; max-height: 70vh; margin: 8px auto; display: block; }
-.rd-actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--nk-line); }
+.rdf-back { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / .45); display: grid; place-items: center; }
+.rdf { width: min(960px, calc(100vw - 48px)); max-height: calc(100vh - 64px); display: flex; flex-direction: column; background: var(--nk-chrome); color: var(--nk-text); border: 1px solid var(--nk-line-2); border-radius: 10px; box-shadow: var(--nk-shadow-pop); font: 12px/1.45 var(--nk-sans); overflow: hidden; }
+.rdf-top { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--nk-line); }
+.rdf-top b { font: 600 12.5px var(--nk-mono); overflow-wrap: anywhere; }
+.rdf-sum { font-weight: 600; } .rdf-keys { color: var(--nk-text-3); margin-left: auto; font-size: 11px; }
+.rdf-body { overflow: auto; min-height: 120px; padding: 6px 0; font: 11.5px/1.5 var(--nk-mono); outline: none; }
+.rdf-line { display: grid; grid-template-columns: 44px 44px 16px 1fr; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rdf-line code { font: inherit; }
+.rdf-n { text-align: right; padding-right: 8px; color: var(--nk-text-3); user-select: none; }
+.rdf-s { text-align: center; font-weight: 700; }
+.rdf-line[data-t="add"] { background: color-mix(in srgb, var(--nk-ok) 16%, transparent); } .rdf-line[data-t="add"] .rdf-s { color: var(--nk-ok); }
+.rdf-line[data-t="del"] { background: color-mix(in srgb, var(--nk-measure) 16%, transparent); } .rdf-line[data-t="del"] .rdf-s { color: var(--nk-measure); }
+.rdf-line[data-current] { box-shadow: inset 3px 0 0 var(--nk-accent); }
+.rdf-fold { padding: 3px 14px; color: var(--nk-text-3); background: var(--nk-chrome-2); font: 11px var(--nk-sans); }
+.rdf-img { max-width: 100%; max-height: 70vh; margin: 8px auto; display: block; }
+.rdf-actions { display: flex; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--nk-line); }
 .rp-diffbar { display: flex; align-items: center; gap: 8px; color: var(--nk-text-2); font-size: 11px; }
 .rp-pre .add, .rp-pre .del { display: block; } .rp-pre .add { color: var(--nk-ok); } .rp-pre .del { color: var(--nk-measure); }
 .rp-pre[data-diff] { max-height: 150px; overflow: auto; }

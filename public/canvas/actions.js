@@ -97,7 +97,7 @@ export const ACTIONS = [
   action('copy-code', 'Copy the element as code (its HTML or JSX and the CSS that applies)', 'Ctrl/Cmd+C', [], [], (c) => c.copyCode?.copy(), 'edit'),
   action('paste-code', 'Paste copied code into the selected element', 'Ctrl/Cmd+V', [], [], (c) => c.copyCode?.pasteFromClipboard(), 'edit'),
   action('runs', 'Open runs: the plan, agents here and what waits for you', 'Alt+R', ['KeyR'], refs('run-panel', 'keydown'), (c) => c.runs?.open(), 'review'),
-  action('runs-keys', 'Review queue: move / approve / reject / send back / note / pick an answer', 'j k · A · X · S · C · 1-9 · Enter · Escape', ['ArrowDown', 'ArrowUp', 'j', 'k', 'a', 'x', 'r', 's', 'c', 'Enter', 'Escape'], refs('run-panel', 'keydown'), undefined, 'review'),
+  action('runs-keys', 'Review queue: move / approve / reject / send back / note / pick an answer', 'j k · A · X · S · D (full diff) · C · 1-9 · Enter · Escape', ['ArrowDown', 'ArrowUp', 'j', 'k', 'a', 'x', 'r', 's', 'c', 'd', 'Enter', 'Escape'], refs('run-panel', 'keydown'), undefined, 'review'),
   action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
   action('theme', 'Switch light or dark chrome', 'Click the theme button', [], [], () => document.querySelector('#theme-toggle').click(), 'theme'),
 ];

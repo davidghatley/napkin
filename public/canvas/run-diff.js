@@ -40,32 +40,32 @@ export function openDiff({ proposal: p, old, next, image, actions, onClose }) {
   const prevFocus = document.activeElement;
   const lines = p.kind === 'control' ? null : image ? null : diffLines(old ?? '', next ?? '');
   const changed = lines ? changeCount(lines) : 0;
-  const body = h('div', { class: 'rd-body', tabindex: '0', 'aria-label': `Changes to ${p.path}` });
+  const body = h('div', { class: 'rdf-body', tabindex: '0', 'aria-label': `Changes to ${p.path}` });
   if (lines) {
     const ranges = old == null ? [{ from: 0, to: lines.length - 1 }] : hunks(lines, 3);
     let prev = -1;
     for (const r of ranges) {
-      if (r.from - prev - 1 > 0) body.append(h('div', { class: 'rd-fold', text: `… ${r.from - prev - 1} unchanged lines …` }));
+      if (r.from - prev - 1 > 0) body.append(h('div', { class: 'rdf-fold', text: `… ${r.from - prev - 1} unchanged lines …` }));
       for (let i = r.from; i <= r.to; i++) {
         const l = lines[i];
-        body.append(h('div', { class: 'rd-line', 'data-t': l.t === ' ' ? 'same' : l.t === '+' ? 'add' : 'del', ...(l.t !== ' ' && (i === 0 || lines[i - 1].t === ' ') ? { 'data-change': '1' } : {}) },
-          h('span', { class: 'rd-n', text: l.a ?? '' }), h('span', { class: 'rd-n', text: l.b ?? '' }), h('span', { class: 'rd-s', 'aria-hidden': 'true', text: l.t }), h('code', { text: l.text })));
+        body.append(h('div', { class: 'rdf-line', 'data-t': l.t === ' ' ? 'same' : l.t === '+' ? 'add' : 'del', ...(l.t !== ' ' && (i === 0 || lines[i - 1].t === ' ') ? { 'data-change': '1' } : {}) },
+          h('span', { class: 'rdf-n', text: l.a ?? '' }), h('span', { class: 'rdf-n', text: l.b ?? '' }), h('span', { class: 'rdf-s', 'aria-hidden': 'true', text: l.t }), h('code', { text: l.text })));
       }
       prev = r.to;
     }
-    if (lines.length - 1 - prev > 0 && old != null) body.append(h('div', { class: 'rd-fold', text: `… ${lines.length - 1 - prev} unchanged lines …` }));
-  } else if (image) body.append(h('img', { class: 'rd-img', src: image, alt: `Proposed ${p.path}` }));
+    if (lines.length - 1 - prev > 0 && old != null) body.append(h('div', { class: 'rdf-fold', text: `… ${lines.length - 1 - prev} unchanged lines …` }));
+  } else if (image) body.append(h('img', { class: 'rdf-img', src: image, alt: `Proposed ${p.path}` }));
   else body.append(h('p', { text: `${p.label ?? p.control}: ${JSON.stringify(p.before)} → ${JSON.stringify(p.value)}` }));
   const summary = lines ? (old == null ? `New file, ${lines.length} lines` : changed ? `${lines.filter((l) => l.t === '+').length} added, ${lines.filter((l) => l.t === '-').length} removed` : 'No text changes') : '';
-  const dlg = h('div', { class: 'rd', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Review ${p.path}` },
-    h('div', { class: 'rd-top' }, h('b', { text: p.path ?? p.label }), h('span', { class: 'rd-sum', text: summary }), h('span', { class: 'rd-keys', text: 'N / P next / previous change · A approve · X reject · S send back · Esc close' })),
-    body, h('div', { class: 'rd-actions' }, ...actions.map((a) => h('button', { type: 'button', class: `rp-btn${a.kind ? ' ' + a.kind : ''}`, onclick: () => { close(); a.run(); } }, a.text, h('kbd', { text: a.key })))));
-  const back = h('div', { class: 'rd-back' }, dlg);
+  const dlg = h('div', { class: 'rdf', role: 'dialog', 'aria-modal': 'true', 'aria-label': `Review ${p.path}` },
+    h('div', { class: 'rdf-top' }, h('b', { text: p.path ?? p.label }), h('span', { class: 'rdf-sum', text: summary }), h('span', { class: 'rdf-keys', text: 'N / P next / previous change · A approve · X reject · S send back · Esc close' })),
+    body, h('div', { class: 'rdf-actions' }, ...actions.map((a) => h('button', { type: 'button', class: `rp-btn${a.kind ? ' ' + a.kind : ''}`, onclick: () => { close(); a.run(); } }, a.text, h('kbd', { text: a.key })))));
+  const back = h('div', { class: 'rdf-back' }, dlg);
   document.body.append(back);
   const marks = () => [...body.querySelectorAll('[data-change]')];
   let at = -1;
   const jump = (d) => { const m = marks(); if (!m.length) return; at = (at + d + m.length) % m.length; m[at].scrollIntoView({ block: 'center' }); m.forEach((x) => x.removeAttribute('data-current')); m[at].dataset.current = '1'; };
-  function close() { document.removeEventListener('keydown', key, true); back.remove(); onClose?.(); try { prevFocus?.focus?.(); } catch { /* gone */ } }
+  function close() { back.remove(); onClose?.(); try { prevFocus?.focus?.(); } catch { /* gone */ } }
   function key(ev) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     const k = ev.key.toLowerCase();
@@ -73,7 +73,7 @@ export function openDiff({ proposal: p, old, next, image, actions, onClose }) {
     if (k === 'n') { ev.preventDefault(); jump(1); } else if (k === 'p') { ev.preventDefault(); jump(-1); }
     else { const a = actions.find((x) => x.key.toLowerCase() === k); if (a) { ev.preventDefault(); ev.stopPropagation(); close(); a.run(); } }
   }
-  document.addEventListener('keydown', key, true);
+  back.onkeydown = key; // on the dialog, which holds focus while it is open
   back.addEventListener('mousedown', (e) => { if (e.target === back) close(); });
   body.focus(); jump(1);
   return close;
