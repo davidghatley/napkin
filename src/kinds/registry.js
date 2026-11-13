@@ -375,9 +375,17 @@ export function decodeText(buf) {
   if (buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString('utf16le');
   if (buf[0] === 0xfe && buf[1] === 0xff) return Buffer.from(buf.subarray(2)).swap16().toString('utf16le');
   if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return buf.subarray(3).toString('utf8');
+  // UTF-16 text with no byte order mark: every other byte is zero.
+  if (buf.length >= 4) {
+    let even = 0, odd = 0;
+    const n = Math.min(buf.length, 400);
+    for (let i = 0; i + 1 < n; i += 2) { if (buf[i] === 0) even++; if (buf[i + 1] === 0) odd++; }
+    if (odd > n / 4 && even === 0) return buf.toString('utf16le');
+    if (even > n / 4 && odd === 0) return Buffer.from(buf).swap16().toString('utf16le');
+  }
   const text = buf.toString('utf8');
   // A cut-off multi-byte character at the end of a window is not a sign of another encoding.
-  if (text.slice(0, -1).includes('\ufffd') && !buf.includes(0)) return buf.toString('latin1');
+  if (text.slice(0, -1).includes('\ufffd') && !buf.includes(0)) return new TextDecoder('windows-1252').decode(buf);
   return text;
 }
 export function context(path, head, bytes) {

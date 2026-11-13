@@ -595,7 +595,16 @@ async function run() {
       root.querySelector('.stamp').textContent =
         `${item.kind.toUpperCase()} · ${img.naturalWidth} × ${img.naturalHeight}`;
     };
-    img.onerror = () => error('The browser cannot decode this image.');
+    img.onerror = async () => {
+      let head = '';
+      try {
+        const b = new Uint8Array(await (await fetch(raw, { headers: { range: 'bytes=0-23' } })).arrayBuffer()).slice(0, 24);
+        head = [...b].map((x) => x.toString(16).padStart(2, '0')).join(' ');
+      } catch {}
+      root.innerHTML = bar(label, item.kind.toUpperCase()) +
+        note('This file is named like a ' + item.kind.toUpperCase() + ' image but the browser cannot decode it. It may be cut short or damaged.') +
+        (head ? '<p class="meta">' + esc(item.bytes + ' bytes. It starts with: ') + '<code>' + esc(head) + '</code></p>' : '');
+    };
     return;
   }
   if (item.family === 'video') {

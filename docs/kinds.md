@@ -224,3 +224,9 @@ its open-time assertion does not establish the separate frame-time target.
 - Video cards show a poster (`/api/poster/<id>`, one ffmpeg frame, two at a time) and load the clip when the pointer reaches for it.
 - A folder of more than 150 files opens on its first files at 30%, grouped by kind, with room for each title. Shift+1 still fits everything. File cards stay out of the picture until they are placed and their picture has arrived; a component that is not drawn live shows the first lines of its file.
 - Under 20 screen pixels wide a frame is not loaded live.
+
+## Text encodings, damaged images and zoomed-out cards
+
+- Text kinds are decoded before they are previewed: UTF-8, UTF-16 with or without a byte order mark, and Windows-1252 for older single-byte files. The raw bytes on disk are never changed.
+- An image the browser cannot decode (cut short, wrong signature) shows a plain message with its size and first bytes instead of a broken-image icon. Its card carries no invented dimensions.
+- When the board is zoomed out, every compact card shows its kind and its main fact (rows, duration, size, entries) in type large enough to read at 30 percent.

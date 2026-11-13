@@ -12,6 +12,7 @@ import {
   zipEntry,
   LIMIT,
 } from './readers.js';
+import { decodeText } from './registry.js';
 import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
 const exec = promisify(execFile),
@@ -318,7 +319,7 @@ export async function previewData(ctx, query = new URLSearchParams()) {
       headers,
       total = 0;
     const b = window(ctx.file, 0, 8 * LIMIT),
-      sample = b.toString('utf8'),
+      sample = decodeText(b),
       truncated = b.length < ctx.bytes;
     const text = truncated ? sample.slice(0, Math.max(0, sample.lastIndexOf('\n') + 1)) : sample;
     if (ctx.kind === 'csv' || ctx.kind === 'tsv') {

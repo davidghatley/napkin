@@ -9,7 +9,7 @@ import {
 import { resolve, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { writeItemValue, removeItemRecipe, writeItemLayout } from '../commit.js';
-import { context, detectKind } from './registry.js';
+import { context, detectKind, decodeText } from './registry.js';
 import { explainError } from '../errors.js';
 import { window, LIMIT } from './readers.js';
 import { validate } from './controls.js';
@@ -197,7 +197,7 @@ export function openItems(
       ...context(item.path, head, item.bytes),
       ...item,
       head,
-      text: head.toString('utf8'),
+      text: decodeText(head),
       recipe,
       recipeBytes,
       recipeFile,

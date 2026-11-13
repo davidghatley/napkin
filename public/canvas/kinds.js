@@ -110,6 +110,21 @@ export function initKinds(ctx) {
   ctx.kinds = { load };
   return ctx.kinds;
 }
+// The line that stays readable when the board is zoomed out: the kind and the one fact about the file that matters most.
+function headline(c) {
+  const m = c.meta || {},
+    bits = [];
+  if (m.summary) bits.push(m.summary);
+  else if (m.table?.rows?.length) bits.push(m.table.columns.length + ' columns');
+  if (m.duration) bits.push(m.duration.toFixed(1) + ' s');
+  if (m.width && m.height) bits.push(m.width + ' × ' + m.height);
+  if (m.archive) bits.push(m.archive.length + ' entries');
+  if (m.cells) bits.push(m.cells.length + ' cells');
+  if (m.events) bits.push(m.events.length + ' events');
+  if (m.graph?.nodes) bits.push(m.graph.nodes.length + ' nodes');
+  if (!bits.length) bits.push(c.bytes.toLocaleString() + ' bytes');
+  return `<span class="kind-headline"><b>${esc(c.kind.toUpperCase())}</b><i>${esc(bits.slice(0, 2).join(' · '))}</i></span>`;
+}
 export function compactItem(c) {
   const family = c.meta.family,
     raw = '/file/' + enc(c.id),
@@ -185,7 +200,7 @@ export function compactItem(c) {
   if (!plain && !['image', 'video', 'font', 'audio'].includes(family)) content = cachedSurface(content);
   else if (family === 'audio')
     content = content.replace(/<svg[\s\S]*?<\/svg>/, (svg) => cachedSurface(svg));
-  return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}">${content}<span class="kind-stamp">${esc(c.kind)} · ${c.bytes.toLocaleString()} bytes</span></div>`;
+  return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}">${content}${headline(c)}<span class="kind-stamp">${esc(c.kind)} · ${c.bytes.toLocaleString()} bytes</span></div>`;
 }
 function cachedSurface(content) {
   const style = `*{box-sizing:border-box}body,div{color:#263e33}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 monospace;padding:18px;margin:0}small{font:10px monospace;color:#74957f}p{font:12px/1.5 system-ui;margin:8px 0}h3{font:600 24px system-ui}svg{width:100%;height:300px;display:block}.kind-mini-table{font:12px/1.6 monospace;padding:12px}.kind-mini-table>div{display:flex;border-bottom:1px solid #d8e1d6}.kind-mini-table span{flex:1;padding:8px;overflow:hidden}.kind-mini-table small{display:block}.kind-mini-table svg{height:25px;width:70px}.kind-mini-table>div:first-child{background:#e1eadd}.kind-caption{font:11px monospace;padding:6px 18px}.kind-archive,.kind-prose,.kind-timeline{padding:16px 22px}.kind-archive p{padding:7px;border-bottom:1px solid #d6e0d4}.kind-archive small,.kind-timeline small{float:right}.kind-notebook{padding:12px}.kind-notebook>div{border:1px solid #d2e0d1;border-radius:4px;margin-bottom:10px}.kind-notebook small{display:block;background:#e2ebdd;padding:5px 8px}.kind-notebook pre{padding:10px}.kind-timeline>div{border-left:2px solid #9bbaa4;padding:0 0 14px 18px}.kind-motion{background:#e0e9d9;min-height:340px;display:grid;place-content:center}.kind-motion>div{background:#35836a;color:white;border-radius:16px;padding:25px;font:30px system-ui}.kind-paper{margin:18px 70px;padding:30px;background:white;min-height:290px}.kind-paper h2{font:26px Georgia;color:#2c7155}.kind-paper-lines{height:80px;background:repeating-linear-gradient(transparent,transparent 15px,#d5dfd2 15px,#d5dfd2 16px)}`;
