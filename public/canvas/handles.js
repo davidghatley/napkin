@@ -54,7 +54,7 @@ export function initHandles(ctx) {
     layer.style.transform = ''; layer.style.visibility = ''; drawnAt = ctx.view?.get() ?? null;
     layer.replaceChildren();
     const info = current();
-    if (!info) return;
+    if (!info) { drawFrame(); return; }
     const base = overlays.getBoundingClientRect(), r = info.el.getBoundingClientRect(), z = zoom();
     const x = r.left - base.left, y = r.top - base.top;
     for (const [h, [fx, fy]] of Object.entries(HANDLES)) {
@@ -88,6 +88,18 @@ export function initHandles(ctx) {
       }
       if (isGrid(style)) drawTracks(info, cs, base);
     }
+  }
+  // A selected HTML frame (frame-ops.js): eight handles on its page, the corners and the middle of each edge (standards 3.6).
+  function frameHandles(rect) {
+    const base = overlays.getBoundingClientRect(), x = rect.left - base.left, y = rect.top - base.top;
+    let list = [...layer.querySelectorAll('.hdl-frame')];
+    if (list.length !== 8) { list.forEach((d) => d.remove()); list = Object.keys(HANDLES).map((h) => { const d = mkdiv('hdl hdl-resize hdl-frame', { 'data-h': h, 'aria-hidden': 'true' }); layer.append(d); return d; }); }
+    for (const d of list) { const [fx, fy] = HANDLES[d.dataset.h]; place(d, x + fx * rect.width, y + fy * rect.height); }
+  }
+  function drawFrame() {
+    const fs = ctx.frames?.selected();
+    if (!fs || fs.sec.culled) return;
+    frameHandles(fs.f.iframe().getBoundingClientRect());
   }
   function drawTracks(info, cs, base) {
     const z = zoom(), r = info.el.getBoundingClientRect();
@@ -188,8 +200,40 @@ export function initHandles(ctx) {
     const h = ev.target.closest('.hdl-resize'), pad = ev.target.closest('.hdl-pad'), gap = ev.target.closest('.hdl-gap');
     if (!h && !pad && !gap) return;
     ev.preventDefault(); ev.stopPropagation();
-    if (h) startResize(ev, h.dataset.h); else if (pad) startPadding(ev, pad.dataset.side); else startGap(ev, Number(gap.dataset.i));
+    if (h?.classList.contains('hdl-frame')) startFrameResize(ev, h.dataset.h); else if (h) startResize(ev, h.dataset.h); else if (pad) startPadding(ev, pad.dataset.side); else startGap(ev, Number(gap.dataset.i));
   });
+  // Resize a frame from a handle: the page reflows as you drag (its body takes the size, its viewport the width), a tag below says
+  // the size, Shift keeps the proportions, Alt resizes from the centre, never under MIN; on release one undoable write (frame-ops.js).
+  function startFrameResize(ev, hd) {
+    const fs = ctx.frames?.selected();
+    if (!fs || !begin('resize', ev, { info: fs })) return;
+    const { id, f } = fs, z = zoom(), b0 = ctx.frames.box(id), MIN = ctx.frames.MIN;
+    const body = f.doc()?.body, was = { w: body?.style.width ?? '', h: body?.style.height ?? '' };
+    const west = hd.includes('w'), east = hd.includes('e'), north = hd.includes('n'), south = hd.includes('s');
+    g.result = null;
+    g.move = (ev2) => {
+      const dx = (ev2.clientX - g.x0) / z, dy = (ev2.clientY - g.y0) / z, k = ev2.altKey ? 2 : 1;
+      let w = b0.w + (east ? dx : west ? -dx : 0) * k, h = b0.h + (south ? dy : north ? -dy : 0) * k;
+      if (ev2.shiftKey) { // the proportions stay: the edge dragged further leads (an edge handle drags the other side along)
+        const r = (east || west) && (north || south) ? Math.max(w / b0.w, h / b0.h) : east || west ? w / b0.w : h / b0.h;
+        w = b0.w * r; h = b0.h * r;
+      }
+      w = Math.max(MIN.w, Math.round(w)); h = Math.max(MIN.h, Math.round(h));
+      const x = ev2.altKey ? b0.x + Math.round((b0.w - w) / 2) : west ? b0.x + b0.w - w : b0.x;
+      const y = ev2.altKey ? b0.y + Math.round((b0.h - h) / 2) : north ? b0.y + b0.h - h : b0.y;
+      const page = f.doc()?.body;
+      if (page) { page.style.width = `${w}px`; page.style.height = `${h}px`; }
+      f.setWidth(w);
+      ctx.stage.moveTo(id, x, y);
+      g.result = { x, y, w, h };
+      const r = f.iframe().getBoundingClientRect(), base = baseBox();
+      frameHandles(r);
+      chip(`${w} × ${h}`, r.left - base.left, r.bottom - base.top + 8);
+      ctx.stage.refreshOverlays();
+    };
+    g.end = async () => { if (g.result) await ctx.frames.resize(id, g.result); };
+    g.undo = () => { const page = f.doc()?.body; if (page) { page.style.width = was.w; page.style.height = was.h; } f.setWidth(b0.w); ctx.stage.moveTo(id, b0.x, b0.y); ctx.stage.refreshOverlays(); };
+  }
   function startResize(ev, hd) {
     const z = zoom();
     const ok = begin('resize', ev, {});

@@ -7,6 +7,7 @@
 // document engine's HTML and React files (POST /api/edit, one batch, one undo step):
 //   ctx.ops.can(verb) -> true | the reason it is off now | null (it can never apply to this selection)
 //   ctx.ops.{ remove, order(forward|backward|front|back), selectParent, selectChildren, copyNow, cutNow, pasteNow }
+// A whole HTML frame selected (its card or body): remove and duplicate act on its file (frame-ops.js).
 import { plain, SANS } from './words.js';
 import { index, VOID } from '/src/model.js';
 import { pasteHtml } from './html-paste.js';
@@ -227,6 +228,7 @@ export function initEditOps(ctx) {
       }
       return null;
     }
+    if ((verb === 'delete' || verb === 'duplicate') && ctx.frames?.selected()) return true; // the whole frame: its file (frame-ops.js)
     const e = eng();
     if (!e?.at) return 'The frame is still loading';
     const n = e.at.n, top = TOP.has(n.tag) || !e.at.parent, card = !!e.s.card, par = e.at.parent && !TOP.has(e.at.parent.tag) ? e.at.parent : null;
@@ -253,6 +255,7 @@ export function initEditOps(ctx) {
       if (r.ok) ctx.select(null);
       return r;
     }
+    if (ctx.frames?.selected()) return ctx.frames.remove(); // a whole frame: its file goes, one undo brings it back
     if (refuse('delete')) return null;
     const e = eng();
     const j = await engEdit(e.c, e.ids.map((node) => ({ op: 'delete', node })), e.ids.length > 1 ? `Deleted ${e.ids.length} elements` : `Deleted <${e.at.n.tag}>`);
@@ -260,6 +263,7 @@ export function initEditOps(ctx) {
     return j;
   }
   async function engDuplicate() {
+    if (ctx.frames?.selected()) return ctx.frames.duplicate(); // a whole frame: a copy of its file beside it
     if (refuse('duplicate')) return null;
     const e = eng();
     const src = await Promise.all(e.ids.map((node) => fetch(`/api/component/${encodeURIComponent(e.c.component)}/copy?node=${encodeURIComponent(node)}`).then((r) => r.json())));

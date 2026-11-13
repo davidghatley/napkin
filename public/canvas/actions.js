@@ -5,6 +5,8 @@ const action = (id, label, key, codes, handlers, run, hint = 'view') => ({ id, k
 // A canvas command: `phrase` is what the palette runs when typed exactly ("Arrange by kind", "Select <path>"); `keys` is its
 // default, rebindable binding (commands.js dispatches it). `key` stays the human line the key map shows next to it.
 const command = (id, label, phrase, keys, run, extra = {}) => ({ id, kind: 'action', label, phrase, keys, key: keys || `Ctrl/Cmd+K, "${phrase}"`, codes: [], handlers: [], run, hint: 'command', palette: true, command: true, ...extra });
+// The arrows nudge a selected HTML frame (frame-ops.js) before they walk; `n` is a count typed first ("3", then an arrow).
+const nudge = (c, dx, dy, n = 1) => !!c.frames?.nudge(dx * (n || 1), dy * (n || 1));
 export const ACTIONS = [
   action('fit', 'Fit all', 'Shift+1', ['Digit1', '!', '1'], refs('view', 'keydown'), (c) => c.view.fitAll({ animate: true })),
   action('fit-selection', 'Fit selection', 'Shift+2', ['Digit2', '@', '2'], refs('view', 'keydown'), (c) => c.view.fitSelection({ animate: true })),
@@ -141,14 +143,17 @@ export const ACTIONS = [
   command('send-to-back', 'Send to back', 'Send to back', 'Ctrl+Alt+[', (c) => c.ops.order('back'), { about: 'Make the element the first of its siblings' }),
   command('toggle-left', 'Show or hide the layers panel', 'Toggle layers panel', 'Ctrl+\\', (c) => c.shell.toggleLeft(), { about: 'The canvas takes the width while it is hidden' }),
   command('rebind', 'Rebind', 'Rebind <command> to <keys>', '', (c, a) => c.surface.rebind(a), { arg: 'rebind', about: 'Give a command other keys' }),
-  command('focus-right', 'Focus the card to the right', 'Focus the card to the right', 'ArrowRight', (c, n) => c.surface.walk(1, 0, false, n), { about: 'Spatial focus: the nearest card that way, by position' }),
-  command('focus-left', 'Focus the card to the left', 'Focus the card to the left', 'ArrowLeft', (c, n) => c.surface.walk(-1, 0, false, n)),
-  command('focus-down', 'Focus the card below', 'Focus the card below', 'ArrowDown', (c, n) => c.surface.walk(0, 1, false, n)),
-  command('focus-up', 'Focus the card above', 'Focus the card above', 'ArrowUp', (c, n) => c.surface.walk(0, -1, false, n)),
-  command('extend-right', 'Add the card to the right to the selection', 'Add the card to the right', 'Shift+ArrowRight', (c, n) => c.surface.walk(1, 0, true, n)),
-  command('extend-left', 'Add the card to the left to the selection', 'Add the card to the left', 'Shift+ArrowLeft', (c, n) => c.surface.walk(-1, 0, true, n)),
-  command('extend-down', 'Add the card below to the selection', 'Add the card below', 'Shift+ArrowDown', (c, n) => c.surface.walk(0, 1, true, n)),
-  command('extend-up', 'Add the card above to the selection', 'Add the card above', 'Shift+ArrowUp', (c, n) => c.surface.walk(0, -1, true, n)),
+  // The arrows: a selected HTML frame moves (1 px, Shift 10 px; frame-ops.js, standards 3.5); otherwise focus walks between cards.
+  command('focus-right', 'Focus the card to the right', 'Focus the card to the right', 'ArrowRight', (c, n) => nudge(c, 1, 0, n) || c.surface.walk(1, 0, false, n), { about: 'Spatial focus: the nearest card that way, by position (a selected frame moves 1 px instead)' }),
+  command('focus-left', 'Focus the card to the left', 'Focus the card to the left', 'ArrowLeft', (c, n) => nudge(c, -1, 0, n) || c.surface.walk(-1, 0, false, n)),
+  command('focus-down', 'Focus the card below', 'Focus the card below', 'ArrowDown', (c, n) => nudge(c, 0, 1, n) || c.surface.walk(0, 1, false, n)),
+  command('focus-up', 'Focus the card above', 'Focus the card above', 'ArrowUp', (c, n) => nudge(c, 0, -1, n) || c.surface.walk(0, -1, false, n)),
+  command('extend-right', 'Add the card to the right to the selection', 'Add the card to the right', 'Shift+ArrowRight', (c, n) => nudge(c, 10, 0, n) || c.surface.walk(1, 0, true, n), { about: 'A selected frame moves 10 px instead' }),
+  command('extend-left', 'Add the card to the left to the selection', 'Add the card to the left', 'Shift+ArrowLeft', (c, n) => nudge(c, -10, 0, n) || c.surface.walk(-1, 0, true, n)),
+  command('extend-down', 'Add the card below to the selection', 'Add the card below', 'Shift+ArrowDown', (c, n) => nudge(c, 0, 10, n) || c.surface.walk(0, 1, true, n)),
+  command('extend-up', 'Add the card above to the selection', 'Add the card above', 'Shift+ArrowUp', (c, n) => nudge(c, 0, -10, n) || c.surface.walk(0, -1, true, n)),
+  action('nudge', 'Move the selected frame', 'Arrows 1 px · Shift+arrows 10 px', [], [], null, 'edit'),
+  action('frame-resize', 'Resize the selected frame (Shift keeps proportions, Alt from the centre)', 'Drag a handle', [], [], null, 'edit'),
   command('panel', 'Go to the instruments of the selection', 'Go to the instruments', 'G I', (c) => c.surface.focusPanel(), { about: 'Move focus into the instrument panel' }),
   command('canvas', 'Back to the canvas', 'Back to the canvas', 'G C', (c) => c.surface.focusCanvas(), { about: 'Move focus from the panel back to the selected card' }),
   command('select-all', 'Select every card', 'Select every card', 'G A', (c) => c.surface.selectAll()),
