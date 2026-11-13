@@ -88,7 +88,7 @@ test('menus: each target has its own item set, in the group order, with the regi
     assert.deepEqual(await selection(b), [`${LANDING}|${h1}`], 'the element under the pointer is selected, the others cleared');
     assert.deepEqual(m.rows, ['Cut', 'Copy', 'Paste here', 'Duplicate', '---', 'Select parent', 'Select children', 'Order >', 'Wrap in frame', '---', 'Create component', '---', 'Zoom to selection', 'Show code', '---', 'Delete']);
     const by = Object.fromEntries(m.items.map((x) => [x.label, x]));
-    assert.equal(by['Create component'].why, 'Coming in the next pass');
+    assert.ok(!by['Create component'].off, 'an element in a frame can become a component (pass 3)');
     assert.ok(by['Select children'].off && /Nothing inside/.test(by['Select children'].why), 'a heading has no elements inside');
     assert.ok(by['Wrap in frame'].off, 'wrapping HTML is not there yet: dimmed');
     assert.deepEqual([by.Cut.key, by.Copy.key, by.Duplicate.key, by['Select parent'].key, by.Delete.key], ['Ctrl X', 'Ctrl C', 'Ctrl D', 'Shift Enter', 'Delete']);
