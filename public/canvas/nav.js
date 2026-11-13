@@ -70,7 +70,7 @@ export function initNav(ctx) {
     }
     if (saved?.view && !saved.focus) view.set(saved.view);
     else if (ctx.state.components.total > 150 && stage.openingRect?.()) view.fitRect(stage.openingRect(), { pad: 0, max: 1, animate: false });
-    else view.fitAll({ animate: false, work: true });
+    else view.fitAll({ animate: false }); // the first view shows every card (lane b-polish)
   }
   addEventListener('hashchange', () => {
     const h = fromHash();
