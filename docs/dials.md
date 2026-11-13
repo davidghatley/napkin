@@ -12,7 +12,7 @@ node test/dials/serve.js
 
 Open the printed URL. The server binds a random free localhost port. Stop that process with Ctrl C when finished. It never uses the owner's live port. The six sample documents are color, typography, motion, image adjustment, chart encoding and generation. Expand the catalogue for thirteen further controls and a custom plugin example. Each schema is inspectable in the page and exported from `public/dials/schemas.js`.
 
-The demo uses one visual language, the workshop: ruled headers, square fields, plated figures, monospaced labels. Round one compared three directions (compact, workshop, specimen); the workshop was kept and the others were removed.
+The demo uses one visual language, the quiet pro tool: ink and paper with one hard accent (cobalt), Inter for words, and the Stem 7 pixel face for one hero readout per studio and a few live numerals. Every row carries a drawn figure at row height that is itself the control (drag it, or the label), an underlined value field beside it, one figure size and one track length. Each sample card shows the thing its values make (a button on a wash, a specimen, a moving block, the image, the chart, the seed tiles) above its panel. Fonts ship in `public/dials/fonts/` (Inter under the OFL, Stem 7 is the owner's own face).
 
 Theme switching is on the top bar. Section buttons are keyboard accessible; `1`, `2`, `3` on those buttons select a depth. A focused label accepts arrows, counts, reset and `S` to open its own studio. Enter or Space on a live figure opens its studio. `Ctrl K` opens a palette that finds any control or depth command; Enter goes to the control and Shift Enter opens its studio. `?` opens the key map, which also lets you rebind keys.
 
@@ -22,17 +22,21 @@ A studio takes the window when the panel is created with `studio: "viewport"` (t
 
 ![Color studio](../public/dials/evidence/studio-color-light.png)
 
-![Motion studio with loop range, lanes, measurements and code](../public/dials/evidence/studio-motion-light.png)
+![Motion studio: response handles, keyframe track, spacing chart and code](../public/dials/evidence/studio-motion-light.png)
 
 The [evidence folder](../public/dials/evidence/) also contains every studio in both themes, the collapsed dial state, the narrow-screen studio, and recorded timing samples. These are browser captures of the shipped demo, not design mockups.
 
 ## Motion studio
 
-- Response plot (spring or cubic-bezier) with a dashed earlier response. The dashed line starts as the standard CSS `ease` (or linear when the response is already ease), then follows the response as it was before your last committed edit. The plot's time axis includes the delay, so a delay shows as a flat run before the curve starts. A velocity plot sits beside the trail. **Pin as before** keeps the current response as the comparison; the trail below the plot shows the current and pinned responses side by side.
-- Measured: settle time (within 2 percent of the end), overshoot, peak time, and whether the response fits the duration. The same measures are shown for the pinned response.
-- Timeline: a ruler in milliseconds, a **loop range** (drag the markers, or `[` and `]` at the playhead, `\` to clear; Loop in and Loop out fields as well), a lane for the response keys and one lane per other number or angle instrument in the section. Drag a key to change its time and value, double-click to add or remove, `K` adds a response key at the playhead. Playback repeats inside the range. **Apply at playhead** sets the other instruments to their values at the playhead.
-- Output you can paste: a CSS easing (`cubic-bezier()`, or a thinned `linear()` for springs), a `transition` line, and a Web Animations call (key values drive the custom property `--progress`; lane keys drive `--<id>`).
-- Additive fields on the motion value: `range: [in, out]` and `tracks: { "<controlId>": [{ time, value }] }`.
+The studio opens for a `motion` or `keyframes` control and works on the whole section: the response, the keyframes, a rotation (`angle`) and a loop (`boolean` whose id or label says loop).
+
+- **Response.** A curve over milliseconds, delay included. In bezier mode the two handles sit on the curve and drag; in spring mode the first peak drags (across sets when it arrives, which sets stiffness; up and down sets overshoot, which sets damping). The delay and the end are handles too. Hover or focus a handle and its numbers show in a chip beside it. The settle point is a dashed line; a spring that is cut off by its duration is shaded.
+- **Path.** Keyframes are diamonds on a timed track: offset across, translateX up, with millisecond ticks and pixel gutter labels. Drag a diamond, use arrows on a focused one, Delete removes a middle key, double-click the track adds one. Each segment eases with the response, as CSS animations and per-frame WAAPI easing do.
+- **Spacing.** Where the element is every 50 ms, with the before and after positions outlined and the live block moving through them. Pause stops it; reduced motion shows the end state.
+- **Presets** are drawn curves, ringed when active. Fields for the shape and the timing sit beside them; the numbers table is in the rail.
+- **Code.** Three tabs: a `transition` rule, an `@keyframes` animation, and a WAAPI `animate()` call. Springs are written as `linear()` plus a `--dials-spring: k d m v` custom property (a comment in WAAPI) so they read back exactly; a bare `linear()` is fitted back to a spring. The code is editable: what you type is parsed and applied to the panel.
+
+For a host that writes files: every `commit` value event on a motion or keyframes control carries `detail.code = { transition, keyframes, waapi }`. `panel.motionCode(sectionId)` returns the same object at any time, and `panel.applyMotionCode(sectionId, text)` reads CSS or WAAPI text back into the section (one undoable edit per changed control). The pure functions `motionCode` and `readMotionCode` are exported from `motion.js`.
 
 ## Talking to napkin's HTTP contract
 
@@ -152,14 +156,18 @@ The Node suite checks arithmetic and rejection paths, reference OKLab coordinate
 
 The browser suite checks both themes, 32 px dials, node identity across depth changes, expression entry and invalid drafts, local undo/redo, numeric counts, modifier scrubbing, queued updates/conflicts, all basic control edit paths, CSS color syntax, plugins, focus indication, reduced motion, narrow layout, and axe. Performance evidence contains 15 swaps of a 200-control document, 100 update/layout samples and 50 real pointer moves per number, color, motion and image control traced from a capture-phase mark to the end of Chromium's next software `Paint`. That last measurement includes the rendering path; it does not measure physical display scanout. Hardware and browser differences still matter.
 
-## Studio details added in round 3
+## Studios
 
-- Choice controls (plane, gamut, scheduler, encoding fields, bench select rows) are drawn: a segmented control for a few short options, otherwise a button that opens a listbox (arrows, Home, End, Enter, Escape). The library no longer uses the browser select. File picking is a drawn button plus a drop target that wraps a hidden file input.
-- Color: ramp and harmony are plated swatches carrying lightness, hue or chroma and the contrast ratio against the chosen background. An image sample is drawn in the studio and any pixel can be clicked to take its color.
-- Image: crop corners and edges and the mask radius are handles drawn on the image, with arrow-key and Shift/Alt steps.
-- Typography: size, tracking, leading and each axis have a slider beside the typed field; each axis is also shown stepped across its range, with the current stop marked, next to a size ladder and the character set.
-- Sampler: the other two schedulers are drawn dashed behind the current one, with a table of sigma per step. Data: axis end values, a legend for color and size, and the first rows of the source with the encoded columns marked.
-- Arrow keys now also work on gradient controls (turn the angle by 5 degrees) and encoding controls (walk the x field through the declared fields; `scrub` names another channel). A `%` entry on a control with a range is that share of the range, otherwise that share of the current value.
+Every studio has the same parts: a rail under the rows (the secondary numbers and key hints), a main column of drawings you drag, and a side column with the hero readout in Stem 7, choices and fields. A studio field is a name you can scrub, a typed value (expressions allowed) and a 4 px bar with a 14 px thumb that is a keyboard slider; painted bars show what they change (lightness, chroma, hue, alpha, exposure). No browser select or range input is used.
+
+- **Colour:** the OKLCH or OKLab plane with gamut lines, painted L, C, H and A bars under it, the contrast ratio as the hero with the proof card, background choice, code formats, ramp and harmony. Token binding, sampling from an image (a drop well) and history sit in the rail.
+- **Type:** the specimen edited in place over its leading lines, a size ladder, an axis lab where one handle sets weight across and size up over the faces it would make, weight steps drawn as glyphs, and the character set in the rail.
+- **Motion:** see above.
+- **Image:** the picture with eight crop handles, the mask ring and a before/after split you drag; the tone curve drawn over the source histogram with five points on the curve and black, grey and white level triangles under it; gamma as the hero with clipping and kept size; aspect choices, a source drop well, and looks in the rail.
+- **Data:** the chart linked to its rows (hover one, the other lights), channels picked on a row of names or by dropping a field, every field with its distribution in the rail (focus one and press x, y, c or s), and the correlation of x and y as the hero.
+- **Sampler:** the noise schedule with the other schedulers dashed behind it and handles for steps, denoise and time shift, a per-step ladder of how much noise each step removes, seed tiles for the batch, and model evaluations as the hero.
+
+Studios are drawn when opened, so swapping a whole panel stays cheap.
 
 ## Integration boundary and remaining gaps
 
@@ -170,7 +178,7 @@ The library has a real editing surface for the listed types, with these limits:
 - CSS parsing depends on browser support. Color output offers four formats; the original input string is preserved until an edit. Wide-gamut boundaries are numerical, but the raster plane is sRGB. The APCA readout is experimental and not a compliance certification.
 - Typography axes are declared by the host; font-table discovery is not implemented. The demo uses the existing repository variable font for its weight axis, with a system-font fallback.
 - Image adjustment is a local preview with five linear curve knots, rectangle crop and a circular mask. It does not implement arbitrary masks, native-resolution image export or image metadata persistence. Palette extraction is frequency bucketing.
-- The motion track stores normalized scalar keyframes and previews them. It does not parse or rewrite CSS/WAAPI itself, or provide multi-property tracks. Those mappings belong to adapters.
+- Motion code covers translateX keyframes with opacity, a rotation and a loop. Other properties in an `@keyframes` block are kept in the frame records but are not drawn on the track. Writing the file is the host's job, using `detail.code`.
 - The sampler studio illustrates schedules and settings. It does not submit generation jobs, assume installed models or claim to reproduce every scheduler's backend math.
 - The gradient composer has two stops; arbitrary CSS remains editable in the row. File pick emits a File and its name; persistence is explicit host work.
 - The keyboard map comes from the same key definitions as the command dispatcher. Label commands can be rebound with `options.keys` (`increase`, `decrease`, `reset`, `studio`, `help` arrays of key names); the help map uses those actual bindings. A global canvas command palette remains integration work.
