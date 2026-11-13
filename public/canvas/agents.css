@@ -126,8 +126,6 @@ body:not([data-drawer]) #proposals-tray .pt-body .pitem { margin: 2px 6px; }
 .clash-chip button.cc-mine { background: var(--nk-accent); border-color: var(--nk-accent); color: var(--nk-on-accent); }
 .clash-chip button:hover { filter: brightness(1.06); }
 
-/* the Activity tab is the sixth button in the status bar: reserve its width so nothing shifts when it arrives (FEEL-04) */
-#drawer-tabs { min-width: 392px; } /* all eight tabs: Code to Activity measure 389px, so none arriving late moves the status bar */
 
 #proposals-tray .pi-edits button.ed-show[aria-pressed="true"] { background: var(--nk-accent); color: var(--nk-on-accent); }
 

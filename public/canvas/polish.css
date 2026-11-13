@@ -17,13 +17,6 @@
 .cmp-head .mctl .mall[aria-pressed="true"] { background: color-mix(in srgb, var(--nk-frame-ink) 15%, var(--nk-frame)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nk-frame-ink) 30%, var(--nk-frame)); }
 
 
-/* ---- bottom bar: summary, panels, hints, zoom, in groups ---- */
-#statusbar { gap: 14px; }
-#statusbar #drawer-tabs { display: inline-flex; gap: 0; padding-left: 14px; border-left: 1px solid var(--nk-line); margin-left: 2px; }
-#statusbar #drawer-tabs button { padding: 0 9px; }
-#statusbar .hints { font-size: 11px; color: var(--nk-text-2); }
-.zoomctl { width: 150px; flex: none; }
-
 /* ---- inspector: hairlines and light rows instead of boxes ---- */
 #panel .seg { background: transparent; padding: 0; gap: 0; border-radius: 0; border-bottom: 1px solid var(--nk-line); }
 #panel .seg button, #panel .seg .segopt { height: 24px; border-radius: 0; background: transparent; box-shadow: none; color: var(--nk-text-3); }
@@ -37,9 +30,6 @@ details.sec > summary { padding: 9px 14px 7px; font-weight: 600; }
 details.sec[data-sec="text"]:not(:has(.fbox:not(.inherited):not(.computed))) > summary { color: var(--nk-text-3); }  /* nothing set here: the section steps back */
 #panel .sec.empty .sectitle { color: var(--nk-text-3); font-weight: 500; }
 #panel .sec.empty .addbtn { color: var(--nk-text-3); }
-#statusbar #counts { flex: none; min-width: 176px; }              /* reserved, so the hints do not move when the counts and tabs fill in */
-#statusbar #drawer-tabs { flex: none; min-width: 372px; }
-#statusbar .hints { flex: none; margin-left: auto; text-align: right; }
 
 /* WPC-33: when the tags below the box would cover a cell caption, both go above it */
 #overlay-select[data-tags="above"]::after { transform: translateY(calc(-100% - 7px)); }
