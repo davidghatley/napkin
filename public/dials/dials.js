@@ -29,6 +29,8 @@ import { builtinTypes, shapeOf, shapeSummary } from "./shapes.js";
 const controls = new Map(),
   figures = new Map();
 let serial = 0;
+// Rows whose figures draw during render(); later rows draw theirs as they come near or when idle.
+const EAGER_FIGURES = 32;
 const DIALS_MIME = "application/x-dials+json";
 // Every live panel, so the palette can reach controls in all of them; one document listener per page.
 const livePanels = new Set(),
@@ -328,6 +330,8 @@ export class Dials extends EventTarget {
       for (const c of section.controls) {
         c.default = clone(c.default ?? c.value);
         const row = this.makeRow(c, s);
+        // Past the first screens, a row's figure is drawn when it scrolls near or when the page is idle.
+        if (this.rows.size > EAGER_FIGURES) row.lazyFig = true;
         rowlist.append(row.node);
       }
       this.buildStudio(
@@ -343,6 +347,7 @@ export class Dials extends EventTarget {
     // Finish row mutations before studios read computed styles and draw their previews.
     for (const row of this.rows.values()) this.paint(row.c.id, false);
     for (const s of this.sections.values()) s.lab?.update?.();
+    this.wakeFigures();
     this.emit("render", { revision: this.revision });
     return this;
   }
@@ -764,10 +769,8 @@ export class Dials extends EventTarget {
         input.querySelector("[aria-checked=\"true\"]")?.focus();
     }
     r.plugin?.update?.(clone(c.value));
-    const key = typeof c.figure === "string" ? c.figure : c.figure?.type,
-      draw = figures.get(key);
-    if (draw) draw(r.fig, c, clone(c.value));
-    else drawFigure(r.fig, c, c.value);
+    if (r.lazyFig) r.figStale = true;
+    else this.drawRowFigure(r);
     const s = r.section;
     if (s.schema.controls[0] === c) {
       drawFigure(s.fig, c, c.value);
@@ -775,6 +778,34 @@ export class Dials extends EventTarget {
     }
     if (updateStudio && s.studioControl === id) s.lab?.update?.();
     this.emit("paint", { control: id, value: clone(c.value) });
+  }
+  drawRowFigure(r) {
+    const { c } = r,
+      key = typeof c.figure === "string" ? c.figure : c.figure?.type,
+      draw = figures.get(key);
+    if (draw) draw(r.fig, c, clone(c.value));
+    else drawFigure(r.fig, c, c.value);
+  }
+  /** Draw deferred row figures: each as its row comes near the viewport, the rest in idle slices. */
+  wakeFigures() {
+    const lazy = [...this.rows.values()].filter((r) => r.lazyFig);
+    if (!lazy.length) return;
+    const token = (this._figToken = {}),
+      wake = (r) => {
+        if (!r.lazyFig || this._figToken !== token) return;
+        r.lazyFig = false;
+        if (r.figStale) this.drawRowFigure(r);
+        r.figStale = false;
+      };
+    for (const r of lazy) r.node.addEventListener("contentvisibilityautostatechange", (e) => !e.skipped && wake(r), { once: true });
+    let i = 0;
+    const slice = () => {
+      if (this._figToken !== token || this.disposed) return;
+      const end = performance.now() + 6;
+      while (i < lazy.length && performance.now() < end) wake(lazy[i++]);
+      if (i < lazy.length) setTimeout(slice, 16);
+    };
+    requestAnimationFrame(() => setTimeout(slice, 32));
   }
   summary(c) {
     const v = c.value;
