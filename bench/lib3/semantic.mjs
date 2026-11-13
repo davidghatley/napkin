@@ -86,3 +86,46 @@ export async function scrollEverything(b, frac) {
   await sleep(180);
 }
 export const visibleText = (b) => b.eval("document.body.innerText");
+// The up-to-n most common colours of a picture (3-bit bins, each reported as its mean colour),
+// ignoring bins under `min` of the picture. `rect` limits the area.
+export function dominantColours(p, rect = null, n = 3, min = 0.04) {
+  const x0 = Math.max(0, rect?.x ?? 0),
+    y0 = Math.max(0, rect?.y ?? 0),
+    x1 = Math.min(p.width, rect ? rect.x + rect.w : p.width),
+    y1 = Math.min(p.height, rect ? rect.y + rect.h : p.height);
+  const bins = new Map();
+  let total = 0;
+  for (let y = y0; y < y1; y += 2)
+    for (let x = x0; x < x1; x += 2) {
+      const i = (y * p.width + x) * 4,
+        k = (p.data[i] >> 5) * 64 + (p.data[i + 1] >> 5) * 8 + (p.data[i + 2] >> 5);
+      const b = bins.get(k) || [0, 0, 0, 0];
+      b[0]++, (b[1] += p.data[i]), (b[2] += p.data[i + 1]), (b[3] += p.data[i + 2]);
+      bins.set(k, b);
+      total++;
+    }
+  return [...bins.values()]
+    .filter((b) => b[0] / total >= min)
+    .sort((a, b) => b[0] - a[0])
+    .slice(0, n)
+    .map((b) => [b[1] / b[0], b[2] / b[0], b[3] / b[0]].map(Math.round));
+}
+// Share of a rect's pixels within `tol` of an [r,g,b] colour.
+export function shareOf(p, rect, rgb, tol = 48) {
+  let hit = 0,
+    all = 0;
+  const x1 = Math.min(p.width, rect.x + rect.w),
+    y1 = Math.min(p.height, rect.y + rect.h);
+  for (let y = Math.max(0, rect.y); y < y1; y += 2)
+    for (let x = Math.max(0, rect.x); x < x1; x += 2) {
+      const i = (y * p.width + x) * 4;
+      all++;
+      if (
+        Math.abs(p.data[i] - rgb[0]) <= tol &&
+        Math.abs(p.data[i + 1] - rgb[1]) <= tol &&
+        Math.abs(p.data[i + 2] - rgb[2]) <= tol
+      )
+        hit++;
+    }
+  return all ? hit / all : 0;
+}

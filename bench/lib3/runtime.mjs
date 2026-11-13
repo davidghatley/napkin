@@ -597,6 +597,39 @@ export async function palette(b, command) {
   await sleep(100);
   return command.length + 2;
 }
+// Select an item by outcome. The documented route is the palette phrase "Select <path>"; if that
+// leaves /api/board without the item selected (and no panel for it on screen), a person's route
+// is taken instead: click the item's card. The result says which route worked. Used by the
+// benches that are not about the keyboard (keys3 never falls back).
+export async function selectItem(b, s, item) {
+  const selected = async () => {
+    try {
+      const board = await request(s, "/api/board");
+      if ((board.selection || []).includes(item.id)) return true;
+    } catch {}
+    return b.eval(
+      `!![...document.querySelectorAll('[data-controls-for]')].find(e=>e.dataset.controlsFor===${JSON.stringify(item.id)}&&e.getBoundingClientRect().width>0)`,
+    );
+  };
+  await palette(b, "Select " + item.path);
+  for (let n = 0; n < 6; n++) {
+    if (await selected()) return "palette";
+    await sleep(100);
+  }
+  await key(b, "Escape");
+  const clicked = await b.eval(
+    `(()=>{const e=document.querySelector('[data-item-id="'+CSS.escape(${JSON.stringify(item.id)})+'"]');if(!e)return null;e.scrollIntoView({block:'center',inline:'center'});const r=e.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`,
+  );
+  if (clicked) {
+    for (const type of ["mousePressed", "mouseReleased"])
+      await b.send("Input.dispatchMouseEvent", { type, x: clicked.x, y: clicked.y, button: "left", clickCount: 1 });
+    for (let n = 0; n < 6; n++) {
+      if (await selected()) return "pointer";
+      await sleep(100);
+    }
+  }
+  throw Error("neither the palette phrase nor clicking the card selects " + item.path);
+}
 // Focus is visible only if an indicator is actually drawn: a real outline or ring whose colour
 // is found in the pixels around the element and contrasts with what is behind it. A caret or
 // the element merely being a text input does not count.

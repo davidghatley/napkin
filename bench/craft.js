@@ -9,12 +9,15 @@ import {
   key,
   typeKeys,
   palette,
+  selectItem,
   axe,
   sleep,
   evidence,
   decodePng,
 } from "./lib3/runtime.mjs";
 import { CARD_CONTENT } from "./kinds.js";
+import { shot, differing } from "./lib3/semantic.mjs";
+import { valueFor } from "./lib3/runtime.mjs";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
 // D8 Craft. Automated half: cold start, light and dark, axe in every state a person meets.
@@ -98,18 +101,55 @@ export async function measure() {
           found.palette = await axe(b);
           await key(b, "Escape");
           const html = listed.find((x) => x.kind === "html");
-          await palette(b, "Select " + html.path);
+          await selectItem(b, s, html);
           await sleep(300);
-          await open("[data-controls-for]", 8, "the selected-item panel");
-          found.panel = await axe(b);
           const schema = await request(
             s,
             "/api/controls/" + encodeURIComponent(html.id),
           );
-          const c = schema.sections.flatMap((x) => x.controls)[0];
+          const all = schema.sections.flatMap((x) => x.controls);
+          const c = all[0];
+          // The panel is judged by outcome: a visible region (the contract's data-controls-for,
+          // or any aside/complementary/region/dialog/form) that names the item's real controls
+          // by their schema labels (as text, aria-label or label) and holds a working widget
+          // for them. Empty dummy panels pass no label.
+          const want = all.slice(0, 6).map((x) => String(x.label).toLowerCase());
+          const named = await b.eval(
+            `(()=>{const want=${JSON.stringify(want)};const vis=e=>{const r=e.getBoundingClientRect(),s=getComputedStyle(e);return r.width>40&&r.height>20&&s.visibility!=='hidden'&&s.display!=='none'};const regions=[...document.querySelectorAll('[data-controls-for],aside,[role=complementary],[role=region],[role=dialog],[role=form],[role=group]')].filter(vis);const names=new Set();let widgets=0;for(const g of regions){const t=(g.innerText||'').toLowerCase()+' '+[...g.querySelectorAll('[aria-label],[title]')].map(e=>(e.getAttribute('aria-label')||e.title).toLowerCase()).join(' ');for(const w of want)if(t.includes(w))names.add(w);widgets=Math.max(widgets,g.querySelectorAll('input,select,textarea,button,[role=slider],[role=spinbutton],[role=switch],[role=checkbox],[role=combobox],[role=radio],canvas').length)}return{names:[...names],widgets,regions:regions.length}})()`,
+          );
+          assert(
+            named.names.length >= Math.min(3, want.length) &&
+              named.widgets >= Math.min(3, want.length),
+            `the selected-item panel names ${named.names.length} of ${want.length} real controls (${JSON.stringify(want)}) with ${named.widgets} widgets`,
+          );
+          found.panel = await axe(b);
           await palette(b, "Studio " + c.label);
           await sleep(300);
-          await open("[data-studio-for]", 8, "the control studio");
+          if (!(await b.eval("!![...document.querySelectorAll('[data-studio-for]')].find(e=>e.getBoundingClientRect().width>40)"))) {
+            // Outcome route: open the control's studio from its own row by pointer or Enter.
+            await key(b, "Escape");
+            await b.eval(`(()=>{const l=${JSON.stringify(String(c.label).toLowerCase())};const e=[...document.querySelectorAll('[data-control-id],[aria-label],button,[role=button]')].find(e=>(e.getAttribute('aria-label')||e.innerText||'').toLowerCase().includes(l)&&e.getBoundingClientRect().width>0);if(e){e.focus();e.dispatchEvent(new MouseEvent('dblclick',{bubbles:true}));}})()`);
+            await key(b, "Enter");
+            await sleep(300);
+          }
+          await open("[data-studio-for],[role=dialog]", 8, "the control studio");
+          // A real studio draws the control's value: change it through the API and the studio's
+          // own pixels must change (a static or empty pane does not).
+          const srect = await b.eval(
+            `(()=>{const e=[...document.querySelectorAll('[data-studio-for],[role=dialog]')].filter(e=>{const r=e.getBoundingClientRect();return r.width>40&&r.height>20}).sort((a,b)=>b.getBoundingClientRect().width*b.getBoundingClientRect().height-a.getBoundingClientRect().width*a.getBoundingClientRect().height)[0];if(!e)return null;const r=e.getBoundingClientRect();return{x:Math.max(0,Math.round(r.x)),y:Math.max(0,Math.round(r.y)),w:Math.round(Math.min(r.right,innerWidth)-Math.max(0,r.x)),h:Math.round(Math.min(r.bottom,innerHeight)-Math.max(0,r.y))}})()`,
+          );
+          assert(srect, "no studio region is visible");
+          const before = await shot(b);
+          const latest = await request(s, "/api/controls/" + encodeURIComponent(html.id));
+          await request(s, "/api/control", {
+            item: html.id,
+            control: c.id,
+            value: valueFor(latest.sections.flatMap((x) => x.controls).find((x) => x.id === c.id)),
+            baseRevision: latest.revision,
+          });
+          await sleep(900);
+          const moved = differing(before, await shot(b), srect);
+          assert(moved > 60, `changing the control moved only ${moved} studio pixels`);
           found.studio = await axe(b);
           await key(b, "Escape");
           await key(b, "?");
@@ -117,9 +157,9 @@ export async function measure() {
           await open("[role=dialog]", 10, "the key map");
           found.keymap = await axe(b);
           await key(b, "Escape");
-          const all = Object.values(found).flat();
+          const violations = Object.values(found).flat();
           await evidence(b, "D8-" + scheme);
-          return { ok: all.length === 0, value: { cards, found } };
+          return { ok: violations.length === 0, value: { cards, found } };
         },
       );
     }

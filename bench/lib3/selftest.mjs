@@ -471,3 +471,19 @@ test("cheats are rejected and honest work passes: focus ring, causal scrub, lead
     rmSync(dir, { recursive: true, force: true });
   }
 });
+test("card pixel oracle: a thumbnail matches its view, placeholder text does not", async () => {
+  const { dominantColours, shareOf } = await import("./semantic.mjs");
+  const pic = (w, h, fill) => {
+    const data = new Uint8Array(w * h * 4);
+    for (let i = 0; i < w * h; i++) data.set(fill(i % w, (i / w) | 0), i * 4);
+    return { width: w, height: h, data };
+  };
+  const view = pic(100, 100, (x) => (x < 50 ? [200, 30, 30, 255] : [30, 60, 220, 255]));
+  const thumb = pic(60, 40, (x) => (x < 30 ? [205, 28, 33, 255] : [28, 62, 215, 255]));
+  const xxx = pic(60, 40, () => [250, 250, 250, 255]);
+  const want = dominantColours(view);
+  assert.equal(want.length, 2);
+  const rect = { x: 0, y: 0, w: 60, h: 40 };
+  assert.equal(want.filter((c) => shareOf(thumb, rect, c) >= 0.005).length, 2);
+  assert.equal(want.filter((c) => shareOf(xxx, rect, c) >= 0.005).length, 0);
+});

@@ -15,6 +15,7 @@ import {
   p95,
   key,
   palette,
+  selectItem,
   evidence,
   sleep,
   focusVisible,
@@ -415,7 +416,7 @@ export async function measure() {
         assert(num, "no numeric control with a range on " + item.path);
         const b = await browser();
         await b.goto(s.base + "/");
-        await palette(b, "Select " + item.path);
+        await selectItem(b, s, item);
         const read = async () =>
           (
             await request(s, "/api/controls/" + encodeURIComponent(item.id))

@@ -20,6 +20,8 @@ import {
   shot,
   colorShare,
   differing,
+  dominantColours,
+  shareOf,
   rectOf,
   inkExtent,
   scrollEverything,
@@ -379,6 +381,7 @@ export async function measure() {
       const cards = await wb.eval(
         `(()=>{const cards=[...document.querySelectorAll('[data-item-id]')];return{n:cards.length,blank:cards.filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight&&!${CARD_CONTENT}(e)}).length}})()`,
       );
+      const openMs = ws.ms + performance.now() - t;
       // Content oracle on visible cards: a card must show something FROM the file, not only its
       // name. For plain-text kinds the bench reads each visible file and requires a distinctive
       // word from its body (not part of its path) in the card's rendered text.
@@ -401,17 +404,41 @@ export async function measure() {
       }
       cards.judged = judged;
       cards.matched = matched;
+      // Pixel oracle for every other kind: the colours that dominate the item's own /view render
+      // must also appear in its canvas card. A card of "xxx" in a <pre> does not show them.
+      const nonText = JSON.parse(
+        await wb.eval(
+          `JSON.stringify([...document.querySelectorAll('[data-item-id]')].map(e=>{const r=e.getBoundingClientRect();return{id:e.dataset.itemId,x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height),vis:r.width>20&&r.height>20&&r.x>=0&&r.y>=0&&r.right<=innerWidth&&r.bottom<=innerHeight}}).filter(r=>r.vis))`,
+        ),
+      ).filter((r) => byId.has(r.id) && !textKinds.has(byId.get(r.id).kind));
+      const canvasShot = await shot(wb);
+      let pjudged = 0, pmatched = 0;
+      for (const r of nonText.slice(0, 10)) {
+        await observe(wb, ws.base + "/view/" + encodeURIComponent(r.id));
+        await sleep(250);
+        const want = dominantColours(await shot(wb));
+        if (want.length < 2) continue;
+        pjudged++;
+        const found = want.filter((c) => shareOf(canvasShot, r, c) >= 0.005).length;
+        if (found >= Math.ceil(want.length / 2)) pmatched++;
+      }
+      await wb.goto(ws.base + "/");
+      await sleep(500);
+      cards.pixelJudged = pjudged;
+      cards.pixelMatched = pmatched;
       await book.check(
         "mixed.open",
         "1000 items; complete visible cards (real content from the file, not just the name) < 2 s from CLI start",
         () => ({
           ok:
-            ws.ms + performance.now() - t < 2000 &&
+            openMs < 2000 &&
             cards.n > 0 &&
             cards.blank === 0 &&
             cards.judged >= 3 &&
-            cards.matched >= Math.ceil(cards.judged * 0.8),
-          value: { ms: ws.ms + performance.now() - t, cards },
+            cards.matched >= Math.ceil(cards.judged * 0.8) &&
+            cards.pixelJudged >= 3 &&
+            cards.pixelMatched >= Math.ceil(cards.pixelJudged * 0.8),
+          value: { ms: openMs, cards },
         }),
       );
       await book.check(

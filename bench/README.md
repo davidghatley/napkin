@@ -417,6 +417,37 @@ If a contract-compatible product chooses a different observation shape, resolve
 that with the lead before judging: do not put compatibility branches or bench-specific
 responses into the product. These conventions are not permission to weaken DREAM 3.
 
+### Builder-facing contract: hooks, commands and what is judged by outcome
+
+Where a check needs a hook, this is the contract. Where an outcome can be seen another
+way, the bench accepts the other way; those places are marked "or".
+
+| Need | Hook the bench uses | Accepted instead |
+|---|---|---|
+| Canvas card | `data-item-id="<item id>"` on the card | none; every check that samples cards needs it |
+| Selecting an item (D3 panel checks, D8) | palette phrase `Select <path>` | clicking the card, as long as `/api/board` `selection` then holds the id or a `[data-controls-for=<id>]` region shows. D6 keys journeys never fall back: they are keyboard-only |
+| Item panel | `[data-controls-for="<id>"]` | D8 only: any visible aside / complementary / region / dialog / form that shows at least 3 of the item's first 6 schema control labels (text or aria-label) and holds at least 3 widgets (inputs, buttons, sliders) |
+| Control row | `data-control-id` | D3 control checks need it |
+| Studio | palette phrase `Studio <label>` and `[data-studio-for]` | D8 only: Enter / double click on the control's row, and any visible `[role=dialog]` as the pane |
+| Keyboard control checks | palette phrases `Control <label>`, `Dial`, `Bench`, `Studio`, `Reset <label>` | none; typed exactly, never abbreviated |
+| Arrange / review / present | `Arrange by <mode>`, `data-group-id`, `data-proposal-id`, `data-variant`, `data-presenting` | fullscreen for presenting |
+
+Cards are judged by what they show, not by their markup. In the 1,000-item folder:
+
+- Text kinds: a distinctive word from the file body is in the card's rendered text (at
+  least 80% of the sampled visible cards, at least 3 judged).
+- Every other kind: the colours that dominate the item's own `/view/<id>` render (up to
+  three bins of at least 4% of the picture) must also appear in its canvas card at
+  0.5% of the card or more, for at least half of those colours, on at least 80% of up to 10
+  visible non-text cards (at least 3 judged). A card that holds three characters of
+  placeholder text fails; a thumbnail, a plot, a waveform or a poster passes.
+- A card with no real content fails the blank check even if it carries a `pre` or `ul`.
+
+D8 is judged by outcome too. The panel must name the item's real controls and hold
+working widgets for them. The studio must redraw: the bench changes the control through
+`POST /api/control` and the studio pane's pixels must change (more than 60 differing pixels
+within 0.9 s). An empty panel wrapped in the right landmarks fails.
+
 ### D1 and D2 methods
 
 D1 checks every manifest file, the right MIME/bytes/kind, visible purpose-built DOM,
