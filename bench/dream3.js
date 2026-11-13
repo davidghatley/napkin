@@ -9,8 +9,10 @@ import { join } from "node:path";
 import { ROOT } from "./lib3/runtime.mjs";
 import { leadEnv } from "./lib3/lead-env.mjs";
 import { buildHash } from "./lib3/reviews.mjs";
+// A dimension may be measured by several benches; their checks are merged into one row (D1 =
+// kinds.js coverage and performance + fidelity3.js differential fidelity).
 const DIMENSIONS = [
-  ["D1", "kinds"],
+  ["D1", ["kinds", "fidelity3"]],
   ["D2", "controls3"],
   ["D3", "keys3"],
   ["D4", "board"],
@@ -70,6 +72,18 @@ for (const [dimension, name] of DIMENSIONS) {
     });
     continue;
   }
+  const parts = [];
+  for (const one of [name].flat()) parts.push(await measureOne(dimension, one));
+  const result = parts.reduce((a, r) => ({
+    dimension,
+    beat: { met: a.beat.met + r.beat.met, total: a.beat.total + r.beat.total },
+    dream: { met: a.dream.met + r.dream.met, total: a.dream.total + r.dream.total },
+    pendingLead: (a.pendingLead || 0) + (r.pendingLead || 0),
+    checks: [...a.checks, ...r.checks],
+  }));
+  results.push(result);
+}
+async function measureOne(dimension, name) {
   const { code, stdout, stderr } = await exec([
     join(ROOT, "bench", name + ".js"),
     "--json",
@@ -100,16 +114,18 @@ for (const [dimension, name] of DIMENSIONS) {
       ],
     };
   }
-  if (code > 1)
+  if (code > 1) {
     result.checks.push({
-      id: "harness.exit",
+      id: name + ".harness.exit",
       ok: false,
       value: code,
       target: "no harness crash",
     });
-  results.push(result);
+    result.dream.total++;
+  }
   console.log(stdout.trim().split("\n").slice(0, -1).join("\n"));
   if (stderr) console.error(stderr.trim());
+  return result;
 }
 if (!process.argv.includes("--skip-legacy"))
   for (const [name, args] of LEGACY) {

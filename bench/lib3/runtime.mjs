@@ -59,13 +59,19 @@ export function walk(dir, prefix = "") {
     .sort();
 }
 export function snapshot(dir) {
+  // A file the product removes between listing and reading (an undo deleting a recipe) is
+  // simply absent from the snapshot.
   return Object.fromEntries(
-    walk(dir).map((p) => [
-      p,
-      createHash("sha256")
-        .update(readFileSync(join(dir, p)))
-        .digest("hex"),
-    ]),
+    walk(dir).flatMap((p) => {
+      let bytes;
+      try {
+        bytes = readFileSync(join(dir, p));
+      } catch (e) {
+        if (e.code === "ENOENT") return [];
+        throw e;
+      }
+      return [[p, createHash("sha256").update(bytes).digest("hex")]];
+    }),
   );
 }
 export function git(dir, ...args) {
@@ -107,6 +113,32 @@ export function processRSS(pid) {
   } catch {
     return 0;
   }
+}
+// The page renderer: the largest web-content renderer under a Chromium main process (not the
+// GPU, network or utility processes, and not a browser-UI or extension renderer). Own memory
+// only: field "RssAnon" is its private memory (JS heap, ArrayBuffers, DOM, decoded data);
+// "VmRSS" adds shared mappings, including raster tiles shared with the GPU process.
+export function pageRendererRSS(pid, field = "VmRSS") {
+  let best = 0;
+  const rx = new RegExp("^" + field + ":\\s+(\\d+)", "m");
+  const walk = (p) => {
+    let children = [];
+    try {
+      children = readFileSync(`/proc/${p}/task/${p}/children`, "utf8").trim().split(/\s+/).filter(Boolean);
+    } catch {}
+    for (const c of children) {
+      try {
+        const cmd = readFileSync(`/proc/${c}/cmdline`, "utf8");
+        if (cmd.includes("--type=renderer") && !/--extension-process|--top-chrome-webui/.test(cmd)) {
+          const own = Number(readFileSync(`/proc/${c}/status`, "utf8").match(rx)?.[1] || 0) * 1024;
+          best = Math.max(best, own);
+        }
+      } catch {}
+      walk(c);
+    }
+  };
+  walk(pid);
+  return best;
 }
 export function chromiumMains() {
   const out = [];
@@ -618,8 +650,10 @@ export async function selectItem(b, s, item) {
       `!![...document.querySelectorAll('[data-controls-for]')].find(e=>e.dataset.controlsFor===${JSON.stringify(item.id)}&&e.getBoundingClientRect().width>0)`,
     );
   };
+  // Selection speed is judged by panel.swap; here the bench only needs the selection, so it
+  // waits up to 2 s (a first selection after load can take several hundred ms).
   await palette(b, "Select " + item.path);
-  for (let n = 0; n < 6; n++) {
+  for (let n = 0; n < 20; n++) {
     if (await selected()) return "palette";
     await sleep(100);
   }
@@ -886,3 +920,35 @@ export async function waitUntil(fn, ms = 5000) {
   throw Error("Outcome not observed within " + ms + " ms");
 }
 export { stress, diffPng, decodePng };
+// Main-thread work per frame and dropped frames during a canvas gesture (see bench/README.md,
+// "Frame budget"). For each animation frame: work = time from the frame's start (the rAF
+// timestamp) to a message posted from inside rAF, which runs only after that frame's rendering
+// task (rAF callbacks, style, layout, paint) has finished. Dropped = intervals over 1.5 vsyncs.
+export async function frameWork(b, mode = "pan", { events = 240, x = 520, y = 350 } = {}) {
+  const geometry = () =>
+    b.eval(
+      `JSON.stringify([...document.querySelectorAll('[data-item-id]')].slice(0,200).map(e=>{const r=e.getBoundingClientRect();return[r.x,r.y,r.width]}))`,
+    );
+  const before = await geometry();
+  await b.eval(
+    `window.__fw={work:[],intervals:[],stop:false};(()=>{let last;const tick=t=>{if(last!==undefined)window.__fw.intervals.push(t-last);last=t;const ch=new MessageChannel();ch.port1.onmessage=()=>window.__fw.work.push(performance.now()-t);ch.port2.postMessage(0);if(!window.__fw.stop)requestAnimationFrame(tick)};requestAnimationFrame(tick)})()`,
+  );
+  let moved = false;
+  for (let i = 0; i < events; i++) {
+    await b.send("Input.dispatchMouseEvent", {
+      type: "mouseWheel",
+      x,
+      y,
+      deltaX: mode === "pan" ? (i % 80 < 40 ? 24 : -24) : 0,
+      deltaY: mode === "pan" ? (i % 120 < 60 ? 8 : -8) : i % 40 < 20 ? -12 : 12,
+      modifiers: mode === "pan" ? 0 : 2,
+    });
+    await sleep(16);
+    if (i === 24) moved = before !== (await geometry());
+  }
+  assert(moved, "wheel gesture did not move or scale actual canvas items");
+  const r = await b.eval("window.__fw.stop=true;({work:window.__fw.work.slice(2),intervals:window.__fw.intervals.slice(2)})");
+  const sorted = [...r.intervals].sort((a, b) => a - b),
+    vsync = sorted[Math.floor(sorted.length / 2)] || 16.7;
+  return { ...r, vsync, dropped: r.intervals.filter((v) => v > Math.max(vsync, 16.6) * 1.5).length };
+}
