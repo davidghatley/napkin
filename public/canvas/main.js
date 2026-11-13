@@ -248,4 +248,5 @@ counts();
 initEmpty(ctx, $('#stage'));
 $('#revision').parentElement.hidden = !ctx.state.selection;
 document.body.dataset.ready = '1';
+try { if (sessionStorage.getItem('napkin.focusFirst')) { sessionStorage.removeItem('napkin.focusFirst'); const c = document.querySelector('#world [data-item-id]'); if (c) { if (!c.hasAttribute('tabindex')) c.tabIndex = -1; c.focus({ preventScroll: true, focusVisible: true }); } } } catch {} // after Open folder, focus starts on the first card
 docs.ask();

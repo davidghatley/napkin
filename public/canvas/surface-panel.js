@@ -45,6 +45,8 @@ registerFigure('specimen', (host, c, v) => {
 export function initInstruments(ctx) {
   const host = document.createElement('div');
   host.id = 'instruments';
+  host.tabIndex = 0; host.setAttribute('role', 'region'); host.setAttribute('aria-label', 'File instruments'); // a scrolling region can be reached by keys
+  const el0 = document.querySelector('#panel'); el0.tabIndex = 0; el0.setAttribute('role', 'region'); el0.setAttribute('aria-label', 'Element panel');
   document.querySelector('#panel').after(host); // below the element panel, so drawing it never moves what is above
 
   const schemas = new Map(); // item id -> { revision, sections } as last read
@@ -281,6 +283,7 @@ export function initInstruments(ctx) {
   function focusControl(label) {
     const row = find(label);
     if (!row) return false;
+    for (const sec of panel.sections.values()) if (sec.depth === 3) panel.setDepth(sec.schema.id, 2, false); // a studio left open would cover the control
     if (row.section.depth === 1) panel.setDepth(row.section.schema.id, 2, false);
     const target = row.node.querySelector('.d-value input, .d-value textarea, .d-value [role=switch], .d-value [role=radio][tabindex="0"], .d-value button, .d-value [tabindex="0"]') || row.label;
     row.node.scrollIntoView({ block: 'nearest' });

@@ -48,6 +48,7 @@ export function initSurface(ctx) {
     if (!el.hasAttribute('tabindex')) el.tabIndex = -1;
     el.focus({ preventScroll: true, focusVisible: true });
   }
+  const sync1 = (item) => { if (item) json('/api/board', { selection: [item] }).catch(() => {}); };
   const sync = () => json('/api/board', { selection: selectedItems() }).catch(() => {});
   ctx.on('select', sync);
 
@@ -73,6 +74,7 @@ export function initSurface(ctx) {
     if (!id) ctx.instruments?.preview(want); // a file's id is its path: its panel can be read and drawn before its card exists
     for (let i = 0; i < 60 && !id && performance.now() < 20000; i++) { await new Promise((r) => setTimeout(r, 50)); id = lookup(); } // just after load the canvas may still be reading its files
     if (!id) { ctx.hint(`No file called “${want}” on this canvas`); return; }
+    sync1(ctx.itemOf(id)); // the board knows the selection at once, before a frame that is still loading lets the canvas finish selecting
     ctx.instruments?.preview(ctx.itemOf(id), id); // the panel does not wait for a frame that is still loading
     ctx.stage.live?.(id);
     let sel = cardSelection(id);
@@ -284,6 +286,7 @@ export function initSurface(ctx) {
     if (!folder) { ctx.hint('Name the folder: Open folder <path>'); return; }
     const r = await json('/api/folder', { folder });
     if (r.ok === false || r.status >= 400) { ctx.hint(plain(r.error || 'That folder could not be opened.')); return; }
+    try { sessionStorage.setItem('napkin.focusFirst', '1'); } catch {}
     ctx.hint('Opening the folder…');
     location.reload();
   }

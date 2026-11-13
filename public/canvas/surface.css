@@ -94,4 +94,4 @@ body { font-family: var(--nk-sans); }
 /* A long value (a file's source, JSON, a paragraph) gets the full width under its label, not a sliver beside the figure. */
 #instruments .d-section:not([data-depth="1"]) .d-row:has(> .d-value > textarea) { grid-template-columns: 12px minmax(0, 1fr) var(--d-fig-w); row-gap: 4px; padding-bottom: 6px; }
 #instruments .d-section:not([data-depth="1"]) .d-row:has(> .d-value > textarea) > .d-value { grid-column: 1 / -1; }
-#instruments .d-section:not([data-depth="1"]) .d-row > .d-value > textarea { max-height: 168px; overflow: auto; }
+#instruments .d-section:not([data-depth="1"]) .d-row > .d-value > textarea { max-height: 72px; overflow: auto; }
