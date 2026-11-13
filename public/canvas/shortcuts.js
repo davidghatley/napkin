@@ -1,21 +1,51 @@
+// The key map (?): generated from the bindings in force (GET /api/keys: the registry in actions.js plus any rebinding),
+// then every other key of the canvas from the same registry. A command can be rebound here (Rebind, then press the keys)
+// or from the palette ("Rebind <command> to <keys>").
 import { ACTIONS } from './actions.js';
+import { eventChord } from './keynames.js';
+
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 export function initShortcuts(ctx) {
-  const style = document.createElement('style');
-  style.textContent = `#shortcuts { color:var(--nk-text); background:var(--nk-chrome); border:1px solid var(--nk-line); border-radius:12px; padding:24px; width:min(760px,90vw); max-height:85vh; box-shadow:var(--nk-shadow-pop); font:12px/1.5 var(--nk-sans) } #shortcuts::backdrop { background:#0005 } #shortcuts header { display:flex; justify-content:space-between; align-items:center } #shortcuts h2 { font-size:17px; margin:0 } #shortcuts p { color:var(--nk-text-2) } #shortcuts dl { display:grid; grid-template-columns:1fr 1fr; gap:0 24px } #shortcuts .shortcut { display:flex; justify-content:space-between; align-items:center; gap:12px; border-top:1px solid var(--nk-line); padding:9px 0; break-inside:avoid } #shortcuts dt { max-width:55% } #shortcuts dd { margin:0; text-align:right; font:10px var(--nk-mono); color:var(--nk-text-2) } #shortcuts button { border:1px solid var(--nk-line); background:var(--nk-chrome-2); border-radius:6px; padding:5px 10px } @media(max-width:650px) { #shortcuts dl { grid-template-columns:1fr } }`;
-  document.head.append(style);
-  const dialog = document.createElement('dialog'); dialog.id = 'shortcuts'; dialog.setAttribute('aria-labelledby', 'shortcuts-title');
-  dialog.innerHTML = '<header><h2 id="shortcuts-title">Keyboard shortcuts</h2><button type="button" autofocus>Close</button></header><p>Ctrl on Windows and Linux · Cmd on Mac. Tool keys pause while you type.</p>';
-  const dl = document.createElement('dl');
-  for (const a of ACTIONS) { const row = document.createElement('div'); row.className = 'shortcut'; const dt = document.createElement('dt'), dd = document.createElement('dd'); dt.textContent = a.label; dd.textContent = a.key; row.append(dt, dd); dl.append(row); }
-  dialog.append(dl); document.body.append(dialog);
-  let previous;
+  const dialog = document.createElement('dialog'); dialog.id = 'shortcuts';
+  dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-labelledby', 'shortcuts-title'); dialog.setAttribute('data-keymap', '');
+  dialog.innerHTML = `<header><h2 id="shortcuts-title">Keys</h2><button type="button" class="km-close">Close</button></header>
+    <p class="km-note">Ctrl on Windows and Linux, Cmd on Mac. A sequence is pressed one key after the other (A K: A, then K). A number first repeats a move (3, then ArrowRight). Every command is also in the palette (Ctrl K).</p>
+    <section aria-labelledby="km-commands"><h3 id="km-commands">Commands</h3><ul class="km-list"></ul></section>
+    <section aria-labelledby="km-more"><h3 id="km-more">Everywhere else</h3><dl class="km-more"></dl></section>
+    <p class="km-status" role="status" aria-live="polite"></p>`;
+  // First in the page, so it is the dialog a person (or a test) finds while it is open.
+  document.body.prepend(dialog);
+  const list = dialog.querySelector('.km-list'), more = dialog.querySelector('.km-more'), status = dialog.querySelector('.km-status');
+  const byId = new Map(ACTIONS.map((a) => [a.id, a]));
+  const name = (id) => byId.get(id)?.label ?? id;
+  function paint() {
+    const bindings = ctx.surface?.bindings() ?? [];
+    list.innerHTML = bindings.map((b) => `<li class="shortcut" data-command="${esc(b.command)}"><span class="km-label">${esc(name(b.command))}</span><kbd class="km-keys">${esc(b.keys)}</kbd><button type="button" class="km-rebind" data-rebind="${esc(b.command)}" aria-label="Rebind ${esc(name(b.command))}">Rebind</button></li>`).join('');
+    const bound = new Set(bindings.map((b) => b.command));
+    more.innerHTML = ACTIONS.filter((a) => !bound.has(a.id) && !a.command).map((a) => `<div class="shortcut"><dt>${esc(a.label)}</dt><dd>${esc(a.key)}</dd></div>`).join('');
+  }
+  let previous, recording = null;
   const close = () => dialog.close();
-  function open() { if (dialog.open) return; ctx.quick?.close(); previous = document.activeElement; document.body.dataset.modal = 'shortcuts'; dialog.showModal(); }
-  dialog.querySelector('button').addEventListener('click', close);
-  dialog.addEventListener('click', (e) => { if (e.target === dialog) { const r = dialog.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) close(); } });
-  dialog.addEventListener('close', () => { delete document.body.dataset.modal; previous?.focus?.({ preventScroll: true }); });
+  function open() { if (dialog.open) return; ctx.quick?.close(); previous = document.activeElement; paint(); status.textContent = ''; document.body.dataset.modal = 'shortcuts'; dialog.showModal(); dialog.querySelector('.km-close').focus({ focusVisible: true }); }
+  dialog.querySelector('.km-close').addEventListener('click', close);
+  dialog.addEventListener('click', (e) => {
+    const r = e.target.closest?.('[data-rebind]');
+    if (r) { recording = r.dataset.rebind; r.textContent = 'Press keys'; status.textContent = `Press the new keys for ${name(recording)}. Escape keeps the old ones.`; return; }
+    if (e.target === dialog) { const b = dialog.getBoundingClientRect(); if (e.clientX < b.left || e.clientX > b.right || e.clientY < b.top || e.clientY > b.bottom) close(); }
+  });
+  dialog.addEventListener('close', () => { recording = null; delete document.body.dataset.modal; previous?.focus?.({ preventScroll: true }); });
+  ctx.on('keys', () => { if (dialog.open) paint(); });
   addEventListener('keydown', (ev) => {
+    if (recording && dialog.open) {
+      const chord = eventChord(ev);
+      if (!chord) return; // a modifier on its own: wait for the key
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      const command = recording; recording = null;
+      if (ev.key === 'Escape') { paint(); status.textContent = 'Kept the old keys.'; return; }
+      ctx.surface.rebind(`${command} to ${chord}`).then(() => { paint(); status.textContent = `${name(command)}: ${chord}`; list.querySelector(`[data-rebind="${CSS.escape(command)}"]`)?.focus({ focusVisible: true }); });
+      return;
+    }
     if (ev.key === 'Escape' && dialog.open) { ev.preventDefault(); ev.stopImmediatePropagation(); close(); return; }
     if (ev.key !== '?' || ev.ctrlKey || ev.metaKey || ev.altKey || ev.isComposing || /^(INPUT|TEXTAREA|SELECT)$/.test(ev.target.tagName) || ev.target.isContentEditable) return;
     ev.preventDefault(); ev.stopImmediatePropagation(); dialog.open ? close() : open();

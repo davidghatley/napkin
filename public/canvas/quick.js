@@ -14,12 +14,13 @@ export function initQuick(ctx) {
   root.innerHTML = `<div class="q-scrim" data-close></div>
     <div class="q-panel" role="dialog" aria-modal="true" aria-label="Quick open">
       <div class="q-field"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        <input id="q-input" role="combobox" aria-expanded="true" aria-controls="q-list" aria-autocomplete="list" aria-label="Jump to a component, layer or action" placeholder="Jump to a component, a layer or an action" autocomplete="off" spellcheck="false"></div>
+        <input id="q-input" role="combobox" aria-expanded="true" aria-controls="q-list" aria-autocomplete="list" aria-label="Jump to a component, layer or action" placeholder="Type a file, a control or a command: Select, Control, Arrange by, Present" autocomplete="off" spellcheck="false"></div>
       <ul id="q-list" role="listbox" aria-label="Results"></ul>
+      <p class="q-preview" aria-live="polite"></p>
       <div class="q-foot"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>Enter</kbd> go</span><span><kbd>Esc</kbd> close</span></div>
     </div>`;
   document.body.append(root);
-  const input = root.querySelector('#q-input'), list = root.querySelector('#q-list');
+  const input = root.querySelector('#q-input'), list = root.querySelector('#q-list'), preview = root.querySelector('.q-preview');
   let items = [], results = [], active = 0, returnTo = null;
 
 
@@ -123,8 +124,10 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
   }
   function query(q) {
     const t0 = performance.now();
+    // Command phrases first (an exact phrase, then the ones it begins: "Select orbit.html", "Arrange by kind"), then the fuzzy list.
+    const said = ctx.surface?.phrases(q) ?? [], seen = new Set(said.map((r) => r.item.label.toLowerCase()));
     results = q.trim()
-      ? search(items, q, MAX)
+      ? [...said, ...search(items, q, MAX).filter((r) => !seen.has(r.item.label.toLowerCase()))].slice(0, MAX)
       : [...items.filter((i) => i.kind === 'action').slice(0, 5), ...items.filter((i) => i.kind === 'component')].slice(0, MAX).map((item) => ({ item, at: [] }));
     api.lastMs = performance.now() - t0;
     return results;
@@ -143,6 +146,8 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
   function paint() {
     list.innerHTML = results.map(({ item, at }, i) => `<li role="option" id="q-${i}" aria-selected="${i === active}" data-i="${i}"><span class="qk qk-${item.kind}">${KIND[item.kind]}</span><span class="ql">${mark(item.label, at)}</span>${item.hint && item.kind === 'node' ? `<span class="qh">${esc(item.hint)}</span>` : ''}${item.key ? `<kbd>${esc(item.key)}</kbd>` : ''}</li>`).join('') || '<li class="q-none" role="option" aria-disabled="true" aria-selected="false">Nothing matches</li>';
     input.setAttribute('aria-activedescendant', results.length ? `q-${active}` : '');
+    const r = results[active]?.item;
+    preview.textContent = r ? (r.about || (r.kind === 'component' ? `${r.hint}: select it and open its instruments` : r.kind === 'node' ? `${r.hint} element` : r.kind === 'property' ? `Go to ${r.label} in the panel` : r.hint || '')) : '';
     list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }
 
@@ -152,6 +157,14 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
     build(); query(''); active = 0; paint();
     root.hidden = false; document.body.dataset.modal = 'quick';
     input.value = ''; input.focus();
+  }
+  // Open with a phrase already typed (a command that takes an argument: "Select ", "Control ").
+  function prefill(text) {
+    open();
+    input.value = text;
+    items = [...items.filter((i) => i.kind !== 'property'), ...propertyItems()];
+    query(text); active = 0; paint();
+    input.setSelectionRange(text.length, text.length);
   }
   function close() {
     if (root.hidden) return;
@@ -227,7 +240,7 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
   }, true);
   document.querySelector('#quick-open').addEventListener('click', open);
 
-  const api = { open, close, focusInspector, search: (q) => query(q).map((r) => r.item), build, lastMs: 0, isOpen: () => !root.hidden }; // build() first, then search(): the index is rebuilt on open
+  const api = { open, prefill, close, focusInspector, search: (q) => query(q).map((r) => r.item), build, lastMs: 0, isOpen: () => !root.hidden }; // build() first, then search(): the index is rebuilt on open
   ctx.quick = api;
   return api;
 }

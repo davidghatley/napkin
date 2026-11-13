@@ -60,7 +60,7 @@ export function createStage(ctx, root, world, view) {
     let sec = sections.get(id);
     if (sec) return sec;
     const el = document.createElement('section');
-    el.className = ctx.state.components.get(id)?.item ? 'item-card' : 'cmp'; el.dataset.component = id; el.dataset.itemId = id;
+    el.className = ctx.state.components.get(id)?.item ? 'item-card' : 'cmp'; el.dataset.component = id; el.dataset.itemId = ctx.itemOf?.(id) ?? id;
     el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="cmp-path" hidden></span><span class="badge" hidden></span><span class="rev"></span><span class="cmp-note" hidden></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
     if (ctx.state.components.get(id)?.item) el.dataset.awaiting = '1';
     sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false, item: !!ctx.state.components.get(id)?.item };
