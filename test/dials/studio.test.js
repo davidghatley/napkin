@@ -177,6 +177,36 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
       await q('dialsDemo.panels[1].reset("typeface")');
       await open(1, 2);
     });
+    await t.test("prompt: words are edited as rows (rename, weigh, move, remove, add) and the sent line is the real prompt", async () => {
+      await open(5);
+      await q('dialsDemo.panels[5].open("prompt")');
+      await sleep(250);
+      const rows = () => q(`[...document.querySelectorAll("${S} .ki-wordrow .ki-wordin")].map(i=>i.value).join(" ")`);
+      assert.equal(await rows(), "A small world in cobalt and paper");
+      await q(`document.querySelector('${S} .ki-wordrow[data-i="1"] [data-act="Heavier"]').click()`);
+      assert.equal(await q('dialsDemo.panels[5].get("prompt")'), "A (small:1.1) world in cobalt and paper.");
+      assert.equal(await q(`document.querySelector("${S} .ki-sent").textContent`), "A (small:1.1) world in cobalt and paper.");
+      await q(`document.querySelector('${S} .ki-wordrow[data-i="2"] [data-act="Earlier"]').click()`);
+      assert.equal(await q('dialsDemo.panels[5].get("prompt")'), "A world (small:1.1) in cobalt and paper.");
+      await q(`document.querySelector('${S} .ki-wordrow[data-i="0"] [aria-label^="Remove"]').click()`);
+      assert.equal(await q('dialsDemo.panels[5].get("prompt")'), "world (small:1.1) in cobalt and paper.");
+      await q(`(()=>{const i=document.querySelector("${S} .ki-add");i.focus();i.value="moon";i.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",bubbles:true}))})()`);
+      assert.match(await q('dialsDemo.panels[5].get("prompt")'), /paper\. moon$/);
+      assert.match(await q(`document.querySelector("${S} .ki-sent-meta").textContent`), /Sent with 28 steps, karras, cfg 7, seed 51654/);
+      await q('dialsDemo.panels[5].reset("prompt")');
+      await open(5, 2);
+    });
+    await t.test("the subject a section edits stays in view: under the head at bench, atop the rail in the studio", async () => {
+      const where = (i) => q(`(()=>{const p=dialsDemo.panels[${i}],sec=p.root.querySelector(".d-section"),sub=document.querySelectorAll(".subject")[${i}];return JSON.stringify({anchored:sub.dataset.anchored,inRail:!!sub.closest(".d-rail"),inHost:!!sub.closest(".d-subject"),visible:sub.getBoundingClientRect().height>40,editing:[...sec.querySelectorAll(".d-row")].filter(r=>r.dataset.editing==="true").length})})()`);
+      await open(0, 2);
+      let w = JSON.parse(await where(0));
+      assert.deepEqual([w.anchored, w.inRail, w.inHost, w.visible, w.editing], ["section", false, true, true, 0]);
+      await open(0, 3);
+      await sleep(250);
+      w = JSON.parse(await where(0));
+      assert.deepEqual([w.anchored, w.inRail, w.inHost, w.visible, w.editing], ["studio", true, false, true, 1]);
+      await open(0, 2);
+    });
     await t.test("command palette finds controls and depth commands; keys are rebindable", async () => {
       await q("dialsDemo.panels.forEach(p=>[...p.sections.keys()].forEach(id=>p.setDepth(id,2,false)))");
       await q('document.querySelector("#sample-motion [data-control=loop] .d-label").focus()');

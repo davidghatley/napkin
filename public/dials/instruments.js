@@ -1114,8 +1114,76 @@ const stages = {
     const typeC = api.sibling("typography"),
       alignC = api.sibling("align"),
       padC = api.sibling("spacing");
+    // Word by word: each word of the real prompt as an editable row (rename, weight, move, remove, add),
+    // and the exact line the sampler receives with the settings that travel with it.
+    const rows = el("div", { class: "ki-wordrows", role: "list", "aria-label": "Words of the prompt" }),
+      sent = el("pre", { class: "ki-sent", "aria-label": "The prompt as it is sent" }),
+      sentMeta = el("p", { class: "ki-help ki-sent-meta" }),
+      addIn = el("input", { class: "ki-wordin ki-add", type: "text", placeholder: "Add a word", "aria-label": "Add a word to the prompt", spellcheck: "true" });
+    const swap = (i, j) => {
+      const text = api.get(),
+        list = parts(text),
+        [lo, hi] = i < j ? [list[i], list[j]] : [list[j], list[i]];
+      if (!lo || !hi) return;
+      api.edit(text.slice(0, lo.at) + text.slice(hi.at, hi.end) + text.slice(lo.end, hi.at) + text.slice(lo.at, lo.end) + text.slice(hi.end), "studio-word-move");
+    };
+    const put = (i, piece, src) => {
+      const text = api.get(),
+        p = parts(text)[i];
+      if (p) api.edit(text.slice(0, p.at) + piece + text.slice(p.end), src);
+    };
+    const wrapW = (word, w) => (w === 1 ? word : `(${word}:${w})`);
+    const refocus = (sel) => requestAnimationFrame(() => rows.querySelector(sel)?.focus());
+    addIn.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter" && addIn.value.trim()) {
+        const text = api.get();
+        api.edit(`${text.replace(/\s+$/, "")}${text.trim() ? " " : ""}${addIn.value.trim()}`, "studio-word-add");
+        addIn.value = "";
+      }
+    });
+    const wordRow = (p, i, n) => {
+      const word = el("input", { class: "ki-wordin", type: "text", value: p.word, "aria-label": `Word ${i + 1}`, spellcheck: "true" });
+      word.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") word.blur();
+      });
+      word.addEventListener("change", () => {
+        const v = word.value.trim();
+        if (!v) return;
+        put(i, wrapW(v, p.weight), "studio-word-edit");
+      });
+      const step = (d, label, glyph) =>
+        el("button", { type: "button", class: "ki-wordbtn", "aria-label": `${label}: ${p.word}`, title: label, "data-act": label, onclick: () => (reweigh(i, d), refocus(`[data-i="${i}"] [data-act="${label}"]`)) }, glyph);
+      const move = (to, label, glyph) =>
+        el("button", { type: "button", class: "ki-wordbtn", "aria-label": `${label}: ${p.word}`, title: label, disabled: to < 0 || to >= n ? "" : undefined, "data-act": label, onclick: () => (swap(i, to), refocus(`[data-i="${to}"] [data-act="${label}"]`)) }, glyph);
+      return el(
+        "div",
+        { class: "ki-wordrow", role: "listitem", "data-i": i, style: `--w:${fx(p.weight / 2)}` },
+        word,
+        step(-0.1, "Lighter", "\u2212"),
+        el("output", { class: "ki-wordw", text: fx(p.weight, 1), "aria-label": `weight ${fx(p.weight, 1)}` }),
+        step(0.1, "Heavier", "+"),
+        move(i - 1, "Earlier", "\u2191"),
+        move(i + 1, "Later", "\u2193"),
+        el("button", { type: "button", class: "ki-wordbtn", "aria-label": `Remove: ${p.word}`, title: "Remove", onclick: () => {
+          const text = api.get(),
+            q = parts(text)[i];
+          if (q) api.edit((text.slice(0, q.at) + text.slice(q.end).replace(/^[\s,]+/, "")).replace(/\s+$/, ""), "studio-word-remove");
+        } }, "\u00d7"),
+      );
+    };
+    const sampleC = api.sibling("sampler"),
+      seedC = api.sibling("seed"),
+      batchC = api.sibling("count");
     const below = prompt
-      ? el("div", { class: "ki-prompt-below" }, block("Words", el("p", { class: "ki-help", text: "Each column fills to its word's weight, 0 to 2; the line is 1. Drag a word up or down, or focus it and press up or down; it is written back as (word:1.2)." }), tokens))
+      ? el(
+          "div",
+          { class: "ki-prompt-below" },
+          block("Words", el("p", { class: "ki-help", text: "Each column fills to its word's weight, 0 to 2; the line is 1. Drag a word up or down, or focus it and press up or down; it is written back as (word:1.2)." }), tokens),
+          block("Word by word", rows, addIn),
+          block("As the sampler receives it", sent, sentMeta),
+        )
       : block(typeC || alignC || padC ? "Set as this section sets it" : "Set at three measures", specimen);
     const node = el("div", { class: "ki-text" }, area, below);
     const words = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
@@ -1139,6 +1207,21 @@ const stages = {
             ),
           );
           if (focused >= 0) tokens.children[focused]?.focus();
+          const typing2 = rows.contains(document.activeElement) && document.activeElement.matches("input");
+          if (!typing2) rows.replaceChildren(...list.map((p, i) => wordRow(p, i, list.length)));
+          sent.textContent = v || "(empty)";
+          const sv = sampleC ? api.panel.get(sampleC.id) : null,
+            bits = [];
+          if (sv && typeof sv === "object") {
+            if (sv.steps != null) bits.push(`${sv.steps} steps`);
+            if (sv.scheduler) bits.push(String(sv.scheduler));
+            if (sv.cfg != null) bits.push(`cfg ${sv.cfg}`);
+          }
+          const sd = seedC ? api.panel.get(seedC.id) : sv?.seed;
+          if (sd != null) bits.push(`seed ${sd}`);
+          if (batchC) bits.push(`${api.panel.get(batchC.id)} in the batch`);
+          const weighed = list.filter((p) => p.weight !== 1).length;
+          sentMeta.textContent = `${list.length} ${list.length === 1 ? "word" : "words"}, ${weighed} weighed away from 1${bits.length ? `. Sent with ${bits.join(", ")}.` : "."}`;
         } else {
           const ty = typeC ? api.panel.get(typeC.id) || {} : {},
             al = alignC ? api.panel.get(alignC.id) : "left",

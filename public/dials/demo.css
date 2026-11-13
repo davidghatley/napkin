@@ -162,7 +162,7 @@ main {
 .subject {
   position: relative;
   height: 152px;
-  margin: 6px 12px 10px;
+  margin: 0;
   border-radius: 3px;
   overflow: hidden;
   background: color-mix(in srgb, var(--text) 4%, var(--surface));
@@ -513,4 +513,7 @@ footer output {
 }
 .subject-note[hidden] {
   display: none;
+}
+.study-mount .d-subject {
+  padding: 6px 12px 10px;
 }

@@ -86,6 +86,8 @@ export interface Options {
   history?: boolean;
   onChange?(event: ValueEvent): void;
   onDepth?(section: string, depth: Depth): void;
+  /** An element a section edits; kept in view at every depth (see Dials.setSubject). */
+  subject?(section: string, schema: unknown): HTMLElement | null | undefined;
   /**
    * The bytes behind a control's value (an asset path, a file name, an image control): a URL,
    * Blob, File, ImageBitmap, canvas or <img>, a promise of one, or null when the host has none.
@@ -156,6 +158,8 @@ export class Dials extends EventTarget {
   get(id: string): JSONValue;
   values(): Record<string, JSONValue>;
   open(id: string, depth?: Depth): this;
+  /** Keep the element a section edits in view at every depth: under the head at dial and bench, atop the studio rail in the studio. null lets go. */
+  setSubject(section: string, node: HTMLElement | null, animate?: boolean): this;
   setDepth(section: string, depth: Depth, animate?: boolean): void;
   resizeStudio(section: string, width: number, height: number): void;
   begin(id: string, source?: string): void;
