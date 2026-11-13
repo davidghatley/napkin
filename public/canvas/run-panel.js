@@ -59,7 +59,7 @@ export function initRuns(ctx) {
     if (/^run-(proposal|question)/.test(f.type)) later('review', loadReview, 30);
     if (f.type === 'run-proposal' || f.type === 'run-question') {
       S.announce = f.type === 'run-question' ? `${f.by} asked you a question` : `${f.by} proposed a change`;
-      if (S.userFolded) { S.userFolded = false; } // something needs you: show the panel
+      S.userFolded = false; // something new needs you: show the panel
     }
   });
   ctx.on('connection', (f) => { if (f.connected) loadAll(); });
@@ -175,7 +175,6 @@ export function initRuns(ctx) {
     const anything = runs.length || waiting || here.length;
     root.hidden = !anything;
     if (!anything) return;
-    if (waiting) S.userFolded = false;
     const open = !S.userFolded;
     root.dataset.open = open ? '1' : '0';
     root.dataset.waiting = waiting ? '1' : '0';
