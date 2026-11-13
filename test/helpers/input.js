@@ -22,6 +22,15 @@ export function input(browser) {
     async press(x, y, o = {}) { const button = o.button ?? 'left'; await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button, buttons: button === 'left' ? 1 : button === 'middle' ? 4 : 2, clickCount: 1, modifiers: mods(o) }); },
     async release(x, y, o = {}) { await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: o.button ?? 'left', buttons: 0, clickCount: 1, modifiers: mods(o) }); },
     async click(x, y, o = {}) { await api.move(x, y, o); await api.press(x, y, o); await api.release(x, y, o); },
+    // a real double-click: two presses at one point, the second with clickCount 2 (what makes the browser fire dblclick)
+    async dblclick(x, y, o = {}) {
+      await api.move(x, y, o);
+      for (const clickCount of [1, 2]) {
+        await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', buttons: 1, clickCount, modifiers: mods(o) });
+        await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', buttons: 0, clickCount, modifiers: mods(o) });
+      }
+    },
+    async type(text) { for (const ch of text) await api.key(ch); },
     async drag(x0, y0, x1, y1, o = {}) {
       const button = o.button ?? 'left', held = button === 'left' ? 1 : button === 'middle' ? 4 : 2;
       await api.move(x0, y0, o); await api.press(x0, y0, o);

@@ -145,3 +145,165 @@ test('basics pass 2: Escape disarms; F then Enter places a default frame in the 
   assert.match(readFileSync(file('frame-2.html'), 'utf8'), /width: 320px; height: 180px/, 'the default size');
   assert.equal(await q('napkin.state.tool'), 'select');
 });
+
+// ---- round 2: text edited again in place, rename in place, formatting ------------------------------------------------------
+const liveFrame = (id) => `document.querySelector('section.cmp[data-component="${id}"] iframe.doc-frame:not(.doc-next)')`;
+// the centre of a word inside a frame, in page pixels
+const wordAt = (id, word) => json(`(() => { const f = ${liveFrame(id)}; const d = f?.contentDocument; if (!d?.body) return null; const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { const i = n.data.indexOf(${JSON.stringify(word)}); if (i < 0) continue; const r = d.createRange(); r.setStart(n, i); r.setEnd(n, i + ${word.length}); const b = r.getBoundingClientRect(), fr = f.getBoundingClientRect(), z = fr.width / f.offsetWidth; return { x: fr.left + (b.left + b.width / 2) * z, y: fr.top + (b.top + b.height / 2) * z }; } return null; })()`);
+// what a person sees while editing: the caret is in the element in the frame, and what is highlighted
+const editState = (id) => json(`(() => { const f = ${liveFrame(id)}; const d = f?.contentDocument; const a = d?.activeElement; return { focused: document.activeElement === f && !!a?.isContentEditable, tag: a?.localName ?? null, selected: d?.getSelection().toString() ?? '', collapsed: d?.getSelection().isCollapsed ?? true, dialog: !!document.querySelector('dialog[open]') }; })()`);
+const show = async (id) => { await q(`napkin.select(null); napkin.view.fitRect(napkin.stage.componentRect('${id}'), { pad: 160, max: 1 }); 0`); await sleep(400); };
+async function newText(words, at) {
+  await emptyCanvas();
+  const before = await frames();
+  await io.key('t');
+  await io.click(at.x, at.y);
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-new-text');
+  await words();
+  await io.key('Escape');
+  let id = null;
+  await until(async () => { id = (await frames()).find((f) => !before.includes(f)); return id && existsSync(file(id)) && (await q(`napkin.state.selection?.component`)) === id && (await q(`!!${liveFrame(id)}?.contentDocument?.querySelector('p')`)); });
+  return id;
+}
+
+test('round 2: double-click a word in committed text edits it with that word selected; Escape writes it; one undo restores the text exactly', { timeout: 90000 }, async () => {
+  const id = await newText(() => io.type('Good morning'), { x: 300, y: 180 });
+  const original = readFileSync(file(id), 'utf8');
+  assert.match(original, />Good morning<\/p>/);
+  const w = await wordAt(id, 'morning');
+  await io.dblclick(w.x, w.y);
+  await until(async () => (await editState(id)).focused);
+  const s = await editState(id);
+  assert.equal(s.selected, 'morning', 'the word under the pointer is selected');
+  assert.equal(s.tag, 'p', 'the text itself is editable, in the frame');
+  assert.equal(s.dialog, false, 'nothing over the canvas');
+  await io.type('evening');
+  await io.key('Escape');
+  await until(async () => />Good evening<\/p>/.test(readFileSync(file(id), 'utf8')));
+  await until(async () => (await q(`napkin.state.selection?.component`)) === id && (await q(`napkin.state.selection?.node`)) !== null);
+  assert.equal(await q(`(() => { const s = napkin.state.selection; return napkin.stage.sections.get(s.component).docFrame.element(s.node)?.el.localName; })()`), 'p', 'the text stays selected');
+  assert.equal(await q('napkin.state.tool'), 'select');
+  assert.equal((await editState(id)).focused, false, 'editing is over');
+  await q('document.activeElement?.blur?.(); 0');
+  await io.key('z', { ctrl: true });
+  await until(async () => readFileSync(file(id), 'utf8') === original);
+});
+
+test('round 2: arrows move the caret while editing, they do not move the card', { timeout: 60000 }, async () => {
+  const id = (await frames()).find((f) => />Good morning<\/p>/.test(readFileSync(file(f), 'utf8')));
+  await show(id);
+  const card = await cardRect(id);
+  const w = await wordAt(id, 'Good');
+  await io.dblclick(w.x, w.y);
+  await until(async () => (await editState(id)).selected === 'Good');
+  await io.key('ArrowRight'); // the caret goes to the end of "Good"
+  await io.key('ArrowRight'); // and past the space
+  await io.type('very ');
+  await io.key('Enter', { ctrl: true });
+  await until(async () => />Good very morning<\/p>/.test(readFileSync(file(id), 'utf8')));
+  const after = await cardRect(id);
+  assert.ok(Math.abs(after.l - card.l) < 1 && Math.abs(after.t - card.t) < 1, 'the card stayed where it was');
+});
+
+test('round 2: Enter on selected text edits all of it; F2 does the same; no dialog', { timeout: 60000 }, async () => {
+  await show('page.html');
+  const h = await wordAt('page.html', 'Plan');
+  await io.click(h.x, h.y);
+  await until(async () => (await q(`(() => { const s = napkin.state.selection; return s?.component === 'page.html' && napkin.stage.sections.get('page.html').docFrame.element(s.node)?.el.localName; })()`)) === 'h1');
+  await io.key('Enter');
+  await until(async () => (await editState('page.html')).focused);
+  assert.equal((await editState('page.html')).selected, 'Plan the week', 'all of the text is selected');
+  assert.equal(await q('document.body.dataset.focus ?? null'), null, 'Enter edits the text, it does not focus the card');
+  await io.type('Plan the month');
+  await io.key('Escape');
+  await until(async () => /<h1>Plan the month<\/h1>/.test(readFileSync(file('page.html'), 'utf8')));
+  await until(async () => (await q(`(() => { const s = napkin.state.selection; return s?.component === 'page.html' && napkin.stage.sections.get('page.html').docFrame.element(s.node)?.el.localName; })()`)) === 'h1');
+  // F2: the same, all selected; Escape with nothing changed writes nothing
+  const before = readFileSync(file('page.html'), 'utf8');
+  await io.key('F2');
+  await until(async () => (await editState('page.html')).focused);
+  const s = await editState('page.html');
+  assert.equal(s.selected, 'Plan the month');
+  assert.equal(s.dialog, false, 'F2 on text never opens a dialog');
+  await io.key('Escape');
+  await until(async () => !(await editState('page.html')).focused);
+  await sleep(300);
+  assert.equal(readFileSync(file('page.html'), 'utf8'), before, 'nothing written');
+});
+
+test('round 2: Ctrl+B in text writes bold markup to the file; Ctrl+I and Ctrl+U too; one undo takes it back', { timeout: 60000 }, async () => {
+  const before = readFileSync(file('page.html'), 'utf8');
+  const w = await wordAt('page.html', 'month');
+  await io.dblclick(w.x, w.y);
+  await until(async () => (await editState('page.html')).selected === 'month');
+  await io.key('b', { ctrl: true });
+  assert.equal(await q(`${liveFrame('page.html')}.contentDocument.querySelector('h1 b, h1 strong')?.textContent ?? null`), 'month', 'bold shows at once');
+  await io.key('Escape');
+  await until(async () => /<h1>Plan the <strong>month<\/strong><\/h1>/.test(readFileSync(file('page.html'), 'utf8')));
+  // the bold run survives the commit: the frame draws it from the file
+  await until(async () => (await q(`${liveFrame('page.html')}.contentDocument.querySelector('h1 strong')?.textContent ?? null`)) === 'month');
+  await q('document.activeElement?.blur?.(); 0');
+  await io.key('z', { ctrl: true });
+  await until(async () => readFileSync(file('page.html'), 'utf8') === before);
+  // new text: italic and underline while typing, and Enter makes a new line (<br>), the same as in text edited again
+  const id = await newText(async () => {
+    await io.type('Say ');
+    await io.key('i', { ctrl: true }); await io.type('soft'); await io.key('i', { ctrl: true });
+    await io.type(' and ');
+    await io.key('u', { ctrl: true }); await io.type('clear'); await io.key('u', { ctrl: true });
+    await io.key('Enter');
+    await io.type('twice');
+  }, { x: 900, y: 180 });
+  assert.match(readFileSync(file(id), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif">Say <em>soft<\/em> and <u>clear<\/u><br>twice<\/p>/);
+  // Enter in text edited again is the same new line
+  const t = await wordAt(id, 'twice');
+  await io.dblclick(t.x, t.y);
+  await until(async () => (await editState(id)).selected === 'twice');
+  await io.key('ArrowRight');
+  await io.key('Enter');
+  await io.type('again');
+  await io.key('Escape');
+  await until(async () => /<u>clear<\/u><br>twice<br>again<\/p>/.test(readFileSync(file(id), 'utf8')));
+});
+
+test('round 2: pasted text arrives as plain text, without foreign styles', { timeout: 60000 }, async () => {
+  const id = (await frames()).find((f) => />Good very morning<\/p>/.test(readFileSync(file(f), 'utf8')));
+  await show(id);
+  const w = await wordAt(id, 'very');
+  await io.dblclick(w.x, w.y);
+  await until(async () => (await editState(id)).selected === 'very');
+  // a paste the way the browser delivers one from another page: rich HTML and its plain text
+  await q(`(() => { const f = ${liveFrame(id)}, d = f.contentDocument, dt = new DataTransfer(); dt.setData('text/html', '<span style="color: red; font-size: 40px">really</span>'); dt.setData('text/plain', 'really'); d.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })(); 0`);
+  await io.key('Escape');
+  await until(async () => />Good really morning<\/p>/.test(readFileSync(file(id), 'utf8')));
+  assert.doesNotMatch(readFileSync(file(id), 'utf8'), /color: red|40px/);
+});
+
+test('round 2: F2 on a frame renames it in place with no dialog; F2 on a component card too', { timeout: 60000 }, async () => {
+  const id = (await frames())[0];
+  await show(id);
+  const head = await json(`(() => { const r = document.querySelector('section.cmp[data-component="${id}"] .cmp-title h3').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  await io.click(head.x, head.y);
+  await until(async () => (await q('napkin.state.selection?.component')) === id);
+  await io.key('F2');
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename');
+  assert.equal(await q(`!!document.querySelector('dialog[open]')`), false, 'no dialog over the canvas');
+  assert.equal(await q(`document.activeElement.closest('section.cmp')?.dataset.component`), id, 'the field is the frame’s own label');
+  assert.equal(await q(`document.activeElement.selectionStart === 0 && document.activeElement.selectionEnd === document.activeElement.value.length`), true, 'the name is selected');
+  await io.type('welcome');
+  await io.key('Enter');
+  await until(async () => existsSync(file('welcome.html')) && !existsSync(file(id)));
+  // a component card (Card.tsx): the same field on its label, never the old dialog; Escape leaves the name as it was
+  const cid = await q(`napkin.find('Card').component`);
+  await show(cid);
+  const card = await json(`(() => { const r = document.querySelector('section.cmp[data-component="${cid}"] .cmp-title h3').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  await io.click(card.x, card.y);
+  await until(async () => (await q('napkin.state.selection?.component')) === cid);
+  await io.key('F2');
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename');
+  assert.equal(await q(`!!document.querySelector('dialog[open]')`), false, 'no dialog over the canvas');
+  assert.equal(await q(`document.activeElement.value`), 'Card');
+  await io.key('Escape');
+  await until(async () => !(await q(`!!document.querySelector('.nk-rename')`)));
+  assert.equal(await q(`napkin.find('Card')?.component`), cid, 'still called Card');
+});

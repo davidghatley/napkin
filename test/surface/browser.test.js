@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { startServer } from '../helpers/harness.js';
 import { launchChromium } from '../helpers/cdp.js';
 import { input } from '../helpers/input.js';
+import { keyLabel } from '../../public/canvas/keylabel.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const CSS = `.card { padding: 12px; gap: 8px; }\n:root { --tint: #3366cc; }\n`;
@@ -82,7 +83,7 @@ test('surface: palette phrases, one instrument panel, spatial focus, groups, key
   await b.waitFor('document.querySelector("#shortcuts").open');
   const keys = await (await fetch(server.url + 'api/keys')).json();
   const text = await b.eval('document.querySelector("#shortcuts").innerText');
-  assert.ok(keys.bindings.every((x) => text.includes(x.keys)), 'every binding in force is in the key map');
+  assert.ok(keys.bindings.every((x) => text.includes(keyLabel(x.keys, false))), 'every binding in force is in the key map, spelled for the platform (keylabel.js)');
   await io.key('Escape');
   await palette('Arrange by folder');
   assert.equal((await board()).arrange.by, 'folder');
@@ -91,7 +92,7 @@ test('surface: palette phrases, one instrument panel, spatial focus, groups, key
   assert.equal((await board()).arrange.by, 'kind', 'the new binding runs');
   await io.key('?', { code: 'Slash', shift: true });
   await b.waitFor('document.querySelector("#shortcuts").open');
-  assert.match(await b.eval('document.querySelector("#shortcuts").innerText'), /Alt\+Y/);
+  assert.match(await b.eval('document.querySelector("#shortcuts").innerText'), /Alt Y/);
   await io.key('Escape');
 
   // Present takes the screen; Escape leaves and says so to the board.

@@ -30,6 +30,7 @@ import { renderPanel } from './panel.js';
 import { initTools } from './tools.js';
 import { initLayers } from './layers.js';
 import { initComponentOps } from './component-ops.js';
+import { initFileOps } from './file-ops.js';
 import { initQuick } from './quick.js';
 import { initReadOnly } from './readonly.js';
 import { initEmpty } from './empty.js';
@@ -67,6 +68,8 @@ import { initContextMenu } from './context-menu.js';
 import { initRightPanel } from './right-panel.js';
 import { initPanelHead } from './panel-head.js';
 import { initCreate } from './create.js';
+import { initTextEdit } from './text-edit.js';
+import { initMakeComponent } from './make-component.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -151,10 +154,13 @@ initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
 initCreate(ctx); // basics pass 2: draw a frame, text or image on the canvas or into an HTML frame (create.js)
+initTextEdit(ctx); // edit text in an HTML frame again, in place; F2 renames a card from its label (before nav: Enter on text edits it)
+initMakeComponent(ctx); // basics pass 3: an element selected in an HTML frame becomes a component file (make-component.js)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
+initFileOps(ctx); // an HTML file as a frame: rename on its label, duplicate beside it, delete to the trash, each undoable
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
 initPanelHead(ctx); // the right panel's one header (type glyph, name, tag) and its empty state
