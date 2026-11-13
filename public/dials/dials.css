@@ -2310,10 +2310,10 @@
 .k-bar b {
   position: absolute;
   left: calc(var(--p, 0) * 100%);
-  top: 1px;
-  width: 12px;
-  height: 12px;
-  margin-left: -6px;
+  top: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
   border-radius: 50%;
   background: var(--d-surface);
   box-shadow: inset 0 0 0 1.5px var(--d-text), 0 1px 2px rgb(0 0 0 / 0.15);
@@ -2871,4 +2871,105 @@
 .km-table th:first-child,
 .km-table td:first-child {
   text-align: left;
+}
+
+/* ---------- Colour studio, round 5 ---------- */
+.d-cx-grades .d-cx-grade:first-child b {
+  font-family: var(--d-pixel);
+  font-size: 44px;
+  line-height: 44px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.d-cx-main .d-cx-channels {
+  padding: 4px 0 2px;
+}
+.d-rail .d-cx-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.d-rail .d-cx-section header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.d-rail .d-cx-section h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.d-cx-well.d-drop {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 10px;
+  border: 1px dashed var(--d-rule);
+  border-radius: 4px;
+}
+.d-cx-well.is-over {
+  border-color: var(--d-accent);
+  background: var(--d-soft);
+}
+.d-cx-dropper {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--d-well);
+  color: var(--d-text);
+}
+.dials .d-cx-well .d-drop-button {
+  justify-self: start;
+  padding: 0;
+  min-height: 0;
+  height: 18px;
+  color: var(--d-accent-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.d-cx-well .d-drop-hint {
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.d-rail .d-cx-token {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.d-rail .d-cx-token input {
+  flex: 1;
+  min-width: 0;
+}
+.d-rail .d-eye {
+  width: 100%;
+  height: auto;
+  border-radius: 3px;
+}
+.d-section[data-depth="3"] .d-cx-grades {
+  grid-template-columns: auto 1fr;
+  gap: 0 28px;
+  align-items: end;
+}
+.d-section[data-depth="3"] .d-cx-grades .d-cx-grade:first-child b {
+  white-space: nowrap;
+  font-size: 40px;
+  line-height: 40px;
+}
+.d-rail .d-cx-history > div:has(> :only-child)::after {
+  content: "Each change you commit lands here, newest last.";
+  font-size: 11px;
+  color: var(--d-muted);
+  align-self: center;
+  margin-left: 6px;
+}
+.d-rail .d-cx-history > div > * {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }

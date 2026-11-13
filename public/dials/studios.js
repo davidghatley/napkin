@@ -28,6 +28,7 @@ import {
 } from "./motion.js";
 import { schedule } from "./figures.js";
 import { imageStudio } from "./studio-image.js";
+import { field as kField } from "./kit.js";
 import { motionStudio as motionLab } from "./studio-motion.js";
 const accent = (node) =>
   getComputedStyle(node).getPropertyValue("--d-accent").trim() || "#3459e2";
@@ -351,13 +352,18 @@ function colorStudio(ctx, host) {
     },
     change: (v) => ctx.change(cssLch([v.l, v.c, v.h, v.a])),
   };
-  const channels = fields(channelCtx, [
-    ["Lightness", "l", 0, 1, 0.001],
-    ["Chroma", "c", 0, 0.5, 0.001],
-    ["Hue", "h", 0, 360, 1, "deg"],
-    ["Alpha", "a", 0, 1, 0.01],
-  ]);
-  channels.node.classList.add("d-cx-channels");
+  // L, C, H and A as bars painted with what they change; drag, type or use arrows.
+  const lchTrack = (fn) => (v) => `linear-gradient(90deg, ${Array.from({ length: 7 }, (_, i) => cssLch(fn(v, i / 6))).join(", ")})`;
+  const kf = [
+    kField(channelCtx, { label: "Lightness", min: 0, max: 1, step: 0.001, digits: 3, get: (v) => v.l, put: (v, n) => ({ ...v, l: n }), track: lchTrack((v, t) => [t, v.c, v.h, 1]) }),
+    kField(channelCtx, { label: "Chroma", min: 0, max: 0.5, step: 0.001, digits: 3, get: (v) => v.c, put: (v, n) => ({ ...v, c: n }), track: lchTrack((v, t) => [v.l, t * 0.37, v.h, 1]) }),
+    kField(channelCtx, { label: "Hue", min: 0, max: 360, step: 1, digits: 1, unit: "deg", get: (v) => v.h, put: (v, n) => ({ ...v, h: n }), track: lchTrack((v, t) => [v.l, Math.min(v.c, 0.15), t * 360, 1]) }),
+    kField(channelCtx, { label: "Alpha", min: 0, max: 1, step: 0.01, digits: 2, get: (v) => v.a, put: (v, n) => ({ ...v, a: n }), track: (v) => `linear-gradient(90deg, ${cssLch([v.l, v.c, v.h, 0])}, ${cssLch([v.l, v.c, v.h, 1])}), repeating-conic-gradient(#c9c7bf 0 25%, #fff 0 50%) 0 0 / 8px 8px` }),
+  ];
+  const channels = {
+    node: el("div", { class: "k-fields d-cx-channels d-deep" }, ...kf.map((x) => x.node)),
+    update: () => kf.forEach((x) => x.update()),
+  };
   const code = el("output", { class: "d-color-code", "aria-live": "off" }),
     copyStatus = el("output", { class: "d-note" });
   const copy = button("Copy", "Copy formatted color", async () => {
@@ -473,7 +479,6 @@ function colorStudio(ctx, host) {
     { class: "d-cx-side" },
     proof,
     el("div", { class: "d-deep" }, backs),
-    channels.node,
     codeBlock,
     section(
       "Token",
@@ -501,11 +506,18 @@ function colorStudio(ctx, host) {
     { class: "d-cx-main" },
     bar,
     field,
-    el("div", { class: "d-deep d-cx-strips" }, hue.node, alpha.node),
+    channels.node,
     ramps,
     harmonies,
   );
   host.append(el("div", { class: "d-cx" }, main, side));
+  // Sampling, the token and history live in the rail, beside the rows they came from.
+  ctx.rail.append(...side.querySelectorAll(".d-cx-image, .d-cx-tokens, .d-cx-history"));
+  side.append(harmonies);
+  image.classList.add("d-cx-well");
+  const dropper = el("span", { class: "d-cx-dropper", "aria-hidden": "true" });
+  dropper.innerHTML = `<svg viewBox="0 0 24 24" width="22" height="22"><path d="M14.5 5.5l4 4M16.5 3.5a2.1 2.1 0 013 3l-2 2-3-3zM14.5 7.5L6 16l-1 3 3-1 8.5-8.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+  image.prepend(dropper);
   paintAxes();
   // Pointer and keys on the plane.
   const pick = (e) => {
