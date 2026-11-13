@@ -88,8 +88,8 @@ export function createStage(ctx, root, world, view) {
       sec.media = true;
       // a picture's card takes the picture's proportions (kinds.js cardSize): known once it has decoded
       const img = sec.frame.querySelector('.kind-compact > img:not(.kind-poster)');
-      if (img?.naturalWidth && !sec.natural) {
-        sec.natural = { w: img.naturalWidth, h: img.naturalHeight };
+      if (img && !sec.natural && (img.naturalWidth || img.complete)) { // (a picture that failed to decode is complete with no width: card-state.js draws its error card)
+        sec.natural = img.naturalWidth ? { w: img.naturalWidth, h: img.naturalHeight } : { broken: true };
         const id = sec.el.dataset.component, was = { ...sec.size };
         measure(sec);
         if (laidOut && (was.w !== sec.size.w || was.h !== sec.size.h)) { if (auto.has(id) && overlapsOthers(id, sec)) placeNew(id); refreshOverlays(); ctx.emit('layout', {}); }

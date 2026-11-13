@@ -81,6 +81,7 @@
   --nk-armed: light-dark(rgb(52 89 226 / .12), rgb(123 155 255 / .18));
   --nk-armed-ink: light-dark(#2c52d2, #a9bfff);  /* icon on --nk-armed: 5:1 and 7:1 */
   --nk-danger: var(--nk-measure);
+  --nk-danger-ink: light-dark(#ce2c31, #ff8589);  /* danger as small text: 5.2:1 on white, 4.5:1+ on the dark chrome */
   /* cards on the canvas (standards 3, 5): one surface for every kind, a hairline edge and no shadow; the label's quieter half */
   --nk-card-edge: 0 0 0 1px light-dark(rgb(28 31 39 / .14), rgb(232 234 240 / .16));
   --nk-ink-faint: light-dark(#626a79, #959cab);  /* 4.5:1 and 5:1 on the canvas */

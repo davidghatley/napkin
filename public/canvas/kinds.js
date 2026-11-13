@@ -1,4 +1,5 @@
 import { plain } from './words.js';
+import { installCardStates, setCardState } from './card-state.js';
 // Folder items join the existing stage. Document components keep their original frames and editing paths.
 const enc = encodeURIComponent,
   esc = (s) =>
@@ -13,6 +14,7 @@ export function glanceCard(ctx, c) {
 }
 export function initKinds(ctx) {
   ctx.glances = new Map();
+  installCardStates(ctx);
   const style = document.createElement('link');
   style.rel = 'stylesheet';
   style.href = '/canvas/kind-canvas.css';
@@ -159,6 +161,7 @@ export function cardSize(c, natural) {
   if (!isCore(c)) return { w: 480, h: 340 };
   const m = c.meta, family = m.family;
   if (family === 'image') {
+    if (natural?.broken) return { w: 320, h: 80 }; // it did not decode: the card is the error card (card-state.js), not a picture-sized blank
     const w = natural?.w || m.width, h = natural?.h || m.height;
     if (!w || !h) return { w: 320, h: 240 };
     // the picture's proportions; a small one is drawn larger, up to 240 px on its long side, a large one fits 480 x 340
@@ -416,7 +419,7 @@ export function createItemFrame(ctx, id) {
       if (rev === revision && frame) return true;
       const now = ctx.state.components.get(id) || c;
       if (isCore(now)) { // a design-core card is its content (text, a picture): no viewer page is loaded over it; an edit redraws it
-        if (rev !== null && rev !== revision) { cell.querySelector('.kind-compact')?.remove(); cell.insertAdjacentHTML('afterbegin', compactItem(now)); }
+        if (rev !== null && rev !== revision) { cell.querySelector('.kind-compact')?.remove(); setCardState(cell, null); cell.insertAdjacentHTML('afterbegin', compactItem(now)); }
         rev = revision;
         return true;
       }

@@ -6,6 +6,7 @@
 //   createDocFrame(ctx, id, { onResize }) -> { cell, load(revision), pick(clientX, clientY), element(node), has(node),
 //                                              iframe(), doc(), tree(), node(id), width, setWidth(w) }
 import { createRuler } from './stage-ruler.js';
+import { setCardState, errorParts } from './card-state.js';
 const enc = encodeURIComponent;
 export const DOC_WIDTH = 640;
 
@@ -127,9 +128,23 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   };
   const flatten = (list, out = new Map()) => { for (const n of list) { out.set(n.node, n); flatten(n.children, out); } return out; };
 
+  // The page says it failed ([data-napkin-error]) or that it draws nothing ([data-napkin-empty], src/doc/view.js): the card says so in the
+  // chrome's type, compact, and the page stays loaded behind it (hidden) so a fix, or a late runtime error, is seen when it arrives.
+  function state() {
+    const d = iframe?.contentDocument;
+    if (!d?.body) return;
+    const err = d.querySelector('[data-napkin-error]'), empty = !err && d.querySelector('[data-napkin-empty]');
+    const next = err ? 'error' : empty ? 'empty' : null, text = (err || empty)?.textContent.trim() || '';
+    if ((cell.dataset.state || null) === next && (cell.dataset.stateText || '') === (next ? text : '')) return;
+    if (next === 'error') setCardState(cell, 'error', { ...errorParts(text), full: text });
+    else setCardState(cell, next, { detail: text.replace(/\.$/, '') });
+    if (next) cell.dataset.stateText = text; else delete cell.dataset.stateText;
+    onResize(false);
+  }
   function size() {
     const d = iframe?.contentDocument;
     if (!d?.documentElement) return;
+    state();
     // the frame hugs its content (a body with a fixed viewport height or overflow never gets an inner scrollbar on the canvas)
     const h = Math.max(24, Math.min(4000, Math.ceil(Math.max(d.documentElement.getBoundingClientRect().height, d.documentElement.scrollHeight > iframe.clientHeight + 1 ? d.documentElement.scrollHeight : 0))));
     if (iframe.style.height !== `${h}px`) { iframe.style.height = `${h}px`; onResize(Date.now() - widthAt < 2000); }
@@ -188,7 +203,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   }
   // The element under a page point (nearest one with a source node), or null.
   function pick(clientX, clientY) {
-    if (!iframe?.contentDocument) return null;
+    if (!iframe?.contentDocument || cell.dataset.state) return null; // an empty or failed page has nothing to pick: the card is picked whole
     const fr = iframe.getBoundingClientRect(), z = iframe.offsetWidth ? fr.width / iframe.offsetWidth : 1;
     const x = (clientX - fr.left) / z - iframe.clientLeft, y = (clientY - fr.top) / z - iframe.clientTop;
     if (x < 0 || y < 0 || x > iframe.clientWidth || y > iframe.clientHeight) return null;
