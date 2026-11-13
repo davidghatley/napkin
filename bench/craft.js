@@ -19,7 +19,7 @@ import { CARD_CONTENT } from "./kinds.js";
 import { shot, differing } from "./lib3/semantic.mjs";
 import { valueFor } from "./lib3/runtime.mjs";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, cpSync } from "node:fs";
 // D8 Craft. Automated half: cold start, light and dark, axe in every state a person meets.
 // Judged half (two fresh critics >= 8/10 against the floor products, slop audit 0 tells) cannot
 // be satisfied from the repository: it is lead-attested input, reported as pending until supplied.
@@ -47,7 +47,11 @@ export async function measure() {
         assert(!error, error);
         const empty = join(f.temp, "cold-state");
         mkdirSync(empty, { recursive: true });
-        const server = await start(f.folder, empty);
+        // The main fixture server already holds the folder's directory lock: a second napkin on the
+        // same folder exits at once. Cold-start a byte-identical copy instead.
+        const copy = join(f.temp, "cold-folder");
+        cpSync(f.folder, copy, { recursive: true });
+        const server = await start(copy, empty);
         try {
           const b = await browser();
           const t = performance.now();

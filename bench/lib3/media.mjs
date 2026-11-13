@@ -182,6 +182,27 @@ export function randomize(f, bytes, ctx) {
       expect.ramp = ctx.ramp;
       return { bytes: readFileSync(out), expect };
     }
+    case "pdf": {
+      // One page: page fill A, a block of B, black text. Offsets are exact so any reader parses it.
+      const content = `${a.map((x) => (x / 255).toFixed(3)).join(" ")} rg 0 0 320 200 re f ${fromHex(B).map((x) => (x / 255).toFixed(3)).join(" ")} rg 40 40 240 80 re f BT /F1 24 Tf 0 0 0 rg 48 80 Td (Orbit ${ctx.seed}) Tj ET`;
+      const objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 320 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+      ];
+      let out = "%PDF-1.4\n";
+      const offs = [];
+      objs.forEach((o, i) => {
+        offs.push(out.length);
+        out += `${i + 1} 0 obj\n${o}\nendobj\n`;
+      });
+      const xref = out.length;
+      out += `xref\n0 6\n0000000000 65535 f \n${offs.map((o) => String(o).padStart(10, "0") + " 00000 n \n").join("")}trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+      expect.colors = [A, B];
+      return { bytes: Buffer.from(out), expect };
+    }
     case "zip": {
       const name = `note-${ctx.nonce}.txt`,
         body = `Inside ${ctx.nonce} ${ctx.seed}`;

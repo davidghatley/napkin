@@ -168,23 +168,23 @@ async function oracle(b, file, item, r, f, s) {
     );
   }
   if (["pdf"].includes(file.kind)) {
+    // The fixture is re-made per run with the run's two colours as page and block fill (see
+    // lib3/media.mjs), plus black text. A faithful render shows both fills (checked above with
+    // e.colors) and dark text ink inside the page element.
     const rect = await rectOf(b, file.markers.selectors[0]);
     assert(rect, "no page element");
     const p = await shot(b);
     let ink = 0,
-      light = 0,
       n = 0;
     for (let y = rect.y; y < rect.y + rect.h; y += 2)
       for (let x = rect.x; x < rect.x + rect.w; x += 2) {
-        const i = (y * p.width + x) * 4,
-          l = (p.data[i] + p.data[i + 1] + p.data[i + 2]) / 3;
+        const i = (y * p.width + x) * 4;
         n++;
-        if (l < 110) ink++;
-        if (l > 200) light++;
+        if ((p.data[i] + p.data[i + 1] + p.data[i + 2]) / 3 < 40) ink++;
       }
     assert(
-      light / n > 0.3 && ink / n > 0.0015,
-      `rendered page has no page-and-ink structure (ink ${ink / n}, light ${light / n})`,
+      ink / n > 0.0008,
+      `rendered page shows no text ink (ink ${ink / n})`,
     );
   }
   if (["ttf", "otf", "woff2"].includes(file.kind)) {
@@ -309,6 +309,8 @@ export async function measure() {
               s.base + "/view/" + encodeURIComponent(item.id),
               file.markers,
             );
+          // Paint is measured for every listed item, whatever the later content checks say.
+          paints.push(typeof r.paint === "number" ? r.paint : Infinity);
           assert(kindOk(file.kind, r.kind), `root data-napkin-kind is ${r.kind}`);
           for (const selector of file.markers.selectors)
             assert(
@@ -375,7 +377,6 @@ export async function measure() {
             typeof r.paint === "number",
             "no first-contentful-paint entry",
           );
-          paints.push(r.paint);
           rendered++;
           await evidence(b, "D1-" + file.original);
           return {
@@ -403,7 +404,11 @@ export async function measure() {
               )
               .map((x) => x.kind),
           ).size >= 25,
-        value: rendered,
+        value: new Set(
+          f.files
+            .filter((x) => book.rows.find((r) => r.id === "viewer." + x.original)?.ok)
+            .map((x) => x.kind),
+        ).size,
       }),
       ["beat"],
     );
@@ -524,6 +529,13 @@ export async function measure() {
           "mixed." + mode,
           "p95 frame < 16.7 ms; no blank cards after 300 ms",
           async () => {
+            // mixed.sample leaves the browser on a /view page: gestures run on the canvas.
+            await wb.goto(ws.base + "/");
+            await waitUntil(
+              () => wb.eval("document.querySelectorAll('[data-item-id]').length>0"),
+              10000,
+            );
+            await sleep(500);
             const samples = await frameGesture(wb, mode);
             await sleep(300);
             const visible = await wb.eval(
