@@ -3,19 +3,13 @@ import { statSync } from 'node:fs';
 import { dirname, posix } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import {
-  window,
-  delimited,
-  table,
-  zipDirectory,
-  zipEntry,
-  LIMIT,
-} from './readers.js';
+import { window, zipDirectory, zipEntry, LIMIT } from './readers.js';
+import { tableWindow, recordsToRows, parseExact } from './cells.js';
 import { decodeText } from './registry.js';
 import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
 import { parseGltf, parseObj } from './gltf.js';
-import { indexable, utf16, buildIndex, readRecords } from './rowindex.js';
+import { utf16, buildIndex, readRecords } from './rowindex.js';
 const exec = promisify(execFile),
   esc = (s) =>
     String(s).replace(
@@ -235,29 +229,17 @@ export async function previewData(ctx, query = new URLSearchParams()) {
         .all()
         .map((r) => r.name);
       const name = query.get('table') || tables[0];
-      if (!tables.includes(name)) return { tables, ...table([]) };
+      if (!tables.includes(name)) return { tables, ...tableWindow([], []) };
       const quoted = '"' + name.replaceAll('"', '""') + '"',
-        rows = sqliteRows(db, name, count, offset);
-      const total = db.prepare(`SELECT count(*) AS n FROM ${quoted}`).get().n;
-      const shaped = table(
-        rows.map((r) =>
-          Object.fromEntries(
-            Object.entries(r).map(([k, v]) => [
-              k,
-              typeof v === 'bigint' ? String(v) : v instanceof Uint8Array ? Buffer.from(v).toString('hex') : v,
-            ]),
-          ),
-        ),
-      );
-      // SQLite has no boolean type: an integer column that only holds 0 and 1 is shown as one.
-      const declared = new Map(
-        db.prepare('PRAGMA table_info(' + quoted + ')').all().map((c) => [c.name, String(c.type).toUpperCase()]),
-      );
+        got = sqliteRows(db, name, count, offset),
+        total = db.prepare(`SELECT count(*) AS n FROM ${quoted}`).get().n,
+        shaped = tableWindow(got.names, got.rows, { overrides: ctx.recipe.columnTypes || {} });
+      // SQLite has no boolean type: a column declared INT or BOOL that only holds 0 and 1 is labelled boolean (cells still read 0 and 1).
       shaped.columns.forEach((c, i) => {
         const vals = shaped.rows.map((r) => r[i]).filter((v) => v !== null);
-        if (/INT|BOOL/.test(declared.get(c.name) || '') && vals.length >= 4 && vals.every((v) => v === 0 || v === 1)) {
+        if (!c.overridden && /INT|BOOL/i.test(got.declared[i]) && vals.length >= 4 && vals.every((v) => v === '0' || v === '1')) {
           c.type = 'boolean';
-          c.bins = [vals.filter((v) => v === 0).length, vals.filter((v) => v === 1).length];
+          c.bins = [vals.filter((v) => v === '0').length, vals.filter((v) => v === '1').length];
           c.min = c.max = null;
         }
       });
@@ -267,57 +249,33 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     }
   }
   if (family === 'table') {
-    if (indexable(ctx.head)) {
-      // Every row of the file is reachable: a one-pass index of record offsets, then bounded reads.
-      const csv = ctx.kind === 'csv' || ctx.kind === 'tsv',
-        delimiter = ctx.kind === 'tsv' ? '\t' : ',',
-        index = buildIndex(ctx.file, ctx.key, { quotes: csv, bytes: ctx.bytes, skipBlank: !csv, enc: utf16(ctx.head) });
-      if (csv) {
-        const headers = readRecords(ctx.file, index, 0, 1, { delimiter, quotes: true })[0] || [],
-          total = Math.max(0, index.total - 1),
-          at = Math.min(offset, Math.max(0, total - 1)),
-          recs = total ? readRecords(ctx.file, index, at + 1, count, { delimiter, quotes: true }) : [];
-        const rows = recs.map((a) => Object.fromEntries(headers.map((k, i) => [k, a[i] ?? null])));
-        return { ...table(rows, headers), offset: at, total, truncated: false };
-      }
-      const at = Math.min(offset, Math.max(0, index.total - 1)),
-        lines = readRecords(ctx.file, index, at, count, { quotes: false }),
-        rows = lines.map((l) => {
-          try {
-            return JSON.parse(l);
-          } catch {
-            return { invalid: l };
-          }
-        });
-      return { ...table(rows), offset: at, total: index.total, truncated: false };
+    // Every row of the file is reachable: a one-pass index of record offsets, then bounded reads.
+    const csv = ctx.kind === 'csv' || ctx.kind === 'tsv',
+      delimiter = ctx.kind === 'tsv' ? '\t' : ',',
+      overrides = ctx.recipe.columnTypes || {},
+      index = buildIndex(ctx.file, ctx.key, { quotes: csv, delimiter, bytes: ctx.bytes, skipBlank: !csv, enc: utf16(ctx.head) });
+    if (csv) {
+      const headers = readRecords(ctx.file, index, 0, 1, { delimiter, quotes: true })[0] || [],
+        total = Math.max(0, index.total - 1),
+        at = Math.min(offset, Math.max(0, total - 1)),
+        recs = total ? readRecords(ctx.file, index, at + 1, count, { delimiter, quotes: true }) : [];
+      const shaped = tableWindow(headers, recs, { overrides }),
+        ragged = recs.some((r) => r.length !== headers.length);
+      return { ...shaped, offset: at, total, truncated: false, ...(ragged ? { note: 'Some rows in this window have a different number of cells than the header; missing cells are shown empty, extra cells get unnamed columns.' } : {}) };
     }
-    let rows,
-      headers,
-      total = 0;
-    const b = window(ctx.file, 0, 8 * LIMIT),
-      sample = decodeText(b),
-      truncated = b.length < ctx.bytes;
-    const text = truncated ? sample.slice(0, Math.max(0, sample.lastIndexOf('\n') + 1)) : sample;
-    if (ctx.kind === 'csv' || ctx.kind === 'tsv') {
-      const delimiter = ctx.kind === 'tsv' ? '\t' : ',';
-      headers = delimited(text, delimiter, { limit: 1 })[0] || [];
-      const r = delimited(text, delimiter, { offset: offset + 1, limit: count });
-      total = Math.max(0, r.total - 1);
-      rows = r.map((a) => Object.fromEntries(headers.map((k, i) => [k, a[i] ?? null])));
-    } else {
-      rows = [];
-      for (const match of text.matchAll(/[^\r\n]+/g)) {
-        if (total >= offset && rows.length < count) {
-          try {
-            rows.push(JSON.parse(match[0]));
-          } catch {
-            rows.push({ invalid: match[0] });
-          }
-        }
-        total++;
+    const at = Math.min(offset, Math.max(0, index.total - 1)),
+      lines = readRecords(ctx.file, index, at, count, { quotes: false });
+    let invalid = 0;
+    const records = lines.map((l) => {
+      try {
+        return parseExact(l);
+      } catch {
+        invalid++;
+        return { 'not JSON': l };
       }
-    }
-    return { ...table(rows, headers), offset, total: truncated ? null : total, truncated };
+    });
+    const { names, rows } = recordsToRows(records);
+    return { ...tableWindow(names, rows, { overrides }), offset: at, total: index.total, truncated: false, ...(invalid ? { note: invalid + ' lines in this window are not JSON; they are shown as written.' } : {}) };
   }
   if (family === 'binary') {
     const start = Math.max(0, Number(query.get('offset') ?? ctx.recipe.offset) || 0),
@@ -331,12 +289,15 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     };
   }
   if (family === 'json') {
-    const data = jsonData(ctx),
+    // The tree is drawn from the text itself (numbers keep the digits written in the file); a list of records is also a table.
+    if (ctx.bytes > LIMIT) throw new Error('JSON preview is limited to the first 1 MiB; use JSONL for streaming records');
+    const data = parseExact(ctx.text),
       list = Array.isArray(data) ? data : null;
-    // A list of records is also a table, with the same typed columns and distributions as a CSV.
-    if (list && list.length > 1 && list.slice(0, 200).every((r) => r && typeof r === 'object' && !Array.isArray(r)))
-      return { data, ...table(list.slice(offset, offset + count)), total: list.length, offset, asTable: true };
-    return { data };
+    if (list && list.length > 1 && list.slice(0, 200).every((r) => r && typeof r === 'object' && !Array.isArray(r))) {
+      const { names, rows } = recordsToRows(list.slice(offset, offset + count));
+      return { text: ctx.text, ...tableWindow(names, rows, { overrides: ctx.recipe.columnTypes || {} }), total: list.length, offset, asTable: true };
+    }
+    return { text: ctx.text };
   }
   if (['chart', 'animation', 'notebook', 'graph'].includes(family)) return { data: jsonData(ctx) };
   if (family === 'timeline') {

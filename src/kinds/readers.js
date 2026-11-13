@@ -15,93 +15,56 @@ export function window(file, start = 0, length = 65536) {
     closeSync(fd);
   }
 }
+// RFC 4180 records. A quote opens a quoted field only at the start of a field; inside one, two quotes are one quote and
+// delimiters and line breaks are text. Text after a closing quote is kept as written (`"a"b` reads as ab), as spreadsheets do.
+// Cells are returned exactly as written: nothing is trimmed or converted.
 export function delimited(text, delimiter = ',', { offset = 0, limit = Infinity } = {}) {
   const rows = [];
   let row = [],
     cell = '',
-    quote = false,
+    state = 0, // 0 field start, 1 unquoted, 2 quoted, 3 quote inside quoted
     count = 0;
   const push = () => {
     if (count++ >= offset && rows.length < limit) rows.push(row);
   };
   for (let i = 0; i < text.length; i++) {
     const c = text[i];
-    if (quote) {
-      if (c === '"' && text[i + 1] === '"') {
-        cell += '"';
-        i++;
-      } else if (c === '"') quote = false;
+    if (state === 2) {
+      if (c === '"') state = 3;
       else cell += c;
-    } else if (c === '"' && !cell) quote = true;
+      continue;
+    }
+    if (state === 3) {
+      if (c === '"') {
+        cell += '"';
+        state = 2;
+        continue;
+      }
+      state = 1;
+    }
+    if (c === '"' && state === 0) state = 2;
     else if (c === delimiter) {
       row.push(cell);
       cell = '';
+      state = 0;
     } else if (c === '\n' || c === '\r') {
       if (c === '\r' && text[i + 1] === '\n') i++;
       row.push(cell);
       push();
       row = [];
       cell = '';
-    } else cell += c;
+      state = 0;
+    } else {
+      cell += c;
+      state = 1;
+    }
   }
-  if (cell || row.length) {
+  if (cell || row.length || state === 3 || state === 2) {
     row.push(cell);
     push();
   }
   Object.defineProperty(rows, 'total', { value: count });
   return rows;
-}
-export const scalar = (v) =>
-  v === '' || v === null
-    ? null
-    : typeof v !== 'string'
-      ? v
-      : /^(true|false)$/.test(v)
-        ? v === 'true'
-        : /^-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(v) && Number.isFinite(Number(v))
-          ? Number(v)
-          : v;
-export function table(rows, headers) {
-  const keys = headers || [...new Set(rows.flatMap((r) => Object.keys(r || {})))].slice(0, 64);
-  const data = rows.slice(0, 120).map((r) => keys.map((k) => scalar(r?.[k] ?? null)));
-  const columns = keys.map((name, i) => {
-    const values = data.map((r) => r[i]).filter((v) => v !== null),
-      nums = values.filter((v) => typeof v === 'number');
-    const type =
-      nums.length === values.length && values.length
-        ? 'number'
-        : values.every((v) => typeof v === 'boolean') && values.length
-          ? 'boolean'
-          : values.length &&
-              values.every(
-                (v) =>
-                  typeof v === 'string' &&
-                  /^\d{4}-\d\d-\d\d/.test(v) &&
-                  Number.isFinite(Date.parse(v)),
-              )
-            ? 'date'
-            : 'string';
-    const counts = new Map();
-    for (const v of values) {
-      const s = String(v);
-      counts.set(s, (counts.get(s) || 0) + 1);
-    }
-    const min = nums.length ? Math.min(...nums) : null,
-      max = nums.length ? Math.max(...nums) : null;
-    const bins = Array(16).fill(0);
-    for (const n of nums)
-      bins[max === min ? 0 : Math.min(15, Math.floor(((n - min) / (max - min)) * 16))]++;
-    return {
-      name,
-      type,
-      missing: data.length - values.length,
-      min,
-      max,
-      bins: type === 'number' ? bins : [...counts.values()].sort((a, b) => b - a).slice(0, 16),
-      distinct: counts.size,
-    };
-  });
-  return { columns, rows: data, sampled: data.length };
 }
 export function zipDirectory(file) {
   const size = statSync(file).size,

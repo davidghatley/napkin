@@ -26,21 +26,21 @@ test('delimited and line files are reachable to their last row, beyond any prefi
   assert.ok(d.total, JSON.stringify(d).slice(0, 300));
   assert.equal(d.total, N);
   assert.equal(d.truncated, false);
-  assert.equal(d.rows[0][0], 0);
+  assert.equal(d.rows[0][0], String(0));
   d = await get('big.csv', `offset=${N - 100}`);
   assert.equal(d.rows.length, 80);
-  assert.equal(d.rows[0][0], N - 100);
+  assert.equal(d.rows[0][0], String(N - 100));
   assert.equal(d.rows[0][1], `line ${N - 100}`);
   d = await get('big.csv', `offset=${977 * 300}`);
-  assert.equal(d.rows[0][0], 977 * 300);
+  assert.equal(d.rows[0][0], String(977 * 300));
   assert.equal(d.rows[0][1], `line ${977 * 300}\nsecond line`);
   d = await get('big.csv', `offset=${N - 1}`);
-  assert.equal(d.rows.at(-1)[0], N - 1);
+  assert.equal(d.rows.at(-1)[0], String(N - 1));
   d = await get('big.jsonl', `offset=${N - 5}`);
   assert.equal(d.total, N);
-  assert.equal(d.rows.at(-1)[0], N - 1);
+  assert.equal(d.rows.at(-1)[0], String(N - 1));
   d = await get('big.jsonl', 'offset=250001');
-  assert.equal(d.rows[0][0], 250001);
+  assert.equal(d.rows[0][0], String(250001));
 });
 
 test('UTF-16 tables larger than 8 MiB are reachable to the last row, with and without a byte order mark', async (t) => {
@@ -63,10 +63,10 @@ test('UTF-16 tables larger than 8 MiB are reachable to the last row, with and wi
   for (const id of ['wide.csv', 'wide-be.tsv']) {
     let d = await get(id, 'offset=0');
     assert.equal(d.total, N, id);
-    assert.equal(d.rows[0][0], 0);
+    assert.equal(d.rows[0][0], String(0));
     d = await get(id, `offset=${N - 100}`);
     assert.equal(d.rows.length, 80);
-    assert.equal(d.rows[0][0], N - 100);
+    assert.equal(d.rows[0][0], String(N - 100));
     assert.equal(d.rows[0][1], `héllo ${N - 100}`);
     d = await get(id, `offset=${977 * 200}`);
     assert.equal(d.rows[0][1], `héllo ${977 * 200}\nsecond`);
@@ -89,9 +89,9 @@ test('Parquet rows are reachable at any offset inside a row group and at the las
   for (const at of [0, 99_999, 100_000, 777_777, 1_100_001, N - 80]) {
     const d = await get(`offset=${at}`);
     assert.equal(d.total, N);
-    assert.equal(d.rows[0][0], at, `offset ${at}`);
-    assert.equal(d.rows.at(-1)[0], Math.min(N - 1, at + 79));
+    assert.equal(d.rows[0][0], String(at), `offset ${at}`);
+    assert.equal(d.rows.at(-1)[0], String(Math.min(N - 1, at + 79)));
   }
   const last = await get(`offset=${N - 1}`);
-  assert.equal(last.rows[0][0], N - 1);
+  assert.equal(last.rows[0][0], String(N - 1));
 });

@@ -1,11 +1,10 @@
 // Parquet through hyparquet (src/vendor/hyparquet, MIT): the format's own reader, not a miniature of it. Any row of the file is
 // reachable: a request for rows [offset, offset+n) reads only the row groups that hold them, column chunk by column chunk,
 // through byte ranges of the file. Compression codecs napkin has in Node (gzip, brotli) are plugged in; snappy ships with the reader.
-import fs, { statSync, openSync, readSync, closeSync } from 'node:fs';
-const { open, stat } = fs.promises; // read-only use
+import { statSync, openSync, readSync, closeSync, fstatSync } from 'node:fs';
 import { gunzipSync, brotliDecompressSync, zstdDecompressSync } from 'node:zlib';
 import { parquetMetadata, parquetReadObjects } from '../vendor/hyparquet/index.js';
-import { table } from './readers.js';
+import { tableWindow } from './cells.js';
 
 const zstd = typeof zstdDecompressSync === 'function' ? { ZSTD: (input, length) => new Uint8Array(zstdDecompressSync(input, { maxOutputLength: Math.max(length, 1) + 1024 })) } : {};
 const compressors = {
@@ -15,18 +14,18 @@ const compressors = {
 };
 const metas = new Map();
 
-async function fileBuffer(file) {
-  const st = await stat(file),
-    fh = await open(file, 'r');
+// hyparquet asks for byte ranges through an async slice(); positioned synchronous reads on one read-only descriptor answer them.
+function fileBuffer(file) {
+  const fd = openSync(file, 'r'),
+    size = fstatSync(fd).size;
   return {
-    st,
-    fh,
+    close: () => closeSync(fd),
     buffer: {
-      byteLength: st.size,
-      async slice(start, end = st.size) {
-        const n = Math.max(0, Math.min(end, st.size) - start),
+      byteLength: size,
+      async slice(start, end = size) {
+        const n = Math.max(0, Math.min(end, size) - start),
           b = Buffer.alloc(n);
-        if (n) await fh.read(b, 0, n, start);
+        if (n) readSync(fd, b, 0, n, start);
         return b.buffer.slice(b.byteOffset, b.byteOffset + n);
       },
     },
@@ -65,25 +64,15 @@ export function parquetInfo(file) {
   return metas.get(key);
 }
 
-const plain = (v) =>
-  typeof v === 'bigint'
-    ? Number.isSafeInteger(Number(v)) ? Number(v) : v.toString()
-    : v instanceof Date
-      ? v.toISOString()
-      : v instanceof Uint8Array
-        ? `<${v.length} bytes>`
-        : Array.isArray(v) || ArrayBuffer.isView(v)
-          ? Array.from(v, plain)
-          : v && typeof v === 'object'
-            ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, plain(x)]))
-            : v;
+// Values arrive typed (INT64 as bigint, timestamps as Date, byte arrays as bytes); cellText writes each as its exact text.
+const declaredType = (s) => String(s.logical_type?.type || s.converted_type || s.type || '').toLowerCase();
 
 // The 120 rows (at most) from `offset`, with the typed columns computed over that window.
 export async function parquetRows(file, offset = 0, count = 120) {
   const info = parquetInfo(file),
     start = Math.max(0, Math.min(info.rows ? info.rows - 1 : 0, offset)),
     end = Math.min(info.rows, start + count),
-    { fh, buffer } = await fileBuffer(file);
+    { close, buffer } = fileBuffer(file);
   try {
     let rows = [];
     try {
@@ -91,8 +80,13 @@ export async function parquetRows(file, offset = 0, count = 120) {
     } catch (e) {
       throw new Error(`${e.message}. Next: open the file in its own application; napkin still shows its metadata and bytes.`);
     }
-    const cols = info.leaves.map((s) => s.name);
-    const out = table(rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, plain(v)]))), cols);
+    // Rows come back keyed by top-level column, so the columns are read positionally from the schema's top level.
+    const top = info.metadata.schema.slice(1).filter((x, i, all) => isTop(all, i)),
+      out = tableWindow(
+        top.map((s) => s.name),
+        rows.map((r) => top.map((s) => r[s.name])),
+        { declared: top.map((s) => (s.num_children ? 'nested' : declaredType(s))) },
+      );
     let g = info.starts.findLastIndex((s) => s <= start);
     return {
       ...out,
@@ -104,6 +98,23 @@ export async function parquetRows(file, offset = 0, count = 120) {
       createdBy: info.metadata.created_by,
     };
   } finally {
-    await fh.close();
+    close();
   }
+}
+
+// The schema is a flattened tree: a node with num_children is followed by its descendants.
+function isTop(all, i) {
+  let at = 0;
+  while (at < all.length) {
+    if (at === i) return true;
+    if (at > i) return false;
+    at = skip(all, at);
+  }
+  return false;
+}
+function skip(all, at) {
+  let n = all[at].num_children || 0;
+  at++;
+  while (n-- > 0) at = skip(all, at);
+  return at;
 }

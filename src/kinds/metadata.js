@@ -2,10 +2,11 @@ import { fontInfo } from './fontinfo.js';
 import { parseGltf, parseObj } from './gltf.js';
 import { flattenScene } from '../../public/canvas/model-view.js';
 import { decodeText } from './registry.js';
-import { delimited, table, zipDirectory, window } from './readers.js';
+import { delimited, zipDirectory, window } from './readers.js';
+import { tableWindow, recordsToRows, parseExact } from './cells.js';
 import { DatabaseSync } from 'node:sqlite';
 import { parquetInfo } from './parquet.js';
-import { arrowTable } from './arrow.js';
+import { arrowInfo, arrowSmall } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
 // Small, source-derived previews let a zoomed-out folder remain useful without 1,000 browsing contexts.
 export function cardMetadata(ctx, family) {
@@ -17,27 +18,27 @@ export function cardMetadata(ctx, family) {
     if (ctx.bytes <= 65536) j = JSON.parse(text);
   } catch {}
   if (family === 'table') {
-    let rows, headers;
+    let t;
     if (ctx.kind === 'csv' || ctx.kind === 'tsv') {
       const parsed = delimited(text, ctx.kind === 'tsv' ? '\t' : ',', { limit: 101 });
       if (ctx.bytes > b.length) parsed.pop();
-      headers = parsed.shift() || [];
-      rows = parsed
-        .slice(0, 100)
-        .map((r) => Object.fromEntries(headers.map((k, i) => [k, r[i] ?? null])));
-    } else
-      rows = text
+      const headers = parsed.shift() || [];
+      t = tableWindow(headers, parsed.slice(0, 100));
+    } else {
+      const records = text
         .split('\n')
         .filter(Boolean)
         .slice(0, 100)
         .flatMap((line) => {
           try {
-            return [JSON.parse(line)];
+            return [parseExact(line)];
           } catch {
             return [];
           }
         });
-    const t = table(rows, headers);
+      const { names, rows } = recordsToRows(records);
+      t = tableWindow(names, rows);
+    }
     result.table = {
       columns: t.columns.slice(0, 8),
       rows: t.rows.slice(0, 6).map((r) => r.slice(0, 8)),
@@ -52,9 +53,11 @@ export function cardMetadata(ctx, family) {
     result.summary = `${p.rows.toLocaleString()} rows · ${p.metadata.row_groups.length} row groups`;
   }
   if (family === 'arrow') {
-    const t = arrowTable(ctx.file, 0, 8);
-    result.table = { columns: t.columns, rows: t.rows };
-    result.summary = t.batches + ' record batches';
+    const info = arrowInfo(ctx.file);
+    // A small file is read whole here; a large one fills its card from the first window when the card comes near the screen.
+    const t = ctx.bytes <= 8 * 1024 * 1024 ? arrowSmall(ctx.file, 6) : null;
+    result.table = t ? { columns: t.columns.slice(0, 8), rows: t.rows.map((r) => r.slice(0, 8)) } : { columns: [], rows: [] };
+    result.summary = `${info.total.toLocaleString()} rows · ${info.batches} record batch${info.batches === 1 ? '' : 'es'}`;
   }
   if (family === 'sqlite') {
     const db = new DatabaseSync(ctx.file, { readOnly: true });
@@ -65,21 +68,8 @@ export function cardMetadata(ctx, family) {
         )
         .get()?.name;
       if (name) {
-        const rows = sqliteRows(db, name, 8);
-        const t = table(
-          rows.map((r) =>
-            Object.fromEntries(
-              Object.entries(r).map(([k, v]) => [
-                k,
-                typeof v === 'bigint'
-                  ? String(v)
-                  : v instanceof Uint8Array
-                    ? '[' + v.length + ' bytes]'
-                    : v,
-              ]),
-            ),
-          ),
-        );
+        const { names, rows } = sqliteRows(db, name, 8);
+        const t = tableWindow(names, rows);
         result.table = { columns: t.columns, rows: t.rows };
         result.summary = name;
       }

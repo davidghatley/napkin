@@ -21,16 +21,17 @@ export function utf16(head) {
 export function indexable(head) {
   return true;
 }
-export function buildIndex(file, key, { quotes, bytes, skipBlank, enc = null }) {
+export function buildIndex(file, key, { quotes, bytes, skipBlank, enc = null, delimiter = ',' }) {
   const W = enc ? 2 : 1,
-    id = file + key + quotes + W;
+    D = delimiter.charCodeAt(0),
+    id = file + key + quotes + W + D;
   if (cache.has(id)) return cache.get(id);
   const starts = [enc ? enc.bom : 0],
     buf = Buffer.alloc(CHUNK),
     fd = openSync(file, 'r');
   let count = 0,
     pos = enc ? enc.bom : 0,
-    quote = false,
+    state = 0, // the same field states as delimited(): 0 field start, 1 unquoted, 2 quoted, 3 quote inside quoted
     lineBytes = 0,
     prevCR = false;
   const end = () => {
@@ -45,7 +46,13 @@ export function buildIndex(file, key, { quotes, bytes, skipBlank, enc = null }) 
       if (n < W) break;
       for (let i = 0; i + W <= n; i += W, pos += W) {
         const b = enc ? (enc.be ? (buf[i] << 8) | buf[i + 1] : buf[i] | (buf[i + 1] << 8)) : buf[i];
-        if (quotes && b === 0x22) quote = !quote;
+        if (quotes) {
+          if (state === 2) state = b === 0x22 ? 3 : 2;
+          else if (state === 3 && b === 0x22) state = 2;
+          else if (b === 0x22 && state === 0) state = 2;
+          else state = b === D || b === 0x0a || b === 0x0d ? 0 : 1;
+        }
+        const quote = state === 2;
         if (!quote && b === 0x0a) {
           if (prevCR) {
             // the pair CR LF is one break; the record already ended at the CR

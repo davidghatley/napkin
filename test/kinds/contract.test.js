@@ -166,7 +166,7 @@ test('data readers produce typed rows, real distributions, meshes, zip contents 
     assert.equal(status, 200, name);
     assert.ok(d.rows.length > 0, name);
     assert.ok(
-      d.columns.some((c) => c.type === 'number'),
+      d.columns.some((c) => /int|num|float/i.test(c.type)),
       name,
     );
     assert.ok(
@@ -221,7 +221,7 @@ test('2 GiB media range requests and a real 5 M row Parquet stay bounded', async
   assert.equal(status, 200);
   assert.equal(d.total, 5_000_000);
   assert.equal(d.groups, 50);
-  assert.equal(d.rows[0][0], 4_900_000);
+  assert.equal(d.rows[0][0], String(4_900_000));
   assert.ok(d.rows.length <= 120);
   const rss =
     Number(readFileSync(`/proc/${server.proc.pid}/status`, 'utf8').match(/VmRSS:\s+(\d+)/)[1]) *

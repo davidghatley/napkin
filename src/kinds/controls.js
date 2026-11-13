@@ -1,4 +1,4 @@
-import { delimited, scalar } from './readers.js';
+import { delimited } from './readers.js';
 const control = (id, label, value, target, extra = {}) => ({
   id,
   label,
@@ -116,7 +116,7 @@ export function nativeControls(ctx) {
           control(
             `cell:${r}:${c}`,
             `${rows[0]?.[c] || `Column ${c + 1}`} · row ${r}`,
-            scalar(rows[r][c]) ?? '',
+            rows[r][c] ?? "",
             { mode: 'cell', row: r, column: c, delimiter },
           ),
         );
@@ -141,22 +141,27 @@ export function applyNative(ctx, c, value) {
   const t = c.target;
   if (t.mode === 'source') return String(value);
   if (t.mode === 'cell') {
-    // Find cell byte spans without normalizing any other row or quote.
+    // Find the cell's span with the same field states as the reader, without normalizing any other row or quote.
     let row = 0,
       col = 0,
       start = 0,
-      quote = false,
+      state = 0,
       end = ctx.text.length;
     for (let i = 0; i <= ctx.text.length; i++) {
       const ch = ctx.text[i];
-      if (ch === '"') {
-        if (quote && ctx.text[i + 1] === '"') {
-          i++;
-          continue;
-        }
-        quote = !quote;
+      if (state === 2) {
+        if (ch === '"') state = 3;
+        if (i < ctx.text.length) continue;
       }
-      if (!quote && (ch === t.delimiter || ch === '\n' || ch === '\r' || i === ctx.text.length)) {
+      if (state === 3 && ch === '"') {
+        state = 2;
+        continue;
+      }
+      if (ch === '"' && state === 0) {
+        state = 2;
+        continue;
+      }
+      if (ch === t.delimiter || ch === '\n' || ch === '\r' || i === ctx.text.length) {
         if (row === t.row && col === t.column) {
           end = i;
           break;
@@ -168,7 +173,8 @@ export function applyNative(ctx, c, value) {
           if (ch === '\r' && ctx.text[i + 1] === '\n') i++;
         }
         start = i + 1;
-      }
+        state = 0;
+      } else state = 1;
     }
     const s = String(value),
       v = s.includes(t.delimiter) || /["\r\n]/.test(s) ? '"' + s.replaceAll('"', '""') + '"' : s;
