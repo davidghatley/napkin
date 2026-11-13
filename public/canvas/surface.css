@@ -45,7 +45,7 @@ body { font-family: var(--nk-sans); }
 /* ------------------------------------------------------------------ key map */
 #shortcuts { color: var(--nk-text); background: var(--nk-chrome); border: 1px solid var(--nk-line); border-radius: 12px; padding: 20px 24px; width: min(820px, calc(100vw - 32px)); max-height: 85vh; box-shadow: var(--nk-shadow-pop); font: 13px/1.5 var(--nk-sans); }
 #shortcuts::backdrop { background: #0006; }
-#shortcuts header { display: flex; justify-content: space-between; align-items: center; }
+#shortcuts .km-head { display: flex; justify-content: space-between; align-items: center; }
 #shortcuts h2 { font: 600 17px/24px var(--nk-sans); margin: 0; }
 #shortcuts h3 { font: 600 12px/16px var(--nk-sans); color: var(--nk-text-2); margin: 18px 0 6px; }
 #shortcuts .km-note { color: var(--nk-text-2); margin: 6px 0 0; }

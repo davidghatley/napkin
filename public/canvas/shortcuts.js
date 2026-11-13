@@ -9,7 +9,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 export function initShortcuts(ctx) {
   const dialog = document.createElement('dialog'); dialog.id = 'shortcuts';
   dialog.setAttribute('role', 'dialog'); dialog.setAttribute('aria-labelledby', 'shortcuts-title'); dialog.setAttribute('data-keymap', '');
-  dialog.innerHTML = `<header><h2 id="shortcuts-title">Keys</h2><button type="button" class="km-close">Close</button></header>
+  dialog.innerHTML = `<div class="km-head"><h2 id="shortcuts-title">Keys</h2><button type="button" class="km-close">Close</button></div>
     <p class="km-note">Ctrl on Windows and Linux, Cmd on Mac. A sequence is pressed one key after the other (A K: A, then K). A number first repeats a move (3, then ArrowRight). Every command is also in the palette (Ctrl K).</p>
     <section aria-labelledby="km-commands"><h3 id="km-commands">Commands</h3><ul class="km-list"></ul></section>
     <section aria-labelledby="km-more"><h3 id="km-more">Everywhere else</h3><dl class="km-more"></dl></section>

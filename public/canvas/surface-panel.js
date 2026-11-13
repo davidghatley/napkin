@@ -168,6 +168,16 @@ export function initInstruments(ctx) {
       try { panel.adjust(row.c.id, dir, { shiftKey: ev.altKey, altKey: ev.shiftKey }); } catch (err) { status(err.message); }
       return;
     }
+    // A long text or JSON field: Enter applies it (Shift+Enter starts a new line), like the one-line fields. A text control's
+    // field takes its words as they are typed (no quotes needed), whatever type name the schema gives it.
+    if (ev.key === 'Enter' && ev.target.tagName === 'TEXTAREA' && (/\bki-(editor|source)\b/.test(ev.target.className) || typeof row.c.value === 'string') && !ev.shiftKey && !ev.altKey && !ev.ctrlKey && !ev.metaKey) {
+      ev.preventDefault(); ev.stopPropagation();
+      let v = ev.target.value;
+      if (ev.target.classList.contains('ki-source')) { try { v = JSON.parse(v); } catch (err) { status('That is not valid JSON. Fix it, then press Enter again.'); return; } }
+      try { panel.transact(row.c.id, v); } catch (err) { status(err.message); return; }
+      row.label.focus({ focusVisible: true });
+      return;
+    }
     if (ev.key === 'Enter' && editing && !ev.shiftKey) { setTimeout(() => { if (document.activeElement === ev.target && !ev.target.getAttribute('aria-invalid')) row.label.focus({ focusVisible: true }); }, 0); return; }
     if (['select', 'segmented'].includes(row.c.type) && !editing) {
       if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey && ev.key !== ' ') { if (performance.now() - typedAt > 1500) typed = ''; typed += ev.key.toLowerCase(); typedAt = performance.now(); ev.preventDefault(); ev.stopPropagation(); return; }

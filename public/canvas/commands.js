@@ -51,17 +51,31 @@ export function initSurface(ctx) {
   const sync = () => json('/api/board', { selection: selectedItems() }).catch(() => {});
   ctx.on('select', sync);
 
+  // Bring a card fully into the visible part of the stage (what the side panels leave free), at once, so the focus ring is seen.
+  function bringIntoView(id) {
+    ctx.stage.live?.(id);
+    const el = ctx.stage.sections.get(id)?.el, stage = document.querySelector('#stage');
+    if (!el || !stage || !ctx.view?.panBy) return;
+    const r = el.getBoundingClientRect(), b = stage.getBoundingClientRect(), pad = 24;
+    let right = b.right;
+    for (const side of document.querySelectorAll('#inspector, #instruments')) { const q = side.getBoundingClientRect(); if (q.width && q.left > b.left + b.width / 2 && q.left < right) right = q.left; }
+    const fit = (lo, hi, a, z) => (z - a > hi - lo - 2 * pad ? lo + pad - a : a < lo + pad ? lo + pad - a : z > hi - pad ? hi - pad - z : 0);
+    const dx = fit(b.left, right, r.left, r.right), dy = fit(b.top, b.bottom, r.top, r.bottom);
+    if (dx || dy) ctx.view.panBy(dx, dy);
+  }
+
   async function selectPath(path) {
     const want = String(path ?? '').trim();
     if (!want) { ctx.hint('Name a file: Select orbit.html'); return; }
-    let id = componentOfItem(want);
-    if (!id) { const c = ctx.state.components.all().find((x) => x.path === want || ctx.itemOf(x.component) === want) || ctx.state.components.all().find((x) => norm(x.name) === norm(want)); id = c?.component; }
+    const lookup = () => componentOfItem(want) || (ctx.state.components.all().find((x) => x.path === want || ctx.itemOf(x.component) === want) || ctx.state.components.all().find((x) => norm(x.name) === norm(want)))?.component;
+    let id = lookup();
+    for (let i = 0; i < 60 && !id && performance.now() < 20000; i++) { await new Promise((r) => setTimeout(r, 50)); id = lookup(); } // just after load the canvas may still be reading its files
     if (!id) { ctx.hint(`No file called “${want}” on this canvas`); return; }
     ctx.stage.live?.(id);
     let sel = cardSelection(id);
     for (let i = 0; i < 40 && sel && sel.node === '' && ctx.state.components.get(id)?.kind === 'html'; i++) { await new Promise((r) => setTimeout(r, 50)); sel = cardSelection(id); } // a frame still loading
     ctx.select(sel);
-    ctx.stage.reveal?.(id);
+    bringIntoView(id);
     focusCard(id);
   }
 
@@ -104,7 +118,7 @@ export function initSurface(ctx) {
       ctx.selectMany([...cur.filter((s) => !picked.some((p) => p.component === s.component)), ...picked]);
     } else ctx.select(picked.at(-1));
     const id = picked.at(-1).component;
-    ctx.stage.reveal?.(id);
+    bringIntoView(id);
     focusCard(id);
   }
   function selectAll() {
