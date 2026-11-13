@@ -74,10 +74,10 @@ const subjects = {
   motion(node, get) {
     node.classList.add("subject-motion");
     const svg = svgEl("svg", { "aria-hidden": "true" }),
-      track = svgEl("path", { stroke: "var(--d-rule, #bbb)", "stroke-dasharray": "2 4" }),
+      track = svgEl("path", { stroke: "var(--frame)", "stroke-dasharray": "2 4" }),
       ghosts = svgEl("g"),
-      block = svgEl("rect", { width: 28, height: 28, rx: 3, fill: "var(--d-accent, #1f45d3)" }),
-      clock = svgEl("text", { x: 12, y: 20, "font-size": 11, fill: "var(--d-faint, #666)" });
+      block = svgEl("rect", { width: 28, height: 28, rx: 3, fill: "var(--accent)" }),
+      clock = svgEl("text", { x: 12, y: 20, "font-size": 11, fill: "var(--muted)" });
     svg.append(track, ghosts, block, clock);
     node.append(svg);
     let start = performance.now(),
@@ -110,12 +110,12 @@ const subjects = {
             height: 28,
             rx: 3,
             fill: "none",
-            stroke: "var(--d-accent, #1f45d3)",
+            stroke: "var(--accent)",
             "stroke-opacity": 0.12 + (i / 10) * 0.3,
             "stroke-dasharray": "2 2",
             transform: `rotate(${get("rotation")} ${p.x} ${g.y})`,
           }),
-          svgEl("path", { d: `M${p.x} ${g.y + 19}V${g.y + 25}`, stroke: "var(--d-faint, #888)", "stroke-width": i % 5 ? 1 : 1.5 }),
+          svgEl("path", { d: `M${p.x} ${g.y + 19}V${g.y + 25}`, stroke: "var(--muted)", "stroke-width": i % 5 ? 1 : 1.5 }),
         );
       }
     };
@@ -136,6 +136,8 @@ const subjects = {
       clock.textContent = `${Math.round(t * (v.duration || 1000))} ms`;
       if (visible && !reduced.matches && (loop || ms < total)) raf = requestAnimationFrame(frame);
     };
+    // The subject grows when its panel folds to a dial; redraw the ghost at the new size.
+    new ResizeObserver(() => ghost()).observe(node);
     new IntersectionObserver(([e]) => {
       visible = e.isIntersecting;
       if (visible && !raf) raf = requestAnimationFrame(frame);
@@ -189,11 +191,11 @@ const subjects = {
         Y = e.y ? scale(e.y, h - pad.b, pad.t) : () => h / 2,
         S = e.size ? scale(e.size, r0 * 0.5, r0 * 1.6) : () => r0,
         groups = [...new Set(rows.map((d) => d[e.color]))],
-        palette = ["var(--d-accent, #1f45d3)", "var(--d-text, #15161a)", "#c2410c"],
+        palette = ["var(--accent)", "var(--text)", "#c2410c"],
         C = (d) => (e.color ? palette[groups.indexOf(d[e.color]) % 3] : palette[0]);
-      svg.append(svgEl("path", { d: `M${pad.l} ${pad.t}V${h - pad.b}H${w - pad.r}`, stroke: "var(--d-rule, #bbb)", fill: "none" }));
+      svg.append(svgEl("path", { d: `M${pad.l} ${pad.t}V${h - pad.b}H${w - pad.r}`, stroke: "var(--frame)", fill: "none" }));
       const axis = (text, x, y, anchor) => {
-        const t = svgEl("text", { x, y, "font-size": 10.5, fill: "var(--d-faint, #666)", "text-anchor": anchor });
+        const t = svgEl("text", { x, y, "font-size": 10.5, fill: "var(--muted)", "text-anchor": anchor });
         t.textContent = text;
         svg.append(t);
       };
@@ -300,6 +302,8 @@ for (const sample of samples) {
   panel.render(sample.schema);
   draw = subjects[sample.id]?.(subject, (id) => panel.get(id)) || (() => {});
   requestAnimationFrame(() => draw());
+  // Subjects drawn to their box redraw when the box changes size (a folded panel gives them room).
+  if (sample.id === "data") new ResizeObserver(() => draw()).observe(subject);
   panels.push(panel);
 }
 // A plugin follows exactly the built-in edit lifecycle and draws its own figure.
