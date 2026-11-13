@@ -7,7 +7,7 @@ export function initEmpty(ctx, stage) {
   panel.innerHTML = `<h2 id="empty-title">Room for your first component</h2><p>Start a component, then draw inside it.</p><button type="button"><span>New component</span><kbd>N</kbd></button><dl><dt>Draw a frame</dt><dd><kbd>F</kbd></dd><dt>Add text</dt><dd><kbd>T</kbd></dd><dt>Add an image slot</dt><dd><kbd>I</kbd></dd><dt>Find a component or action</dt><dd><kbd>Ctrl/Cmd+K</kbd></dd></dl><small>Press <kbd>?</kbd> for every shortcut.</small>`;
   stage.append(panel);
   panel.querySelector('button').addEventListener('click', () => document.querySelector('#tool-new').click());
-  const update = () => { const empty = !ctx.state.components.size; panel.hidden = !empty || ctx.state.progress && !ctx.state.progress.done; document.body.dataset.empty = empty ? '1' : '0'; document.querySelector('#changes-placeholder').hidden = !!document.querySelector('#log li:not(:empty)'); };
+  const update = () => { const empty = !ctx.state.components.total; panel.hidden = !empty || ctx.state.progress && !ctx.state.progress.done; document.body.dataset.empty = empty ? '1' : '0'; document.querySelector('#changes-placeholder').hidden = !!document.querySelector('#log li:not(:empty)'); };
   ctx.on('progress', update); ctx.on('added', update); ctx.on('removed', update); ctx.on('render', update);
   update(); return panel;
 }

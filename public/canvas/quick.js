@@ -93,7 +93,7 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
   }
   function build() {
     items = actionsFor(ctx);
-    for (const c of ctx.state.components.values()) {
+    for (const c of ctx.state.components.all()) {
       items.push({ kind: 'component', label: c.name, hint: c.readOnly ? 'read-only component' : 'component', component: c.component, boost: 4 });
       if (!c.doc) continue;
       (function walk(n) {

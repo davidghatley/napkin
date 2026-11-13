@@ -1,0 +1,1 @@
+{"nodes":[{"id":1,"type":"CLIPTextEncode","pos":[30,30],"widgets_values":["A river garden, morning light"]},{"id":2,"type":"KSampler","pos":[300,40],"widgets_values":[1234,20,7,"euler","normal"]},{"id":3,"type":"VAEDecode","pos":[570,70],"widgets_values":[]}],"links":[[1,1,0,2,0,"CONDITIONING"],[2,2,0,3,0,"LATENT"]]}

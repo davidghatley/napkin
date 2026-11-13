@@ -58,6 +58,7 @@ import { initTheme } from './stage-theme.js';
 import { initChrome } from './stage-chrome.js';
 import { initBreakpoints } from './stage-breakpoints.js';
 import { initInspector } from './doc-panel.js';
+import { initKinds } from './kinds.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -66,8 +67,20 @@ const handlers = new Map();
 // The toast says it in plain words; the raw store message stays in the panel's inline errors.
 const keyOf = (s) => `${s.component}|${s.node}`;
 const nameCounts = new Map(), nameById = new Map(), idsByName = new Map();
+// Components are the files napkin has always drawn (the TSX dialect and the document engine). File items (any other kind,
+// public/canvas/kinds.js) live in the same map for get/has/set/delete, but iteration and size see components only, so every
+// existing loop keeps its meaning. all() and total are the whole canvas.
+class ComponentMap extends Map {
+  items = new Map();
+  set(k, v) { if (v?.item) this.items.set(k, v); else super.set(k, v); return this; }
+  get(k) { return super.get(k) ?? this.items.get(k); }
+  has(k) { return super.has(k) || this.items.has(k); }
+  delete(k) { return this.items.delete(k) || super.delete(k); }
+  all() { return [...super.values(), ...this.items.values()]; }
+  get total() { return this.size + this.items.size; }
+}
 const ctx = {
-  state: { components: new Map(), selection: null, selections: [], tool: 'select', zoom: 1 },
+  state: { components: new ComponentMap(), selection: null, selections: [], tool: 'select', zoom: 1 },
   select(selection) { ctx.selectMany(selection ? [selection] : []); },
   selectMany(list) {
     const seen = new Set();
@@ -96,7 +109,7 @@ const ctx = {
   // two components with one name show their paths (the dialect's names are counted as they arrive; the engine's are counted here)
   title(c) { return c.path && (nameCounts.get(c.name) > 1 || (c.kind === 'html' && [...ctx.state.components.values()].filter((x) => x.name === c.name).length > 1)) ? `${c.name} · ${c.path.replace(/#.*$/, '')}` : c.name; },
   named(name) { return [...(idsByName.get(name) || [])].map(id => ctx.state.components.get(id)).filter(Boolean); },
-  find(idOrName) { return ctx.state.components.get(idOrName) ?? [...ctx.state.components.values()].find((c) => c.name === idOrName); },
+  find(idOrName) { return ctx.state.components.get(idOrName) ?? ctx.state.components.all().find((c) => c.name === idOrName); },
   on(event, cb) { if (!handlers.has(event)) handlers.set(event, new Set()); handlers.get(event).add(cb); return () => handlers.get(event).delete(cb); },
   emit(event, payload) { for (const cb of handlers.get(event) || []) cb(payload); },
 };
@@ -170,8 +183,12 @@ const sync = id => {
 function counts() {
   // WPC-35: counted from the documents, not from the cells on screen (frames far off screen are not drawn), so zoom never changes it
   let cells = 0; for (const c of ctx.state.components.values()) if (c.doc) cells += variantGrid(c.doc).length;
+  const files = ctx.state.components.items.size;
   const n = ctx.state.components.size;
   $('#counts').textContent = `${n} component${n === 1 ? '' : 's'}${cells ? ` · ${cells} variant${cells === 1 ? '' : 's'}` : ''}`;
+  let fileCount = $('#item-count');
+  if (!fileCount) { fileCount = document.createElement('span'); fileCount.id = 'item-count'; $('#folder').after(fileCount); }
+  fileCount.textContent = files ? `${files} file${files === 1 ? '' : 's'}` : '';
 }
 
 // The change log has a fixed number of rows that are rewritten in place, so a new entry never moves the rows (FEEL-04).
@@ -202,13 +219,17 @@ client.onChange((f) => {
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
   else if (f.type === 'removed') { stage.remove(f.component); ctx.emit('removed', f); renderPanel(ctx); counts(); }
   else if (typeof f.type === 'string' && f.type.startsWith('doc-')) ctx.emit(f.type, f); // the document engine (docs.js)
+  else if (f.type === 'item-change' || f.type === 'items-changed') ctx.emit(f.type, f);
 });
 
 for (const c of client.components()) sync(c.component);
 const docs = initDocs(ctx);
 initInspector(ctx); // the inspector's scope keys, measuring and checks (doc-panel.js)
 await docs.load(); // the folder's HTML components (decision 0014), drawn with the rest
-await Promise.all([...ctx.state.components.keys()].map((id) => stage.render(id).catch(console.error)));
+await initKinds(ctx).load();
+const drawn = Promise.all(ctx.state.components.all().map((c) => c.component).map((id) => stage.render(id).catch(console.error)));
+// A big folder is laid out as soon as the cards exist; frames still loading are given room by their estimate and settle into it.
+if (ctx.state.components.total > 150) await Promise.race([drawn, new Promise((r) => setTimeout(r, 100))]); else await drawn;
 stage.layoutAll();
 nav.restore();
 renderPanel(ctx);

@@ -1,0 +1,2 @@
+:root { --leaf: #35836a; --space: 16px; }
+button { color: var(--leaf); padding: var(--space); }
