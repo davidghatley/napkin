@@ -481,10 +481,14 @@ used by the board bench.)
 Large-file gates also seek the 2 GB video to a random distant offset (must settle in 3 s),
 reach a random row (1 M to 4 M) and the last row of the 5 M-row Parquet file and require both
 cells of each exactly (id and value as written), and measure isolated peaks: each large file
-gets a fresh Chromium whose process tree is sampled every 10 ms from a baseline of the same
-viewer settled on a small file of the same kind (so the increase is what the file's size costs), plus server-tree peak RSS (sampled from spawn every 10 ms) against an empty-folder
-process, and page heap + backing storage against an empty page. Each
-increase must be below 60% of the input size, with a decoded video or a visible
+gets a fresh Chromium, sampled every 10 ms from a baseline of the same viewer settled on a
+small file of the same kind (so the increase is what the file's size costs). Three increases
+are judged: server-tree peak RSS (sampled from spawn every 10 ms) against an empty-folder
+process; the page's JS heap + backing storage; and the page renderer process's private memory (`RssAnon` of the
+largest web-content renderer, not the GPU, network or browser-UI processes). The renderer's
+full RSS (which adds raster tiles shared with the GPU process) and the whole Chromium process
+tree are reported but not judged, since compositor and GPU memory are not the product's to
+control. A file loaded whole would show in the heap and in private memory. Each judged increase must be below 60% of the input size, with a decoded video or a visible
 5-million-row count. This catches straightforward whole-file buffering on either
 side; it does not prove an allocator-independent upper bound or measure OS page cache.
 
@@ -522,7 +526,7 @@ an archive entry. A missing reference (library or command-line tool) FAILS its c
 
 | Family | Cases | Reference | Judged |
 | --- | --- | --- | --- |
-| CSV/TSV | leading zeros, ints beyond 2^53, decimals with trailing zeros, duplicate and empty headers, quotes, embedded newlines, CRLF, UTF-8 BOM, UTF-16LE, Latin-1, TSV with stray quotes, 8.6 MiB CSV, 8.6 MiB UTF-16 TSV | csv-parse on the decoded bytes | header in order; first, random and last row reached, every cell exactly as text; row count; `/api/items` table preview, if served, must also be exact |
+| CSV/TSV | leading zeros, ints beyond 2^53, decimals with trailing zeros, duplicate and empty headers, quotes, embedded newlines, CRLF, UTF-8 BOM, UTF-16LE, Latin-1, TSV with stray quotes, 8.6 MiB CSV, 8.6 MiB UTF-16 TSV | csv-parse on the decoded bytes; TSV has two accepted readings (below) | header in order; first, random and last row reached, every cell exactly as text; row count; `/api/items` table preview, if served, must also be exact |
 | JSON/JSONL | 24-34 deep nesting, 1,200-1,800 element array (last and a middle element), big and precise numbers, 2,500+ line JSONL with unsafe ints | `JSON.parse` with source text | node reachable; numbers exactly as written; counts |
 | Arrow | file IPC, stream IPC (`.arrows` and inside `.arrow`), 3 record batches, dictionary strings, nulls, int64, bool | apache-arrow | rows at batch edges and the last row exact; total rows |
 | Parquet | 3+ row groups, UTF8, INT64, DOUBLE, BOOLEAN, optional UTF8 with nulls | parquetjs-lite | rows on both sides of each row-group boundary and EOF exact |
@@ -545,7 +549,33 @@ card's content and a Layers row per file on first load; and a CSV selected throu
 Enter is on screen, opaque and hit-testable, and wheel (or its own next button) moves the
 card's rows without moving the canvas. Where a viewer draws inside a sandboxed frame the bench
 cannot read, it judges what is drawn instead (the sniffed page's red paragraph, the plugin
-viewer's paper colour). The Lottie reference writes in the spec default `st: 0` for the layer
+viewer's paper colour). TSV quotes have two accepted readings: literal (IANA `text/tab-separated-values`, quotes are
+ordinary characters; csv-parse with `quote: false`) and quoted (Excel and Python `csv`
+dialect `excel-tab`, non-strict, which pandas follows: a quote opens a field only at its
+start, `""` is a quote, a lone closing quote ends quoting and the rest stays in the field). The
+quoted reader is a small state machine in `lib3/fidelity-gen.mjs`, checked against Python
+3.12 `csv.reader` on generated files. A TSV passes if row count and every sampled row match
+either reading in full; it fails only when it matches neither, and the failure lists both.
+
+Thresholds the bench chose (the 300 ms blank-card window and the 16.7 ms frame budget are
+DREAM 3's own numbers):
+
+| Check | Threshold |
+| --- | --- |
+| Vega-Lite points and bar heights | Pearson r > 0.98 against the vega scenegraph |
+| Audio waveform | r > 0.9 against decoded peaks; duration within 0.15 s |
+| Image colours visible | each colour > 0.4% of the view (tolerance 36 per channel); the 3×N tall image > 0.06% each; Markdown image colours > 0.08% |
+| Alpha respected | the hidden colour < 0.05% of the view |
+| Lottie parts | each colour at least min(0.4%, 15% of the lottie-web reference share) |
+| PDF pages | the page's block colour > 1% of the view; reference text ink overlap > 35% |
+| Video seek | the target frame's colour > 1% of the view |
+| Animated frames | each frame's colour > 0.4% of the view within 1.8 s |
+| Sandboxed sniffed HTML | its text shown, or its red #c03030 > 0.01% of the view |
+| Sandboxed plugin card | its text shown, or its paper colour #fff8e0 (tolerance 22) > 15% of the card |
+| Card after Layers + Enter | opacity > 0.98 |
+| Large files | each judged memory increase < 60% of file bytes; video seek < 3 s |
+
+The Lottie reference writes in the spec default `st: 0` for the layer
 that omits it (lottie-web would skip that layer); the product gets the file as written. The
 whole bench takes 1.5 to 3.5 minutes; `dream3.js` adds
 its checks to D1's dream total.

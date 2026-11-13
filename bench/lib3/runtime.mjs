@@ -114,6 +114,32 @@ export function processRSS(pid) {
     return 0;
   }
 }
+// The page renderer: the largest web-content renderer under a Chromium main process (not the
+// GPU, network or utility processes, and not a browser-UI or extension renderer). Own memory
+// only: field "RssAnon" is its private memory (JS heap, ArrayBuffers, DOM, decoded data);
+// "VmRSS" adds shared mappings, including raster tiles shared with the GPU process.
+export function pageRendererRSS(pid, field = "VmRSS") {
+  let best = 0;
+  const rx = new RegExp("^" + field + ":\\s+(\\d+)", "m");
+  const walk = (p) => {
+    let children = [];
+    try {
+      children = readFileSync(`/proc/${p}/task/${p}/children`, "utf8").trim().split(/\s+/).filter(Boolean);
+    } catch {}
+    for (const c of children) {
+      try {
+        const cmd = readFileSync(`/proc/${c}/cmdline`, "utf8");
+        if (cmd.includes("--type=renderer") && !/--extension-process|--top-chrome-webui/.test(cmd)) {
+          const own = Number(readFileSync(`/proc/${c}/status`, "utf8").match(rx)?.[1] || 0) * 1024;
+          best = Math.max(best, own);
+        }
+      } catch {}
+      walk(c);
+    }
+  };
+  walk(pid);
+  return best;
+}
 export function chromiumMains() {
   const out = [];
   for (const d of readdirSync("/proc"))

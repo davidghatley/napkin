@@ -16,6 +16,7 @@ import {
   frameWork,
   processRSS,
   chromiumMains,
+  pageRendererRSS,
   ROOT,
 } from "./lib3/runtime.mjs";
 import {
@@ -624,7 +625,7 @@ export async function measure() {
     ])
       await book.check(
         "large." + (kind === "mov" ? "video" : "parquet"),
-        "real content, exact metadata (Parquet: a random row and the last row exact); isolated peak RSS increase (server, fresh browser heap and process tree) < 60% of file bytes",
+        "real content, exact metadata (Parquet: a random row and the last row exact); isolated peak increase (server RSS, page JS heap, page renderer private memory) each < 60% of file bytes",
         async () => {
           const empty = join(f.temp, "memory-empty-" + kind);
           mkdirSync(empty);
@@ -673,9 +674,23 @@ export async function measure() {
             );
           };
           const browserBaseline = await heapBytes();
-          let browserProc = 0;
-          for (let n = 0; n < 10; n++) browserProc = Math.max(browserProc, processRSS(b.pid)), await sleep(30);
-          let browserProcPeak = browserProc;
+          // Judged: the page's JS heap and its renderer process's private memory (RssAnon). The
+          // renderer's full RSS (which adds raster tiles shared with the GPU process) and the whole
+          // process tree (GPU, compositor, network) are reported but not judged: the product does
+          // not own them. Loading the file whole would show in both judged numbers.
+          let browserProc = 0,
+            renderer = 0,
+            rendererRss = 0;
+          for (let n = 0; n < 10; n++) {
+            browserProc = Math.max(browserProc, processRSS(b.pid));
+            renderer = Math.max(renderer, pageRendererRSS(b.pid, "RssAnon"));
+            rendererRss = Math.max(rendererRss, pageRendererRSS(b.pid));
+            await sleep(30);
+          }
+          assert(renderer > 0, "cannot find the page renderer process to measure");
+          let browserProcPeak = browserProc,
+            rendererPeak = renderer,
+            rendererRssPeak = rendererRss;
           let browserPeak = browserBaseline,
             sampling = false,
             sampleError;
@@ -690,6 +705,8 @@ export async function measure() {
               sampling = true;
               try {
                 browserProcPeak = Math.max(browserProcPeak, processRSS(b.pid));
+                rendererPeak = Math.max(rendererPeak, pageRendererRSS(b.pid, "RssAnon"));
+                rendererRssPeak = Math.max(rendererRssPeak, pageRendererRSS(b.pid));
                 browserPeak = Math.max(browserPeak, await heapBytes());
               } catch (e) {
                 sampleError = e;
@@ -758,7 +775,7 @@ export async function measure() {
               ok:
                 server.peakRSS() - baseline < bytes * 0.6 &&
                 browserPeak - browserBaseline < bytes * 0.6 &&
-                browserProcPeak - browserProc < bytes * 0.6,
+                rendererPeak - renderer < bytes * 0.6,
               value: {
                 fileBytes: bytes,
                 baseline,
@@ -769,7 +786,11 @@ export async function measure() {
                 browserIncrease: browserPeak - browserBaseline,
                 browserProcessBaseline: browserProc,
                 browserProcessPeak: browserProcPeak,
-                browserProcessIncrease: browserProcPeak - browserProc,
+                rendererPrivateBaseline: renderer,
+                rendererPrivatePeak: rendererPeak,
+                rendererPrivateIncrease: rendererPeak - renderer,
+                rendererRssIncrease: rendererRssPeak - rendererRss, // reported, not judged
+                browserProcessIncrease: browserProcPeak - browserProc, // reported, not judged
                 ...(kind === "parquet" ? { exactRow: seekMs } : { seekMs }),
               },
             };

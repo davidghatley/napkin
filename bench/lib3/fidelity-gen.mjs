@@ -216,6 +216,38 @@ function csvRecords(text, delimiter) {
     ...(delimiter === "\t" ? { quote: false } : {}),
   });
 }
+// The quoted TSV reading, as Excel and Python csv (dialect excel-tab, non-strict, which pandas
+// follows) read it: a quote opens a field only at its start; inside, "" is a quote and a lone
+// quote ends quoting while the following characters stay in the field. Checked against
+// Python 3.12 csv.reader on the generated files when this was written.
+function excelTabRecords(text) {
+  if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
+  const out = [];
+  let rec = [], f = "", st = "start", any = false;
+  const endField = () => { rec.push(f); f = ""; any = true; st = "start"; };
+  const endRec = () => { if (any || f) { rec.push(f); out.push(rec); } rec = []; f = ""; any = false; st = "start"; };
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], nl = ch === "\n" || ch === "\r";
+    if (nl && ch === "\r" && text[i + 1] === "\n" && st !== "q") i++;
+    if (st === "q") {
+      if (ch === "\"") st = "qq";
+      else f += ch;
+    } else if (st === "qq" && ch === "\"") {
+      f += ch; st = "q";
+    } else if (ch === "\t") endField();
+    else if (nl) endRec();
+    else if (st === "start" && ch === "\"") st = "q";
+    else { f += ch; st = "f"; }
+  }
+  if (st !== "start" || f || any) endRec();
+  return out;
+}
+function tsvQuotedRef(text) {
+  const [header, ...rows] = excelTabRecords(text),
+    n = rows.length;
+  const idx = [...new Set([0, Math.floor(n / 2), n - 1])].filter((i) => i >= 0 && i < n);
+  return { header, rows: idx.map((i) => ({ index: i, cells: rows[i] })), total: n };
+}
 function decodeBytes(buf, encoding) {
   if (encoding === "utf-16le") return new TextDecoder("utf-16le").decode(buf);
   if (encoding === "latin1") return new TextDecoder("windows-1252").decode(buf);
@@ -252,6 +284,9 @@ export const FAMILIES = {
         kind,
         bytes: bytes.length,
         ref: { header, rows: sampleRows(r, rows.length).map((i) => ({ index: i, cells: rows[i] })), total: rows.length },
+        // TSV has two accepted readings: literal quotes (IANA text/tab-separated-values) and
+        // quoted fields (Excel, pandas). A viewer passes if it matches either one in full.
+        ...(kind === "tsv" ? { alt: tsvQuotedRef(decodeBytes(readFileSync(join(dir, name)), encoding)) } : {}),
       });
     };
     const lines = (h, rows, sep = ",", eol = "\n") =>
