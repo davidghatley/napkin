@@ -1,6 +1,7 @@
 // The layers tree (CAN-04): every component, and under it the JSX tree of its nodes, as the file has it.
 // Selection syncs both ways. Rename (F2 / double-click) is one `rename` edit; dragging a row is one `move`.
 import { keyLabel } from './keylabel.js';
+import { plain } from './words.js';
 import { index, VOID } from '/src/model.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -151,7 +152,8 @@ export function initLayers(ctx, el) {
   el.addEventListener('dblclick', (ev) => {
     const row = ev.target.closest('.lrow');
     if (!row) return;
-    if (row.dataset.kind === 'component') { const r = ctx.stage.componentRect(row.dataset.component); if (r) ctx.view.flyTo(r, { pad: 88, max: 2 }); }
+    if (row.dataset.kind === 'component' && frameRow(row)) fileRename(row); // an HTML frame: its row name is its file name
+    else if (row.dataset.kind === 'component') { const r = ctx.stage.componentRect(row.dataset.component); if (r) ctx.view.flyTo(r, { pad: 88, max: 2 }); }
     else startRename(row);
   });
 
@@ -243,6 +245,40 @@ export function initLayers(ctx, el) {
     input.addEventListener('blur', () => finish(true));
   }
 
+  // An HTML frame file is renamed in its row, the same way as on the canvas (ctx.create.rename: the file moves on disk).
+  const frameRow = (row) => !!ctx.create?.isFrameFile(ctx.state.components.get(row.dataset.component));
+  function fileRename(row) {
+    const id = row.dataset.component, c = ctx.state.components.get(id);
+    if (!c || c.readOnly) return;
+    const name = row.querySelector('.lname'), old = String(c.path || id).split('/').pop().replace(/\.html?$/i, '');
+    const input = document.createElement('input');
+    input.className = 'lrename'; input.value = old; input.setAttribute('aria-label', `Rename ${old}`); input.spellcheck = false;
+    const msg = document.createElement('span'); msg.className = 'nk-rename-msg'; msg.setAttribute('role', 'alert'); msg.hidden = true;
+    name.replaceWith(input); input.after(msg);
+    renaming = { row, old };
+    input.focus(); input.select();
+    let done = false;
+    const close = () => { done = true; renaming = null; focusKey = `${ctx.state.selection?.component ?? id}|${ctx.state.selection?.node ?? ''}`; draw(); };
+    const finish = async (commit, fromBlur) => {
+      if (done) return;
+      if (!commit) { close(); return; }
+      const k = ctx.create.check(id, input.value);
+      if (k.same) { close(); return; }
+      if (k.error) { if (fromBlur) { ctx.hint(plain(k.error)); close(); } else { msg.textContent = k.error; msg.hidden = false; } return; }
+      done = true; input.disabled = true;
+      const r = await ctx.create.rename(id, k.name);
+      if (!r.ok) ctx.hint(plain(r.error));
+      renaming = null; draw();
+    };
+    input.addEventListener('input', () => { msg.hidden = true; });
+    input.addEventListener('keydown', (ev) => {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); finish(true, false); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true, true));
+  }
+
   // ---- keyboard ----
   el.addEventListener('keydown', (ev) => {
     const row = ev.target.closest?.('.lrow');
@@ -256,7 +292,7 @@ export function initLayers(ctx, el) {
       ev.preventDefault();
       if (row.getAttribute('aria-expanded') === 'true') row.querySelector('.twirl').click();
       else { const lvl = Number(row.getAttribute('aria-level')); go(rows.slice(0, i).reverse().find((r) => Number(r.getAttribute('aria-level')) < lvl)); }
-    } else if (ev.key === 'F2') { ev.preventDefault(); if (row.dataset.kind === 'component') ctx.cmpOps.rename(row.dataset.component); else startRename(row); }
+    } else if (ev.key === 'F2') { ev.preventDefault(); if (row.dataset.kind === 'component' && frameRow(row)) fileRename(row); else if (row.dataset.kind === 'component') ctx.cmpOps.rename(row.dataset.component); else startRename(row); }
     else if (ev.key === 'ContextMenu' || (ev.shiftKey && ev.key === 'F10')) { ev.preventDefault(); const b = row.querySelector('.lmore'); if (b) openMenu(b); }
     else if (ev.key === 'Enter') { ev.preventDefault(); focusKey = rowKey(row); pick(row); ctx.nav?.focus(row.dataset.component, row.dataset.node); }
   });

@@ -110,6 +110,12 @@ export function cleanStaleTmp(file) {
   }
 }
 
+// Removing and renaming a whole file (a frame made on the canvas, then undone or renamed; src/doc/folder.js).
+// removeFile clears a dead writer's leftovers beside it first. moveFile never overwrites: the hard link fails with EEXIST
+// when `to` exists, and only then is `from` unlinked, so a kill at any moment leaves the file under one name or both.
+export function removeFile(file) { cleanStaleTmp(file); unlinkSync(file); }
+export function moveFile(from, to) { mkdirSync(dirname(to), { recursive: true }); linkSync(from, to); unlinkSync(from); }
+
 // The same for a whole directory at once: the leftovers (.<name>.tmp-<pid>-<n>, .<name>.guard-<pid>-<n>) of a dead writer
 // beside each of `names` (the files napkin maps). Anything else in the folder, and the leftovers of a live process, stay.
 export function sweepDir(dir, names) {
