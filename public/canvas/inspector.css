@@ -180,6 +180,9 @@ body[data-gesture="move"] #stage, body[data-gesture="reorder"] #stage { cursor: 
 
 /* round 5: a bigger alignment matrix with axis cues, Min / Max behind a toggle, and a quieter type hint */
 #panel .alignrow { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+#panel .alignrow .stack { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+/* The panel at its narrowest (240 px): the alignment matrix sits above the size fields, so nothing runs past the panel. */
+@container inspector (max-width: 260px) { #panel .alignrow, #panel .irow { grid-template-columns: minmax(0, 1fr); } }
 #panel .amwrap { position: relative; display: flex; gap: 4px; align-items: flex-start; color: var(--nk-text-3); }
 #panel .amwrap.row { flex-direction: column; align-items: flex-start; }
 #panel .amwrap.column { flex-direction: row; }

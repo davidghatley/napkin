@@ -27,6 +27,9 @@ export const ACTIONS = [
   action('toolbar-rove', 'Tools: move between them / arm one', '← → · Home · End · Enter or Space', ['ArrowLeft', 'ArrowRight', 'Home', 'End'], refs('tools', 'keydown')),
   action('tooltip', 'Hide a tooltip', 'Escape', ['Escape'], refs('shell', 'keydown')),
   action('text-edit', 'Finish text edit', 'Enter', ['Enter'], refs('tools', 'keydown')),
+  action('place-default', 'Frame, Text or Image armed: place the default one in the middle of the view', 'Enter', ['Enter'], refs('tools', 'keydown'), null, 'draw'),
+  action('new-text', 'New text: new line / finish', 'Enter · Escape or Ctrl/Cmd+Enter', ['Enter', 'Escape'], refs('create', 'keydown'), null, 'draw'),
+  action('frame-rename', 'Rename a frame file (double-click its label): finish / cancel', 'Enter / Escape', ['Enter', 'Escape'], refs('create', 'keydown'), null, 'edit'),
   action('measure', 'Measure to hovered node', 'Hold Alt', ['Alt'], refs('stage', 'keydown', 'keyup')),
   action('multi', 'Add / remove selection', 'Shift/Ctrl/Cmd + click · drag marquee', [], []),
   action('quick', 'Quick open', 'Ctrl/Cmd+K', ['k'], refs('quick', 'keydown'), (c) => c.quick.open()),
@@ -115,7 +118,7 @@ export const ACTIONS = [
   command('control', 'Control', 'Control <label>', '', (c, a) => c.surface.control(a), { arg: 'control', about: 'Go to a control of the selection, ready to type a value' }),
   command('dial', 'Dial', 'Dial <label>', '', (c, a) => c.surface.depth(a, 1), { arg: 'control', about: 'Fold the control’s section to one row' }),
   command('bench', 'Bench', 'Bench <label>', '', (c, a) => c.surface.depth(a, 2), { arg: 'control', about: 'Open the control’s section with every related control' }),
-  command('studio', 'Studio', 'Studio <label>', '', (c, a) => c.surface.depth(a, 3), { arg: 'control', about: 'Open the control in its studio' }),
+  command('studio', 'Studio', 'Studio <label>', '', (c, a) => c.surface.depth(a, 3), { arg: 'control', about: 'Open the control’s full editor in the panel' }),
   command('reset', 'Reset', 'Reset <label>', '', (c, a) => c.surface.reset(a), { arg: 'control', about: 'Put a control back to its default' }),
   ...['kind', 'folder', 'date', 'similarity', 'tag', 'status', 'run'].map((by, i) => command(`arrange-${by}`, `Arrange by ${by}`, `Arrange by ${by}`, `A ${'KFDSTUR'[i]}`, (c) => c.surface.arrange(by), { about: `Sort the canvas into groups by ${by}` })),
   command('arrange-meta', 'Arrange by meta', 'Arrange by meta.<column>', '', (c, a) => c.surface.arrange('meta.' + String(a || '').replace(/^meta\./, '')), { arg: 'text', about: 'Sort the canvas into groups by a metadata field or a data column' }),
@@ -185,7 +188,7 @@ for (const a of ACTIONS) if (MENU[a.id]) Object.assign(a, MENU[a.id]);
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'file-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 3, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1,
+  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'file-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'create.js:keydown': 2, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1,
 };
 // A command that takes an argument ("Select <path>") puts its verb in the palette, where the argument is completed.
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run && a.palette !== false).map((a) => ({ ...a, boost: a.command ? -25 : a.boost, run: a.arg ? () => ctx.quick.prefill(a.phrase.replace(/\s*<.*$/, '') + ' ') : () => a.run(ctx) }));

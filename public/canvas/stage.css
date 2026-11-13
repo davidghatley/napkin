@@ -227,7 +227,7 @@ body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
 /* a frame of the engine hugs its content: the card adds no padding, the file's own page is the frame */
 .cmp[data-kind="html"] .frame { padding: 0; border-radius: 3px; }
 .cmp[data-kind="html"] .cell.doc-cell { border: 0; }
-.cmp-title .cmp-path { font: 400 10.5px var(--nk-mono); color: var(--nk-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.cmp-title .cmp-path { font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); color: var(--nk-ink-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 0; }
 .cmp-title .cmp-note { margin-left: 8px; font: 500 10.5px var(--nk-sans); color: var(--nk-accent-text); white-space: nowrap; }
 .cmp-note[hidden] { display: none; }
 

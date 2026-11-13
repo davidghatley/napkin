@@ -15,7 +15,7 @@ import { parseHtml, byId as htmlNode, attrOf } from './html.js';
 import { parseCss, varUses, stripCommentsKeep, specificity, splitList } from './css.js';
 import { parseJsx, componentTree } from './jsx.js';
 import { classLiteral, planNodeEdit, planInsert, planMove, planRule, planVar, EditRefused, styleDecls, mediaOf, runsOf, decodeText } from './edit.js';
-import { writeAtomic, cleanStaleTmp, sweepDir } from '../atomic.js';
+import { writeAtomic, cleanStaleTmp, sweepDir, removeFile, moveFile } from '../atomic.js';
 import { buildDom, matches as selMatches } from './select.js';
 import { createCascade } from '../../public/canvas/inspector-cascade.js';
 import { explainError } from '../errors.js';
@@ -32,6 +32,19 @@ const posixRel = (p) => p.split(sep).join('/');
 // so its frame can say why it does not build instead of disappearing.
 const fileComponentName = (path) => basename(path).replace(/\.[jt]sx$/i, '').split(/[^A-Za-z0-9]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join('') || 'Component';
 const htmlName = (path) => { const b = basename(path).replace(/\.html?$/i, ''); return /^(index|preview|demo|example|component)$/i.test(b) && dirname(path) !== '.' ? basename(dirname(path)) : b; };
+
+// A frame drawn on the canvas is its own HTML file (decision 0023, standards section 3). The file holds the smallest valid document:
+// a doctype, a charset, a title (the file name) and a body sized to the drawn box. No framework, no napkin markup, no stylesheet;
+// where the frame sits on the canvas is napkin's layout state, never the file. `body` is the inner HTML (text or an image) or ''.
+//   frameTemplate('frame-1', { width: 320, height: 180 })
+export const FRAME_MIN = { w: 48, h: 32 };
+export function frameTemplate(name, { width, height, body = '' } = {}) {
+  const size = ['margin: 0', Number.isFinite(width) && `width: ${Math.round(width)}px`, Number.isFinite(height) && `height: ${Math.round(height)}px`].filter(Boolean).join('; ');
+  const title = String(name).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+  return `<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<title>${title}</title>\n</head>\n<body style="${size}">${body ? `\n${body}\n` : ''}</body>\n</html>\n`;
+}
+// A file name a person can type for a frame: letters, digits, space, dot, dash, underscore; no folder, no leading dot.
+const FRAME_NAME = /^[A-Za-z0-9_][A-Za-z0-9 ._-]{0,99}$/;
 
 export class DocError extends Error { constructor(message, status = 400, extra = {}) { super(message); this.status = status; Object.assign(this, extra); } }
 
@@ -349,7 +362,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const num = (v) => v === undefined || v === null || Number.isFinite(v);
     if (!num(x) || !num(y) || !num(width) || (x === undefined) !== (y === undefined) || (x === undefined && width === undefined)) throw new DocError('send { component, x, y } and/or { width } as numbers. Next: retry with the frame position or width', 400);
     const cur = layout[comp.id] || {};
-    layout[comp.id] = { ...cur, ...(x !== undefined && { x: Math.round(x), y: Math.round(y) }), ...(width !== undefined && { width: width === null ? undefined : Math.max(120, Math.min(2400, Math.round(width))) }) };
+    layout[comp.id] = { ...cur, ...(x !== undefined && { x: Math.round(x), y: Math.round(y) }), ...(width !== undefined && { width: width === null ? undefined : Math.max(FRAME_MIN.w, Math.min(2400, Math.round(width))) }) };
     mkdirSync(state, { recursive: true });
     writeAtomic(join(state, 'layout.json'), JSON.stringify({ folder: real, frames: layout }) + '\n');
     return { ok: true, component: comp.id, canvas: layout[comp.id] };
@@ -482,6 +495,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return out;
   }
   function step(id, by, kind) {
+    const own = (kind === 'undo' ? undo : redo).get(id) || [];
+    let f = own.length - 1; while (f >= 0 && own[f].by !== by) f--;
+    if (f >= 0 && own[f].op) return fileStep(id, f, by, kind); // a file made, removed or renamed (its file may not exist now)
     const comp = component(id);
     const [fromStack, toStack, a, b] = kind === 'undo' ? [undo, redo, 'after', 'before'] : [redo, undo, 'before', 'after'];
     const stack = fromStack.get(comp.id) || [];
@@ -511,7 +527,6 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   // ---------- an HTML file as a whole (a frame on the canvas): its source, duplicate, rename, trash and back ----------
   // The trash is in the state dir (never the folder): a trashed file can be put back (undo) while napkin runs and after.
   const htmlComp = (id) => { const comp = component(id); if (comp.kind !== 'html') throw new DocError(`${comp.path} is not an HTML file. Next: rename or duplicate a .tsx component with its own commands`, 400); return comp; };
-  const saveLayout = () => { mkdirSync(state, { recursive: true }); writeAtomic(join(state, 'layout.json'), JSON.stringify({ folder: real, frames: layout }) + '\n'); };
   const changedFiles = () => { const old = new Set((list || []).map((x) => x.path)); scan(); watchDirs(); const cur = new Set(list.map((x) => x.path)); if ([...cur].some((x) => !old.has(x)) || [...old].some((x) => !cur.has(x))) events.emit('files', {}); };
   // The whole text of a component's file, and the lines each element spans (the code strip shows and highlights them).
   function source(id) {
@@ -575,7 +590,124 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return { ok: true, component: meta.path, file: meta.path };
   }
 
-  // ---------- watcher ----------
+  // ---------- frame files: make, remove, rename (decision 0023) ----------
+  // Each is one step on the caller's undo stack of that file, so Ctrl+Z after drawing a frame removes the file and its card,
+  // and redo brings both back. Nothing is ever overwritten: a new file is written exclusively, a rename is a hard link then an
+  // unlink (refused when the name is taken), and a removal or an undo checks the file still holds what napkin wrote.
+  const nameOfPath = (path) => basename(path).replace(/\.html?$/i, '');
+  function frameFile(path) {
+    if (typeof path !== 'string' || !path) throw new DocError('send the frame file as a folder-relative path, like frame-1.html', 400);
+    const rel = posixRel(relative(root, abs(path)));
+    if (!rel || rel.startsWith('..') || rel.split('/').some((x) => x.startsWith('.'))) throw new DocError(`${path} is not a file napkin can make here. Next: use a path inside the folder`, 400);
+    if (kindOf(rel) !== 'html') throw new DocError(`${path} is not an .html file. Next: frames are .html files`, 400);
+    return rel;
+  }
+  function nextFrame(dir = '.') {
+    const taken = new Set(); try { for (const n of readdirSync(abs(dir))) taken.add(n.toLowerCase()); } catch { /* new folder */ }
+    let n = 1; while (taken.has(`frame-${n}.html`)) n++;
+    return posix.join(dir, `frame-${n}.html`).replace(/^\.\//, '');
+  }
+  function saveLayout() { mkdirSync(state, { recursive: true }); writeAtomic(join(state, 'layout.json'), JSON.stringify({ folder: real, frames: layout }) + '\n'); }
+  const placeOf = (x, y, width) => ({ ...(Number.isFinite(x) && Number.isFinite(y) && { x: Math.round(x), y: Math.round(y) }), ...(Number.isFinite(width) && { width: Math.max(FRAME_MIN.w, Math.min(2400, Math.round(width))) }) });
+  function structural() { const old = new Set((list || []).map((x) => x.path)); scan(); watchDirs(); const cur = new Set(list.map((x) => x.path)); if ([...cur].some((x) => !old.has(x)) || [...old].some((x) => !cur.has(x))) events.emit('files', {}); }
+  function put(path, text, place) { // a new file: exclusive (never replaces one), remembered, placed
+    const buf = Buffer.from(text, 'latin1');
+    try { writeAtomic(abs(path), buf, { exclusive: true }); }
+    catch (e) { if (e.code === 'EEXIST') throw new DocError(`${path} already exists; napkin never overwrites a file. Next: choose another name`, 409); throw e; }
+    let st = null; try { st = statSync(abs(path)); } catch { /* raced */ }
+    remember(path, buf, st);
+    if (place && Object.keys(place).length) { layout[path] = { ...place }; saveLayout(); }
+  }
+  function drop(path, text) { // remove a file napkin can vouch for: it must still hold `text`
+    let now; try { now = read(path).s; } catch { throw new DocError(`${path} is already gone. Next: nothing to remove`, 409); }
+    if (text !== undefined && now !== text) throw new DocError(`${path} changed since napkin made it; napkin will not remove those changes. Next: delete it in your editor if you mean to`, 409);
+    const place = layout[path];
+    removeFile(abs(path)); cache.delete(path); past.delete(path);
+    if (place) { delete layout[path]; saveLayout(); }
+    return { text: now, place };
+  }
+  function move(from, to) { // rename without overwriting: link (fails when `to` exists), then unlink
+    if (!existsSync(abs(from))) throw new DocError(`${from} is gone. Next: check the file list`, 404);
+    try { moveFile(abs(from), abs(to)); }
+    catch (e) { if (e.code === 'EEXIST') throw new DocError(`${basename(to)} is taken: another file has that name. Next: choose another name`, 409); throw e; }
+    const c = cache.get(from); cache.delete(from); if (c) cache.set(to, c); past.delete(from);
+    // what napkin keeps per file follows it: the place on the canvas, the undo and redo steps, the history
+    if (layout[from]) { layout[to] = layout[from]; delete layout[from]; saveLayout(); }
+    for (const m of [undo, redo, history]) {
+      const a = m.get(from); if (!a) continue;
+      m.delete(from); m.set(to, [...(m.get(to) || []), ...a.map((x) => (x.files ? { ...x, files: x.files.map((f) => (f.path === from ? { ...f, path: to } : f)) } : x))]);
+    }
+  }
+  function fileDone(id, by, st, kind) {
+    structural();
+    const at = st.op === 'rename' ? (kind === 'undo' ? st.from : st.to) : st.path;
+    let revision = null; try { revision = read(at).rev; } catch { /* removed */ }
+    push(history, id, { revision, by, at: Date.now(), summary: (kind === 'edit' ? '' : kind + ': ') + st.summary, files: [at] });
+    if (st.op === 'rename') events.emit('renamed', { from: kind === 'undo' ? st.to : st.from, to: at, by });
+    return { ok: true, revision, changed: [at], component: at, ...(st.op === 'rename' && { from: kind === 'undo' ? st.to : st.from }) };
+  }
+  // POST /api/frames: { path?, x, y, width, height?, body? } -> a new frame file. With no path, the next free frame-N.html.
+  function createFrame({ path, x, y, width, height, body = '', by = 'unknown' } = {}) {
+    const p = frameFile(path ?? nextFrame());
+    const num = (v) => v === undefined || v === null || Number.isFinite(v);
+    if (!num(x) || !num(y) || !num(width) || !num(height)) throw new DocError('send x, y, width and height as numbers. Next: retry with the drawn box', 400);
+    if (typeof body !== 'string' || body.length > 1e6) throw new DocError('body must be the frame\'s inner HTML as a string. Next: send text or leave it out', 400);
+    const w = Number.isFinite(width) ? Math.max(FRAME_MIN.w, width) : undefined, h = Number.isFinite(height) ? Math.max(FRAME_MIN.h, height) : undefined;
+    const text = toL(frameTemplate(nameOfPath(p), { width: w, height: h, body }));
+    const place = placeOf(x, y, w);
+    put(p, text, place);
+    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `created ${p}` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
+    return { ...fileDone(p, by, st, 'edit'), path: p, name: nameOfPath(p), canvas: layout[p] };
+  }
+  // DELETE /api/frames/<path>: { revision } must be the file's current revision (nobody changed it since you looked).
+  function removeFrame(path, { revision, by = 'unknown' } = {}) {
+    const p = frameFile(path);
+    const cur = read(p);
+    if (revision !== undefined && revision !== null && String(revision) !== cur.rev) throw new DocError(`stale revision: ${p} is at ${cur.rev}, not ${revision}. Read it again and retry`, 409, { revision: cur.rev });
+    const { text, place } = drop(p, cur.s);
+    const st = { op: 'delete', by, at: Date.now(), path: p, text, place, summary: `deleted ${p}` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
+    return fileDone(p, by, st, 'edit');
+  }
+  // POST /api/frames/rename: { from, to } where `to` is a name ("hero") or a file name ("hero.html"), in the same folder.
+  function renameFrame(from, to, { by = 'unknown' } = {}) {
+    const f = frameFile(from);
+    if (!existsSync(abs(f))) throw new DocError(`${f} is gone. Next: check the file list`, 404);
+    const name = String(to ?? '').trim().replace(/\.html?$/i, '');
+    if (!name) throw new DocError('a frame needs a name. Next: type one', 400);
+    if (!FRAME_NAME.test(name)) throw new DocError(`"${name}" cannot be a file name: use letters, digits, spaces, dots, dashes and underscores`, 400);
+    const t = frameFile(posix.join(posix.dirname(f), `${name}${extname(f)}`).replace(/^\.\//, ''));
+    if (t === f) return { ok: true, noop: true, component: f, changed: [] };
+    if (existsSync(abs(t)) && realpathSync(abs(t)) !== realpathSync(abs(f))) throw new DocError(`${basename(t)} is taken: another file has that name. Next: choose another name`, 409);
+    move(f, t);
+    const st = { op: 'rename', by, at: Date.now(), from: f, to: t, summary: `renamed ${f} to ${t}` };
+    push(undo, t, st); redo.set(t, (redo.get(t) || []).filter((s) => s.by !== by));
+    return fileDone(t, by, st, 'edit');
+  }
+  // Undo or redo a file step. A create undone removes the file (if it still holds what napkin wrote); a delete undone writes it back.
+  function fileStep(id, k, by, kind) {
+    const [fromStack, toStack] = kind === 'undo' ? [undo, redo] : [redo, undo];
+    const st = fromStack.get(id)[k];
+    const back = kind === 'undo';
+    let key = id;
+    if (st.op === 'create' || st.op === 'delete') {
+      if ((st.op === 'create') === back) drop(st.path, st.text); else put(st.path, st.text, st.place);
+    } else if (st.op === 'rename') {
+      const [a, b] = back ? [st.to, st.from] : [st.from, st.to];
+      if (existsSync(abs(b))) throw new DocError(`${basename(b)} is taken now; napkin will not overwrite it. Next: rename that file first`, 409);
+      fromStack.get(id).splice(k, 1); // (before the move: the move carries this file's stacks to the new name)
+      move(a, b); key = b;
+      push(toStack, key, st);
+      return fileDone(key, by, st, kind);
+    }
+    fromStack.get(id).splice(k, 1);
+    push(toStack, key, st);
+    return fileDone(key, by, st, kind);
+  }
+  // Is there a step of this caller's to undo (or redo) on this id, even one whose file does not exist right now?
+  const pendingStep = (verb, id, by) => ((verb === 'undo' ? undo : redo).get(id) || []).some((x) => x.by === by);
+
   const watchers = new Map();
   let timer = null; const pending = new Set();
   function watchDirs() {
@@ -626,8 +758,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };
       return best;
     },
-    undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'),
-    history: (id) => [...(history.get(component(id).id) || [])].reverse(),
+    undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'), pendingStep,
+    createFrame, removeFrame, renameFrame, nextFrame,
+    history: (id) => [...(history.get(has(id) ? component(id).id : id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,
     rescan: () => { scan(); watchDirs(); },
     close() { clearTimeout(timer); for (const w of watchers.values()) w.close(); watchers.clear(); },

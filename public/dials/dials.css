@@ -329,43 +329,30 @@
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
-.d-depth {
-  display: flex;
-  align-items: center;
-  gap: 1px;
-  margin-left: auto;
-  flex: none;
-}
-.dials .d-depth button,
-.dials .d-pane-size {
+/* The section's one disclosure for its full editor, drawn in the panel beneath the rows (no depth selector, no full-window pane). */
+.dials .d-expand {
   width: 24px;
   height: 24px;
   min-height: 0;
   padding: 0;
   display: grid;
   place-items: center;
+  flex: none;
+  margin-left: auto;
   color: var(--d-faint);
 }
-.dials .d-depth button:hover {
+.dials .d-expand:hover {
   color: var(--d-text);
 }
-.dials .d-depth button[aria-pressed="true"] {
+.dials .d-expand[aria-expanded="true"] {
   color: var(--d-accent-text);
   background: var(--d-soft);
 }
-.d-depth svg,
-.d-pane-size svg {
+.d-expand svg {
   display: block;
 }
-.dials .d-pane-size.d-studio-only {
-  display: none;
-}
-.dials .d-section[data-depth="3"] .d-pane-size.d-studio-only {
-  display: grid;
-  margin-left: auto;
-}
-.d-section[data-depth="3"] .d-pane-size + .d-depth {
-  margin-left: 0;
+.d-section[data-depth="1"] .d-expand {
+  visibility: hidden;
 }
 /* In a studio the head names the instruments; each one is a tab, the current one underlined. */
 .d-studio-tabs {
@@ -921,22 +908,12 @@
   font-weight: 600;
 }
 
-/* ---------- Studio: the section takes the pane ---------- */
+/* ---------- The full editor: the section opens in place, inside the panel, as tall as it needs ---------- */
 .d-section[data-depth="3"] {
-  resize: both;
-  overflow: auto;
-  min-width: min(100%, 360px);
-  min-height: 520px;
   width: 100%;
-  height: 720px;
-  max-height: 90vh;
-  border-radius: 6px;
-  box-shadow: var(--d-shadow);
+  min-width: 0;
 }
 .d-section[data-depth="3"] > .d-section-head {
-  position: sticky;
-  top: 0;
-  z-index: 3;
   height: 44px;
   padding: 0 10px 0 8px;
   background: var(--d-surface);
@@ -981,50 +958,39 @@
   gap: 16px;
   align-content: start;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] {
-  position: fixed;
-  inset: var(--d-studio-top, 56px) var(--d-studio-side, 24px) var(--d-studio-bottom, 24px);
-  margin: auto;
-  z-index: 100;
-  width: auto;
-  height: auto;
-  max-height: none;
-  min-height: 0;
-  resize: none;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow:
-    0 0 0 100vmax rgb(10 12 18 / 0.32),
-    var(--d-shadow);
-}
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] > .d-section-inner {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-section-content {
-  min-height: 100%;
-}
 /* A studio without its own layout: the main figure left, what tunes it right. */
 .d-col {
   display: contents;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-  grid-template-areas: "head head" "main side";
-  align-content: start;
-  gap: 16px 32px;
+/* Only when the section is wide enough for two columns (a wide panel); narrower, the pieces stack. */
+@container dials-studio (min-width: 821px) {
+  .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    grid-template-areas: "head head" "main side";
+    align-content: start;
+    gap: 16px 32px;
+  }
+  .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) > .d-lab-head {
+    grid-area: head;
+  }
+  .d-section[data-depth="3"] .d-col {
+    display: grid;
+    gap: 16px;
+    align-content: start;
+    min-width: 0;
+  }
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) > .d-lab-head {
-  grid-area: head;
+/* In a panel-wide section the full editor keeps the panel's padding; in the narrowest panel the colour grades stack. */
+@container dials-studio (max-width: 520px) {
+  .d-section[data-depth="3"] .d-lab {
+    padding: 12px;
+  }
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col {
-  display: grid;
-  gap: 16px;
-  align-content: start;
-  min-width: 0;
+@container dials-studio (max-width: 300px) {
+  .dials .d-section[data-depth="3"] .d-cx-grades {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .d-section[data-depth="3"] .d-lab-fields {
@@ -1055,9 +1021,24 @@
 .d-cx-main,
 .d-cx-side {
   display: grid;
+  grid-template-columns: minmax(0, 1fr); /* a column never grows past the panel for a long ramp or code line */
   gap: 18px;
   align-content: start;
   min-width: 0;
+}
+.d-cx-main > *,
+.d-cx-side > * {
+  min-width: 0;
+}
+.d-cx-ramp {
+  grid-template-columns: minmax(0, 1fr);
+}
+.d-cx-ramp .d-swatches {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.d-cx-ramp .d-color-code {
+  overflow-wrap: anywhere;
 }
 .d-cx-field {
   display: grid;
@@ -1157,6 +1138,7 @@
 }
 .d-cx-proof {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 .d-cx-sample {
   border-radius: 8px;
@@ -1241,6 +1223,7 @@
   gap: 4px;
 }
 .d-cx-code output {
+  overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
@@ -1250,8 +1233,13 @@
 }
 .d-cx-section {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   min-width: 0;
+}
+.d-cx-section > header {
+  min-width: 0;
+  flex-wrap: wrap;
 }
 .d-cx-section > header {
   display: flex;
@@ -1630,22 +1618,13 @@
 }
 
 /* ---------- Narrow and reduced motion ---------- */
-@media (max-width: 1100px) {
+/* The full editor lives in the panel, so it answers the section's width, not the window's. */
+@container dials-studio (max-width: 820px) {
   .d-section[data-depth="3"] :is(.d-cx, .d-mx) {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 720px) {
-  .d-section[data-depth="3"] .d-section-content {
-    grid-template-columns: 1fr;
-  }
-  .d-section[data-depth="3"] .d-rows {
-    border-right: 0;
-    border-bottom: 1px solid var(--d-line);
-  }
-  .d-section[data-depth="3"] .d-lab {
-    padding: 14px;
-  }
   .d-section[data-depth="2"] :is(.d-cx, .d-mx) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2517,8 +2496,8 @@
   border-radius: 3px;
 }
 .d-section[data-depth="3"] .d-cx-grades {
-  grid-template-columns: auto 1fr;
-  gap: 0 28px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 clamp(12px, 4cqi, 28px);
   align-items: end;
 }
 .d-section[data-depth="3"] .d-cx-grades .d-cx-grade:first-child b {
@@ -3816,11 +3795,6 @@ ul.ki-session > li > .ki-cell {
   }
   .dials .d-studio-tabs button {
     max-width: 11em;
-  }
-}
-@media (max-width: 600px) {
-  .dials[data-studio-mode="viewport"] .d-section[data-depth="3"] {
-    inset: var(--d-studio-top, 52px) 6px 6px;
   }
 }
 /* Words and numerals inside row figures (dates, links, matrix sizes). */
