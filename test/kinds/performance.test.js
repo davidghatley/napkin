@@ -1,6 +1,6 @@
 // 1,000 mixed files on one canvas: the folder opens fast on readable cards, and panning and zooming keep every frame (p95 < 16.7 ms) at several
 // window sizes. Frames are measured from requestAnimationFrame timestamps, which Chromium quantises to the display's vsync (a perfect 60 Hz page
-// reads 16.6 to 16.9 ms): each interval is counted in vsyncs (1 = made its frame, 2 = missed one), so "p95 < 16.7 ms" is read exactly as the
+// reads 16.6 to 16.9 ms): each interval is counted in vsyncs, rounding UP past 2.5 ms of slack (an interval of 19.2 ms or more counts as 2 = missed a frame; 24 ms never reads as made), so "p95 < 16.7 ms" is read exactly as the
 // dream means it, and a missed frame (33 ms) can never hide inside timer jitter.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,7 +20,7 @@ async function gesture(browser, mode) {
     await new Promise((r) => setTimeout(r, 16));
   }
   const frames = (await browser.eval('window.__stop=true;__f.slice(2)')).filter((x) => x > 0);
-  return { frames, vsyncs: frames.map((x) => Math.max(1, Math.round(x / VSYNC))) };
+  return { frames, vsyncs: frames.map((x) => Math.max(1, Math.ceil(x / VSYNC - 0.15))) };
 }
 test('1,000 mixed canvas items open on readable cards, with bounded live frames, and pan and zoom without dropping frames', async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-kinds-perf-')),
@@ -33,7 +33,7 @@ test('1,000 mixed canvas items open on readable cards, with bounded live frames,
     rmSync(dir, { recursive: true, force: true });
   });
   const report = {};
-  for (const [width, height] of [[1280, 820], [1440, 900], [900, 700]]) {
+  for (const [width, height] of [[1280, 820], [1440, 900], [900, 700], [1600, 1000], [1920, 1080]]) {
     const browser = await launchChromium({ width, height }),
       size = `${width}x${height}`;
     try {

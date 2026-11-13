@@ -692,8 +692,8 @@ export function createStage(ctx, root, world, view) {
 
   // ---------------------------------------------------------------------------------------------- culling
   // Far off-screen frames stop being painted (content-visibility), keeping their size. Cheap until a repo is big.
-  const NEAR = 0.12, WIDE = 0.5; // viewports of margin: frames inside are drawn, frames far outside are not (every frame drawn costs about 0.1 ms in every frame that moves the view)
-  let cullQueued = false, cullMode = 'exact', trickle = false; // 'exact' (settled, or a programmatic move), 'pan' (a wheel or drag pan) or 'zoom' (a wheel or pinch zoom)
+  const NEAR = 0.05; // viewports of margin: frames inside are drawn, frames outside are not. Every frame drawn costs paint work in every frame that moves the view, so a gesture draws only what comes within this margin (no read-ahead: 4 frames brought in per event made a 1,000-file pan drop frames at 1920x1080) and nothing is taken out until it settles
+  let cullQueued = false, cullMode = 'exact'; // 'exact' (settled, or a programmatic move), 'pan' (a wheel or drag pan) or 'zoom' (a wheel or pinch zoom)
   function cull() {
     cullQueued = false;
     const mode = cullMode; cullMode = 'exact';
@@ -702,9 +702,8 @@ export function createStage(ctx, root, world, view) {
     const { x, y, z } = view.get(), b = view.stageBox();
     const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
     const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
-    const near = box(NEAR), wide = box(WIDE), far = box(1); // a change of culling costs a layout and a repaint: while panning, everything that comes within 0.6 viewports is un-culled at once, a few frames within 1.6 viewports are brought in per frame ahead of it, and nothing is taken out
+    const near = box(NEAR), far = box(1); // a change of culling costs a layout and a repaint: while panning, what comes within the margin is un-culled at once, and nothing is taken out
     const keep = new Set(ctx.state.selections.map((s) => s.component));
-    const ahead = [];
     // A frame of the document engine is a whole page, so they load progressively and under a budget: a few per pass for the frames in view (at fit-all too), never more than
     // DOC_BUDGET at once. When the frames in view want more than the budget, the loaded ones farthest from the view are unloaded (they keep their size and their name).
     const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html' || ctx.state.components.get(id)?.item;
@@ -730,18 +729,12 @@ export function createStage(ctx, root, world, view) {
       let off;
       if (mode !== 'exact') { // a gesture (pan or zoom): nothing is taken out, what comes into view is drawn within a frame
         off = sec.culled;
-        if (sec.culled) { if (!out(near, sec)) { off = false; trickle = true; } else if (!out(wide, sec)) ahead.push(sec); }
+        if (sec.culled && !out(near, sec)) off = false;
       } else off = !keep.has(id) && out(near, sec);
       if (off !== sec.culled) { sec.culled = off; if (off) sec.el.dataset.cull = '1'; else { delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); } }
       if (mode === 'exact' && sec.culled) { if (out(far, sec)) sec.el.dataset.far = '1'; else delete sec.el.dataset.far; }
     }
     if (mode !== 'exact') titlesNow(view.get()); // frames just drawn get their label scales now
-    if (mode !== 'exact' && trickle) {
-      const cy = (-y + b.height / 2) / z;
-      ahead.sort((p, q) => Math.abs(p.pos.y - cy) - Math.abs(q.pos.y - cy));
-      for (const sec of ahead.slice(0, 4)) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); }
-      if (ahead.length > 4) queueCull('pan'); else trickle = false;
-    } else if (mode === 'exact') trickle = false;
     if (drawn.length) regrown(drawn);
   }
   // The first screenful of a big folder: where Shift+1 would show a map too small to read, a person starts on the first files at a size they can read.
