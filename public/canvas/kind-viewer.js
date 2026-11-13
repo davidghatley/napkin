@@ -391,7 +391,7 @@ const loadLottie = () =>
     const s = document.createElement('script');
     s.src = '/canvas/lottie-runtime.js';
     s.onload = () => ok(window.lottie);
-    s.onerror = () => no(new Error('The Lottie player could not be loaded. Next: reload the page; the file is unchanged.'));
+    s.onerror = () => no(new Error('The Lottie player could not be loaded. Reload the page to try again; the file is unchanged.'));
     document.head.append(s);
   }));
 // Hand-written and generated files often list a shape and its fill straight on the layer. The player wants them in a group
@@ -428,7 +428,7 @@ async function lottie(j) {
       rendererSettings: { preserveAspectRatio: 'xMidYMid meet', progressiveLoad: false },
     });
   } catch (e) {
-    return void root.insertAdjacentHTML('beforeend', note('This animation could not be played: ' + e.message + '. Next: check the file against the Lottie schema.'));
+    return void root.insertAdjacentHTML('beforeend', note('This animation could not be played: ' + e.message + '. The file may not follow the Lottie format.'));
   }
   anim.setSpeed(Number(r.speed) || 1);
   if (isReduced || r.paused) anim.goToAndStop(Number(j.ip) || 0, true);

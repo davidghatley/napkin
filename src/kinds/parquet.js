@@ -1,8 +1,8 @@
 // Parquet through hyparquet (src/vendor/hyparquet, MIT): the format's own reader, not a miniature of it. Any row of the file is
 // reachable: a request for rows [offset, offset+n) reads only the row groups that hold them, column chunk by column chunk,
 // through byte ranges of the file. Compression codecs napkin has in Node (gzip, brotli) are plugged in; snappy ships with the reader.
-import { open, stat } from 'node:fs/promises';
-import { statSync, openSync, readSync, closeSync } from 'node:fs';
+import fs, { statSync, openSync, readSync, closeSync } from 'node:fs';
+const { open, stat } = fs.promises; // read-only use
 import { gunzipSync, brotliDecompressSync, zstdDecompressSync } from 'node:zlib';
 import { parquetMetadata, parquetReadObjects } from '../vendor/hyparquet/index.js';
 import { table } from './readers.js';
