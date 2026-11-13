@@ -1,0 +1,23 @@
+{
+  "swaps": [
+    12.099999904632568,
+    12.400000095367432,
+    12.699999809265137,
+    12.800000190734863,
+    13,
+    13,
+    13.200000286102295,
+    13.599999904632568,
+    13.900000095367432,
+    14.099999904632568,
+    14.400000095367432,
+    14.5,
+    15,
+    16.90000009536743,
+    23
+  ],
+  "swapP95": 23,
+  "scrubWorkP95": 0.40000009536743164,
+  "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "note": "Scrub work includes DOM update and forced layout. This is not compositor presentation latency."
+}
