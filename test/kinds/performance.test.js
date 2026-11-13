@@ -41,7 +41,7 @@ test('1,000 mixed canvas items have bounded live contexts and useful settled car
   await browser.goto(server.url);
   await browser.waitFor('document.body.dataset.ready === "1"', 30000);
   const openMs = performance.now() - started;
-  await browser.waitFor('napkin.state.components.size===1000');
+  await browser.waitFor('napkin.state.components.total===1000');
   await browser.eval('new Promise(r=>setTimeout(r,300))');
   console.log('Open ms', openMs);
   const cards = await browser.eval(

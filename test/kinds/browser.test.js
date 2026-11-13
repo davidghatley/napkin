@@ -64,7 +64,7 @@ test('live viewers draw their contents and mixed items join the canvas and panel
   await browser.goto(server.url);
   await browser.waitFor('document.body.dataset.ready === "1"', 20000);
   const counts = await browser.eval(
-    '({items:[...napkin.state.components.values()].filter(c=>c.item).length,total:napkin.state.components.size,frames:document.querySelectorAll(".kind-frame").length})',
+    '({items:napkin.state.components.items.size,total:napkin.state.components.total,frames:document.querySelectorAll(".kind-frame").length})',
   );
   assert.ok(counts.items >= 40, JSON.stringify(counts));
   assert.ok(await browser.eval('document.querySelectorAll(".kind-compact").length>0'));

@@ -156,7 +156,7 @@ export function createStage(ctx, root, world, view) {
       sec.el.dataset.kind = c.kind; sec.el.dataset.ready = '1';
       return;
     }
-    if (!force && ctx.state.components.size > CULL_AFTER) {
+    if (!force && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER) {
       if (!sec.pos) {
         sec.frame.innerHTML = c.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : c.kind === 'html' ? `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>` : '<div class="bundle-pending">Preview loads when in view</div>';
         measure(sec); placeNew(id);
@@ -164,7 +164,7 @@ export function createStage(ctx, root, world, view) {
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
-    if ((c.kind === 'html' || c.item) && !sec.docFrame && ctx.state.components.size > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
+    if ((c.kind === 'html' || c.item) && !sec.docFrame && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
       sec.pending = true; sec.el.dataset.ready = '1';
       if (!c.item && !sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
       return;

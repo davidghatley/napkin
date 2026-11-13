@@ -32,7 +32,7 @@ export function initLayers(ctx, el) {
   function draw() {
     if (renaming || dragging) { lastHtml = ''; return; } // (the rename box and the drag marks are not in lastHtml)
     const sel = selected(), prim = ctx.state.selection;
-    const comps = [...ctx.state.components.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const comps = ctx.state.components.all().sort((a, b) => a.name.localeCompare(b.name));
     const rows = [];
     const anc = new Set(); // ancestors of every selected node: a quiet trail down to the selection
     for (const sl of ctx.state.selections) { const c0 = ctx.state.components.get(sl.component); if (!c0?.doc) continue; const { parentOf } = index(c0.doc); for (let q = parentOf.get(sl.node); q; q = parentOf.get(q.id)) anc.add(`${sl.component}|${q.id}`); }

@@ -40,11 +40,12 @@ export function initKinds(ctx) {
       const { items } = await r.json(),
         layout = await l.json(),
         seen = new Set(),
-        paths = new Set(
-          [...ctx.state.components.values()].filter((c) => !c.item).map((c) => c.path),
-        );
+        owned = [...ctx.state.components.values()].filter((c) => c.path).map((c) => c.path),
+        paths = new Set(owned);
       for (const item of items) {
-        if (paths.has(item.path)) continue;
+        // A file the dialect or the document engine already draws is not drawn twice. Dialect paths are relative
+        // to the folder it opened (often components/), so a suffix match counts.
+        if (paths.has(item.path) || ((item.kind === 'tsx' || item.kind === 'jsx') && owned.some((p) => item.path.endsWith('/' + p)))) continue;
         seen.add(item.id);
         const old = ctx.state.components.get(item.id);
         const revision = String(item.meta.modifiedAt) + ':' + item.bytes;
@@ -64,8 +65,8 @@ export function initKinds(ctx) {
           ctx.emit('added', { component: item.id });
         }
       }
-      for (const [id, c] of ctx.state.components)
-        if (c.item && !seen.has(id)) {
+      for (const [id, c] of [...ctx.state.components.items])
+        if (!seen.has(id)) {
           ctx.stage.remove(id);
           ctx.state.components.delete(id);
           ctx.emit('removed', { component: id });
