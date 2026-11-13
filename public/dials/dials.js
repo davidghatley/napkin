@@ -689,6 +689,9 @@ export class Dials extends EventTarget {
         b.setAttribute("aria-checked", String(selected));
         b.tabIndex = selected ? 0 : -1;
       });
+      // With a drawn figure only the chosen word shows; keep focus on what is visible.
+      if (input.contains(document.activeElement) && document.activeElement.getAttribute("aria-checked") !== "true")
+        input.querySelector("[aria-checked=\"true\"]")?.focus();
     }
     r.plugin?.update?.(clone(c.value));
     const key = typeof c.figure === "string" ? c.figure : c.figure?.type,

@@ -3274,3 +3274,11 @@
 .kd-spark-bar {
   fill: color-mix(in srgb, var(--d-text) 42%, transparent);
 }
+/* A choice drawn by its figure shows only the chosen word beside it. */
+.d-row[data-type="segmented"] .d-segmented button:not([aria-checked="true"]) {
+  display: none;
+}
+.d-row[data-type="segmented"] .d-segmented button[aria-checked="true"] {
+  box-shadow: none;
+  padding: 0;
+}
