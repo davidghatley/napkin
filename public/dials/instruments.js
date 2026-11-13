@@ -7,12 +7,14 @@
 // The stage is chosen by type, then by figure, then by the shape of the value, so a type the
 // library has never seen still gets an instrument from its schema alone.
 import { el, pointerSurface, filePick } from "./dom.js";
-import { clamp, same, format, looseJson, validateValue } from "./values.js";
+import { clamp, same, format, humane, looseJson, validateValue } from "./values.js";
 import { figureMarkup, choiceGlyphs, hash } from "./figures.js";
 import { s, fx, block, hero, field, handle, fitSvg, keyHint, stillLife, adjust, svgPoint } from "./kit.js";
 import { motionAt } from "./motion.js";
 import { parseColor, cssLch } from "./color.js";
 import { paintSeed } from "./studio-sampler.js";
+import { shapeOf } from "./shapes.js";
+import { shapeStages } from "./instruments-shapes.js";
 
 const instruments = new Map();
 /** Register a stage for a control type: (api) => { node, draw(v), strip?, hero?, fields?, keys? }. */
@@ -40,7 +42,7 @@ export function rangeOf(c = {}, v = 0, d = c.default) {
     step = c.step ?? niceStep(max - min, 100);
   return { min, max, step };
 }
-const digitsOf = (step) => clamp(Math.ceil(-Math.log10(step || 1)), 0, 4);
+const digitsOf = (step) => clamp(Math.max(Math.ceil(-Math.log10(step || 1)), (String(step).split(".")[1] || "").length), 0, 4);
 const blendModes = ["normal", "multiply", "screen", "overlay", "darken", "lighten", "color-dodge", "color-burn", "hard-light", "soft-light", "difference", "exclusion", "hue", "saturation", "color", "luminosity"];
 const optionValue = (o) => (o && typeof o === "object" ? o.value : o);
 const optionLabel = (o) => (o && typeof o === "object" ? o.label ?? String(o.value) : String(o));
@@ -76,6 +78,10 @@ export function kindOfInstrument(c, v = c.value) {
   }[c.type];
   if (known) return known;
   if (c.options?.length) return "choice";
+  // A type nobody declared: the shape of its value decides (a matrix, a palette, a date...).
+  const shape = shapeOf(c, v);
+  if (shape === "profile") return "list";
+  if (shape) return shape;
   if (typeof v === "number") return "number";
   if (typeof v === "boolean") return "boolean";
   if (typeof v === "string") return "text";
@@ -126,7 +132,7 @@ export function instrument(ctx, host) {
     sibling: (...types) => ctx.section?.controls.find((x) => x.id !== c.id && (types.includes(x.type) || types.includes(x.figure))),
     later: () => later(),
   };
-  const make = instruments.get(kind) || stages[kind] || stages.text;
+  const make = instruments.get(kind) || stages[kind] || shapeStages[kind] || stages.text;
   const st = make(api);
 
   // Main: stage, then the strip.
@@ -154,13 +160,13 @@ export function instrument(ctx, host) {
   const big = hero(st.heroLabel || c.label || c.id),
     long = el("output", { class: "ki-long", "aria-label": `${c.label || c.id} value` }),
     readout = el("div", { class: "ki-readout" }, big.node, long);
-  const fieldsBox = st.fields?.length ? el("div", { class: "k-fields" + (st.fields.length === 1 ? " k-one" : "") }, ...st.fields.map((f) => f.node)) : null;
+  const fieldsBox = st.fields?.length ? el("div", { class: "k-fields" + (st.fields.length === 1 || st.fieldsColumns === 1 ? " k-one" : "") }, ...st.fields.map((f) => f.node)) : null;
   const was = el("figure", { class: "ki-compare-cell" }),
     now = el("figure", { class: "ki-compare-cell is-now" }),
     delta = el("p", { class: "ki-delta" }),
     reset = el("button", { type: "button", class: "kx-btn ki-reset", text: "Reset to default" });
   reset.addEventListener("click", () => panel.reset(c.id));
-  const session = el("div", { class: "ki-session", role: "list", "aria-label": "Values this session" });
+  const session = el("ul", { class: "ki-session", "aria-label": "Earlier values this session" });
   const history = (panel._instrumentHistory ??= new Map());
   if (!history.has(c.id)) history.set(c.id, [structuredClone(ctx.get())]);
   const onValue = (e) => {
@@ -172,6 +178,10 @@ export function instrument(ctx, host) {
   };
   panel.addEventListener("value", onValue);
   cleanup.push(() => panel.removeEventListener("value", onValue));
+  // The default and the session only appear when they say something: a changed value, an earlier one.
+  const changedBlock = block("Changed from its default", el("div", { class: "ki-compare" }, was, now), delta, reset),
+    sessionBlock = el("section", { class: "k-block" }, el("h3", { class: "k-title" }, "Earlier this session", el("small", { text: "newest first; click to go back" })), session);
+  changedBlock.classList.add("ki-changed");
   host.append(
     el("div", { class: "k-main" }, stageBlock, stripBlock),
     el(
@@ -180,9 +190,8 @@ export function instrument(ctx, host) {
       readout,
       st.side || null,
       fieldsBox ? block(st.fieldsTitle || "Value", fieldsBox) : null,
-      block("Against the default", el("div", { class: "ki-compare" }, was, now), delta, reset),
-      declared(c, kind),
-      el("section", { class: "k-block" }, el("h3", { class: "k-title" }, "This session", el("small", { text: "newest first; click to go back" })), session),
+      changedBlock,
+      sessionBlock,
     ),
   );
   ctx.rail.append(
@@ -190,12 +199,19 @@ export function instrument(ctx, host) {
   );
 
   const caption = (v) => st.caption?.(v) ?? format(v, c);
+  let shownSession = "";
   function paintSession() {
+    const now = ctx.get(),
+      earlier = history.get(c.id).filter((v) => !same(v, now)),
+      key = JSON.stringify(earlier);
+    sessionBlock.hidden = !earlier.length;
+    if (key === shownSession) return;
+    shownSession = key;
     session.replaceChildren(
-      ...history.get(c.id).map((v) => {
-        const b = el("button", { type: "button", class: "ki-cell", role: "listitem", "aria-label": `Go back to ${caption(v)}` }, st.mini ? st.mini(v) : mini(c, v), el("span", { class: "ki-cell-text", text: caption(v) }));
+      ...earlier.map((v) => {
+        const b = el("button", { type: "button", class: "ki-cell", "aria-label": `Go back to ${caption(v)}` }, st.mini ? st.mini(v) : mini(c, v), el("span", { class: "ki-cell-text", text: caption(v) }));
         b.addEventListener("click", () => api.edit(structuredClone(v), "studio-history"));
-        return b;
+        return el("li", {}, b);
       }),
     );
   }
@@ -211,10 +227,16 @@ export function instrument(ctx, host) {
     long.textContent = h ? h.long ?? "" : caption(v);
     long.hidden = !long.textContent;
     const d = c.default ?? v;
+    changedBlock.hidden = same(v, d);
+    paintSession();
+    if (changedBlock.hidden) return paintStrip(v);
     was.replaceChildren(st.mini ? st.mini(d) : mini(c, d), el("figcaption", {}, el("span", { text: "Default" }), el("b", { text: caption(d) })));
     now.replaceChildren(st.mini ? st.mini(v) : mini(c, v), el("figcaption", {}, el("span", { text: "Now" }), el("b", { text: caption(v) })));
     delta.textContent = same(v, d) ? "At its default." : st.delta?.(v, d) ?? "Changed from its default.";
     reset.disabled = same(v, d);
+    paintStrip(v);
+  }
+  function paintStrip(v) {
     if (st.strip) {
       const samples = st.strip(v),
         key = JSON.stringify(samples);
@@ -249,7 +271,6 @@ export function instrument(ctx, host) {
   };
   panel.addEventListener("paint", onPaint);
   cleanup.push(() => panel.removeEventListener("paint", onPaint));
-  paintSession();
   draw();
   return {
     update: draw,
@@ -364,8 +385,91 @@ function ruler(api, svg, { label, range, get, put, unit = "", y0 = () => 0, heig
   };
 }
 
+/* ---------- a long list of options: find by typing, pick from a dense list ---------- */
+function manyChoice(api) {
+  const { c } = api,
+    opts = c.options || [];
+  const find = el("input", { type: "search", class: "ki-text-field ki-find", "aria-label": `Find in ${opts.length} options`, placeholder: `Find in ${opts.length} options`, spellcheck: "false" });
+  const list = el("div", { class: "ki-options", role: "radiogroup", "aria-label": c.label });
+  const count = el("p", { class: "ki-help", "aria-live": "polite" });
+  const items = opts.map((o, i) => {
+    const b = el("button", { type: "button", role: "radio", class: "ki-option", tabindex: -1, "aria-checked": "false" }, el("span", { text: optionLabel(o) }), el("small", { text: String(i + 1) }));
+    b.addEventListener("click", () => api.edit(optionValue(o), "studio-option"));
+    list.append(b);
+    return { b, o, text: optionLabel(o).toLowerCase() + " " + String(optionValue(o)).toLowerCase() };
+  });
+  const visible = () => items.filter((x) => !x.b.hidden);
+  const filter = () => {
+    const q = find.value.trim().toLowerCase();
+    let n = 0;
+    for (const x of items) {
+      x.b.hidden = !!q && !q.split(/\s+/).every((w) => x.text.includes(w));
+      if (!x.b.hidden) n++;
+    }
+    count.textContent = q ? `${n} of ${opts.length} match` : `${opts.length} options`;
+  };
+  find.addEventListener("input", filter);
+  find.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "ArrowDown" || e.key === "Enter") {
+      e.preventDefault();
+      const v = visible();
+      if (e.key === "Enter" && v.length) api.edit(optionValue(v[0].o), "studio-option");
+      (v.find((x) => x.b.getAttribute("aria-checked") === "true") || v[0])?.b.focus();
+    }
+  });
+  list.addEventListener("keydown", (e) => {
+    const v = visible(),
+      i = v.findIndex((x) => x.b === document.activeElement),
+      cols = Math.max(1, Math.round(list.clientWidth / (v[0]?.b.offsetWidth || 200))),
+      d = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols, PageDown: cols * 6, PageUp: -cols * 6 }[e.key];
+    if (e.key === "Home" || e.key === "End" || d) {
+      e.preventDefault();
+      e.stopPropagation();
+      const next = e.key === "Home" ? v[0] : e.key === "End" ? v.at(-1) : v[clamp(i + d, 0, v.length - 1)];
+      if (next) {
+        api.edit(optionValue(next.o), "studio-key");
+        next.b.focus();
+      }
+    } else if (e.key.length === 1 && /\S/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+      find.focus();
+    }
+  });
+  filter();
+  return {
+    node: el("div", { class: "ki-many" }, find, count, list),
+    note: "type to find; arrows walk the list",
+    draw(v) {
+      let any = null;
+      for (const x of items) {
+        const on = same(optionValue(x.o), v);
+        x.b.setAttribute("aria-checked", String(on));
+        x.b.tabIndex = on ? 0 : -1;
+        if (on) any = x;
+      }
+      if (!any && items[0]) items[0].b.tabIndex = 0;
+      if (any && !list.contains(document.activeElement)) {
+        const top = any.b.offsetTop - list.offsetTop;
+        if (top < list.scrollTop || top > list.scrollTop + list.clientHeight - 32) list.scrollTop = top - list.clientHeight / 3;
+      }
+    },
+    hero: (v) => {
+      const i = opts.findIndex((o) => same(optionValue(o), v));
+      return { value: "", long: optionLabel(opts[i] ?? v), note: `${i + 1} of ${opts.length}`, tone: "quiet" };
+    },
+    keys: [["Type", "find an option"], ["Arrows", "walk the list"]],
+    caption: (v) => optionLabel(opts.find((o) => same(optionValue(o), v)) ?? v),
+  };
+}
+
 /* ---------- stages ---------- */
 const stages = {
+  /** One colour of an undeclared type: the palette instrument over a list of one. */
+  colour(api) {
+    const one = { ...api, get: () => [api.get()], edit: (v, src) => api.edit(v[0] ?? api.get(), src), ctx: { ...api.ctx, get: () => [api.ctx.get()], change: (v) => api.ctx.change(v[0] ?? api.ctx.get()) } };
+    const st = shapeStages.swatches(one);
+    return { ...st, draw: (v) => st.draw([v]), hero: () => ({ value: "", long: api.get(), note: "", tone: "quiet" }), caption: (v) => v, mini: (v) => st.mini([v]) };
+  },
   number(api) {
     const { c } = api,
       range = () => rangeOf(c, api.get()),
@@ -712,6 +816,7 @@ const stages = {
   },
 
   choice(api) {
+    if ((api.c.options || []).length > 12) return manyChoice(api);
     const { c } = api,
       opts = c.options || [],
       figure = typeof c.figure === "string" ? c.figure : c.figure?.type,
@@ -1313,32 +1418,42 @@ const stages = {
   },
 
   list(api) {
+    // A list of numbers is a profile: a line through its values, each point dragged up or down,
+    // or drawn across in one stroke.
     const { c } = api;
-    const svg = svgStage(`${c.label}: drag across the bars to draw values`),
-      bars = s("g", {}),
+    const svg = svgStage(`${c.label}: drag across to draw the values; arrows pick and change one`),
+      area = s("path", { class: "ki-profile-area" }),
+      lineP = s("path", { class: "ki-profile-line" }),
+      dots = s("g", {}),
       axis = s("g", {}),
+      tag = s("g", { class: "ki-profile-tag" }),
       hit = s("rect", { class: "ki-hit" });
-    svg.append(axis, bars, hit);
+    svg.append(axis, area, lineP, dots, hit, tag);
     let size = { w: 1, h: 1 },
       focus = 0;
     const range = () => {
       const v = api.get();
-      return { min: c.min ?? Math.min(0, ...v), max: c.max ?? ceilNice(Math.max(1, ...v.map(Math.abs))) };
+      const lo = c.min ?? Math.min(0, ...v),
+        hi = c.max ?? ceilNice(Math.max(1e-9, ...v.map(Math.abs)));
+      return { min: lo, max: hi > lo ? hi : lo + 1 };
     };
-    const P = { l: 40, r: 12, t: 12, b: 24 };
+    const stepOf = () => c.step || niceStep(range().max - range().min, 100);
+    const P = { l: 48, r: 16, t: 24, b: 28 };
+    const X = (i, n) => P.l + (n < 2 ? (size.w - P.l - P.r) / 2 : (i / (n - 1)) * (size.w - P.l - P.r));
     const at = (e) => {
       const p = svgPoint(svg, e),
         v = api.get(),
-        { min, max } = range(),
-        i = clamp(Math.floor(((p.x - P.l) / (size.w - P.l - P.r)) * v.length), 0, v.length - 1),
+        { min, max } = range();
+      if (!v.length) return v;
+      const i = clamp(Math.round(((p.x - P.l) / (size.w - P.l - P.r || 1)) * (v.length - 1)), 0, v.length - 1),
         n = min + clamp(1 - (p.y - P.t) / (size.h - P.t - P.b), 0, 1) * (max - min);
-      v[i] = Number(n.toFixed(c.step ? digitsOf(c.step) : 2));
+      v[i] = Number(n.toFixed(digitsOf(stepOf()) + 1));
       focus = i;
       return v;
     };
     api.surface(hit, {
       start: (e) => {
-        api.ctx.begin("studio-bars");
+        api.ctx.begin("studio-profile");
         api.ctx.change(at(e));
       },
       move: (e) => api.ctx.change(at(e)),
@@ -1350,12 +1465,14 @@ const stages = {
     svg.addEventListener("keydown", (e) => {
       const v = api.get(),
         { min, max } = range(),
-        st = c.step || (max - min) / 100;
+        st = stepOf();
+      if (!v.length) return;
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") focus = clamp(focus + (e.key === "ArrowRight" ? 1 : -1), 0, v.length - 1);
       else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        v[focus] = clamp(Number((v[focus] + (e.key === "ArrowUp" ? st : -st) * (e.shiftKey ? 0.1 : e.altKey ? 10 : 1)).toFixed(4)), min, max);
+        v[focus] = clamp(Number((v[focus] + (e.key === "ArrowUp" ? st : -st) * (e.shiftKey ? 0.1 : e.altKey ? 10 : 1)).toFixed(6)), min, max);
         api.edit(v, "studio-key");
-      } else return;
+      } else if (e.key === "Home" || e.key === "End") focus = e.key === "Home" ? 0 : v.length - 1;
+      else return;
       e.preventDefault();
       e.stopPropagation();
       draw(api.get());
@@ -1363,29 +1480,63 @@ const stages = {
     api.fit(svg, (w, h) => ((size = { w, h }), draw(api.get())));
     function draw(v) {
       if (size.w < 10) return;
+      focus = clamp(focus, 0, Math.max(0, v.length - 1));
       const { min, max } = range(),
-        bw = (size.w - P.l - P.r) / v.length,
-        Y = (n) => P.t + (1 - (n - min) / (max - min || 1)) * (size.h - P.t - P.b);
-      Object.entries({ x: P.l, y: P.t, width: size.w - P.l - P.r, height: size.h - P.t - P.b }).forEach(([k, n]) => hit.setAttribute(k, n));
-      bars.replaceChildren(
-        ...v.map((n, i) => s("rect", { class: i === focus ? "ki-bar is-focus" : "ki-bar", x: fx(P.l + i * bw + (bw > 4 ? 1 : 0)), y: fx(Math.min(Y(n), Y(Math.max(min, 0)))), width: fx(Math.max(1, bw - (bw > 4 ? 2 : 0))), height: fx(Math.max(1, Math.abs(Y(n) - Y(Math.max(min, 0))))) })),
-      );
-      const every = Math.max(1, Math.ceil(v.length / Math.floor((size.w - P.l) / 40)));
+        Y = (n) => P.t + (1 - (n - min) / (max - min || 1)) * (size.h - P.t - P.b),
+        n = v.length,
+        pts = v.map((x, i) => [X(i, n), Y(x)]),
+        base = Y(clamp(0, min, max));
+      Object.entries({ x: P.l - 8, y: P.t - 8, width: size.w - P.l - P.r + 16, height: size.h - P.t - P.b + 16 }).forEach(([k, x]) => hit.setAttribute(k, x));
+      const d = pts.map(([x, y], i) => `${i ? "L" : "M"}${fx(x)} ${fx(y)}`).join("");
+      lineP.setAttribute("d", d);
+      area.setAttribute("d", n ? `${d}L${fx(pts.at(-1)[0])} ${fx(base)}L${fx(pts[0][0])} ${fx(base)}Z` : "");
+      dots.replaceChildren(...(n <= 64 ? pts.map(([x, y], i) => s("circle", { cx: fx(x), cy: fx(y), r: i === focus ? 6 : 4, class: i === focus ? "ki-profile-dot is-focus" : "ki-profile-dot" })) : []));
+      const ticks = niceStep(max - min, 4),
+        rows = [];
+      for (let t = Math.ceil(min / ticks) * ticks; t <= max + 1e-9; t += ticks) rows.push(t);
+      const every = Math.max(1, Math.ceil(n / Math.floor((size.w - P.l) / 36)));
       axis.replaceChildren(
-        s("path", { class: "ki-grid-line", d: `M${P.l} ${Y(max)}H${size.w - P.r}M${P.l} ${Y((min + max) / 2)}H${size.w - P.r}M${P.l} ${Y(min)}H${size.w - P.r}` }),
-        s("text", { x: P.l - 6, y: Y(max) + 4, "text-anchor": "end", text: String(max) }),
-        s("text", { x: P.l - 6, y: Y(min) + 4, "text-anchor": "end", text: String(min) }),
-        ...v.map((_, i) => (i % every === 0 ? s("text", { x: P.l + (i + 0.5) * bw, y: size.h - 6, "text-anchor": "middle", text: String(i + 1) }) : null)).filter(Boolean),
+        ...rows.flatMap((t) => [s("path", { class: "ki-grid-line", d: `M${P.l} ${fx(Y(t))}H${size.w - P.r}` }), s("text", { x: P.l - 8, y: Y(t) + 4, "text-anchor": "end", text: humane(Number(t.toFixed(6))) })]),
+        ...v.map((_, i) => (i % every === 0 ? s("text", { x: X(i, n), y: size.h - 8, "text-anchor": "middle", text: String(i + 1) }) : null)).filter(Boolean),
+        n ? null : s("text", { x: size.w / 2, y: size.h / 2, "text-anchor": "middle", class: "k-strong", text: "No values yet: add the first one" }),
       );
-      svg.setAttribute("aria-valuenow", v[focus]);
-      svg.setAttribute("aria-valuetext", `item ${focus + 1} of ${v.length}: ${v[focus]}`);
+      tag.replaceChildren();
+      if (n) {
+        const [x, y] = pts[focus],
+          label = `#${focus + 1}  ${humane(v[focus])}${c.unit || ""}`,
+          w = label.length * 6.4 + 14,
+          tx = clamp(x - w / 2, P.l, size.w - P.r - w);
+        tag.append(s("rect", { x: fx(tx), y: fx(y - 30), width: fx(w), height: 18, rx: 3 }), s("text", { x: fx(tx + w / 2), y: fx(y - 17), "text-anchor": "middle", text: label }));
+      }
+      svg.setAttribute("aria-valuenow", v[focus] ?? 0);
+      svg.setAttribute("aria-valuetext", n ? `item ${focus + 1} of ${n}: ${v[focus]}` : "no values");
     }
+    const tools = el(
+      "div",
+      { class: "ki-actions" },
+      el("button", { type: "button", class: "kx-btn", text: "Add a value", onclick: () => {
+        const v = api.get();
+        v.splice(focus + 1, 0, v.length ? v[focus] : clamp(0, range().min, range().max));
+        focus = v.length > 1 ? focus + 1 : 0;
+        api.edit(v, "studio-profile");
+      } }),
+      el("button", { type: "button", class: "kx-btn", text: "Remove this value", onclick: () => {
+        const v = api.get();
+        if (!v.length) return;
+        v.splice(focus, 1);
+        api.edit(v, "studio-profile");
+      } }),
+      el("button", { type: "button", class: "kx-btn", text: "Reverse", onclick: () => api.edit(api.get().reverse(), "studio-profile") }),
+    );
+    const node = api.nested ? svg : el("div", { class: "ki-profile" }, svg, tools);
     return {
-      node: svg,
+      node,
       note: `${api.get().length} values; drag across to draw them`,
       draw,
       side: api.nested ? null : sourceBlock(api),
-      hero: (v) => ({ value: String(v.length), unit: "values", note: `mean ${fx(v.reduce((a, b) => a + b, 0) / (v.length || 1))}`, tone: "quiet" }),
+      fields: api.nested ? null : [field(api.ctx, { label: "Chosen value", min: c.min ?? -1e15, max: c.max ?? 1e15, step: c.step || 0.01, digits: 4, get: (v) => v[focus] ?? 0, put: (v, n) => (v.length ? Object.assign([...v], { [focus]: n }) : [n]) })],
+      fieldsTitle: "The chosen point",
+      hero: (v) => ({ value: String(v.length), unit: "values", note: v.length ? `from ${humane(Math.min(...v))} to ${humane(Math.max(...v))}` : "", tone: "quiet" }),
       keys: [["Left Right", "pick a value"], ["Up Down", "change it · Shift fine"]],
       caption: (v) => `${v.length} values`,
     };
@@ -1448,13 +1599,6 @@ const stages = {
   },
 };
 
-/** How the control was declared: what an agent or plugin wrote to get this instrument. */
-function declared(c, kind) {
-  const keep = Object.entries(c).filter(([k, v]) => !["value", "default", "data", "label", "depth"].includes(k) && v !== undefined);
-  const list = el("dl", { class: "ki-declared" }, ...keep.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: typeof v === "object" ? JSON.stringify(v) : String(v) })]));
-  const why = instruments.has(c.type) ? "a registered instrument" : kind === c.type ? `the ${kind} instrument` : ["record", "list"].includes(kind) || !["number", "range", "angle", "boolean", "select", "segmented", "text", "vector", "gradient", "shadow", "spacing", "seed", "asset", "file"].includes(c.type) ? `drawn from the shape of its value (${kind})` : `the ${kind} instrument`;
-  return el("section", { class: "k-block" }, el("h3", { class: "k-title" }, "Declared as", el("small", { text: why })), list);
-}
 /** The value as editable source: JSON or a JavaScript literal, read tolerantly, errors in words. */
 function sourceBlock(api) {
   const area = el("textarea", { class: "ki-source", spellcheck: "false", rows: 8, "aria-label": `${api.c.label} as JSON` }),

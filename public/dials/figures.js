@@ -1,5 +1,6 @@
 import { clamp } from "./values.js";
 import { curvePoints } from "./motion.js";
+import { shapeOf, shapeFigure, builtinTypes } from "./shapes.js";
 /*
   Row figures. Every control draws what its value does in one well of the same size
   (W x H CSS pixels), and that drawing is the control: a drag on it sets the value
@@ -106,8 +107,17 @@ export const choiceGlyphs = {
   },
 };
 function choice(c, v) {
-  const opts = optionsOf(c),
-    n = Math.max(1, opts.length),
+  const opts = optionsOf(c);
+  // More options than fit as blocks: a strip of the whole list with the chosen one marked.
+  if (opts.length > 8 && !(choiceGlyphs[c.figure] || choiceGlyphs[c.id])) {
+    const at = opts.findIndex((o) => same(o, v)),
+      x = 4 + (Math.max(0, at) / Math.max(1, opts.length - 1)) * (W - 8);
+    let ticks = "";
+    const every = Math.ceil(opts.length / 34);
+    for (let i = 0; i < opts.length; i += every) ticks += `<path d="M${f1(4 + (i / Math.max(1, opts.length - 1)) * (W - 8))} 9v6" stroke="${LINE}"/>`;
+    return svg(ticks + `<rect x="${f1(x - 1.5)}" y="5" width="3" height="14" rx="1" fill="${A}"/><text x="${W - 3}" y="${H - 1}" text-anchor="end" class="d-fig-num" fill="${SOFT}">${at + 1}/${opts.length}</text>`);
+  }
+  const n = Math.max(1, opts.length),
     w = W / n,
     glyph = choiceGlyphs[c.figure] || choiceGlyphs[c.id];
   return svg(
@@ -133,10 +143,17 @@ export function hash(n) {
     return s / 4294967296;
   };
 }
+// Figures named by the library itself; anything else is read from the value's shape.
+const figureKinds = new Set(["color", "gradient", "shadow", "motion", "spring", "bezier", "keyframes", "angle", "vector", "spacing", "text", "prompt", "typography", "image", "encoding", "sampler", "seed", "count", "select", "segmented", "file", "asset", "boolean", "loop", "split", "labels", "radius", "opacity", "align", "mark", "number", "range"]);
 export function figureMarkup(c, v) {
   const n = typeof v === "number" ? v : 0,
     p = position(c, n),
     kind = kindOf(c);
+  // A type the library has never seen draws the shape of its value.
+  if (!builtinTypes.has(c.type) && !figureKinds.has(kind)) {
+    const shape = shapeOf(c, v);
+    if (shape) return shapeFigure(shape, c, v);
+  }
   if (kind === "color")
     return `<span class="d-fig-swatch" style="--swatch:${esc(v)}"><i></i></span>`;
   if (kind === "gradient") {
@@ -238,7 +255,8 @@ export function figureMarkup(c, v) {
         `<rect x="${f1(ox + 1 + k(l))}" y="${f1(2 + k(t) / 1.6)}" width="${f1(Math.max(2, ow - 2 - k(l) - k(r)))}" height="${f1(Math.max(2, 20 - k(t) / 1.6 - k(b) / 1.6))}" fill="${PAPER}" stroke="${INK}"/>`,
     );
   }
-  if (kind === "text" && typeof v === "string") {
+  if (typeof v === "string" && (kind === "text" || kind === "prompt" || (!figureKinds.has(kind) && !c.options?.length))) {
+    if (!v.trim()) return svg(`<path d="M3 6v12" stroke="${A}" stroke-width="1.5"/><path d="M7 18.5H${W - 3}" stroke="${LINE}"/>`);
     // Words as dashes: the drawing grows with the text and wraps like a paragraph.
     const words = v.trim().split(/\s+/).filter(Boolean);
     let x = 2,

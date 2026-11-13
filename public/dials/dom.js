@@ -60,6 +60,8 @@ export function pointerSurface(node, { start, move, end, cancel }) {
   };
   const onDown = (e) => {
     if (e.button !== 0 || active) return;
+    // A text field inside a surface keeps its own pointer (caret, selection).
+    if (e.target !== node && e.target.closest?.("input, textarea")) return;
     e.preventDefault();
     node.focus({ preventScroll: true });
     active = true;
