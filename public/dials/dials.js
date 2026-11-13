@@ -11,6 +11,7 @@ import {
   validateSchema,
   validateValue,
   repairSchema,
+  convert,
 } from "./values.js";
 import { parseColor, cssLch } from "./color.js";
 import { motionCode, readMotionCode } from "./motion.js";
@@ -28,6 +29,22 @@ import { builtinTypes, shapeOf, shapeSummary } from "./shapes.js";
 const controls = new Map(),
   figures = new Map();
 let serial = 0;
+const DIALS_MIME = "application/x-dials+json";
+// Every live panel, so the palette can reach controls in all of them; one document listener per page.
+const livePanels = new Set(),
+  pageKeys = new WeakSet();
+/** Ctrl K (Cmd K) anywhere on the page opens the palette of the panel used last, listing every panel. */
+function listenOnPage(doc) {
+  if (pageKeys.has(doc)) return;
+  pageKeys.add(doc);
+  doc.addEventListener("keydown", (e) => {
+    if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "k" || e.altKey || e.shiftKey) return;
+    const panels = [...livePanels].filter((p) => p.root.isConnected && p.root.ownerDocument === doc && p.options.pagePalette !== false);
+    if (!panels.length) return;
+    e.preventDefault();
+    panels.sort((a, b) => (b._usedAt || 0) - (a._usedAt || 0))[0].palette();
+  });
+}
 export function registerControl(type, plugin) {
   if (!type || typeof plugin?.mount !== "function")
     throw new Error("A control plugin needs mount(context)");
@@ -118,6 +135,12 @@ export class Dials extends EventTarget {
       "aria-label": options.label || "Instruments",
     });
     if (options.theme) this.root.dataset.theme = options.theme;
+    livePanels.add(this);
+    listenOnPage(container.ownerDocument);
+    // The panel used last answers a page-wide Ctrl K.
+    const used = () => (this._usedAt = performance.now());
+    this.root.addEventListener("pointerdown", used, true);
+    this.root.addEventListener("focusin", used);
     this.status = el("div", {
       class: "d-sr",
       "aria-live": "polite",
@@ -126,24 +149,48 @@ export class Dials extends EventTarget {
     this.root.append(this.status);
     container.append(this.root);
     this.root.addEventListener("keydown", (e) => this.keydown(e));
+    // Copy a value from a row or a studio; paste it on any other control, of any type that can hold it.
+    // The clipboard carries the words and, for other panels, the typed value.
     this.root.addEventListener("copy", (e) => {
-      const row = this.rowAt(e.target);
+      const row = this.controlAt(e.target);
       if (row && !["INPUT", "TEXTAREA"].includes(e.target.tagName)) {
         e.preventDefault();
         e.clipboardData.setData("text/plain", format(row.c.value, row.c));
+        e.clipboardData.setData(DIALS_MIME, JSON.stringify({ type: row.c.type, unit: row.c.unit, min: row.c.min, max: row.c.max, label: row.c.label, value: row.c.value }));
+        this.announce(`Copied ${row.c.label}`);
       }
     });
     this.root.addEventListener("paste", (e) => {
-      const row = this.rowAt(e.target);
+      const row = this.controlAt(e.target);
       if (row && !["INPUT", "TEXTAREA"].includes(e.target.tagName)) {
         e.preventDefault();
-        this.fromText(row.c.id, e.clipboardData.getData("text/plain"));
+        const typed = e.clipboardData.getData(DIALS_MIME);
+        if (typed) this.fromValue(row.c.id, JSON.parse(typed));
+        else this.fromText(row.c.id, e.clipboardData.getData("text/plain"));
       }
     });
   }
   emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
     if (type === "value") this.options.onChange?.(detail);
+  }
+  /** The control a node belongs to: its row, or the control whose studio holds it. */
+  controlAt(target) {
+    const row = this.rowAt(target);
+    if (row) return row;
+    const lab = target.closest?.(".d-lab"),
+      s = lab && [...this.sections.values()].find((x) => x.labHost === lab);
+    return s?.studioControl ? this.rows.get(s.studioControl) : undefined;
+  }
+  /** Paste a value copied from another control, converted to this one's type. */
+  fromValue(id, from) {
+    const c = this.rows.get(id).c;
+    try {
+      this.transact(id, convert(from.value, from, c), "paste");
+      this.announce(from.type === c.type ? "Value pasted" : `Pasted ${from.label || from.type} as ${c.type}`);
+    } catch (e) {
+      this.announce(`Cannot paste ${from.label || from.type} here: ${e.message}`);
+    }
   }
   rowAt(target) {
     return this.rows.get(target.closest("[data-control]")?.dataset.control);
@@ -1274,8 +1321,8 @@ export class Dials extends EventTarget {
     this.paint(id);
   }
   /** Command palette: type to find a control or a depth command; Enter runs, Shift+Enter opens the studio. */
-  palette() {
-    if (this.dialog?.open) return;
+  /** This panel's palette commands; the palette lists every panel's on the page. */
+  paletteItems() {
     // Commands are exact phrases (`Control Opacity`, `Studio Accent`, `Bench Pigment`, `Reset Wash`),
     // so a person or an agent can type one whole and press Enter.
     const items = [];
@@ -1331,6 +1378,14 @@ export class Dials extends EventTarget {
         }),
       );
     }
+    for (const it of items) it.panel = this;
+    return items;
+  }
+  palette() {
+    if (this.dialog?.open || [...livePanels].some((p) => p.dialog?.open)) return;
+    // Every panel on the page, this one first: Ctrl K finds any control from anywhere.
+    const others = [...livePanels].filter((p) => p !== this && p.root.isConnected && p.root.ownerDocument === this.root.ownerDocument);
+    const items = [this, ...others].flatMap((p) => p.paletteItems());
     const input = el("input", {
         type: "text",
         role: "combobox",
@@ -1389,7 +1444,7 @@ export class Dials extends EventTarget {
             el("span", { class: "d-palette-text", text: it.text }),
             el("kbd", { text: it.hint }),
           );
-          if (it.control) drawFigure(o.firstChild, it.control, this.get(it.control.id));
+          if (it.control) drawFigure(o.firstChild, it.control, it.panel.get(it.control.id));
           else if (it.section) o.firstChild.innerHTML = depthGlyphs[it.depthIndex];
           o.addEventListener("click", () => run(it, false));
           return o;
@@ -1406,12 +1461,12 @@ export class Dials extends EventTarget {
       if (!it) return;
       const c = it.control;
       if (c) {
-        const now = this.get(c.id),
+        const now = it.panel.get(c.id),
           shownValue = it.reset ? c.default : now,
           fig = el("span", { class: "d-palette-big" });
         drawFigure(fig, c, shownValue);
         preview.append(
-          el("p", { class: "d-palette-kicker", text: `${this.rows.get(c.id)?.section.schema.label || ""} · ${c.type}` }),
+          el("p", { class: "d-palette-kicker", text: `${it.panel.rows.get(c.id)?.section.schema.label || ""} · ${c.type}` }),
           el("h3", { text: c.label || c.id }),
           fig,
           el("p", { class: "d-palette-value", text: format(shownValue, c) }),
@@ -1502,6 +1557,7 @@ export class Dials extends EventTarget {
   }
   destroy() {
     if (this.disposed) return;
+    livePanels.delete(this);
     this.gestures.forEach((dispose) => dispose());
     this.gestures = [];
     for (const id of [...this.active.keys()]) this.cancel(id);

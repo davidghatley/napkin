@@ -557,3 +557,37 @@ const short = (v) => {
   const t = v === undefined ? "nothing" : typeof v === "number" && !Number.isFinite(v) ? String(v) : JSON.stringify(v);
   return t.length > 40 ? `${t.slice(0, 37)}…` : t;
 };
+/**
+ * Carry a value from one control to another of a different type, keeping what it means:
+ * a number lands in range, a colour becomes a gradient's stops (and back), a vector fills
+ * insets, a response moves between motion, bezier and spring. Anything else goes through
+ * its text. Returns a value valid for `to`, or throws if nothing sensible exists.
+ */
+export function convert(value, from, to) {
+  const ft = from?.type,
+    tt = to.type,
+    num = (n) => clamp(Number(n), to.min ?? -Infinity, to.max ?? Infinity),
+    done = (v) => (validateValue(v, to), v);
+  if (ft === tt && !["select", "segmented"].includes(tt)) return done(fit(to, value));
+  if (numeric(to)) {
+    if (typeof value === "number") return done(num(value));
+    if (typeof value === "boolean") return done(num(value ? to.max ?? 1 : to.min ?? 0));
+    if (Array.isArray(value) && typeof value[0] === "number") return done(num(value[0]));
+  }
+  if (tt === "boolean") return done(typeof value === "number" ? value !== 0 : !!value && value !== "off" && value !== "false");
+  if (tt === "color" && typeof value === "string" && /gradient\(/i.test(value)) {
+    const m = /(#[0-9a-f]{3,8}|(?:rgba?|hsla?|oklch|oklab|lch|lab|color)\([^)]*\))/i.exec(value);
+    if (m) return done(m[1]);
+  }
+  if (tt === "gradient" && ft === "color" && typeof value === "string") return done(`linear-gradient(120deg, ${value}, color-mix(in oklch, ${value} 40%, white))`);
+  if (["vector", "spacing"].includes(tt) && (typeof value === "number" || Array.isArray(value))) return done(fit(to, value));
+  if (["motion", "bezier", "spring"].includes(tt) && value && typeof value === "object") return done(fit(to, Array.isArray(value) ? value : { ...value, mode: tt === "spring" ? "spring" : tt === "bezier" ? "bezier" : value.mode }));
+  if (tt === "text") return done(typeof value === "string" ? value : format(value, from || {}));
+  if (["select", "segmented"].includes(tt)) {
+    const opts = (to.options || []).map((o) => (o && typeof o === "object" ? o : { label: String(o), value: o }));
+    const hit = opts.find((o) => same(o.value, value)) || opts.find((o) => String(o.label).toLowerCase() === String(value).toLowerCase());
+    if (hit) return hit.value;
+    throw new Error(`${to.label || to.id} has no option ${String(value)}`);
+  }
+  return done(parse(typeof value === "string" ? value : format(value, from || {}), to));
+}

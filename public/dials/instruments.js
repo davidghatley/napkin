@@ -524,7 +524,7 @@ const stages = {
     if (figure === "count") {
       const max = Math.min(64, range().max);
       for (let i = 0; i < max; i++) {
-        const t = s("rect", { class: "ki-tile", rx: 3, tabindex: -1 });
+        const t = s("rect", { class: "ki-tile", rx: 3, tabindex: -1, role: "button", "aria-label": `${c.label || c.id}: ${i + 1}` });
         t.addEventListener("click", () => api.edit(i + 1, "studio-tile"));
         subject.append(t);
         tiles.push(t);

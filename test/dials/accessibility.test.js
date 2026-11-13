@@ -111,3 +111,40 @@ test("every tab of every studio passes axe in both themes", { timeout: 600000 },
     await server.close();
   }
 });
+
+// Every tab stop has a name, read from Chromium's own accessibility tree (not a DOM guess):
+// the page as it loads, and every tab of every studio.
+test("every focusable node has an accessible name, page and every studio tab", { timeout: 300000 }, async (t) => {
+  const server = await serve(),
+    browser = await launchChromium({ width: 1440, height: 1000 }),
+    unnamed = [];
+  let checked = 0;
+  const scan = async (where) => {
+    const { nodes } = await browser.send("Accessibility.getFullAXTree");
+    for (const n of nodes) {
+      if (n.ignored || !n.properties?.some((p) => p.name === "focusable" && p.value.value)) continue;
+      if (["RootWebArea", "generic", "none", "presentation"].includes(n.role?.value)) continue;
+      checked++;
+      if (!(n.name?.value || "").trim()) unnamed.push(`${where}: ${n.role?.value} #${n.backendDOMNodeId}`);
+    }
+  };
+  try {
+    await browser.goto(server.url);
+    await browser.waitFor("dialsDemo.panels.length===6");
+    await browser.send("Accessibility.enable");
+    await scan("page");
+    for (let i = 0; i < 6; i++) {
+      const ids = await browser.eval(`dialsDemo.panels[${i}].schema.sections[0].controls.map(c=>c.id)`);
+      for (const id of ids) {
+        await browser.eval(`dialsDemo.panels[${i}].open(${JSON.stringify(id)})`);
+        await new Promise((r) => setTimeout(r, 120));
+        await scan(`panel ${i} / ${id}`);
+      }
+      await browser.eval(`(()=>{const p=dialsDemo.panels[${i}];p.setDepth([...p.sections.keys()][0],2,false)})()`);
+    }
+    await t.test(`${checked} focusable nodes checked, none unnamed`, () => assert.deepEqual(unnamed, []));
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});

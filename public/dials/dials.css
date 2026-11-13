@@ -4562,3 +4562,29 @@ ul.ki-tags {
   pointer-events: none;
   z-index: 1;
 }
+/* Key map: keys sit at their own width, rows have a rhythm, the second heading has room. */
+.dials dialog.d-help:not(.d-palette) {
+  max-width: 660px;
+}
+.d-help p > kbd {
+  justify-self: start;
+  align-self: start;
+  white-space: normal;
+  max-width: 100%;
+}
+.d-help h2 ~ p:not(.d-note) {
+  padding: 5px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--d-line) 60%, transparent);
+  align-items: baseline;
+}
+.d-help h2:not(:first-child) {
+  margin-top: 22px;
+}
+.d-help p.d-note {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--d-muted);
+}
+.d-keymap {
+  gap: 6px;
+}
