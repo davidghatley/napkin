@@ -1619,7 +1619,8 @@
   font-variant-numeric: tabular-nums;
 }
 .d-palette-empty,
-.d-palette-note {
+.d-palette-note,
+.dials dialog.d-palette .d-palette-note {
   margin: 0;
   padding: 8px 16px 12px;
   font-size: 11px;
