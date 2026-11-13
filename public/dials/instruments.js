@@ -1153,7 +1153,10 @@ const stages = {
           });
           specimen.replaceChildren(...sets.map((x) => x.node));
           requestAnimationFrame(() =>
-            sets.forEach(({ p, note }) => {
+            sets.forEach(({ w, p, note, node }) => {
+              // A pane narrower than the column cannot show it at size: say what width it is set at.
+              const shown = Math.round(p.offsetWidth);
+              if (shown && shown < w - 1) node.firstChild.textContent = `${w} px column, set at ${shown} px (the pane is narrower)`;
               const lh = parseFloat(getComputedStyle(p).lineHeight) || px * 1.3,
                 inner = p.clientHeight - (pad[0] || 0) - (pad[2] || 0),
                 lines = Math.max(1, Math.round(inner / lh)),

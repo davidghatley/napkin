@@ -4757,7 +4757,6 @@ ul.ki-tags {
   padding: 10px 0;
   border-top: 1px solid var(--d-line);
   min-width: 0;
-  overflow-x: auto;
 }
 .ki-measure > span,
 .ki-measure > small {
