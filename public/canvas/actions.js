@@ -46,6 +46,7 @@ export const ACTIONS = [
   action('layer-rename', 'Finish / cancel layer rename or reorder', 'Enter / Escape', ['Enter', 'Escape'], refs('layers', 'keydown')),
   action('number', 'Nudge number field', '↑ ↓ · Shift ×10 · Alt ×0.1', ['ArrowUp', 'ArrowDown'], refs('panel', 'keydown')),
   action('right-edge', 'Right panel edge, focused: widen / narrow (Shift ×8) / narrowest / widest / default', '← → · Home · End · Enter', ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter'], refs('right-panel', 'keydown')),
+  action('list-height', 'Long list\'s bottom edge, focused: a row more / fewer · six more / fewer · six · all', '↓ ↑ · Page Down / Page Up · Home · End', ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'], refs('panel-height', 'keydown')),
   action('panel-cancel', 'Cancel field edit or scrub', 'Escape', ['Escape'], refs('panel', 'keydown')),
   action('doc-field', 'Inspector: apply a value / put it back', 'Enter (Shift+Enter: new line in text) · Escape', ['Enter', 'Escape'], refs('doc-panel', 'keydown')),
   action('scope-pick', 'Inspector: where an edit goes (this element, this class, this variable)', 'E · C · V (Alt+E, Alt+C, Alt+V while typing) · B uses the matching variable · Tab from the field goes to the scope, arrows change it', ['e', 'c', 'v', 'b', 'KeyE', 'KeyC', 'KeyV', 'KeyB', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'], refs('doc-panel', 'keydown'), null, 'edit'),
@@ -106,7 +107,6 @@ export const ACTIONS = [
   action('copy', 'Copy', 'Ctrl/Cmd+C', [], [], (c) => c.ops.copyNow(), 'edit'),
   action('cut', 'Cut', 'Ctrl/Cmd+X', [], [], (c) => c.ops.cutNow(), 'edit'),
   action('paste', 'Paste here', 'Ctrl/Cmd+V', [], [], (c) => c.ops.pasteNow(), 'edit'),
-  action('create-component', 'Create component from the selection', 'coming in the next pass', [], [], null, 'edit'),
   action('copy-code', 'Copy the element as code (its HTML or JSX and the CSS that applies)', 'Ctrl/Cmd+C', [], [], (c) => c.copyCode?.copy(), 'edit'),
   action('paste-code', 'Paste copied code into the selected element', 'Ctrl/Cmd+V', [], [], (c) => c.copyCode?.pasteFromClipboard(), 'edit'),
   action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
@@ -123,6 +123,7 @@ export const ACTIONS = [
   ...['kind', 'folder', 'date', 'similarity', 'tag', 'status', 'run'].map((by, i) => command(`arrange-${by}`, `Arrange by ${by}`, `Arrange by ${by}`, `A ${'KFDSTUR'[i]}`, (c) => c.surface.arrange(by), { about: `Sort the canvas into groups by ${by}` })),
   command('arrange-meta', 'Arrange by meta', 'Arrange by meta.<column>', '', (c, a) => c.surface.arrange('meta.' + String(a || '').replace(/^meta\./, '')), { arg: 'text', about: 'Sort the canvas into groups by a metadata field or a data column' }),
   command('group', 'Group', 'Group <name>', '', (c, a) => c.surface.group(a), { arg: 'text', about: 'Put the selected cards in a named group' }),
+  command('make-component', 'Create component', 'Create component', 'Ctrl+Alt+K', (c) => c.makeComponent.run(), { about: 'The selected element of a frame becomes a component file beside it; the frame stays as it is', enabled: (c) => c.makeComponent.can() }),
   command('present', 'Present', 'Present', 'F5', (c) => c.surface.present(true), { about: 'Show the selection (or the whole canvas) full screen; Escape leaves' }),
   command('compare', 'Compare variants', 'Compare variants <path>', '', (c, a) => c.surface.compare(a), { arg: 'item', about: 'Show a component’s variants side by side' }),
   command('approve', 'Approve', 'Approve <proposal>', '', (c, a) => c.surface.resolve(a, 'accept'), { arg: 'proposal', about: 'Accept an agent’s proposal' }),
@@ -175,7 +176,7 @@ const MENU = {
   copy: { spec: 'Mod+C', enabled: can('copy') }, cut: { spec: 'Mod+X', enabled: can('cut') }, paste: { short: (c) => (frame(c) ? 'Paste inside' : 'Paste here'), spec: 'Mod+V', enabled: can('paste') },
   'select-parent': { enabled: can('parent') }, 'select-children': { enabled: can('children') },
   'bring-forward': { enabled: can('forward') }, 'send-backward': { enabled: can('backward') }, 'bring-to-front': { enabled: can('front') }, 'send-to-back': { enabled: can('back') },
-  'create-component': { short: 'Create component', enabled: () => 'Coming in the next pass', sheet: false },
+  'make-component': { short: 'Create component', enabled: (c) => { const t = c.makeComponent.can(); return t.ok || t.why; } },
   // a TSX component renames in a dialog (its function and Props type change too); an HTML file renames in place on its label
   'component-rename': { short: (c) => (file(c)?.doc ? 'Rename…' : 'Rename'), spec: 'F2', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : x.doc || x.fileKind === 'html' ? true : 'Rename a React file in your editor for now: that comes in the next pass'; } },
   'component-delete': { short: 'Delete file…', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : x.doc || x.fileKind === 'html' ? true : 'Delete a React file in your editor for now: that comes in the next pass'; } },
@@ -188,7 +189,7 @@ for (const a of ACTIONS) if (MENU[a.id]) Object.assign(a, MENU[a.id]);
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'create.js:keydown': 2, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 5, 'right-panel.js:keydown': 1, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1,
+  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'create.js:keydown': 2, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 5, 'right-panel.js:keydown': 1, 'panel-height.js:keydown': 1, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1,
 };
 // A command that takes an argument ("Select <path>") puts its verb in the palette, where the argument is completed.
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run && a.palette !== false).map((a) => ({ ...a, boost: a.command ? -25 : a.boost, run: a.arg ? () => ctx.quick.prefill(a.phrase.replace(/\s*<.*$/, '') + ' ') : () => a.run(ctx) }));

@@ -674,6 +674,7 @@
 }
 .d-value .d-choice-trigger {
   width: 100%;
+  min-width: 0; /* in a narrow panel the column decides; the trigger never runs past it */
 }
 .d-choice-trigger::after {
   content: "";
@@ -4928,5 +4929,147 @@ ul.ki-tags {
 @media (max-width: 900px) {
   .ki-prompt-below {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- The width lever (options.reveal; the host's panel width decides how much of a colour shows) ----------
+   Tiers on the panel root (data-tier, from its own width): narrow < 340 px, medium 340 to 459, wide 460 and up.
+   Narrow: a colour is its row (swatch and value); the swatch opens the host's anchored picker.
+   Medium: the channel sliders (L, C, H, alpha) under the rows, labels whole, and a larger swatch.
+   Wide: the full editor in place (the depth-3 layout above), opened by the width, not by a button. */
+.dials[data-tier] .d-row[data-type="color"] > .d-figure {
+  cursor: pointer;
+}
+.dials[data-tier="medium"] .d-section[data-reveal="width"][data-depth="2"] .d-lab {
+  display: grid;
+  gap: 8px;
+  padding: 4px 12px 12px 12px;
+}
+.dials[data-tier="medium"] .d-section[data-reveal="width"][data-depth="2"] .d-lab[data-studio="color"] .d-cx {
+  display: block;
+}
+.dials[data-tier="medium"] .d-section[data-reveal="width"][data-depth="2"] .d-cx-main > :not(.d-cx-channels),
+.dials[data-tier="medium"] .d-section[data-reveal="width"][data-depth="2"] .d-cx-side {
+  display: none;
+}
+.dials[data-tier="medium"] .d-section[data-reveal="width"][data-depth="2"] .d-cx-main {
+  gap: 0;
+}
+.dials[data-tier="medium"] .d-section[data-reveal="width"][data-depth="2"] .d-cx-channels.d-deep {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+/* The channel fields at any tier: the whole label, a value field sized for its number, never an ellipsis. */
+.dials[data-tier] .d-cx-channels .k-field-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  font-size: 11px;
+}
+.dials[data-tier] .d-cx-channels .k-field-input {
+  width: 64px;
+}
+/* In a section narrower than the medium tier (the full editor asked for by key), one channel per line. */
+@container dials-studio (max-width: 339px) {
+  .dials .d-section[data-depth="3"] .d-cx-channels {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .dials .d-section[data-depth="3"] .d-tools {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+}
+/* A ramp's steps keep their numbers whole: they wrap onto a second line rather than squeeze. */
+.dials[data-tier] .d-cx-ramp .d-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  overflow: visible;
+}
+.dials[data-tier] .d-cx-ramp .d-swatches button.d-plate {
+  min-width: 0;
+  min-height: 48px;
+  padding: 4px 6px;
+}
+/* Exported CSS: one line with Copy; the code opens below when wanted. */
+.d-cx-css-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.d-cx-css-row[hidden] {
+  display: none;
+}
+.d-cx-css {
+  min-width: 0;
+}
+.d-cx-css > summary {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--d-muted);
+  list-style: none;
+}
+.d-cx-css > summary::-webkit-details-marker {
+  display: none;
+}
+.d-cx-css > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-left: 5px solid currentColor;
+  border-right-width: 0;
+}
+.d-cx-css[open] > summary::before {
+  transform: rotate(90deg);
+}
+.d-cx-css > summary:hover {
+  color: var(--d-text);
+}
+.d-cx-css > summary:focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 0;
+}
+.dials .d-cx-css .d-color-code {
+  display: block;
+  margin-top: 4px;
+  padding: 8px;
+  max-height: 160px;
+  overflow: auto;
+  border-radius: 4px;
+  background: var(--d-well);
+  font-family: var(--d-mono);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.d-cx-css-row > .d-note {
+  align-self: center;
+  font-size: 11px;
+}
+.d-cx-css-row > .d-cx-copy {
+  height: 24px;
+}
+/* The height lever's handle belongs to the rows; the full editor shows every row. */
+.d-section[data-depth="3"] .nk-cap {
+  display: none;
+}
+.d-section[data-depth="3"] .d-rows[data-capped] {
+  max-height: none !important;
+}
+/* In a side panel the tabs of a full editor wrap onto more lines rather than scroll under a fade: every name stays in view. */
+@container dials-studio (max-width: 820px) {
+  .dials[data-tier] .d-section[data-depth="3"] .d-section-head > .d-studio-tabs.d-studio-only {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    mask-image: none;
   }
 }

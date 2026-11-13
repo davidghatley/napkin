@@ -104,7 +104,7 @@ test('menus: each target has its own item set, in the group order, with the regi
     assert.deepEqual(await selection(b), [`${LANDING}|${h1}`], 'the element under the pointer is selected, the others cleared');
     assert.deepEqual(m.rows, ['Cut', 'Copy', 'Paste here', 'Duplicate', '---', 'Select parent', 'Select children', 'Order >', 'Wrap in frame', '---', 'Create component', '---', 'Zoom to selection', 'Show code', '---', 'Delete']);
     const by = Object.fromEntries(m.items.map((x) => [x.label, x]));
-    assert.equal(by['Create component'].why, 'Coming in the next pass');
+    assert.ok(!by['Create component'].off, 'an element in a frame can become a component (pass 3)');
     assert.ok(by['Select children'].off && /Nothing inside/.test(by['Select children'].why), 'a heading has no elements inside');
     assert.ok(by['Wrap in frame'].off, 'wrapping HTML is not there yet: dimmed');
     assert.deepEqual([by.Cut.key, by.Copy.key, by.Duplicate.key, by['Select parent'].key, by.Delete.key], ['Ctrl X', 'Ctrl C', 'Ctrl D', 'Shift Enter', 'Delete']);
@@ -386,12 +386,12 @@ test('menus: Escape after a hover-opened submenu closes one level; dimmed items 
 
     // the pointer over a dimmed item: no fill and no ring; over a live one: the hover fill
     await rclick(io, await centre(b, el(h1)));
-    const off = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((x) => x.querySelector('.nk-ml').textContent === 'Create component')`);
+    const off = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((x) => x.querySelector('.nk-ml').textContent === 'Wrap in frame')`);
     await io.move(off.x, off.y); await sleep(150);
-    const dim = await look('Create component');
+    const dim = await look('Wrap in frame');
     assert.deepEqual(dim, { bg: 'rgba(0, 0, 0, 0)', outline: 'none' }, `a dimmed item under the pointer: ${JSON.stringify(dim)}`);
     await io.press(off.x, off.y); await sleep(50);
-    assert.equal((await look('Create component')).bg, 'rgba(0, 0, 0, 0)', 'no press state either');
+    assert.equal((await look('Wrap in frame')).bg, 'rgba(0, 0, 0, 0)', 'no press state either');
     await io.release(off.x, off.y);
     const live = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((x) => x.querySelector('.nk-ml').textContent === 'Copy')`);
     await io.move(live.x, live.y); await sleep(150);

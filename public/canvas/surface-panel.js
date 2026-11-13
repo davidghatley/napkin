@@ -8,6 +8,7 @@
 //   ctx.instruments.controls()        [{ id, label, type, value, section }] of the panel on screen
 //   ctx.instruments.focusControl(l)   focus the value of the control labelled l (opens its section first)
 //   ctx.instruments.depth(l, 1|2|3)   fold / open / open with the full editor, the section of the control labelled l (always inside the panel)
+//                                     the panel's width also opens a colour section's editor (Dials reveal); a long list shows six rows (panel-height.js)
 //   ctx.instruments.reset(l)          back to its default
 //   ctx.instruments.undo()            undo the newest instrument change of the selection
 //
@@ -16,6 +17,8 @@
 import { Dials, registerFigure } from '/dials/dials.js';
 import { colorObjects } from '/dials/studios.js';
 import { plain } from './words.js';
+import { openColorPicker } from './colorpop.js';
+import { capList } from './panel-height.js';
 
 const enc = encodeURIComponent;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -116,7 +119,7 @@ export function initInstruments(ctx) {
     if (host.contains(document.activeElement)) return;
     host.style.visibility = 'hidden';
     cancelAnimationFrame(quietTimer);
-    quietTimer = requestAnimationFrame(() => { quietTimer = requestAnimationFrame(() => { host.style.visibility = ''; }); });
+    quietTimer = requestAnimationFrame(() => { quietTimer = requestAnimationFrame(() => { host.style.visibility = ''; for (const s of panel?.sections.values() ?? []) s.lab?.update?.(); }); }); // an editor drawn while out of sight draws now
   }
   async function show() {
     const list = ids(), mine = ++token;
@@ -149,7 +152,10 @@ export function initInstruments(ctx) {
     host.innerHTML = `<div class="instruments" data-controls-for="${esc(list[0])}"${many ? ` data-controls-many="${esc(list.join(' '))}"` : ''} role="region" aria-label="Instruments of ${esc(many ? list.length + ' cards' : list[0])}">${header(list, many)}<div class="inst-mount"></div></div>`;
     if (!schema.sections.length) host.querySelector('.inst-mount').innerHTML = `<p class="inst-empty">${many ? 'These cards share no instruments. Select one to tune it.' : 'This file has no instruments.'}</p>`;
     // Pictures come from the file's own bytes (/raw/<id>); a control that is not a picture says so instead of drawing one.
-    panel = new Dials(host.querySelector('.inst-mount'), { history: false, pagePalette: false, label: 'Instruments', source: (c) => (['image', 'asset', 'file'].includes(c.type) ? '/raw/' + enc(list[0]) : null) });
+    // reveal: the panel's width shows more of a colour's editor (standards section 7 rule 6b); a narrow panel's swatch opens the
+    // anchored picker, which stays inside the panel (rule 11).
+    panel = new Dials(host.querySelector('.inst-mount'), { history: false, pagePalette: false, label: 'Instruments', reveal: true, source: (c) => (['image', 'asset', 'file'].includes(c.type) ? '/raw/' + enc(list[0]) : null),
+      pickColor: ({ anchor, value, label, onPreview, onCommit }) => openColorPicker({ anchor, value, label, space: /^#/.test(value) ? 'hex' : /^rgb/i.test(value) ? 'rgb' : /^hsl/i.test(value) ? 'hsl' : /^oklch/i.test(value) ? 'oklch' : 'hex', onPreview, onCommit }) });
     panel.items = list;
     const t0 = performance.now();
     panel.render(schema);
@@ -157,6 +163,9 @@ export function initInstruments(ctx) {
     performance.mark('inst-drawn');
     for (const sec of schema.sections) for (const c of sec.controls) if (Array.isArray(c.palette) && c.palette.length) colorObjects(panel, c.id).palette.splice(0, Infinity, ...c.palette); // the colours kept before
     for (const f of host.querySelectorAll('.d-figure')) f.setAttribute('data-figure', ''); // every figure is findable as one, whatever it draws it with
+    // The height lever (rule 6c): a section's long list shows six rows; its bottom edge drags down for more, or Show all.
+    const comp0 = ctx.state.components.get(cardOf.get(list[0]) ?? list[0]), kind = comp0?.fileKind || comp0?.kind || 'file';
+    for (const s of panel.sections.values()) capList(s.rowlist, { key: `${kind}.${s.schema.id}`, label: s.schema.label || s.schema.id, rows: () => [...s.rowlist.children].filter((r) => !r.hidden) });
     shown = list.join('\n');
     wire(panel);
     host.querySelector('[data-inst-undo]').onclick = () => undo();
@@ -232,6 +241,7 @@ export function initInstruments(ctx) {
     // The colours kept in a colour studio are the board's, so they come back with the file.
     p.addEventListener('palette', ({ detail: e }) => { for (const id of p.items) ctx.fetch('/api/board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ palette: { item: id, control: e.control, palette: e.palette } }) }).catch(() => {}); });
     p.addEventListener('depth', ({ detail }) => {
+      if (detail.auto) return; // the panel's width chose it, not the person
       for (const id of p.items) ctx.fetch('/api/board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ depth: { item: id, section: detail.section, depth: detail.depth } }) }).catch(() => {});
     });
   }

@@ -47,7 +47,8 @@ const cards = (b) => b.eval(`JSON.stringify([...document.querySelectorAll('#worl
   const h = s.querySelector('.cmp-title h3'), p = s.querySelector('.cmp-path'), t = s.querySelector('.cmp-title'), f = s.querySelector(':scope > .frame');
   const hs = getComputedStyle(h), ps = getComputedStyle(p), fs = getComputedStyle(f), tr = t.getBoundingClientRect(), fr = f.getBoundingClientRect();
   const mono = [...s.querySelectorAll('.cmp-head *')].filter((e) => e.getBoundingClientRect().width && getComputedStyle(e).visibility !== 'hidden' && /mono/i.test(getComputedStyle(e).fontFamily)).map((e) => e.className);
-  return { id: s.dataset.name, name: h.textContent, ext: p.hidden ? '' : p.textContent, family: hs.fontFamily, size: hs.fontSize, weight: hs.fontWeight, color: hs.color,
+  const pr = p.getBoundingClientRect(), shown = pr.width > 0 && ps.display !== 'none' && ps.visibility !== 'hidden' && pr.right <= tr.right + 0.5; // drawn, and not cut off by the label's edge
+  return { id: s.dataset.name, name: h.textContent, ext: shown ? p.textContent : '', family: hs.fontFamily, size: hs.fontSize, weight: hs.fontWeight, color: hs.color,
     extFamily: ps.fontFamily, extSize: ps.fontSize, extColor: ps.color, mono, gap: fr.top - tr.bottom, left: tr.left - fr.left,
     shadow: fs.boxShadow, radius: fs.borderRadius, frame: { l: fr.left, t: fr.top, w: fr.width, h: fr.height }, z: napkin.view.get().z };
 }))`).then(JSON.parse);
@@ -55,17 +56,17 @@ const accent = (b) => b.eval(`(() => { const e = document.createElement('i'); e.
 const ink = (b, v) => b.eval(`(() => { const e = document.createElement('i'); e.style.color = 'var(${v})'; document.querySelector('#stage').append(e); const c = getComputedStyle(e).color; e.remove(); return c; })()`);
 
 // One server and one browser for a test: the folder above, opened, every card drawn.
-async function boot(size = [1440, 900], extra = {}) {
+async function boot(size = [1440, 900], extra = {}, count = Object.keys(KINDS).length) {
   const r = folder(extra);
   const server = await startServer(r.compDir, { timeout: 20000 });
   const b = await launchChromium({ width: size[0], height: size[1] });
   await b.goto(server.url);
   await b.waitFor('document.body.dataset.ready === "1"', 30000);
-  await b.waitFor(`document.querySelectorAll('#world > section[data-component][data-ready]:not([data-awaiting])').length >= ${Object.keys(KINDS).length}`, 30000);
+  await b.waitFor(`document.querySelectorAll('#world > section[data-component][data-ready]:not([data-awaiting])').length >= ${count}`, 30000);
   await b.waitFor(`[...napkin.stage.sections.values()].filter((s) => s.docFrame && !s.item).every((s) => s.docFrame.iframe())`, 30000);
   await sleep(600);
   const io = input(b);
-  await io.move(4, 890); // the pointer rests on the status bar, away from every card
+  await io.move(4, size[1] - 10); // the pointer rests on the status bar, away from every card
   return { b, io, dir: r.compDir, close: async () => { await b.close(); await server.stop(); rmSync(r.dir, { recursive: true, force: true }); } };
 }
 
@@ -270,5 +271,118 @@ test('cards: an empty component and a failed render say so plainly, on the same 
     // fixed and saved: the error card goes and the component is drawn again
     writeFileSync(join(dir, 'Broken.tsx'), 'export default function Broken() {\n  return <div style={{ padding: 16 }}>fixed</div>;\n}\n');
     await b.waitFor(`[...document.querySelectorAll('#world > section[data-component]')].some((s) => /^Broken/.test(s.dataset.component) && !s.querySelector('.card-state') && s.querySelector('iframe.doc-frame')?.contentDocument?.body?.innerText.includes('fixed'))`, 30000);
+  } finally { await close(); }
+});
+
+// ------------------------------------------------------------------------------------------------ the opening arrangement and fit
+// A folder like the view-basics specimen: two components called Orbit (a .jsx and a .tsx), pictures that share a name, notes as Markdown and text.
+const GIF = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+const CLASH = {
+  'Orbit.jsx': 'export default function Orbit({tone="gold"}){return <button style={{background:tone==="gold"?"#f0bd45":"#154f65",padding:24}}>Launch 731</button>}\n',
+  'Orbit.tsx': 'type Props = { tone?: "gold" | "blue" };\nexport default function Orbit({tone="gold"}: Props){return <button style={{background:tone==="gold"?"#f0bd45":"#154f65",padding:24}}>Launch 731</button>}\n',
+  'spectrum.png': png(320, 200), 'spectrum.gif': GIF,
+  'spectrum.svg': '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="100" viewBox="0 0 16 10"><rect width="16" height="10" fill="#154f65"/></svg>\n',
+  'notes.txt': 'Orbit 731\nA bright circle.\n',
+};
+const CLASH_COUNT = Object.keys(KINDS).length + Object.keys(CLASH).length;
+// What the screen shows: the visible canvas (between the side panels, under the top bar, over the status bar) and every card's box, its label included.
+const sight = (b) => b.eval(`JSON.stringify((() => {
+  const R = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom }; };
+  const shown = (e) => !!e && e.getBoundingClientRect().width > 0 && getComputedStyle(e).display !== 'none' && getComputedStyle(e).visibility !== 'hidden';
+  const stage = R(document.querySelector('#stage')), side = document.querySelector('#sidebar'), insp = document.querySelector('#inspector');
+  const area = { l: Math.max(stage.l, shown(side) ? R(side).r : 0), r: Math.min(stage.r, shown(insp) ? R(insp).l : innerWidth),
+    t: Math.max(stage.t, R(document.querySelector('#topbar')).b), b: Math.min(stage.b, R(document.querySelector('#statusbar')).t) };
+  const cards = [...document.querySelectorAll('#world > section[data-component]')].filter(shown).map((s) => {
+    const f = R(s.querySelector(':scope > .frame')), t = s.querySelector('.cmp-title'), tr = R(t), h = t.querySelector('h3'), p = t.querySelector('.cmp-path'), pr = p.getBoundingClientRect();
+    const ext = pr.width > 0 && shown(p) && pr.right <= tr.r + 0.5 && pr.left >= tr.l - 0.5 ? p.textContent : ''; // the extension as drawn: there, not hidden, not cut off
+    return { id: s.dataset.component, l: Math.min(f.l, tr.l), r: Math.max(f.r, tr.r), t: Math.min(f.t, tr.t), b: Math.max(f.b, tr.b), text: h.textContent + ext, ext, path: p.textContent, cut: h.scrollWidth > h.clientWidth + 0.5 };
+  });
+  return { area, cards, z: napkin.view.get().z, sideOpen: shown(side) };
+})())`).then(JSON.parse);
+function framed(g, what) {
+  assert.ok(g.cards.length >= CLASH_COUNT, `${what}: every card is drawn (${g.cards.length})`);
+  const { area } = g, ext = { l: Math.min(...g.cards.map((c) => c.l)), r: Math.max(...g.cards.map((c) => c.r)), t: Math.min(...g.cards.map((c) => c.t)), b: Math.max(...g.cards.map((c) => c.b)) };
+  for (const c of g.cards) assert.ok(c.l >= area.l - 0.5 && c.r <= area.r + 0.5 && c.t >= area.t - 0.5 && c.b <= area.b + 0.5,
+    `${what}: ${c.id} is inside the visible canvas (card ${JSON.stringify([c.l, c.t, c.r, c.b].map(Math.round))}, canvas ${JSON.stringify([area.l, area.t, area.r, area.b].map(Math.round))})`);
+  const m = { l: ext.l - area.l, r: area.r - ext.r, t: ext.t - area.t, b: area.b - ext.b };
+  assert.ok(Math.abs(m.l - m.r) <= 2, `${what}: even margins left and right (${m.l.toFixed(1)} / ${m.r.toFixed(1)})`);
+  assert.ok(Math.abs(m.t - m.b) <= 2, `${what}: even margins top and bottom (${m.t.toFixed(1)} / ${m.b.toFixed(1)})`);
+  assert.ok(Math.min(m.l, m.t) >= 16, `${what}: nothing touches the canvas edge (${JSON.stringify(m)})`);
+  assert.ok(g.z <= 1, `${what}: never above 100% (${g.z})`);
+  if (g.z < 1) assert.ok(Math.min(m.l, m.t) <= 80, `${what}: fitted, not floating small in the middle (${JSON.stringify(m)}, ${g.z})`);
+  for (let i = 0; i < g.cards.length; i++) for (let j = i + 1; j < g.cards.length; j++) {
+    const a = g.cards[i], c = g.cards[j];
+    assert.ok(!(a.l < c.r && c.l < a.r && a.t < c.b && c.t < a.b), `${what}: ${a.id} and ${c.id} do not overlap`);
+  }
+  return m;
+}
+// every label as drawn is different: its extension is there (not hidden, not cut off) and, at a fit, its name is not cut either
+const unique = (g, what, { whole = true } = {}) => {
+  for (const c of g.cards) {
+    if (c.path) assert.equal(c.ext, c.path, `${what}: ${c.id} shows its extension (${c.path})`);
+    if (whole) assert.ok(!c.cut, `${what}: ${c.id}'s name is not cut`);
+  }
+  const seen = new Map();
+  for (const c of g.cards) { assert.ok(!seen.has(c.text), `${what}: "${c.text}" names both ${seen.get(c.text)} and ${c.id}`); seen.set(c.text, c.id); }
+};
+const shift1 = async (b, io) => { await io.key('!', { shift: true, code: 'Digit1' }); await sleep(900); };
+
+for (const size of [[1440, 900], [1280, 720]]) {
+  test(`cards: at ${size.join('x')} the folder opens with every card in view, evenly framed, and Shift+1 frames it the same with either panel state`, { timeout: 150000 }, async () => {
+    const { b, io, close } = await boot(size, CLASH, CLASH_COUNT);
+    try {
+      // right after open, no key pressed
+      const first = await sight(b);
+      assert.ok(first.sideOpen, 'the left panel is open');
+      framed(first, `${size} first view`);
+      unique(first, `${size} first view`);
+      // Shift+1: the same picture
+      await shift1(b, io);
+      const fit = await sight(b);
+      framed(fit, `${size} Shift+1`);
+      unique(fit, `${size} Shift+1`);
+      assert.ok(Math.abs(fit.z - first.z) < 0.01, `the first view is the fit (${first.z} / ${fit.z})`);
+      // the left panel collapsed (Ctrl+\\): Shift+1 uses the room it leaves
+      await io.key('\\', { ctrl: true, code: 'Backslash' }); await sleep(300);
+      await shift1(b, io);
+      const wide = await sight(b);
+      assert.equal(wide.sideOpen, false, 'the left panel is collapsed');
+      framed(wide, `${size} Shift+1, left panel collapsed`);
+      assert.ok(wide.z >= fit.z - 1e-6, `more room, no smaller (${fit.z} -> ${wide.z})`);
+      await io.key('\\', { ctrl: true, code: 'Backslash' }); await sleep(300);
+      await shift1(b, io);
+      framed(await sight(b), `${size} Shift+1, left panel open again`);
+    } finally { await close(); }
+  });
+}
+
+test('cards: labels keep their extension at every zoom, so same-named files stay apart; the label is 11 px with a 4 px gap on screen at 25%, 100% and 300%', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot([1280, 720], CLASH, CLASH_COUNT);
+  try {
+    // zoomed out with the keyboard, past the old 40% cut-off where the extension went
+    await shift1(b, io);
+    await io.move(600, 360);
+    for (let i = 0; i < 8 && (await b.eval('napkin.view.get().z')) > 0.2; i++) { await io.key('-'); await sleep(60); }
+    await sleep(500);
+    for (const g of [await sight(b)]) {
+      assert.ok(g.z < 0.4, `zoomed out (${g.z})`);
+      // (far out a narrow card's name is cut first, "Or… .jsx"; the extension stays)
+      unique(g, `at ${Math.round(g.z * 100)}%`, { whole: false });
+      const want = ['Orbit.jsx', 'Orbit.tsx', 'spectrum.png', 'spectrum.gif', 'spectrum.svg', 'notes.md', 'notes.txt'];
+      for (const w of want) assert.ok(g.cards.some((c) => c.text === w), `"${w}" keeps its extension at ${Math.round(g.z * 100)}%: ${g.cards.map((c) => c.text)}`);
+    }
+    const label = () => b.eval(`JSON.stringify([...document.querySelectorAll('#world > section[data-component]:not([data-awaiting])')].map((s) => {
+      const t = s.querySelector('.cmp-title'), h = t.querySelector('h3'), tr = t.getBoundingClientRect(), fr = s.querySelector(':scope > .frame').getBoundingClientRect();
+      return { id: s.dataset.component, px: parseFloat(getComputedStyle(h).fontSize) * tr.height / t.offsetHeight, gap: fr.top - tr.bottom };
+    }))`).then(JSON.parse);
+    for (const z of [0.25, 1, 3]) {
+      // the zoom from the keyboard's steps would not land on these: set it, as Shift+0 and the presets do
+      await b.eval(`(() => { const r = napkin.view.rectToWorld(document.querySelector('section[data-component="notes.md"] > .frame').getBoundingClientRect()); return napkin.view.set({ x: 200 - r.x * ${z}, y: 200 - r.y * ${z}, z: ${z} }); })()`);
+      await sleep(500);
+      for (const l of await label()) {
+        assert.ok(Math.abs(l.px - 11) <= 0.25, `${l.id} at ${z * 100}%: the label is drawn at 11 px (${l.px.toFixed(2)})`);
+        assert.ok(Math.abs(l.gap - 4) <= 0.5, `${l.id} at ${z * 100}%: 4 px under it (${l.gap.toFixed(2)})`);
+      }
+    }
   } finally { await close(); }
 });

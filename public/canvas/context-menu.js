@@ -18,8 +18,8 @@ const ORDER = { sub: 'Order', items: ['bring-forward', 'send-backward', 'bring-t
 export const MENUS = {
   canvas: [['paste'], [], ['frame', 'text', 'image'], ['select-all', 'fit', 'actual', 'toggle-left'], []],
   frame: [['copy', 'paste', 'duplicate', 'component-rename'], [], ['frame', 'text', 'image'], ['fit-selection', 'open-code'], ['delete']],
-  element: [['cut', 'copy', 'paste', 'duplicate', 'rename'], ['select-parent', 'select-children', ORDER, 'wrap'], ['create-component'], ['fit-selection', 'open-code'], ['delete']],
-  several: [['cut', 'copy', 'duplicate'], ['select-parent', 'wrap'], ['create-component'], ['fit-selection'], ['delete']],
+  element: [['cut', 'copy', 'paste', 'duplicate', 'rename'], ['select-parent', 'select-children', ORDER, 'wrap'], ['make-component'], ['fit-selection', 'open-code'], ['delete']],
+  several: [['cut', 'copy', 'duplicate'], ['select-parent', 'wrap'], ['make-component'], ['fit-selection'], ['delete']],
   file: [[], [], [], ['fit-selection'], []], // a picture, a stylesheet, a text file: napkin shows it, it does not edit it here; or several cards
 };
 const ROW = ['layer-toggle']; // a layer row adds these to its item's view group
