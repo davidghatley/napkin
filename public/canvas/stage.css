@@ -2,16 +2,12 @@
    Chrome only: nothing here reaches inside a frame. */
 
 /* ---- M1 play: the chrome steps back, the component takes the pointer and the keyboard ---- */
-#topbar > *, #sidebar, #inspector, #statusbar, #toolbar > * { transition: opacity .16s ease, visibility 0s; }
-body[data-play] #sidebar, body[data-play] #inspector, body[data-play] #statusbar, body[data-play] #topbar > :not(#toolbar), body[data-play] #toolbar > :not(#tool-play) { opacity: 0; visibility: hidden; transition: opacity .16s ease, visibility 0s linear .16s; }
+#topbar > *, #sidebar, #inspector, #statusbar { transition: opacity var(--nk-motion-panel) var(--nk-ease), visibility 0s; }
+body[data-play] #sidebar, body[data-play] #inspector, body[data-play] #statusbar, body[data-play] #topbar > * { opacity: 0; visibility: hidden; transition: opacity .16s ease, visibility 0s linear .16s; }
 body[data-play] #overlays { opacity: 0; transition: opacity .12s ease; }
 body[data-play-hold] #play-bar { display: none; }
 body[data-play] .cmp-head { opacity: 0; }
 body[data-play] [data-sel] .frame { outline: 0; box-shadow: none; }
-#tool-play { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--nk-text-2); font: 500 12.5px var(--nk-sans); cursor: pointer; }
-#tool-play:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
-#tool-play[aria-pressed="true"] { background: var(--nk-accent); color: var(--nk-on-accent); }
-#tool-play kbd { background: transparent; border-color: currentColor; opacity: .7; }
 
 /* ---- M4 ruler: the file's own @media breakpoints, under the frame ---- */
 /* one ruler and one caption, for the frame you are on */
@@ -210,8 +206,6 @@ body[data-chrome="hidden"] .hl-box b { display: none !important; }
 .cell-grip:focus-visible::after { opacity: 1; }
 .cell-ruler .rt-more { position: absolute; top: 0; transform: translateX(-100%); height: 20px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--nk-accent-text); font: 600 10.5px/20px var(--nk-mono); cursor: pointer; }
 .cell-ruler .rt[hidden] { display: none; }
-#layers .lskip { display: flex; gap: 8px; align-items: baseline; padding: 4px 14px; color: var(--nk-text-2); font-size: 12px; }
-#layers .lskip .lnote { margin-left: auto; font-size: 11px; }
 body[data-play] .cell-was, body[data-play] .doc-cell figcaption, body[data-play] .cell-ruler, body[data-play] .cell-grip, body[data-play] #hl-side, body[data-play] #bp-panel, body[data-play] #bp-strip { visibility: hidden !important; }
 
 /* a frame dimmed behind a focused one keeps no caption or ruler (they would sit at 0.16 contrast) */
@@ -244,11 +238,6 @@ body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
 
 /* ---- sidebar: Layers and Styles ---- */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.side-tabs { display: flex; gap: 14px; flex: none; padding: 0 14px; height: 36px; align-items: stretch; border-bottom: 1px solid var(--nk-line); }
-.side-tabs button { padding: 0; border: 0; background: none; color: var(--nk-text-2); font: 500 12.5px var(--nk-sans); cursor: pointer; box-shadow: none; }
-.side-tabs button:hover { color: var(--nk-text); }
-.side-tabs button[aria-selected="true"] { color: var(--nk-text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--nk-text); }
-.side-tabs button:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: -2px; }
 #layers[hidden], #styles[hidden] { display: none; }
 #styles { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .st-top { flex: none; padding: 8px 10px 4px; }
@@ -269,7 +258,6 @@ body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
 .st-none { margin: 12px 14px; color: var(--nk-text-3); font-size: 12px; }
 
 /* ---- the chrome around the new pieces: denser rows, one source of quiet ---- */
-.top-right .meta { visibility: hidden; }
 body[data-bp] #hint { bottom: 126px; }
 #stage:not([data-zoom-band="near"]) .cmp[data-sel] .doc-cell:not([data-resizing]) figcaption { visibility: hidden !important; }
 #statusbar .hints { width: 470px; }
@@ -278,7 +266,6 @@ body[data-bp] #hint { bottom: 126px; }
 .cmp[data-chip-top] .cmp-head { transform: translateY(calc(-22px * var(--nk-ls, 1))) scale(var(--nk-lf, 1)); }
 .cmp[data-chip-top] .cell-ruler { transform: translateY(calc(-22px * var(--nk-ls, 1))); }
 #overlay-select[data-tags="none"]::after, #overlay-select[data-tags="none"] .osize { display: none; }
-#layers .lcomp { margin-top: 0; }
 body[data-wipe] #grid { visibility: hidden; }
 #stage[data-hdr="strip"] .cmp-title .cmp-path, #stage[data-hdr="strip"] .cmp-title .cmp-note { display: none; }
 /* the frame you are on is above its neighbours, with its grip */

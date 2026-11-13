@@ -163,10 +163,11 @@ test('keys: B is before/after in the film strip, the breakpoints elsewhere, and 
   } finally { await a.close(); }
 });
 
-test('Styles tab: rules and variables with their reach; a row lights it up; the tab keys move', { timeout: 90000 }, async () => {
+test('Styles view: rules and variables with their reach; a row lights it up; Escape goes back to layers', { timeout: 90000 }, async () => {
   const a = await open();
   try {
-    await a.q(`document.querySelector('#tab-styles').click()`);
+    await a.q(`napkin.stylesTab.show('styles')`);
+    assert.equal(await a.q(`document.querySelector('#side-title').textContent`), 'Styles');
     await a.browser.waitFor(`document.querySelectorAll('#styles-list .st-row').length > 5`);
     assert.equal(await a.q(`document.querySelector('#layers').hidden`), true);
     await a.browser.waitFor(`[...document.querySelectorAll('#styles-list .st-row')].find((r) => r.dataset.raw === '.ss-note__tag')?.querySelector('.st-n').textContent === '3'`, 8000);
@@ -174,8 +175,8 @@ test('Styles tab: rules and variables with their reach; a row lights it up; the 
     await a.browser.waitFor(`!document.querySelector('#hl-side').hidden`);
     assert.equal(await a.q(`napkin.highlight.places()`), 3);
     assert.equal(await a.q(`document.querySelector('#styles-list .st-row.on').dataset.raw`), '.ss-note__tag');
-    await a.q(`document.querySelector('#tab-styles').focus()`);
-    await a.io.key('ArrowLeft');
+    await a.q(`document.querySelector('#styles-filter').focus()`);
+    await a.io.key('Escape');
     assert.equal(await a.q(`document.querySelector('#layers').hidden`), false);
     void PILL;
   } finally { await a.close(); }

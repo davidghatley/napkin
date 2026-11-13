@@ -234,11 +234,11 @@ test('WPC-15: top bar and status bar fit at 1280x720 and 1440x900 (tokens config
       await palette(io, b, 'Chip'); await sleep(500);
       const m = JSON.parse(await b.eval(`(() => {
         const box = (e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width }; };
-        const top = [...document.querySelectorAll('.brand, #toolbar, #quick-open, .top-right > *')].filter((e) => e.getBoundingClientRect().width).map((e) => ({ n: e.id || e.className, ...box(e), clipped: e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible' }));
+        const top = [...document.querySelectorAll('.brand, #panel-toggle, #toolbar, .top-right > *')].filter((e) => e.getBoundingClientRect().width).map((e) => ({ n: e.id || e.className, ...box(e), clipped: e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).overflow !== 'visible' }));
         const status = [...document.querySelectorAll('#statusbar > *')].filter((e) => e.getBoundingClientRect().width).map((e) => ({ n: e.id || e.className, ...box(e), clipped: e.scrollWidth > e.clientWidth + 1 }));
         const hints = [...document.querySelectorAll('#statusbar .hints .h')].filter((e) => getComputedStyle(e).display !== 'none').map((e) => box(e));
         const hb = box(document.querySelector('#statusbar .hints'));
-        const tools = [...document.querySelectorAll('#toolbar [data-tool], #toolbar #tool-new')].map((e) => ({ name: e.getAttribute('aria-label'), w: e.getBoundingClientRect().width }));
+        const tools = [...document.querySelectorAll('#toolbar [data-tool]')].map((e) => ({ name: e.getAttribute('aria-label'), w: e.getBoundingClientRect().width }));
         return JSON.stringify({ top, status, hintsFit: hints.every((h) => h.r <= hb.r + 1 && h.l >= hb.l - 1), tools, vw: innerWidth });
       })()`));
       const overlaps = (list) => list.flatMap((a, i) => list.slice(i + 1).filter((c) => a.l < c.r - 0.5 && c.l < a.r - 0.5 && a.t < c.b && c.t < a.b).map((c) => `${a.n} x ${c.n}`));
@@ -247,7 +247,7 @@ test('WPC-15: top bar and status bar fit at 1280x720 and 1440x900 (tokens config
       assert.ok(m.top.every((e) => e.r <= m.vw + 1) && m.status.every((e) => e.r <= m.vw + 1), 'nothing past the window');
       assert.ok(m.top.every((e) => !e.clipped) && m.status.every((e) => !e.clipped), JSON.stringify([...m.top, ...m.status].filter((e) => e.clipped)));
       assert.ok(m.hintsFit, 'hints are whole, not cut by an ellipsis');
-      assert.ok(m.tools.length === 5 && m.tools.every((x) => x.name && x.w > 20), JSON.stringify(m.tools));
+      assert.ok(m.tools.length === 4 && m.tools.every((x) => x.name && x.w > 20), JSON.stringify(m.tools));
       if (process.env.EVIDENCE) writeFileSync(join(ROOT, `docs/evidence/keys-${size.join('x')}-${theme}-bars.png`), await b.screenshot());
     } finally { await r.close(); }
   });

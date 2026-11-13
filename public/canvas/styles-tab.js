@@ -1,4 +1,5 @@
-// The sidebar's second tab: the folder's rules and variables, grouped by file, each with how many places on the canvas it
+// Styles, a second view of the left panel (no tab strip since basics pass 1; opened from the palette, "Show styles", and closed by the
+// header's X or Escape): the folder's rules and variables, grouped by file, each with how many places on the canvas it
 // reaches. A click lights it up (stage-highlight.js), which turns the inspector to it. Counts are read from the frames in
 // idle moments, a few rules at a time, and only while the tab is open.
 //   initStylesTab(ctx) -> ctx.stylesTab = { show(name), refresh() }
@@ -8,9 +9,9 @@ const enc = encodeURIComponent;
 const idle = (fn) => (window.requestIdleCallback ? requestIdleCallback(fn, { timeout: 300 }) : setTimeout(fn, 30));
 
 export function initStylesTab(ctx) {
-  const side = document.querySelector('#sidebar'), layers = document.querySelector('#layers'), tabs = side.querySelector('.side-tabs'); // (in the page from the first paint: nothing moves when this runs)
+  const side = document.querySelector('#sidebar'), layers = document.querySelector('#layers'), title = side.querySelector('#side-title'), back = side.querySelector('#side-back');
   const pane = document.createElement('div');
-  pane.id = 'styles'; pane.hidden = true; pane.setAttribute('role', 'tabpanel'); pane.setAttribute('aria-labelledby', 'tab-styles');
+  pane.id = 'styles'; pane.hidden = true; pane.setAttribute('role', 'region'); pane.setAttribute('aria-labelledby', 'side-title');
   pane.innerHTML = '<div class="st-top"><input id="styles-filter" type="search" placeholder="find a rule or variable" aria-label="Find a rule or variable" spellcheck="false"></div><div id="styles-list"></div>';
   layers.after(pane);
   const list = pane.querySelector('#styles-list'), filter = pane.querySelector('#styles-filter');
@@ -51,13 +52,14 @@ export function initStylesTab(ctx) {
   }
   async function show(name) {
     const styles = name === 'styles';
-    tabs.querySelector('#tab-layers').setAttribute('aria-selected', String(!styles)); tabs.querySelector('#tab-styles').setAttribute('aria-selected', String(styles));
-    tabs.querySelector('#tab-layers').tabIndex = styles ? -1 : 0; tabs.querySelector('#tab-styles').tabIndex = styles ? 0 : -1;
+    const was = !pane.hidden;
+    title.textContent = styles ? 'Styles' : 'Layers'; back.hidden = !styles;
     layers.hidden = styles; pane.hidden = !styles; side.classList.toggle('on-styles', styles);
-    if (styles) { if (stale) await collect(); paint(); }
+    if (styles) { ctx.shell?.toggleLeft(true); if (stale) await collect(); paint(); filter.focus(); }
+    else if (was) layers.querySelector('.lrow[tabindex="0"]')?.focus();
   }
-  tabs.addEventListener('click', (ev) => { const t = ev.target.closest('[role=tab]'); if (t) show(t.id === 'tab-styles' ? 'styles' : 'layers'); });
-  tabs.addEventListener('keydown', (ev) => { if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return; ev.preventDefault(); const to = pane.hidden ? 'styles' : 'layers'; show(to); tabs.querySelector(`#tab-${to}`).focus(); });
+  back.addEventListener('click', () => show('layers'));
+  pane.addEventListener('keydown', (ev) => { if (ev.key !== 'Escape') return; ev.preventDefault(); ev.stopPropagation(); show('layers'); });
   list.addEventListener('click', (ev) => {
     const b = ev.target.closest('.st-row'); if (!b) return;
     ctx.stage.highlight(b.dataset.kind === 'variable' ? { variable: b.dataset.raw } : { selector: b.dataset.raw, file: b.dataset.file });

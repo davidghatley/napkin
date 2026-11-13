@@ -25,8 +25,7 @@ test('M1 it is alive: animation and hover run in the frame; holding Space-P play
     await t.key('keyDown', ' ', 'Space'); await t.key('keyDown', 'p', 'KeyP');
     await b.waitFor(`document.body.dataset.play === '1' && document.body.dataset.playHold === '1'`);
     await b.waitFor(`getComputedStyle(document.querySelector('#sidebar')).opacity <= 0.15 && getComputedStyle(document.querySelector('#inspector')).opacity <= 0.15 && getComputedStyle(document.querySelector('#overlays')).opacity === '0'`); // the editing chrome fades
-    assert.match(await b.eval(`document.querySelector('#tool-play').textContent`), /^Play\s*Space P$/, 'a Play control in the toolbar');
-    assert.equal(await b.eval(`document.querySelector('#tool-play').getAttribute('aria-pressed')`), 'true');
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('#toolbar')).opacity <= 0.15`), true, 'the top bar steps back too');
     // pointer goes into the frame: hover shows the :hover rule of the file
     const p = await t.centre('Card', '.btn');
     await t.mouse('mouseMoved', p.x, p.y, { buttons: 0 });

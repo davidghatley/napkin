@@ -1,19 +1,22 @@
-// Tools (M4, F11 canvas side + F12): select (V), frame (F), text (T), image slot (I), new component (N).
-// Plain DOM. A toolbar in #toolbar, keyboard shortcuts that never fire while typing in an input, and the
+// Tools (M4, F11 canvas side + F12): select (V), frame (F), text (T), image slot (I).
+// Plain DOM. A toolbar in #toolbar (icon buttons, one roving tab stop, arrows move between them; standards section 1), keyboard shortcuts that never fire while typing in an input, and the
 // drawing itself: with a tool active, a click (or press-drag-release) inside a rendered component inserts a
 // node into the element under the pointer, through ctx.sendEdits (one `insert` op, into the base).
 // Select-tool niceties live here too: Delete removes the selected node, Alt+Up/Down moves it among its siblings,
 // double-click edits a text node in place.
 //   initTools(ctx) -> { tools, use(id), editText(selection), createComponent(name) }; also set as ctx.tools.
-import { plain, SANS } from './words.js';
+// A component is no longer named up front from the bar (decision 0023): createComponent stays for the palette ("New component <Name>")
+// and for agents, until "Create component" from a selection replaces it.
+import { SANS } from './words.js';
 import { index, variantGrid, VOID } from '/src/model.js';
 
-const svg = (d) => `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="${d}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// One grid (16 px), one stroke (1.5 px), round caps and joins: the same drawing rules as every chrome icon (canvas.css .ico).
+const svg = (d) => `<svg class="ico" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${d}</svg>`;
 const TOOLS = [
-  { id: 'select', label: 'Select', key: 'V', icon: svg('M3.5 2.5 12 6.4l-4.2 1.4-1.4 4.2z') },
-  { id: 'frame', label: 'Frame', key: 'F', icon: svg('M5 1.8v12.4M11 1.8v12.4M1.8 5h12.4M1.8 11h12.4') },
-  { id: 'text', label: 'Text', key: 'T', icon: svg('M3 3.5V2.5h10v1M8 2.5v11M6 13.5h4') },
-  { id: 'image', label: 'Image slot', key: 'I', icon: svg('M2.5 3h11v10h-11zM2.5 11l3.3-3.4 2.4 2.4 1.6-1.6 3.7 3.6') },
+  { id: 'select', label: 'Select', key: 'V', icon: svg('<path d="M3.75 2.75v9.5l2.6-2.45 1.75 3.95 1.9-.85-1.75-3.9h3.5z"/>') },
+  { id: 'frame', label: 'Frame', key: 'F', icon: svg('<path d="M5.25 2.25v11.5M10.75 2.25v11.5M2.25 5.25h11.5M2.25 10.75h11.5"/>') },
+  { id: 'text', label: 'Text', key: 'T', icon: svg('<path d="M3.25 4.75v-2h9.5v2M8 2.75v10.5M6 13.25h4"/>') },
+  { id: 'image', label: 'Image', key: 'I', icon: svg('<rect x="2.25" y="2.75" width="11.5" height="10.5" rx="1.5"/><path d="m2.25 11 3.25-3.25 2.75 2.75 1.75-1.75 3.75 3.75"/><circle cx="10.5" cy="5.75" r=".75"/>') },
 ];
 const MIN = { frame: [48, 32], image: [8, 8] };
 const DRAG = 4; // px of pointer travel before a press counts as a drag
@@ -50,11 +53,8 @@ export function initTools(ctx) {
 
   // --- toolbar -------------------------------------------------------------------------------------------
   bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'Tools');
-  bar.innerHTML = TOOLS.map((t) => `<button type="button" data-tool="${t.id}" aria-pressed="false" aria-keyshortcuts="${t.key}" title="${t.label} (${t.key})" aria-label="${t.label}">${t.icon}<span class="tl">${t.label}</span> <kbd>${t.key}</kbd></button>`).join('')
-    + `<button type="button" id="tool-new" aria-keyshortcuts="N" aria-expanded="false" aria-controls="new-component" title="New component (N)" aria-label="New component">${svg('M8 3v10M3 8h10')}<span class="tl">New component</span> <kbd>N</kbd></button>`
-    + '<form id="new-component" hidden autocomplete="off"><label>Name <input id="new-name" aria-label="Component name" placeholder="Card" spellcheck="false"></label><button type="submit">Create</button><span id="new-error" role="alert"></span></form>';
+  bar.innerHTML = TOOLS.map((t, i) => `<button type="button" data-tool="${t.id}" aria-pressed="false" aria-keyshortcuts="${t.key}" aria-label="${t.label}" data-tip="${t.label}" data-key="${t.key}" tabindex="${i ? -1 : 0}">${t.icon}</button>`).join('');
   const buttons = new Map([...bar.querySelectorAll('[data-tool]')].map((b) => [b.dataset.tool, b]));
-  const form = bar.querySelector('#new-component'), nameInput = bar.querySelector('#new-name'), newErr = bar.querySelector('#new-error'), newBtn = bar.querySelector('#tool-new');
 
   const tools = new Map(TOOLS.map((t) => [t.id, { id: t.id, activate() {}, deactivate() {} }]));
   function use(id) {
@@ -66,20 +66,24 @@ export function initTools(ctx) {
     ctx.emit('tool', { tool: id });
   }
   function sync() {
-    for (const [id, b] of buttons) b.setAttribute('aria-pressed', String(id === ctx.state.tool));
+    for (const [id, b] of buttons) { const on = id === ctx.state.tool; b.setAttribute('aria-pressed', String(on)); if (!bar.contains(document.activeElement)) b.tabIndex = on ? 0 : -1; }
     document.body.dataset.tool = ctx.state.tool;
   }
   bar.addEventListener('click', (ev) => {
     const b = ev.target.closest('button[data-tool]');
     if (b) use(b.dataset.tool);
   });
-  newBtn.addEventListener('click', () => (form.hidden ? openNew() : closeNew()));
+  // one Tab stop for the group; arrows, Home and End move between the tools (Enter or Space arms, as any button does)
+  bar.addEventListener('keydown', (ev) => {
+    const list = [...buttons.values()], i = list.indexOf(document.activeElement);
+    if (i < 0) return;
+    const to = ev.key === 'ArrowRight' ? (i + 1) % list.length : ev.key === 'ArrowLeft' ? (i - 1 + list.length) % list.length : ev.key === 'Home' ? 0 : ev.key === 'End' ? list.length - 1 : -1;
+    if (to < 0) return;
+    ev.preventDefault(); ev.stopPropagation();
+    for (const b of list) b.tabIndex = -1;
+    list[to].tabIndex = 0; list[to].focus();
+  });
   sync();
-
-  // --- new component (N) ---------------------------------------------------------------------------------
-  function openNew() { cancelDraw(); form.hidden = false; newBtn.setAttribute('aria-expanded', 'true'); newErr.textContent = ''; nameInput.value = ''; nameInput.focus(); }
-  function closeNew() { nameInput.blur(); form.hidden = true; newBtn.setAttribute('aria-expanded', 'false'); newErr.textContent = ''; }
-  nameInput.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); closeNew(); newBtn.focus(); } });
 
   // Waits until a component's section has drawn the revision (and the node, if given).
   async function rendered(component, revision, node, variant) {
@@ -112,13 +116,6 @@ export function initTools(ctx) {
     if (sec) { ctx.stage?.reveal(r.id); ctx.select({ component: r.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] }); }
     return { ok: true, id: r.id, name: r.name };
   }
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    newErr.textContent = '';
-    const r = await createComponent(nameInput.value);
-    if (!r.ok) { newErr.textContent = plain(r.error); nameInput.focus(); return; }
-    closeNew(); say('');
-  });
 
   // --- inline text editing -------------------------------------------------------------------------------
   let editor = null;
@@ -252,7 +249,6 @@ export function initTools(ctx) {
     if (typing(ev.target) || ev.defaultPrevented || ev.isComposing) return;
     if (ev.key === 'Escape') {
       if (drag) cancelDraw();
-      else if (!form.hidden) closeNew();
       else if (ctx.state.tool !== 'select') use('select');
       return;
     }
@@ -262,7 +258,6 @@ export function initTools(ctx) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
     if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); deleteSelected(); return; }
     const key = ev.key.length === 1 ? ev.key.toUpperCase() : '';
-    if (key === 'N') { ev.preventDefault(); openNew(); return; }
     const t = TOOLS.find((x) => x.key === key);
     if (t) { ev.preventDefault(); use(t.id); }
   });

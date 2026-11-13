@@ -3,16 +3,32 @@
 import { index, VOID } from '/src/model.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// Row glyphs: 16 px grid, 1.5 px stroke, round caps and joins, as every chrome icon (canvas.css). Stroke and fill come from the row's CSS.
+const g = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${d}</svg>`;
 const ICON = {
-  frame: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M4.5 1.5v11M9.5 1.5v11M1.5 4.5h11M1.5 9.5h11" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>',
-  text: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M2.5 3.5v-1h9v1M7 2.5v9M5.2 11.5h3.6" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-  image: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><rect x="1.8" y="2.3" width="10.4" height="9.4" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="m2.5 10 3-3.2 2.2 2.2 1.4-1.4 2.4 2.4" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/></svg>',
-  button: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><rect x="1.5" y="4" width="11" height="6" rx="3" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>',
-  eye: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M1.2 7s2-3.800 5.800-3.800S12.800 7 12.800 7 10.800 10.800 7 10.800 1.200 7 1.200 7z" fill="none" stroke="currentColor" stroke-width="1.200"/><circle cx="7" cy="7" r="1.500" fill="none" stroke="currentColor" stroke-width="1.200"/></svg>',
-  eyeoff: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M1.200 7s2-3.800 5.800-3.800S12.800 7 12.800 7 10.800 10.800 7 10.800 1.200 7 1.200 7zM2.500 12l9-10" fill="none" stroke="currentColor" stroke-width="1.200" stroke-linecap="round"/></svg>',
-  component: '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><path d="M7 1.8 12.2 7 7 12.2 1.8 7z" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>',
+  frame: g('<path d="M5.25 2.25v11.5M10.75 2.25v11.5M2.25 5.25h11.5M2.25 10.75h11.5"/>'),
+  text: g('<path d="M3.25 4.75v-2h9.5v2M8 2.75v10.5M6 13.25h4"/>'),
+  image: g('<rect x="2.25" y="2.75" width="11.5" height="10.5" rx="1.5"/><path d="m2.25 11 3.25-3.25 2.75 2.75 1.75-1.75 3.75 3.75"/><circle cx="10.5" cy="5.75" r=".75"/>'),
+  button: g('<rect x="1.75" y="4.75" width="12.5" height="6.5" rx="3.25"/>'),
+  component: g('<path d="M8 1.75 14.25 8 8 14.25 1.75 8z"/>'),
+  css: g('<path d="M6 2.75c-1.25 0-2 .5-2 1.75v1.75C4 7.25 3.5 8 2.5 8c1 0 1.5.75 1.5 1.75v1.75c0 1.25.75 1.75 2 1.75M10 2.75c1.25 0 2 .5 2 1.75v1.75c0 1 .5 1.75 1.5 1.75-1 0-1.5.75-1.5 1.75v1.75c0 1.25-.75 1.75-2 1.75"/>'),
+  vector: g('<path d="M3.5 12.5C3.5 7 7 3.5 12.5 3.5"/><rect x="2" y="11" width="3" height="3" rx=".5"/><rect x="11" y="2" width="3" height="3" rx=".5"/>'),
+  doc: g('<path d="M4.25 1.75h4.75l2.75 2.75v9.75h-7.5z"/><path d="M6.25 7.25h3.5M6.25 10h3.5"/>'),
+  eye: g('<path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z"/><circle cx="8" cy="8" r="1.75"/>'),
+  eyeoff: g('<path d="M1.75 8S4 3.75 8 3.75 14.25 8 14.25 8 12 12.25 8 12.25 1.75 8 1.75 8z"/><path d="M2.75 13.25 13.25 2.75"/>'),
+  more: g('<circle cx="4" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12" cy="8" r="1"/>'),
+  chevron: g('<path d="M5 6.5 8 9.5l3-3"/>'),
 };
 const iconFor = (n) => (n.tag === 'img' ? ICON.image : n.tag === 'button' ? ICON.button : n.children.length || !(n.text !== undefined || n.textProp) ? ICON.frame : ICON.text);
+// An element of an HTML file: a picture, a vector, text, a button, or a box (a frame, as Figma calls a container).
+const htmlIcon = (n, kids) => (/^(img|picture|video|canvas)$/.test(n.tag) ? ICON.image : n.tag === 'svg' ? ICON.vector : n.tag === 'button' ? ICON.button : !kids && n.text?.trim() ? ICON.text : ICON.frame);
+// A file row says what the file is: an HTML file is a frame, a TSX or JSX file a component, then CSS, SVG, pictures and text.
+const fileIcon = (c) => {
+  if (!c.item) return c.kind === 'html' && !/\.(tsx|jsx)$/i.test(c.path || '') ? ICON.frame : ICON.component;
+  const fam = c.meta?.family, path = c.path || c.name || '';
+  return /\.svg$/i.test(path) ? ICON.vector : fam === 'image' ? ICON.image : fam === 'css' ? ICON.css : ICON.doc;
+};
+const twirl = (on) => `<span class="twirl" aria-hidden="true">${on ? ICON.chevron : ''}</span>`;
 const holdsText = (n) => n.text !== undefined || !!n.textProp;
 const canHold = (n) => !holdsText(n) && !VOID.has(n.tag);
 
@@ -37,19 +53,19 @@ export function initLayers(ctx, el) {
     const anc = new Set(); // ancestors of every selected node: a quiet trail down to the selection
     for (const sl of ctx.state.selections) { const c0 = ctx.state.components.get(sl.component); if (!c0?.doc) continue; const { parentOf } = index(c0.doc); for (let q = parentOf.get(sl.node); q; q = parentOf.get(q.id)) anc.add(`${sl.component}|${q.id}`); }
     for (const c of comps) {
-      const open = expanded.has(c.component);
+      const open = expanded.has(c.component), canOpen = !c.item && (!!c.doc || c.kind === 'html');
       const has = ctx.state.selections.some((s) => s.component === c.component);
-      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1" aria-expanded="${open}" aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0"><span class="twirl" aria-hidden="true">${open ? '▾' : '▸'}</span><span class="licon">${ICON.component}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">⋯</button></div>`);
+      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1"${canOpen ? ` aria-expanded="${open}"` : ''} aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0">${twirl(canOpen)}<span class="licon">${fileIcon(c)}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">${ICON.more}</button></div>`);
       if (open && c.kind === 'html') { htmlRows(c, rows, sel, prim); continue; }
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
         const k = `${c.component}|${n.id}`, kids = n.children.length, isFolded = folded.has(k);
-        rows.push(`<div class="lrow lnode${n.style?.visibility === 'hidden' ? ' hidden-node' : ''}${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${anc.has(k) ? ' anc' : ''}" title="${esc(n.tag)}${n.textProp ? ' · shows ' + esc(n.textProp) : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--nk-d:${depth}"><span class="lgrip" aria-hidden="true">⠿</span><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp && n.textProp !== n.id ? ` · ${esc(n.textProp)}` : ''}</span><button type="button" class="leye" tabindex="-1" data-action="eye" aria-pressed="${n.style?.visibility === 'hidden'}" aria-label="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'} ${esc(n.id)}" title="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'}">${n.style?.visibility === 'hidden' ? ICON.eyeoff : ICON.eye}</button><button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(n.id)}" title="More">⋯</button></div>`);
+        rows.push(`<div class="lrow lnode${n.style?.visibility === 'hidden' ? ' hidden-node' : ''}${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${anc.has(k) ? ' anc' : ''}" title="${esc(n.tag)}${n.textProp ? ' · shows ' + esc(n.textProp) : ''}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.id)}" data-kind="node" tabindex="-1" style="--nk-d:${depth}">${twirl(kids)}<span class="licon">${iconFor(n)}</span><span class="lname">${esc(n.id)}</span><span class="ltag">${esc(n.tag)}${n.textProp && n.textProp !== n.id ? ` · ${esc(n.textProp)}` : ''}</span><button type="button" class="leye" tabindex="-1" data-action="eye" aria-pressed="${n.style?.visibility === 'hidden'}" aria-label="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'} ${esc(n.id)}" title="${n.style?.visibility === 'hidden' ? 'Show' : 'Hide'}">${n.style?.visibility === 'hidden' ? ICON.eyeoff : ICON.eye}</button><button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(n.id)}" title="More">${ICON.more}</button></div>`);
         if (!isFolded) n.children.forEach((x) => walk(x, depth + 1));
       })(c.doc.root, 1);
     }
-    for (const k of ctx.docs?.skipped ?? []) rows.push(`<div class="lrow lskip" role="treeitem" aria-level="1" aria-disabled="true" title="${esc(k.note)}"><span class="lname">${esc(k.path)}</span><span class="lnote">no component exported</span></div>`); // (a file that exports no component has no frame)
-    const html = rows.join('') || '<p class="empty">No layers yet.</p>';
+    for (const k of ctx.docs?.skipped ?? []) rows.push(`<div class="lrow lskip" role="treeitem" aria-level="1" aria-disabled="true" title="${esc(k.note)}" style="--nk-d:0"><span class="lname">${esc(k.path)}</span><span class="lnote">no component exported</span></div>`); // (a file that exports no component has no frame)
+    const html = rows.join('') || '<p class="empty">No layers yet. Files you add to the folder show here.</p>';
     if (html === lastHtml && !focusKey) { if (reveal) { reveal = false; el.querySelector('.primary')?.scrollIntoView({ block: 'nearest' }); } return; } // an edit that moved no row leaves the tree alone (~200 rows at 200 components)
     lastHtml = html;
     el.innerHTML = html;
@@ -85,7 +101,7 @@ export function initLayers(ctx, el) {
         const k = `${c.component}|${n.node}`, kids = n.children.filter((x) => !SKIP.includes(x.tag)).length;
         const isFolded = kids > 0 && ((!onPath.has(n.node) && !opened.has(k)) || folded.has(k));
         const label = `${nameOf(n)}${run > 1 ? ` ×${run}` : ''}${n.tag === 'svg' && kids ? ` · ${kids} shape${kids === 1 ? '' : 's'}` : ''}`;
-        rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${onPath.has(n.node) ? ' anc' : ''}" title="${esc(n.tag)} · line ${n.line}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.node)}" data-kind="node" tabindex="-1" style="--nk-d:${depth}"><span class="lgrip" aria-hidden="true"></span><span class="twirl" aria-hidden="true">${kids ? (isFolded ? '▸' : '▾') : ''}</span><span class="licon">${ICON.frame}</span><span class="lname">${esc(label)}</span></div>`);
+        rows.push(`<div class="lrow lnode${sel.has(k) ? ' selected' : ''}${prim && selKey(prim) === k ? ' primary' : ''}${onPath.has(n.node) ? ' anc' : ''}" title="${esc(n.tag)} · line ${n.line}" role="treeitem" aria-level="${depth + 1}"${kids ? ` aria-expanded="${!isFolded}"` : ''} aria-selected="${sel.has(k)}" data-component="${esc(c.component)}" data-node="${esc(n.node)}" data-kind="node" tabindex="-1" style="--nk-d:${depth}">${twirl(kids)}<span class="licon">${htmlIcon(n, kids)}</span><span class="lname">${esc(label)}</span></div>`);
         if (!isFolded) walkList(n.children, depth + 1);
         i += run - 1;
       }
@@ -294,7 +310,7 @@ export function initLayers(ctx, el) {
     const b = el.getBoundingClientRect(), r = d.row.getBoundingClientRect();
     line.hidden = false;
     line.style.top = `${(d.mode === 'before' ? r.top : r.bottom) - b.top + el.scrollTop - 1}px`;
-    line.style.left = `${Number(d.row.style.getPropertyValue('--nk-d')) * 14 + 22}px`;
+    line.style.left = `${Number(d.row.style.getPropertyValue('--nk-d')) * 12 + 28}px`;
   }
   addEventListener('pointerup', async () => {
     if (!dragging) return;

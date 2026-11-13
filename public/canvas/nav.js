@@ -85,7 +85,7 @@ export function initNav(ctx) {
       const sel = ctx.state.selection;
       if (sel && ctx.state.tool === 'select' && sel.component !== focused) { ev.preventDefault(); focus(sel.component, sel.node); }
       else if (sel && focused) ev.preventDefault();
-    } else if (ev.key === 'Escape' && ctx.state.tool === 'select' && !document.querySelector('#new-component:not([hidden])')) {
+    } else if (ev.key === 'Escape' && ctx.state.tool === 'select') {
       if (focused) { ev.preventDefault(); unfocus(); }
       else if (ctx.state.selections.length) { ev.preventDefault(); ctx.select(null); }
     }

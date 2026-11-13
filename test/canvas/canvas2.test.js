@@ -39,9 +39,7 @@ test('WPC-29: text napkin makes in a new component is a system sans, written int
   const { compDir } = tempRepo(['Card']);
   const { b, io, close } = await open(compDir);
   try {
-    await b.eval('document.querySelector("#tool-new").click()');
-    await b.type('#new-name', 'Fresh');
-    await b.eval('document.querySelector("#new-component").requestSubmit()');
+    await b.eval('napkin.tools.createComponent("Fresh")'); // (the palette's New component; the bar's name form is gone since basics pass 1)
     await b.waitFor(`document.querySelector('section.cmp[data-name="Fresh"]')?.dataset.ready === '1' && !!document.querySelector('#sel-node')`);
     await b.eval('document.activeElement.blur()');
     await io.key('t');
@@ -192,9 +190,7 @@ test('WPC-23: new components land in free space (and stay there after a reload),
   const { server, b, io, close } = await open(compDir);
   try {
     for (const name of ['Newa', 'Newb', 'Newc']) {
-      await b.eval('document.querySelector("#tool-new").click()');
-      await b.type('#new-name', name);
-      await b.eval('document.querySelector("#new-component").requestSubmit()');
+      await b.eval(`napkin.tools.createComponent(${JSON.stringify(name)})`);
       await b.waitFor(`document.querySelector('section.cmp[data-name="${name}"]')?.dataset.ready === '1'`);
       await sleep(500);
     }

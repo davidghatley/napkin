@@ -52,6 +52,38 @@
   --nk-cell-line: #d3d7e0; --nk-head-line: #e7e9ee; --nk-kbd: #2b2f37; --nk-shadow-pop: 0 18px 50px -10px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08);
 }
 
+/* ---- chrome tokens (docs/basics/standards.md section 10) ----
+   The one set of values the app chrome is built from: a 4 px space scale, three control heights, one icon size, four type sizes, one border,
+   two radii, one focus ring, two durations. Colour roles use light-dark(), so each is written once and follows the chrome theme
+   (color-scheme is set by the blocks above). Prefixed --nk- so no chrome value can leak into a user's component that reads --bg or --accent. */
+:root {
+  --nk-s1: 4px; --nk-s2: 8px; --nk-s3: 12px; --nk-s4: 16px; --nk-s5: 24px; --nk-s6: 32px;
+  --nk-h-field: 24px;    /* fields, compact buttons, the hit target of a 16 px icon */
+  --nk-h-row: 28px;      /* a layers row */
+  --nk-h-control: 32px;  /* buttons, toolbar buttons */
+  --nk-h-bar: 40px;      /* the top bar */
+  --nk-icon: 16px;
+  --nk-fs-label: 11px; --nk-fs-body: 12px; --nk-fs-title: 13px; --nk-fs-empty: 14px;
+  --nk-lh-tight: 16px; --nk-lh-loose: 20px;
+  --nk-w-regular: 400; --nk-w-strong: 600;
+  --nk-border: 1px solid var(--nk-line);
+  --nk-radius: 4px; --nk-radius-pop: 8px;
+  --nk-ring-width: 2px; --nk-ring-offset: 2px;
+  --nk-motion: 120ms; --nk-motion-panel: 180ms; --nk-ease: cubic-bezier(.2, 0, 0, 1);
+  --nk-shadow-menu: 0 4px 16px rgb(0 0 0 / .18);
+  --nk-left-w: 240px; --nk-right-w: 320px;
+  /* colour roles */
+  --nk-panel: var(--nk-chrome);
+  --nk-ink: var(--nk-text);
+  --nk-ink-muted: light-dark(#5b6371, #a3aab7);  /* 6:1 on the panel, both themes */
+  --nk-hover: light-dark(rgb(28 31 39 / .06), rgb(232 234 240 / .07));
+  --nk-press: light-dark(rgb(28 31 39 / .11), rgb(232 234 240 / .13));
+  --nk-armed: light-dark(rgb(52 89 226 / .12), rgb(123 155 255 / .18));
+  --nk-armed-ink: light-dark(#2c52d2, #a9bfff);  /* icon on --nk-armed: 5:1 and 7:1 */
+  --nk-danger: var(--nk-measure);
+}
+@media (prefers-reduced-motion: reduce) { :root { --nk-motion: 0ms; --nk-motion-panel: 0ms; } }
+
 /* Cell isolation (decision 0012): chrome rules never reach a component. A cell must look as the component does in a plain page with no app CSS,
    so every element rule below is scoped out of .mount (and the ghost/preview .preview-inner), and .mount itself resets inheritance (tokens are custom properties, which still flow in). */
 *:where(:not(:is(.mount, .preview-inner) *)) { box-sizing: border-box; }
@@ -61,83 +93,132 @@ body {
   margin: 0; height: 100vh; overflow: hidden;
   font: 12px/1.45 var(--nk-sans); font-feature-settings: "cv11", "ss03"; letter-spacing: -.003em;
   color: var(--nk-text); background: var(--nk-bg);
-  display: grid; grid-template-columns: 248px minmax(0, 1fr) 320px; grid-template-rows: 44px minmax(0, 1fr) auto 26px;
+  display: grid; grid-template-columns: var(--nk-left-w) minmax(0, 1fr) var(--nk-right-w); grid-template-rows: var(--nk-h-bar) minmax(0, 1fr) auto 26px;
   grid-template-areas: "top top top" "side stage insp" "side dock insp" "status status status";
   -webkit-font-smoothing: antialiased;
 }
 button:where(:not(:is(.mount, .preview-inner) *)), input:where(:not(:is(.mount, .preview-inner) *)), select:where(:not(:is(.mount, .preview-inner) *)) { font: inherit; color: inherit; }
 button:where(:not(:is(.mount, .preview-inner) *)) { cursor: pointer; }
-:focus-visible:where(:not(:is(.mount, .preview-inner) *)) { outline: 2px solid var(--nk-accent); outline-offset: 1px; }
+:focus-visible:where(:not(:is(.mount, .preview-inner) *)) { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: var(--nk-ring-offset); }
 kbd:where(:not(:is(.mount, .preview-inner) *)) { font: 500 10px/1 var(--nk-mono); padding: 2px 4px; border-radius: 4px; background: var(--nk-kbd); color: var(--nk-text-2); border: 1px solid var(--nk-line); }
 code:where(:not(:is(.mount, .preview-inner) *)) { font-family: var(--nk-mono); }
 .skip { position: absolute; left: 8px; top: -40px; z-index: 100; padding: 6px 10px; background: var(--nk-chrome); color: var(--nk-text); border-radius: 6px; }
 .skip:focus { top: 8px; }
 
-/* ---- top bar ---- */
-#topbar { grid-area: top; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--nk-chrome); border-bottom: 1px solid var(--nk-line); min-width: 0; }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 0; width: 224px; }
-.brand h1 { margin: 0; font: 650 13px var(--nk-sans); letter-spacing: -.01em; }
-#folder { color: var(--nk-text-3); font: 11px var(--nk-mono); padding: 2px 6px; border-radius: 5px; background: var(--nk-chrome-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#toolbar { display: flex; align-items: center; gap: 2px; margin: 0 auto; min-width: 532px; min-height: 34px; /* reserved, so it does not jump when tools.js fills it */ padding: 3px; background: var(--nk-chrome-2); border-radius: 9px; border: 1px solid var(--nk-line); }
-#toolbar button { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--nk-text-2); font: 500 12px var(--nk-sans); }
-#toolbar button:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
-#toolbar button[aria-pressed="true"] { background: var(--nk-accent); color: var(--nk-on-accent); }
-#toolbar button svg { flex: none; }
-#toolbar kbd { margin: 0; background: transparent; border-color: transparent; color: inherit; opacity: .6; padding: 0; }
-#toolbar #tool-new { margin-left: 4px; border-left: 1px solid var(--nk-line); border-radius: 0 6px 6px 0; padding-left: 10px; }
-#new-component { display: flex; gap: 6px; align-items: center; margin-left: 6px; }
-#new-component[hidden] { display: none; }
-#new-component label { display: flex; align-items: center; gap: 6px; color: var(--nk-text-2); }
-#new-component input { height: 24px; width: 120px; padding: 0 8px; border: 1px solid var(--nk-line-2); border-radius: 6px; background: var(--nk-chrome); }
-#new-component button[type=submit] { background: var(--nk-accent); color: var(--nk-on-accent); }
-#new-error { color: var(--nk-measure); font: 11px var(--nk-mono); }
-.top-right { display: flex; align-items: center; gap: 10px; min-width: 0; }
-#quick-open { display: inline-flex; align-items: center; gap: 8px; height: 28px; width: 188px; padding: 0 8px; border: 1px solid var(--nk-line); border-radius: 8px; background: var(--nk-chrome-2); color: var(--nk-text-3); }
-#quick-open span { flex: 1; text-align: left; }
-#quick-open:hover { border-color: var(--nk-line-2); color: var(--nk-text-2); }
-.meta { color: var(--nk-text-3); font-size: 11px; white-space: nowrap; display: inline-flex; gap: 4px; width: 84px; }
-.slot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; width: 190px; overflow: hidden; }
-.meta code { color: var(--nk-text-2); display: inline-block; min-width: 4ch; }
-#agent-status { font: 500 11px var(--nk-sans); padding: 3px 9px; border-radius: 999px; background: var(--nk-accent-soft); color: var(--nk-accent-text); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
-#agent-status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--nk-ok); }
-#agent-status[hidden] { display: none; }
-#presence { font: 500 11px var(--nk-sans); color: var(--nk-ok); white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
-#presence:empty { display: none; }
-#theme-toggle { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--nk-line); border-radius: 8px; background: transparent; color: var(--nk-text-2); }
-#theme-toggle:hover { background: var(--nk-chrome-3); }
+/* ---- the shell: top bar and left panel (basics pass 1). Built only from the chrome tokens above. ---- */
 
-/* ---- left: layers and changes ---- */
-#sidebar { grid-area: side; display: flex; flex-direction: column; min-height: 0; background: var(--nk-chrome); border-right: 1px solid var(--nk-line); }
-.pane-title { margin: 0; padding: 12px 14px 8px; font: 600 11px var(--nk-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--nk-text-3); }
-#layers { flex: 1; min-height: 0; overflow: auto; position: relative; padding: 0 6px 8px; outline-offset: -2px; }
-#layers .empty { margin: 8px; color: var(--nk-text-3); }
-.lrow { display: flex; align-items: center; gap: 4px; height: 26px; padding: 0 8px 0 calc(var(--nk-d) * 14px + 4px); border-radius: 6px; color: var(--nk-text-2); cursor: default; user-select: none; white-space: nowrap; }
-.lrow:hover { background: var(--nk-chrome-2); }
-.lrow:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: -2px; }
-.lrow .twirl { width: 12px; flex: none; text-align: center; font-size: 9px; color: var(--nk-text-3); cursor: pointer; }
-.lrow .licon { display: grid; place-items: center; width: 16px; flex: none; color: var(--nk-text-3); }
-.lrow .lname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 450; }
-.lrow .ltag { font: 10.5px var(--nk-mono); color: var(--nk-text-3); }
-.lcomp { color: var(--nk-text); font-weight: 600; margin-top: 4px; }
-.lcomp .licon { color: var(--nk-accent-text); }
-.lcomp.has-sel .lname { color: var(--nk-accent-text); }
-.lrow.hot:not(.primary) { background: var(--nk-chrome-3); color: var(--nk-text); }
-.lrow.selected { background: var(--nk-accent-soft); color: var(--nk-text); }
-.lrow.selected .licon { color: var(--nk-accent-text); }
-.lrow.primary { background: var(--nk-accent); color: var(--nk-on-accent); }
-.lrow.primary .licon, .lrow.primary .ltag, .lrow.primary .twirl { color: var(--nk-on-accent); }
-.lrow.dragging { opacity: .45; }
-.lrow.drop-into { outline: 2px solid var(--nk-accent); outline-offset: -2px; background: var(--nk-accent-soft); }
-.ldrop { position: absolute; right: 8px; height: 2px; background: var(--nk-accent); border-radius: 2px; pointer-events: none; z-index: 3; }
+/* An icon button: 32 px square, one 16 px icon drawn on a 16 px grid with a 1.5 px stroke. The five states of standards section 1. */
+.ico { width: var(--nk-icon); height: var(--nk-icon); flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn, #toolbar button {
+  display: inline-grid; place-items: center; flex: none; width: var(--nk-h-control); height: var(--nk-h-control); padding: 0;
+  border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-ink-muted);
+  transition: background-color var(--nk-motion) var(--nk-ease), color var(--nk-motion) var(--nk-ease);
+}
+.icon-btn:hover, #toolbar button:hover { background: var(--nk-hover); color: var(--nk-ink); }
+.icon-btn:active, #toolbar button:active { background: var(--nk-press); color: var(--nk-ink); }
+#toolbar button[aria-pressed="true"] { background: var(--nk-armed); color: var(--nk-armed-ink); }
+.icon-btn:disabled, #toolbar button:disabled { opacity: .4; background: transparent; color: var(--nk-ink-muted); cursor: default; }
+.icon-btn[hidden] { display: none; }
+:is(#topbar, #sidebar) :focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: calc(var(--nk-ring-offset) * -1); }
+
+/* The tooltip: name and key, after 500 ms of hover, at once on keyboard focus (shell.js). */
+#tip { position: fixed; z-index: 90; display: flex; align-items: center; gap: var(--nk-s2); padding: var(--nk-s1) var(--nk-s2); border-radius: var(--nk-radius);
+  background: var(--nk-ink); color: var(--nk-panel); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); white-space: nowrap; pointer-events: none; }
+#tip[hidden] { display: none; }
+#tip kbd { padding: 0; border: 0; background: none; color: inherit; opacity: .7; font: inherit; }
+
+/* ---- top bar: brand and folder | tools | jump, status, theme. Three zones; the tools sit on the window's centre line. ---- */
+#topbar {
+  grid-area: top; display: grid; grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr); align-items: center; column-gap: var(--nk-s4);
+  height: var(--nk-h-bar); min-width: 0; padding: 0 var(--nk-s1); /* even sides, so the tools sit on the window's centre line */ background: var(--nk-panel); border-bottom: var(--nk-border);
+}
+.bar-left { display: flex; align-items: center; gap: var(--nk-s2); width: calc(var(--nk-left-w) - 2 * var(--nk-s1)); min-width: 0; padding-left: var(--nk-s2); }
+.brand { display: flex; align-items: center; gap: var(--nk-s2); flex: 1; min-width: 0; margin: 0; font: var(--nk-w-strong) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); color: var(--nk-ink); }
+.brand .glyph { flex: none; color: var(--nk-ink); }
+#folder { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#toolbar { display: flex; align-items: center; gap: var(--nk-s1); justify-self: center; min-width: calc(4 * var(--nk-h-control) + 3 * var(--nk-s1)); } /* sized before tools.js fills it: the bar never shifts on load */
+.top-right { display: flex; align-items: center; justify-content: flex-end; gap: var(--nk-s2); min-width: 0; }
+#quick-open {
+  display: inline-flex; align-items: center; gap: var(--nk-s2); height: var(--nk-h-control); padding: 0 var(--nk-s2); margin-right: var(--nk-s2);
+  border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans);
+  transition: background-color var(--nk-motion) var(--nk-ease), color var(--nk-motion) var(--nk-ease);
+}
+#quick-open:hover { background: var(--nk-hover); color: var(--nk-ink); }
+#quick-open:active { background: var(--nk-press); }
+#quick-open kbd { padding: 0; border: 0; background: none; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); }
+.meta { display: inline-flex; align-items: baseline; gap: var(--nk-s1); color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); white-space: nowrap; }
+.meta[hidden] { display: none; }
+.meta code { display: inline-block; min-width: 9ch; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-mono); }
+.slot { display: flex; align-items: center; justify-content: flex-start; gap: var(--nk-s2); flex: 0 1 calc(5 * var(--nk-h-control)); min-width: var(--nk-h-control); }
+/* presence has a fixed place: people arriving fill it left to right, so Jump to... and the revision never move */
+#avatars { max-width: 100%; overflow: hidden; }
+.top-right .meta[hidden] { display: inline-flex; visibility: hidden; } /* nothing selected: the revision keeps its place, so Jump to... never moves */
+#token-theme-label { display: inline-flex; align-items: center; gap: var(--nk-s2); color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); white-space: nowrap; }
+#token-theme-label[hidden] { display: none; }
+#token-theme { height: var(--nk-h-field); padding: 0 var(--nk-s1); border: var(--nk-border); border-radius: var(--nk-radius); background: var(--nk-panel); color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-body) var(--nk-sans); }
+
+/* ---- left panel: one header, the layers tree. Collapses (Ctrl+\ or the bar button) and the canvas takes the width. ---- */
+body[data-left="closed"] { grid-template-columns: 0 minmax(0, 1fr) var(--nk-right-w); }
+body[data-left="closed"] #sidebar { visibility: hidden; border-right-width: 0; }
+#sidebar { grid-area: side; display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--nk-panel); border-right: var(--nk-border); }
+.side-head { flex: none; display: flex; align-items: center; justify-content: space-between; gap: var(--nk-s2); height: var(--nk-h-bar); padding: 0 var(--nk-s1) 0 var(--nk-s3); }
+.side-head h2 { margin: 0; font: var(--nk-w-strong) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); color: var(--nk-ink); }
+#layers { flex: 1; min-height: 0; overflow: auto; position: relative; padding: 0 var(--nk-s2) var(--nk-s2); }
+#layers:focus-visible { outline-offset: calc(var(--nk-ring-width) * -1); }
+#layers[hidden] { display: none; }
+#layers .empty { margin: var(--nk-s1) var(--nk-s1); color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans); }
+
+/* A row: indent (12 px a level) | disclosure | type glyph | name | hide, more. */
+.lrow {
+  position: relative; display: flex; align-items: center; gap: var(--nk-s1); height: var(--nk-h-row); padding: 0 var(--nk-s1) 0 calc(var(--nk-d, 0) * var(--nk-s3));
+  border-radius: var(--nk-radius); color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans);
+  cursor: default; user-select: none; white-space: nowrap; transition: background-color var(--nk-motion) var(--nk-ease);
+}
+.lrow .twirl { display: grid; place-items: center; flex: none; width: var(--nk-icon); height: var(--nk-icon); border-radius: var(--nk-radius); color: var(--nk-ink-muted); cursor: pointer; }
+.lrow .twirl:empty { cursor: default; }
+.lrow .twirl svg { width: var(--nk-icon); height: var(--nk-icon); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--nk-motion) var(--nk-ease); }
+.lrow[aria-expanded="false"] .twirl svg { transform: rotate(-90deg); }
+.lrow .twirl:hover:not(:empty) { color: var(--nk-ink); background: var(--nk-hover); }
+.lrow .licon { display: grid; place-items: center; flex: none; width: var(--nk-icon); height: var(--nk-icon); color: var(--nk-ink-muted); }
+.lrow .licon svg { width: var(--nk-icon); height: var(--nk-icon); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.lrow .lname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.lrow .ltag, .lrow .lnote { flex: none; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); }
+.lnode .ltag { display: none; }
+.lnode:hover .ltag, .lnode:focus-visible .ltag { display: inline; }
+.lcomp .lname { font-weight: var(--nk-w-strong); } /* a file is a top-level frame: bold, as in Figma */
+.lrow .leye, .lrow .lmore { display: none; place-items: center; flex: none; width: var(--nk-h-field); height: var(--nk-h-field); padding: 0; border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-ink-muted); }
+.lrow .leye svg, .lrow .lmore svg { width: var(--nk-icon); height: var(--nk-icon); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.lrow .lmore svg { fill: currentColor; stroke: none; }
+.lrow:hover :is(.leye, .lmore), .lrow:focus-within :is(.leye, .lmore), .lrow.primary .lmore, .lrow.hidden-node .leye { display: grid; }
+.lrow :is(.leye, .lmore):hover { background: var(--nk-hover); color: var(--nk-ink); }
+.lrow :is(.leye, .lmore):active { background: var(--nk-press); }
+.lrow:hover, .lrow.hot { background: var(--nk-hover); }
+.lrow.selected, .lrow.primary, .lcomp.has-sel[aria-selected="true"] { background: var(--nk-armed); }
+.lrow:is(.selected, .primary) :is(.licon, .twirl) { color: var(--nk-armed-ink); }
+.lrow.anc .licon { color: var(--nk-ink); }
+.lrow:focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: calc(var(--nk-ring-width) * -1); }
+.lrow.hidden-node :is(.lname, .licon) { opacity: .5; }
+.lskip { padding-left: var(--nk-s5); color: var(--nk-ink-muted); }
+.lrow.dragging { opacity: .5; }
+.lrow.drop-into { background: var(--nk-armed); box-shadow: inset 0 0 0 var(--nk-ring-width) var(--nk-accent); }
+.ldrop { position: absolute; right: var(--nk-s2); height: 2px; background: var(--nk-accent); pointer-events: none; z-index: 3; }
 .ldrop[hidden] { display: none; }
-.lrename { flex: 1; min-width: 0; height: 20px; padding: 0 5px; border: 1px solid var(--nk-accent); border-radius: 4px; background: var(--nk-chrome); color: var(--nk-text); font: 12px var(--nk-mono); }
-#changes { flex: none; height: 41px; border-top: 1px solid var(--nk-line); display: flex; flex-direction: column; }
-#changes[open] { height: 190px; }
-#changes summary { padding: 9px 14px; font: 600 11px var(--nk-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--nk-text-3); cursor: pointer; }
-#log { flex: 1; min-height: 0; margin: 0; padding: 0 14px 10px; list-style: none; font: 10.5px/1.5 var(--nk-mono); overflow: auto; color: var(--nk-text-2); }
-#log li:empty { border-color: transparent; }
-#log li { height: 21px; padding: 2px 0; border-top: 1px solid var(--nk-line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.by-agent { color: var(--nk-ok); } .by-canvas { color: var(--nk-accent-text); } .by-file { color: var(--nk-warn); }
+.lrename { flex: 1; min-width: 0; height: var(--nk-h-field); padding: 0 var(--nk-s1); border: 1px solid var(--nk-accent); border-radius: var(--nk-radius); background: var(--nk-panel); color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-body) var(--nk-sans); }
+#lmenu { position: fixed; z-index: 60; width: 168px; padding: var(--nk-s1); background: var(--nk-panel); border: var(--nk-border); border-radius: var(--nk-radius-pop); box-shadow: var(--nk-shadow-menu); }
+#lmenu[hidden] { display: none; }
+#lmenu button { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; width: 100%; min-height: var(--nk-h-row); padding: 0 var(--nk-s2); border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); text-align: left; }
+#lmenu button:hover:not(:disabled), #lmenu button:focus-visible { background: var(--nk-hover); outline-offset: calc(var(--nk-ring-width) * -1); }
+#lmenu button:disabled { color: var(--nk-ink-muted); cursor: not-allowed; }
+#lmenu kbd { padding: 0; border: 0; background: none; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label) var(--nk-sans); }
+#lmenu small { display: block; width: 100%; color: var(--nk-ink-muted); font-size: var(--nk-fs-label); line-height: var(--nk-lh-tight); padding-bottom: var(--nk-s1); }
+
+/* The folder's rules and variables: off the panel's face, opened from the palette ("Show styles"); the header's X goes back to layers. */
+#styles { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#styles[hidden] { display: none; }
+
+/* The top bar at 720 to 1100 px: the jump field gives up its words, then the revision goes. Nothing wraps. */
+@media (max-width: 1100px) { #quick-open span, #quick-open kbd { display: none; } #quick-open { width: var(--nk-h-control); padding: 0; justify-content: center; margin-right: 0; } }
+@media (max-width: 860px) { .top-right .meta, .top-right .meta[hidden] { display: none; } }
 
 /* ---- the canvas ---- */
 #stage {
@@ -440,29 +521,6 @@ details.sec > summary { padding: 8px 14px 6px; }
 .prop .x:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
 .adv .fbox input { font-family: var(--nk-mono); font-size: 11px; }
 
-/* ---- layers, round 2: fixed columns, calm selection, quiet details ---- */
-.lrow { display: grid; grid-template-columns: 14px 16px minmax(0, 1fr) auto 22px; gap: 4px; align-items: center; height: 26px; padding: 0 4px 0 calc(var(--nk-d) * 14px + 2px); border-radius: 4px; }
-.lrow .twirl { width: 14px; }
-.lrow .ltag { display: none; font: 10.5px var(--nk-mono); color: var(--nk-text-3); }
-.lrow:hover .ltag, .lrow.primary .ltag { display: inline; }
-.lrow .lmore { display: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--nk-text-2); font: 600 13px/1 var(--nk-sans); letter-spacing: 1px; }
-.lrow:hover .lmore, .lrow:focus-within .lmore, .lrow:focus-visible .lmore, .lrow.primary .lmore { display: block; }
-.lrow .lmore:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
-.lrow:hover { background: var(--nk-chrome-2); }
-.lrow.hot:not(.primary) { background: var(--nk-chrome-2); }
-.lrow.selected { background: color-mix(in srgb, var(--nk-accent) 10%, transparent); color: var(--nk-text); box-shadow: inset 2px 0 0 var(--nk-accent); }
-.lrow.primary { background: color-mix(in srgb, var(--nk-accent) 17%, transparent); color: var(--nk-text); box-shadow: inset 2px 0 0 var(--nk-accent); }
-.lrow.primary .licon, .lrow.primary .twirl { color: var(--nk-accent-text); }
-.lrow.primary .ltag { color: var(--nk-text-2); }
-.lrow.anc .lname { color: var(--nk-accent-text); }
-.lrow.anc .twirl { color: var(--nk-accent-text); }
-.lcomp.has-sel .licon { color: var(--nk-accent-text); }
-#lmenu { position: fixed; z-index: 60; width: 150px; padding: 4px; background: var(--nk-chrome); border-radius: 8px; box-shadow: var(--nk-shadow-pop); }
-#lmenu[hidden] { display: none; }
-#lmenu button { display: flex; width: 100%; justify-content: space-between; align-items: center; height: 26px; padding: 0 8px; border: 0; border-radius: 5px; background: transparent; color: var(--nk-text); font: 12px var(--nk-sans); text-align: left; }
-#lmenu button:hover:not(:disabled), #lmenu button:focus-visible { background: var(--nk-accent-soft); }
-#lmenu button:disabled { color: var(--nk-text-3); cursor: not-allowed; }
-#lmenu kbd { background: transparent; border: 0; }
 .seg.small button { flex: 1 1 0; min-width: 0; padding: 0 2px; font-size: 10.5px; }
 
 .axes-strip { display: none; font: 500 11px/1 var(--nk-mono); color: var(--nk-text-2); }
@@ -470,28 +528,6 @@ details.sec > summary { padding: 8px 14px 6px; }
 #stage[data-hdr="strip"] .colhead, #stage[data-hdr="strip"] .rowhead, #stage[data-hdr="strip"] .group-title { visibility: hidden; }
 #hint { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); z-index: 8; margin: 0; padding: 6px 12px; border-radius: 8px; background: var(--nk-chrome); border: 1px solid var(--nk-line-2); box-shadow: var(--nk-shadow-pop); color: var(--nk-text); font-size: 12px; }
 #hint:empty { display: none; }
-.lcomp .ltag { display: inline; }
-
-/* ---- layers, round 3 ---- */
-.lrow { grid-template-columns: 18px 16px minmax(0, 1fr) auto 22px 22px; height: 28px; position: relative; }
-.lrow .twirl { width: 18px; height: 22px; display: grid; place-items: center; border-radius: 4px; font-size: 10px; }
-.lrow .twirl:hover { background: var(--nk-chrome-3); }
-.lrow::before { content: ""; position: absolute; left: 11px; top: 0; bottom: 0; width: calc(var(--nk-d) * 14px); pointer-events: none; background: repeating-linear-gradient(to right, var(--nk-line) 0 1px, transparent 1px 14px); opacity: .8; }
-.lcomp::before { display: none; }
-.lrow.primary .ltag { display: none; }
-.lrow:hover .ltag { display: inline; }
-.lgrip { position: absolute; left: -1px; top: 50%; transform: translateY(-50%); display: none; font-size: 10px; color: var(--nk-text-3); cursor: grab; letter-spacing: -2px; }
-.lnode:hover .lgrip { display: block; }
-.leye { width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--nk-text-2); display: none; place-items: center; }
-.lrow:hover .leye, .lrow:focus-within .leye, .lrow.hidden-node .leye { display: grid; }
-.lrow .leye:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
-.lrow.hidden-node .lname, .lrow.hidden-node .licon { opacity: .5; text-decoration: line-through; text-decoration-color: var(--nk-text-3); }
-.lrow.hidden-node .leye { color: var(--nk-warn); }
-.lrow .lmore { grid-column: 6; }
-.lrow .leye { grid-column: 5; }
-.lcomp { grid-template-columns: 18px 16px minmax(0, 1fr) auto; }
-#lmenu small { display: block; font-size: 10.5px; color: var(--nk-text-3); }
-#lmenu button { height: auto; min-height: 26px; padding-top: 3px; padding-bottom: 3px; flex-wrap: wrap; }
 
 /* ---- panel, round 3: hierarchy, one colour field, one unit convention ---- */
 :root { --nk-swatch-line: rgba(0, 0, 0, .3); }
@@ -565,22 +601,7 @@ details.sec { margin-top: 2px; }
 #scan-progress { position:absolute; z-index:2; top:16px; left:24px; padding:8px 12px; border-radius:8px; background:var(--nk-chrome); color:var(--nk-text-2); }
 #scan-progress:empty { display:none; }
 body[data-empty="1"] #statusbar .hints { visibility:hidden; }
-#changes { position:relative; }
-#changes-placeholder { position:absolute; top:36px; left:14px; margin:0; color:var(--nk-text-3); pointer-events:none; }
-#topbar { display:grid; grid-template-columns:236px minmax(0,1fr) 280px; gap:0; }
-#toolbar { grid-column:2; grid-row:1; margin:0 16px; justify-self:start; min-width:0; }
-#quick-open { grid-column:2; grid-row:1; justify-self:end; margin-right:16px; }
-.brand { grid-column:1; grid-row:1; }
-.top-right { grid-column:3; grid-row:1; gap:8px; padding-left:12px; }
-.top-right .slot { width:140px; }
 
-.meta[hidden] { display:inline-flex; visibility:hidden; }
-
-@media (max-width:1320px) {
-  #toolbar kbd { display:none; }
-  #quick-open { width:154px; }
-}
-#topbar:has(#new-component:not([hidden])) #quick-open { visibility:hidden; }
 .cmp-title h3 { flex-shrink:0; max-width:calc(var(--nk-w) - 96px); }
 .cmp .badge:not([hidden]) { flex-shrink:1; min-width:60px; }
 .frame .build-error, .mount .error { color:#9f2633; }
@@ -588,9 +609,6 @@ body[data-empty="1"] #statusbar .hints { visibility:hidden; }
 /* WPC-15: at 1280 px and narrower the tools collapse to icons (the tooltip and aria-label carry the name) and the status-bar hints give up
    their last entries one by one, so the top bar and status bar never overlap or truncate. */
 @media (max-width: 1360px) {
-  #toolbar { min-width: 0; }
-  #toolbar .tl, #toolbar kbd { display: none; }
-  #toolbar button { padding: 0 9px; }
   #statusbar .hints .h:nth-child(n+5) { display: none; }
 }
 @media (max-width: 1180px) { #statusbar .hints .h:nth-child(n+3) { display: none; } }

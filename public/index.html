@@ -26,21 +26,24 @@
 <body>
   <a class="skip" href="#stage">Skip to the canvas</a>
   <header id="topbar">
-    <div class="brand"><svg viewBox="0 0 20 20" width="18" height="18" shape-rendering="crispEdges" aria-hidden="true" fill="currentColor" style="color:var(--text)"><rect x="0" y="0" width="4" height="4"/><rect x="4" y="0" width="4" height="4"/><rect x="8" y="0" width="4" height="4"/><rect x="12" y="0" width="4" height="4"/><rect x="16" y="0" width="4" height="4"/><rect x="0" y="4" width="4" height="4"/><rect x="4" y="4" width="4" height="4"/><rect x="8" y="4" width="4" height="4"/><rect x="12" y="4" width="4" height="4"/><rect x="0" y="8" width="4" height="4"/><rect x="4" y="8" width="4" height="4"/><rect x="8" y="8" width="4" height="4"/><rect x="0" y="12" width="4" height="4"/><rect x="4" y="12" width="4" height="4"/><rect x="0" y="16" width="4" height="4"/></svg><h1>napkin</h1><span id="folder">components</span></div>
+    <div class="bar-left">
+      <h1 class="brand"><svg class="glyph" viewBox="0 0 20 20" width="15" height="15" shape-rendering="crispEdges" aria-hidden="true" fill="currentColor"><path d="M0 0h20v4H0zM0 4h16v4H0zM0 8h12v4H0zM0 12h8v4H0zM0 16h4v4H0z"/></svg><span class="sr-only">napkin: </span><span id="folder">components</span></h1>
+      <button type="button" class="icon-btn" id="panel-toggle" aria-controls="sidebar" aria-expanded="true" aria-keyshortcuts="Control+Backslash" aria-label="Layers panel" data-tip="Hide layers" data-key="Ctrl \"><svg class="ico" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.25" y="2.75" width="11.5" height="10.5" rx="1.5"/><path d="M6.25 2.75v10.5"/></svg></button>
+    </div>
     <div id="toolbar"></div>
-    <button type="button" id="quick-open" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3.5 3.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>Jump to…</span><kbd>⌘K</kbd></button>
     <div class="top-right">
-
-      <span class="meta">revision <code id="revision">…</code></span>
+      <button type="button" id="quick-open" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"><svg class="ico" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.25"/><path d="m10.25 10.25 3 3"/></svg><span>Jump to…</span><kbd>Ctrl K</kbd></button>
+      <span class="meta" title="The selected file’s revision">rev <code id="revision">…</code></span>
       <span class="slot"><span id="agent-status" hidden>agent connected</span><span id="presence" role="status" aria-live="polite"></span></span>
-      <button type="button" id="theme-toggle" aria-label="Switch chrome theme" title="Light / dark chrome"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path d="M8 1.5a6.5 6.5 0 1 0 0 13z" fill="currentColor"/><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg></button>
+      <button type="button" class="icon-btn" id="theme-toggle" aria-label="Switch chrome theme" data-tip="Light or dark chrome"><svg class="ico" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="5.25"/><path d="M8 2.75a5.25 5.25 0 0 0 0 10.5z" fill="currentColor" stroke="none"/></svg></button>
     </div>
   </header>
-  <nav id="sidebar" aria-label="Layers and changes">
-    <h2 class="pane-title sr-only">Layers</h2>
-    <div class="side-tabs" role="tablist" aria-label="Sidebar"><button type="button" role="tab" id="tab-layers" aria-selected="true" aria-controls="layers">Layers</button><button type="button" role="tab" id="tab-styles" aria-selected="false" aria-controls="styles" tabindex="-1">Styles</button></div>
+  <nav id="sidebar" aria-labelledby="side-title">
+    <div class="side-head">
+      <h2 id="side-title">Layers</h2>
+      <button type="button" class="icon-btn" id="side-back" hidden aria-label="Back to layers" data-tip="Back to layers" data-key="Esc"><svg class="ico" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.75 3.75l8.5 8.5M12.25 3.75l-8.5 8.5"/></svg></button>
+    </div>
     <div id="layers" role="tree" aria-label="Layers"></div>
-    <details id="changes"><summary>Changes</summary><p id="changes-placeholder" class="empty">No changes yet.</p><ul id="log" aria-live="polite"></ul></details>
   </nav>
   <main id="stage" aria-label="Canvas" tabindex="-1">
     <p id="scan-progress" role="status"></p>

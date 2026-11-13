@@ -57,10 +57,6 @@
   .token-row { grid-template-columns: minmax(130px, 1fr) repeat(var(--nk-token-mode-count), minmax(100px, 1fr)); gap: 10px; }
   .token-usage { grid-column: 1 / -1; }
 }
-/* Keep the preview label and chrome switch legible beside hash revisions. */
-#token-theme-label { flex: none; white-space: nowrap; }
-.top-right .meta:has(#revision) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#theme-toggle { flex: none; }
 
 /* WPC-11: headers, group chips and captions inside a frame that takes the theme's surface follow the theme's ink, not the fixed light-grey ones */
 #world[data-frame-theme="1"] .group-title, #world[data-frame-theme="1"] .colhead, #world[data-frame-theme="1"] .rowhead, #world[data-frame-theme="1"] .corner,

@@ -50,7 +50,7 @@ test('FEEL-03 axe-core: no serious or critical violations in light or dark chrom
   } finally { await browser.close(); await server.stop(); }
 });
 
-test('FEEL-03 axe-core also passes on an empty workspace, the new-component form, the Advanced list and a rename in progress', { timeout: 60000 }, async (t) => {
+test('FEEL-03 axe-core also passes on an empty workspace, the palette offering New component, the Advanced list and a rename in progress', { timeout: 60000 }, async (t) => {
   const server = await startServer(mkdtempSync(join(tmpdir(), 'napkin-empty-')));
   const browser = await launchChromium({ width: 1440, height: 900 });
   const io = input(browser);
@@ -64,10 +64,9 @@ test('FEEL-03 axe-core also passes on an empty workspace, the new-component form
       assert.deepEqual(bad, [], `${label}: ${JSON.stringify(bad, null, 1)}`);
     };
     await check('empty workspace');
-    await io.key('n');
-    await browser.waitFor(`document.activeElement?.id === 'new-name'`);
-    await check('new-component form open');
-    await browser.send('Input.insertText', { text: 'Badge' });
+    await browser.eval(`napkin.quick.prefill('New component ')`);
+    await browser.send('Input.insertText', { text: 'Badge' }); await sleep(300);
+    await check('palette offering New component Badge');
     await io.key('Enter');
     await browser.waitFor(`document.querySelector('section[data-name="Badge"]')?.dataset.ready === '1' && napkin.state.selection`);
     await browser.eval(`document.querySelector('details.adv > summary').click()`);

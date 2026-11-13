@@ -157,7 +157,7 @@ test('11. a variable with a theme definition shows both and writes either or bot
 test('12. layers: nothing blank over the tree, the selected row in view, other files closed, runs named', { timeout: 60000 }, async () => {
   const a = await open({ files: { ...FILES, 'Grid/preview.html': `<!doctype html><html><body><div class="grid">${'<i></i>'.repeat(16)}</div><svg><path d="M0 0"/><path d="M1 1"/></svg></body></html>` } });
   try {
-    assert.equal(await a.q(`getComputedStyle(document.querySelector('#log')).display === 'none' || !document.querySelector('#changes').open`), true);
+    assert.equal(await a.q(`!document.querySelector('#log') && !document.querySelector('#changes')`), true, 'no change log over the tree (on hold since basics pass 1)');
     const tag = await a.node(NOTE, (n) => n.attrs.class === 'ss-note__tag');
     await a.select(NOTE, tag.node); await sleep(150);
     const g = 'Grid/preview.html';

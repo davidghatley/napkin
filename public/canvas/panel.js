@@ -208,7 +208,7 @@ export function renderPanel(ctx) {
   if (!node) {
     el.innerHTML = `<div class="empty-panel"><svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="7" y="9" width="34" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 4"/><path d="M19 20l11 5-5 2-2 5z" fill="currentColor"/></svg>
       <h2>Nothing selected</h2><p class="hint">Click a layer or an element on the canvas. Shift-click or drag a box to select several.</p>
-      <dl class="keys"><dt><kbd>⌘K</kbd></dt><dd>Jump to anything</dd><dt><kbd>Enter</kbd></dt><dd>Focus a component</dd><dt><kbd>Alt+I</kbd></dt><dd>Jump to the inspector</dd><dt><kbd>⌘K</kbd></dt><dd>…then type a property: Radius, Fill, Gap</dd><dt><kbd>⇧1</kbd></dt><dd>Fit everything</dd><dt><kbd>N</kbd></dt><dd>New component</dd><dt><kbd>Alt</kbd></dt><dd>Measure to hovered</dd></dl></div>`;
+      <dl class="keys"><dt><kbd>⌘K</kbd></dt><dd>Jump to anything</dd><dt><kbd>Enter</kbd></dt><dd>Focus a component</dd><dt><kbd>Alt+I</kbd></dt><dd>Jump to the inspector</dd><dt><kbd>⌘K</kbd></dt><dd>…then type a property: Radius, Fill, Gap</dd><dt><kbd>⇧1</kbd></dt><dd>Fit everything</dd><dt><kbd>Alt</kbd></dt><dd>Measure to hovered</dd></dl></div>`;
     return;
   }
   const selKey = `${sel.component}|${JSON.stringify(sel.variant)}`;

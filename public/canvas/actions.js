@@ -18,14 +18,15 @@ export const ACTIONS = [
   action('pinch', 'Zoom at cursor', 'Ctrl/Cmd + wheel · pinch', [], []),
   action('focus', 'Focus selected component', 'Enter', ['Enter'], refs('nav', 'keydown'), (c) => { const s = c.state.selection; if (s) c.nav.focus(s.component, s.node); }),
   action('leave', 'Leave focus / clear selection', 'Escape', ['Escape'], refs('nav', 'keydown'), (c) => c.nav.unfocus()),
-  action('new', 'New component', 'N', ['N'], refs('tools', 'keydown'), () => key('n'), 'create'),
   action('frame', 'Frame tool', 'F', ['F'], refs('tools', 'keydown'), (c) => c.tools?.use('frame'), 'draw'),
   action('text', 'Text tool', 'T', ['T'], refs('tools', 'keydown'), (c) => c.tools?.use('text'), 'draw'),
-  action('image', 'Image slot tool', 'I', ['I'], refs('tools', 'keydown'), (c) => c.tools?.use('image'), 'draw'),
+  action('image', 'Image tool', 'I', ['I'], refs('tools', 'keydown'), (c) => c.tools?.use('image'), 'draw'),
   action('select', 'Select tool', 'V', ['V'], refs('tools', 'keydown'), (c) => c.tools?.use('select'), 'draw'),
   action('delete', 'Delete selection', 'Delete / Backspace', ['Delete', 'Backspace'], refs('tools', 'keydown'), () => key('Delete'), 'edit'),
   action('reorder', 'Reorder selection', 'Alt + ↑ / ↓', ['ArrowUp', 'ArrowDown'], refs('tools', 'keydown')),
-  action('cancel', 'Cancel drawing, new component or text edit', 'Escape', ['Escape'], refs('tools', 'keydown')),
+  action('cancel', 'Cancel drawing or text edit', 'Escape', ['Escape'], refs('tools', 'keydown')),
+  action('toolbar-rove', 'Tools: move between them / arm one', '← → · Home · End · Enter or Space', ['ArrowLeft', 'ArrowRight', 'Home', 'End'], refs('tools', 'keydown')),
+  action('tooltip', 'Hide a tooltip', 'Escape', ['Escape'], refs('shell', 'keydown')),
   action('text-edit', 'Finish text edit', 'Enter', ['Enter'], refs('tools', 'keydown')),
   action('measure', 'Measure to hovered node', 'Hold Alt', ['Alt'], refs('stage', 'keydown', 'keyup')),
   action('multi', 'Add / remove selection', 'Shift/Ctrl/Cmd + click · drag marquee', [], []),
@@ -59,7 +60,7 @@ export const ACTIONS = [
   action('play-exit', 'Leave play mode, also from inside a frame', 'Escape (or P again, outside a text field)', ['Escape', 'KeyP'], [...refs('play', 'keydown'), ...refs('doc-frames', 'keydown')]),
   action('play-hold', 'Play while you hold it: the component runs, you let go and you are editing again', 'Hold Space, then P', ['KeyP', 'Space'], refs('stage-live', 'keydown', 'keyup')),
   action('highlight-rule', 'Highlight a rule or variable on every frame…', 'Alt+H', ['KeyH'], refs('stage-highlight', 'keydown'), (c) => c.highlight.pick(), 'view'),
-  action('styles-tab', 'Show the folder\'s rules and variables in the sidebar', 'Cmd-K "styles" · ← → on the tabs · ↑ ↓ in the list', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'], refs('styles-tab', 'keydown'), (c) => c.stylesTab.show('styles'), 'view'),
+  action('styles-tab', 'Show styles: the folder\'s rules and variables in the left panel', 'Cmd-K "styles" · ↑ ↓ in the list · Escape back to layers', ['ArrowUp', 'ArrowDown', 'Escape'], refs('styles-tab', 'keydown'), (c) => c.stylesTab.show('styles'), 'view'),
   action('highlight-pick', 'Highlight list: move / light it up / close', '↑ ↓ · Enter · Escape', ['ArrowUp', 'ArrowDown', 'Enter', 'Escape'], refs('stage-highlight', 'keydown')),
   action('highlight-walk', 'While a rule or variable is lit: Tab and Shift-Tab walk its places (select and fly to each)', 'Tab · Shift+Tab', ['Tab'], refs('stage-highlight', 'keydown'), (c) => c.highlight.walk(1), 'view'),
   action('highlight-keep', 'Keep the change shown beside the highlight', 'Cmd-K "keep the change"', [], [], (c) => c.highlight.keep(), 'edit'),
@@ -121,6 +122,8 @@ export const ACTIONS = [
   command('reject', 'Reject', 'Reject <proposal>', '', (c, a) => c.surface.resolve(a, 'reject'), { arg: 'proposal', about: 'Turn an agent’s proposal down' }),
   command('generate', 'Generate', 'Generate <workflow>', '', (c, a) => c.surface.generate(a), { arg: 'item', about: 'Queue a ComfyUI workflow; the result lands on the canvas' }),
   command('open-folder', 'Open folder', 'Open folder <path>', '', (c, a) => c.surface.openFolder(a), { arg: 'text', about: 'Open another folder on this canvas' }),
+  command('new-component', 'New component', 'New component <Name>', '', (c, a) => c.tools.createComponent(a).then((r) => { if (!r.ok) c.hint(r.error); }), { arg: 'text', about: 'Make a new component file with this name (PascalCase)' }),
+  command('toggle-left', 'Show or hide the layers panel', 'Toggle layers panel', 'Ctrl+\\', (c) => c.shell.toggleLeft(), { about: 'The canvas takes the width while it is hidden' }),
   command('rebind', 'Rebind', 'Rebind <command> to <keys>', '', (c, a) => c.surface.rebind(a), { arg: 'rebind', about: 'Give a command other keys' }),
   command('focus-right', 'Focus the card to the right', 'Focus the card to the right', 'ArrowRight', (c, n) => c.surface.walk(1, 0, false, n), { about: 'Spatial focus: the nearest card that way, by position' }),
   command('focus-left', 'Focus the card to the left', 'Focus the card to the left', 'ArrowLeft', (c, n) => c.surface.walk(-1, 0, false, n)),
@@ -141,7 +144,7 @@ export const ACTIONS = [
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1,
+  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1,
 };
 // A command that takes an argument ("Select <path>") puts its verb in the palette, where the argument is completed.
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run && a.palette !== false).map((a) => ({ ...a, boost: a.command ? -25 : a.boost, run: a.arg ? () => ctx.quick.prefill(a.phrase.replace(/\s*<.*$/, '') + ' ') : () => a.run(ctx) }));

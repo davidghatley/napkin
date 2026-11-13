@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url';
 import * as esbuild from 'esbuild';
 import { readComponent } from '../src/tsx/read.js';
 import { index } from '../src/model.js';
-import { tempRepo, startServer, ROOT } from './helpers/harness.js';
+import { tempRepo, startServer, ROOT, sleep } from './helpers/harness.js';
 import { launchChromium } from './helpers/cdp.js';
 import { session } from './helpers/agents.js';
 
@@ -51,13 +51,12 @@ test('draw a Card2 from nothing (N, F, T, I), reopen it identically, and render 
     await browser.waitFor('document.body.dataset.ready === "1"');
     assert.equal(await q(`document.querySelectorAll('section.cmp').length`), 0, 'empty workspace');
 
-    await t.test('N asks for a name inline and the new component appears selected', async () => {
-      await key('n');
-      await browser.waitFor(`document.activeElement?.id === 'new-name'`);
-      await browser.send('Input.insertText', { text: 'Card2' });
+    await t.test('the palette makes a named component and it appears selected', async () => {
+      await q(`napkin.quick.prefill('New component ')`);
+      await browser.send('Input.insertText', { text: 'Card2' }); await sleep(300);
       await key('Enter');
       await browser.waitFor(`${sec('Card2')}?.dataset.ready === '1' && document.querySelector('#sel-node')?.textContent.startsWith('root')`);
-      assert.equal(await q(`document.querySelector('#new-component').hidden`), true);
+      assert.equal(await q(`!!document.querySelector('#new-component, #tool-new')`), false, 'no name form in the bar');
       const files = readdirSync(dir).filter((f) => !f.startsWith(".")).sort();
       assert.deepEqual(files, ['Card2.napkin.json', 'Card2.tsx']);
       assert.equal(await q(`document.querySelector('#overlay-select').dataset.label`), 'Card2 · root');
@@ -220,31 +219,23 @@ test('(c)(d)(e) Delete, Alt+Down, a taken name, and shortcuts while typing', { t
       const bad = await fetch(new URL('api/components', server.url), { method: 'POST', headers: { authorization: `Bearer ${await session(server.url, 'test')}` }, body: JSON.stringify({ name: 'card-x' }) });
       assert.equal(bad.status, 400);
       assert.match((await bad.json()).error, /PascalCase/);
-      // and in the UI, inline
-      await key('n');
-      await browser.waitFor(`document.activeElement?.id === 'new-name'`);
-      await browser.send('Input.insertText', { text: 'Card' });
-      await key('Enter');
-      await browser.waitFor(`document.querySelector('#new-error').textContent.includes('already exists')`);
-      assert.equal(await q(`document.querySelector('#new-component').hidden`), false, 'the field stays open');
+      // and from the page, as the palette does it
+      assert.match(await q(`napkin.tools.createComponent('Card').then((r) => r.error)`), /already exists/);
       assert.equal(readFileSync(fileOf('Card'), 'utf8'), before);
       assert.deepEqual(readdirSync(compDir).filter((f) => !f.startsWith(".")).sort(), ['Button.napkin.json', 'Button.tsx', 'Card.napkin.json', 'Card.tsx'].filter((f) => readdirSync(compDir).includes(f)));
       assert.equal(await q(`document.querySelectorAll('section.cmp').length`), 1);
     });
 
     await t.test('(e) shortcuts do not fire while typing in an input', async () => {
-      await key('Escape'); // closes the name field (focus is in the input)
-      await browser.waitFor(`document.querySelector('#new-component').hidden`);
       await select('body');
-      await key('n');
-      await browser.waitFor(`document.activeElement?.id === 'new-name'`);
+      await q(`(() => { const i = document.createElement('input'); i.id = 'typing-probe'; document.body.append(i); i.focus(); })()`);
       for (const c of ['f', 't', 'i', 'v']) await key(c);
       await key('Backspace'); await key('Delete');
-      assert.equal(await q(`document.querySelector('#new-name').value`), 'fti');
+      assert.equal(await q(`document.querySelector('#typing-probe').value`), 'fti');
       assert.equal(await q('document.body.dataset.tool'), 'select');
       assert.ok(await q(`!!${sec('Card')}.querySelector('[data-n="body"]')`), 'Delete in an input did not delete the node');
       assert.equal(await order(), 'image,body');
-      await key('Escape');
+      await q(`document.querySelector('#typing-probe').remove()`);
       // outside an input the same keys work, and Escape drops back to Select
       await q('document.activeElement.blur()');
       await key('f');

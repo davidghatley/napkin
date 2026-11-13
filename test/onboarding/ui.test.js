@@ -18,9 +18,8 @@ test('ONB-02/03: empty canvas teaches five actions; ? opens the registry sheet, 
     assert.equal(await b.eval('document.querySelector("#revision").parentElement.hidden'), true);
     assert.equal(await b.eval('getComputedStyle(document.querySelector("#statusbar .hints")).visibility'), 'hidden');
     assert.match(await b.eval('document.querySelector("#layers").textContent'), /No layers yet/);
-    assert.match(await b.eval('document.querySelector("#changes").textContent'), /No changes yet/);
     assert.doesNotMatch(await b.eval('document.querySelector("#panel").textContent'), /Jump|New component|Ctrl|⌘K/);
-    const alignment = await b.eval('({ rail: document.querySelector("#sidebar").getBoundingClientRect().right, toolbar: document.querySelector("#toolbar").getBoundingClientRect().left, search: document.querySelector("#quick-open").getBoundingClientRect().left })');
+    const alignment = await b.eval('({ rail: document.querySelector("#sidebar").getBoundingClientRect().right, toolbar: document.querySelector("#toolbar").getBoundingClientRect().left, search: document.querySelector("#quick-open").getBoundingClientRect().left })'); // (Jump to... sits right of the tools)
     assert.ok(alignment.toolbar >= alignment.rail && alignment.search > alignment.toolbar);
     await shot(b, 'ONB-02-empty');
     await input(b).key( '?', { code: 'Slash', shift: true });
@@ -31,9 +30,9 @@ test('ONB-02/03: empty canvas teaches five actions; ? opens the registry sheet, 
     await input(b).key( 'Escape');
     await b.waitFor('!document.querySelector("#shortcuts").open');
     await b.eval('document.querySelector("#empty-state button").click()');
-    await b.waitFor('!document.querySelector("#new-component").hidden');
-    await b.type('#new-name', 'First');
-    await b.eval('document.querySelector("#new-component").requestSubmit()');
+    await b.waitFor('!document.querySelector("#quick").hidden && document.querySelector("#quick input").value === "New component "');
+    await b.send('Input.insertText', { text: 'First' }); await new Promise((r) => setTimeout(r, 300));
+    await input(b).key('Enter');
     await b.waitFor('!!document.querySelector("section.cmp[data-ready]")');
     assert.equal(await b.eval('document.querySelector("#empty-state").hidden'), true);
   } finally { await b.close(); await s.stop(); rmSync(dir, { recursive: true, force: true }); }

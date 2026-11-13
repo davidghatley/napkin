@@ -16,23 +16,6 @@
 .cmp-head .mctl .mchip[aria-pressed="true"] { background: color-mix(in srgb, var(--nk-accent) 16%, var(--nk-frame)); box-shadow: inset 0 0 0 1px var(--nk-accent); }
 .cmp-head .mctl .mall[aria-pressed="true"] { background: color-mix(in srgb, var(--nk-frame-ink) 15%, var(--nk-frame)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nk-frame-ink) 30%, var(--nk-frame)); }
 
-/* ---- top bar: small, uniform tools ---- */
-#toolbar { min-height: 30px; padding: 2px; border-radius: 8px; gap: 1px; }
-#toolbar button { height: 24px; padding: 0 8px; gap: 5px; font: 500 11.5px var(--nk-sans); border-radius: 5px; }
-#toolbar kbd { display: none; }                                  /* the tooltip carries the key */
-#toolbar #tool-new { margin-left: 2px; padding-left: 8px; border-left: 1px solid var(--nk-line); border-radius: 0 5px 5px 0; }
-#quick-open { height: 28px; }
-#theme-toggle { width: 28px; height: 28px; }
-
-/* ---- layers: one row height, one icon size, quiet headers ---- */
-.pane-title { padding: 10px 14px 6px; font: 600 10px var(--nk-sans); letter-spacing: .08em; color: var(--nk-text-2); }
-.lrow .licon, .lrow .licon svg { width: 14px; height: 14px; }
-.lrow .licon { display: grid; place-items: center; }
-#changes summary { padding: 8px 14px; font: 600 10px var(--nk-sans); letter-spacing: .08em; color: var(--nk-text-2); }
-#changes-placeholder { display: none; }                           /* no big "No changes yet." block */
-#changes, #changes[open] { height: 33px; position: relative; }       /* always one quiet header: entries open upward over the layers, so nothing shifts when one arrives */
-#changes > :not(summary) { position: absolute; left: 0; right: 0; bottom: 33px; max-height: 190px; overflow: auto; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); z-index: 4; }
-#changes:not(:has(#log li:not(:empty))) > :not(summary) { display: none; } /* (the log keeps empty rows ready: they are nothing to show) */
 
 /* ---- bottom bar: summary, panels, hints, zoom, in groups ---- */
 #statusbar { gap: 14px; }

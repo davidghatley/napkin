@@ -220,7 +220,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       assert.equal(getValue(doc('Card'), 'image.visibility'), undefined);
     });
 
-    await t.test('layers: rows are 28 px, the menu says why an item is disabled, the grip shows on hover', async () => {
+    await t.test('layers: rows are 28 px, the menu says why an item is disabled, hover lights the row', async () => {
       const row = (node) => `document.querySelector('#layers [data-component="' + napkin.find('Card').component + '"][data-node="${node}"]')`;
       assert.equal(await q(`Math.round(${row('title')}.getBoundingClientRect().height)`), 28);
       await q(`${row('card')}.querySelector('.lmore').click()`);
@@ -229,7 +229,8 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await io.key('Escape');
       const c = await centerOf(browser, row('title'));
       await io.move(c.x, c.y);
-      await browser.waitFor(`getComputedStyle(${row('title')}.querySelector('.lgrip')).display !== 'none'`);
+      // (the drag grip left in basics pass 1: the whole row drags, and hover fills it)
+      await browser.waitFor(`getComputedStyle(${row('title')}).backgroundColor !== 'rgba(0, 0, 0, 0)'`);
     });
 
     await t.test('layers: the row menu renames, duplicates and deletes', async () => {

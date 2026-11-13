@@ -61,6 +61,7 @@ import { initInspector } from './doc-panel.js';
 import { initKinds } from './kinds.js';
 import { initInstruments } from './surface-panel.js';
 import { initSurface } from './commands.js';
+import { initShell } from './shell.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -126,7 +127,7 @@ window.napkin = ctx; // for tests and the console
 {
   const root = document.documentElement, btn = $('#theme-toggle');
   const effective = () => root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  const label = () => { btn.setAttribute('aria-label', `Switch to ${effective() === 'dark' ? 'light' : 'dark'} chrome`); };
+  const label = () => { const t = `Switch to ${effective() === 'dark' ? 'light' : 'dark'} chrome`; btn.setAttribute('aria-label', t); btn.dataset.tip = t; };
   btn.addEventListener('click', () => {
     root.dataset.theme = effective() === 'dark' ? 'light' : 'dark';
     try { localStorage.setItem('napkin.theme', root.dataset.theme); } catch {}
@@ -143,7 +144,7 @@ initLive(ctx); // M1: Space-P holds play mode (registered before play.js so it s
 initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
-ctx.live.mountButton(); // the Play control, after the tools have built the toolbar
+initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));
@@ -193,30 +194,17 @@ const sync = id => {
 function counts() {
   // WPC-35: counted from the documents, not from the cells on screen (frames far off screen are not drawn), so zoom never changes it
   let cells = 0; for (const c of ctx.state.components.values()) if (c.doc) cells += variantGrid(c.doc).length;
-  const files = ctx.state.components.items.size;
   const n = ctx.state.components.size;
   $('#counts').textContent = `${n} component${n === 1 ? '' : 's'}${cells ? ` · ${cells} variant${cells === 1 ? '' : 's'}` : ''}`;
-  let fileCount = $('#item-count');
-  if (!fileCount) { fileCount = document.createElement('span'); fileCount.id = 'item-count'; $('#folder').after(fileCount); }
-  fileCount.textContent = files ? `${files} file${files === 1 ? '' : 's'}` : '';
 }
 
-// The change log has a fixed number of rows that are rewritten in place, so a new entry never moves the rows (FEEL-04).
-const LOG_ROWS = 6, logRows = [];
-for (let i = 0; i < LOG_ROWS; i++) { const li = document.createElement('li'); logRows.push(li); $('#log').append(li); }
-function note(c) {
-  $('#changes-placeholder').hidden = true;
-  const name = ctx.state.components.get(c.component)?.name ?? c.component;
-  for (let i = LOG_ROWS - 1; i > 0; i--) { logRows[i].className = logRows[i - 1].className; logRows[i].textContent = logRows[i - 1].textContent; }
-  logRows[0].className = 'by-' + c.by;
-  logRows[0].textContent = `${name} r${String(c.revision).slice(0, 7)} ${c.by}: ` + (c.edits ? c.edits.map((e) => e.path ? `${e.path} = ${JSON.stringify(e.value)}` : `${e.op} ${e.node?.id ?? e.id ?? ''}`.trim()).join(', ') : 'file changed on disk');
-}
+// (The sidebar's change log is on hold since basics pass 1: who changed what is in the Activity drawer, and changes against git in Changes.)
 
 client.onChange((f) => {
   sync(f.component);
   if (f.type === 'progress') { ctx.state.progress = f; $('#scan-progress').textContent = f.done ? '' : `Scanning components… ${f.scanned} / ${f.total}`; ctx.emit('progress', f); }
   else if (f.type === 'tokens') { ctx.emit('tokens', f); }
-  else if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); note(f); }
+  else if (f.type === 'change') { stage.render(f.component).catch(console.error); ctx.emit('change', f); }
   else if (f.type === 'problem') { if (ctx.state.components.has(f.component) && !stage.sections.has(f.component)) stage.render(f.component).catch(console.error); else stage.header(f.component); ctx.emit('problem', f); }
   else if (f.type === 'added') { counts(); stage.render(f.component).catch(console.error); ctx.emit('added', f); }
   else if (f.type === 'preview') { ctx.emit('preview', f); }

@@ -118,9 +118,6 @@ section.cmp:has(.mctl) .ghint { display: none; }
 #panel .basev { font: 11px var(--nk-mono); color: var(--nk-text-3); }
 
 /* WPC-28: rename / delete a component (dialog from F2, Cmd-K or the row menu), the undo toast, and the row's More button */
-#layers .lcomp { grid-template-columns: 18px 16px minmax(0, 1fr) auto auto; }
-#layers .lcomp .ltag { grid-column: 4; }
-#layers .lcomp .lmore { grid-column: 5; }
 #cmp-dialog { color: var(--nk-text); background: var(--nk-chrome); border: 1px solid var(--nk-line); border-radius: 12px; padding: 20px 22px; width: min(420px, 90vw); box-shadow: var(--nk-shadow-pop); font: 12px/1.5 var(--nk-sans); }
 #cmp-dialog::backdrop { background: #0005; }
 #cmp-dialog h2 { font-size: 15px; margin: 0 0 8px; }
