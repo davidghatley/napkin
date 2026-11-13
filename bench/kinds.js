@@ -15,6 +15,7 @@ import {
   frameGesture,
   processRSS,
   FRAME_BUDGET,
+  ROOT,
 } from "./lib3/runtime.mjs";
 import {
   shot,
@@ -29,6 +30,15 @@ import {
 import { randomInt } from "node:crypto";
 import { join } from "node:path";
 import { readFileSync, statSync, mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
+// Accepted kind names per canonical kind: a small alias table in corpus3/manifest.json for
+// specialised kinds whose reasonable names differ (a diff is a patch). Generic kinds are never
+// aliases: a viewer that reports txt/json/code for a patch or run log did not specialise.
+const ALIASES = JSON.parse(
+  readFileSync(new URL("./corpus3/manifest.json", import.meta.url), "utf8"),
+).kindAliases || {};
+export const kindOk = (canonical, got) =>
+  got === canonical || (ALIASES[canonical] || []).includes(got);
 // Card content test: a shell with an empty pre/svg or an unloaded frame is a blank card.
 export const CARD_CONTENT = `(e=>{const r=e.getBoundingClientRect();const q=e.querySelector('iframe,img,canvas,svg,video,audio,table,pre,article,[role=table],[role=grid],[role=log],[role=tree],ol,ul');if(!q)return false;const t=q.tagName.toLowerCase();if(t==='iframe'){try{const d=q.contentDocument;return !!d&&d.body&&(d.body.innerText.trim().length>0||d.body.children.length>0)}catch{return true}}if(t==='img')return q.complete&&q.naturalWidth>0;if(t==='video')return q.readyState>=1||!!q.poster;if(t==='audio')return !!q.src||!!q.querySelector('source');if(t==='canvas'){try{const c=document.createElement('canvas');c.width=16;c.height=16;c.getContext('2d').drawImage(q,0,0,16,16);const d=c.getContext('2d').getImageData(0,0,16,16).data;let v=new Set();for(let i=0;i<d.length;i+=4)v.add(d[i]+','+d[i+1]+','+d[i+2]+','+d[i+3]);return v.size>1}catch{return true}}if(t==='svg')return q.querySelectorAll('path,rect,circle,ellipse,line,polygon,polyline,text,image,g>*').length>=1;return q.textContent.trim().length>=3})`;
 // Per-kind oracles over values the bench chose for this run (see lib3/media.mjs).
@@ -177,13 +187,55 @@ async function oracle(b, file, item, r, f, s) {
       `rendered page has no page-and-ink structure (ink ${ink / n}, light ${light / n})`,
     );
   }
-  if (["ttf", "otf", "woff2"].includes(file.kind))
-    assert(
-      await b.eval(
-        `[...document.fonts].some(f=>f.status==='loaded'&&!/^(sans|serif|monospace)/i.test(f.family))`,
-      ),
-      "specimen does not use the file's font (no loaded FontFace)",
+  if (["ttf", "otf", "woff2"].includes(file.kind)) {
+    // Outcome: some visible text is set in a loaded, non-generic FontFace, and its measured
+    // advance width equals what the font file itself says (so no other font stands in), and
+    // the specimen paints ink.
+    const probe = await b.eval(
+      `(()=>{const faces=[...document.fonts].filter(f=>f.status==='loaded'&&!/^(sans|serif|monospace|system-ui)/i.test(f.family)).map(f=>f.family.replace(/^["']|["']$/g,''));if(!faces.length)return{faces};for(const e of document.querySelectorAll('body *')){const own=[...e.childNodes].filter(n=>n.nodeType===3).map(n=>n.textContent).join('').trim();if(own.length<8)continue;const r=e.getBoundingClientRect(),s=getComputedStyle(e);if(r.width<20||r.height<8||s.visibility==='hidden'||s.display==='none'||+s.opacity===0)continue;const fam=s.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g,'');if(!faces.includes(fam))continue;e.scrollIntoView({block:'center'});const text=own.slice(0,24),px=parseFloat(s.fontSize);const c=document.createElement('canvas').getContext('2d');c.font=px+'px "'+fam+'"';const q=e.getBoundingClientRect();window.__spec={x:Math.max(0,Math.round(q.x)),y:Math.max(0,Math.round(q.y)),w:Math.round(Math.min(q.right,innerWidth)-Math.max(0,q.x)),h:Math.round(Math.min(q.bottom,innerHeight)-Math.max(0,q.y))};return{faces,fam,text,px,measured:c.measureText(text).width}}return{faces}})()`,
     );
+    assert(probe.faces.length, "no FontFace from the file is loaded");
+    assert(
+      probe.fam,
+      "no visible text is set in the loaded font " + probe.faces,
+    );
+    try {
+      const ot = createRequire(
+        (process.env.NAPKIN_D3_TOOLS || join(ROOT, "bench/tools")) +
+          "/package.json",
+      )("opentype.js");
+      const font = ot.parse(
+        Uint8Array.from(readFileSync(join(f.folder, file.path))).buffer,
+      );
+      const want = font.getAdvanceWidth(probe.text, probe.px);
+      assert(
+        want > 0 && Math.abs(probe.measured - want) / want < 0.03,
+        `text drawn in "${probe.fam}" measures ${probe.measured}px, the font file says ${want}px`,
+      );
+    } catch (e) {
+      if (/measures/.test(e.message)) throw e;
+    }
+    await sleep(150);
+    const rect = await b.eval("window.__spec"),
+      p = await shot(b);
+    let ink = 0,
+      n = 0;
+    const at = (x, y) => (y * p.width + x) * 4,
+      bg = at(rect.x, rect.y);
+    for (let y = rect.y; y < rect.y + rect.h; y++)
+      for (let x = rect.x; x < rect.x + rect.w; x++) {
+        n++;
+        const i = at(x, y);
+        if (
+          Math.abs(p.data[i] - p.data[bg]) +
+            Math.abs(p.data[i + 1] - p.data[bg + 1]) +
+            Math.abs(p.data[i + 2] - p.data[bg + 2]) >
+          120
+        )
+          ink++;
+      }
+    assert(n > 0 && ink / n > 0.01, "specimen text paints no glyph ink");
+  }
   if (["gltf", "glb", "obj"].includes(file.kind)) {
     const rect = await rectOf(b, file.markers.selectors[0]);
     assert(rect, "no model canvas");
@@ -242,7 +294,7 @@ export async function measure() {
           const item = listed.find((i) => i.path === file.path);
           assert(item, `/api/items omits ${file.path}`);
           assert(
-            item.kind === file.kind,
+            kindOk(file.kind, item.kind),
             `expected kind ${file.kind}, received ${item.kind}`,
           );
           assert(
@@ -257,7 +309,7 @@ export async function measure() {
               s.base + "/view/" + encodeURIComponent(item.id),
               file.markers,
             );
-          assert(r.kind === file.kind, `root data-napkin-kind is ${r.kind}`);
+          assert(kindOk(file.kind, r.kind), `root data-napkin-kind is ${r.kind}`);
           for (const selector of file.markers.selectors)
             assert(
               await b.eval(

@@ -588,7 +588,7 @@ export async function generate(dir, tooling) {
     "orbit.otf",
     otf,
     "otf",
-    ['[contenteditable],canvas,[aria-label*="specimen" i]'],
+    [],
     [],
     { glyphs: 96 },
   );
@@ -598,7 +598,7 @@ export async function generate(dir, tooling) {
     "orbit.ttf",
     makeTTF(),
     "ttf",
-    ['[contenteditable],canvas,[aria-label*="specimen" i]'],
+    [],
     [],
     { glyphs: 96 },
   );
@@ -606,7 +606,7 @@ export async function generate(dir, tooling) {
   adopt(
     "orbit.woff2",
     "woff2",
-    ['[contenteditable],canvas,[aria-label*="specimen" i]'],
+    [],
     [],
     { glyphs: 96 },
   );
@@ -704,7 +704,7 @@ export async function generate(dir, tooling) {
   adopt(
     "orbit.zip",
     "zip",
-    ['[role="tree"],ul,table'],
+    [],
     ["notes.txt", "spectrum.png"],
     { entries: 2 },
   );
@@ -716,7 +716,7 @@ export async function generate(dir, tooling) {
       Buffer.from(Array.from({ length: 256 }, (_, n) => n)),
     ]),
     "binary",
-    ["pre,code,table"],
+    [],
     ["ORBIT_731_USEFUL_STRING"],
     { bytes: 287 },
   );
@@ -729,7 +729,7 @@ export async function generate(dir, tooling) {
   writeFileSync(
     join(dir, "manifest.json"),
     JSON.stringify(
-      { license: "CC0-1.0", generator: "tools/make-corpus3.mjs", files },
+      { license: "CC0-1.0", generator: "tools/make-corpus3.mjs", kindAliases: { patch: ["diff"], "agent-run": ["agent-log"] }, files },
       null,
       2,
     ) + "\n",
