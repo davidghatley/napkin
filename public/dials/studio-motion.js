@@ -257,6 +257,129 @@ export function motionStudio(ctx, host) {
     K.set(sortFrames([...f, { offset: r3(o), transform: `translateX(${Math.round(here.x)}px)`, opacity: Number(here.opacity.toFixed(2)) }]));
   });
 
+  /* ---------- loop range: two handles under the response; preview plays only that part ---------- */
+  // Stored on a motion value as loopRange [from, to] (fractions of one iteration). A bare bezier or
+  // spring control has no room for it, so there it lives with the studio.
+  let localRange = null;
+  const range = () => {
+    const r = mv().loopRange ?? localRange;
+    return Array.isArray(r) && r[1] > r[0] ? r : [0, 1];
+  };
+  const setRange = (a, b) => {
+    const r = [r3(clamp(a, 0, 1)), r3(clamp(b, 0, 1))];
+    if (r[1] - r[0] < 0.02) return;
+    const whole = r[0] === 0 && r[1] === 1;
+    if (M && mc.type === "motion")
+      editM((v) => {
+        const { loopRange: _, ...rest } = v;
+        return whole ? rest : { ...rest, loopRange: r };
+      }, "studio-loop");
+    else (localRange = whole ? null : r), draw();
+  };
+  const rBand = s("rect", { class: "km-loop" }),
+    kBand = s("rect", { class: "km-loop" });
+  rsvg.insertBefore(rBand, rCurve);
+  ksvg.insertBefore(kBand, kPath);
+  const loopEdge = (which) => {
+    const h = handle(rsvg, {
+      label: which ? "Loop range end" : "Loop range start",
+      r: 5,
+      cls: "km-loop-edge",
+      move: (x) => {
+        const v = mv(),
+          u = (iX(x) - v.delay) / v.duration,
+          [a, b] = range();
+        setRange(which ? a : Math.min(u, b - 0.02), which ? Math.max(u, a + 0.02) : b);
+      },
+      keys: (dx) => {
+        const [a, b] = range();
+        setRange(which ? a : a + dx * 0.01, which ? b + dx * 0.01 : b);
+      },
+    });
+    h.node.append(s("path", { class: "km-loop-flag", d: which ? "M0 -9V9M0 -9H-7L0 -3" : "M0 -9V9M0 -9H7L0 -3" }));
+    return h;
+  };
+  const loopA = loopEdge(0),
+    loopB = loopEdge(1);
+  cleanup.push(loopA.destroy, loopB.destroy);
+  const loopNote = el("button", { type: "button", class: "km-loop-reset" });
+  loopNote.addEventListener("click", () => setRange(0, 1));
+
+  /* ---------- lanes: one row per animated value in the keyframes ---------- */
+  const fnOf = (name) => (k) => {
+    const m = new RegExp(`${name}\\(\\s*(-?[\\d.]+)`).exec(k.transform || "");
+    return m ? Number(m[1]) : name === "scale" ? 1 : 0;
+  };
+  const withFn = (t = "", name, val) =>
+    new RegExp(`${name}\\(`).test(t) ? t.replace(new RegExp(`${name}\\([^)]*\\)`), `${name}(${val})`) : `${t ? t + " " : ""}${name}(${val})`;
+  const laneDefs = () => {
+    const f = frames(),
+      has = (name) => f.some((k) => new RegExp(`${name}\\(`).test(k.transform || ""));
+    const out = [{ key: "opacity", label: "Opacity", lo: 0, hi: 1, get: (k) => k.opacity ?? 1, put: (k, v) => ({ ...k, opacity: Number(clamp(v, 0, 1).toFixed(2)) }), fmt: (v) => fx(v, 2), step: 0.01 }];
+    if (has("rotate")) out.push({ key: "rotate", label: "Rotate", lo: -180, hi: 180, get: fnOf("rotate"), put: (k, v) => ({ ...k, transform: withFn(k.transform, "rotate", `${Math.round(v)}deg`) }), fmt: (v) => `${Math.round(v)}°`, step: 1 });
+    if (has("scale")) out.push({ key: "scale", label: "Scale", lo: 0, hi: 2, get: fnOf("scale"), put: (k, v) => ({ ...k, transform: withFn(k.transform, "scale", Number(clamp(v, 0, 4).toFixed(2))) }), fmt: (v) => `${fx(v, 2)}×`, step: 0.01 });
+    // Any other number a keyframe carries gets a lane too, scaled to the values it holds.
+    const keys = [...new Set(f.flatMap((k) => Object.keys(k)))].filter((k) => !["offset", "opacity", "transform", "easing", "composite"].includes(k) && f.some((x) => Number.isFinite(x[k])));
+    for (const key of keys) {
+      const vals = f.map((k) => k[key]).filter(Number.isFinite),
+        lo = Math.min(0, ...vals),
+        hi = Math.max(1, ...vals) * 1.25;
+      out.push({ key, label: key.replace(/[A-Z]/g, (m) => " " + m.toLowerCase()), lo, hi, get: (k) => (Number.isFinite(k[key]) ? k[key] : 0), put: (k, v) => ({ ...k, [key]: Number(v.toFixed(2)) }), fmt: (v) => fx(v, 2), step: (hi - lo) / 100 });
+    }
+    return out;
+  };
+  /** A lane's value at u, eased per segment like the x track. */
+  const laneAt = (lane, f, u, v) => {
+    if (!f.length) return lane.get({});
+    if (u <= f[0].offset) return lane.get(f[0]);
+    for (let i = 1; i < f.length; i++)
+      if (u <= f[i].offset) {
+        const a = lane.get(f[i - 1]),
+          b = lane.get(f[i]),
+          e = motionAt((u - f[i - 1].offset) / (f[i].offset - f[i - 1].offset || 1), v);
+        return a + (b - a) * e;
+      }
+    return lane.get(f.at(-1));
+  };
+  const lanesBox = el("div", { class: "km-lanes" });
+  let lanes = [],
+    laneSig = "";
+  const buildLanes = () => {
+    lanes.forEach((l) => (l.diamonds.forEach((d) => d.destroy()), l.fit()));
+    lanes = laneDefs().map((def) => {
+      const svg = s("svg", { class: "k-svg km-lane-svg", "aria-label": `${def.label} lane. Drag a diamond up or down.` }),
+        grid = s("path", { class: "km-grid" }),
+        line = s("path", { class: "km-path" }),
+        text = s("g", {});
+      svg.append(grid, text, line);
+      const lane = { def, svg, grid, line, text, size: { w: 1, h: 1 }, diamonds: [] };
+      lane.LY = (val) => 6 + ((def.hi - val) / (def.hi - def.lo || 1)) * (lane.size.h - 12);
+      lane.iLY = (y) => def.hi - ((y - 6) / (lane.size.h - 12 || 1)) * (def.hi - def.lo);
+      lane.fit = fitSvg(svg, (w, h) => ((lane.size = { w, h }), draw())).destroy;
+      lane.diamonds = frames().map((_, i) => {
+        const h = handle(svg, {
+          label: `${def.label} at keyframe ${i + 1}`,
+          r: 5,
+          cls: "km-key",
+          start: () => ((kfrozen = frames().length), K.begin("studio-lane")),
+          move: (_x, y) => K.change(frames().map((k, j) => (j === i ? def.put(k, clamp(lane.iLY(y), def.lo, def.hi)) : k))),
+          end: () => ((kfrozen = null), K.commit()),
+          cancel: () => ((kfrozen = null), K.cancel()),
+          keys: (_dx, dy) => {
+            K.begin("studio-lane-key");
+            K.change(frames().map((k, j) => (j === i ? def.put(k, clamp(def.get(k) - dy * def.step, def.lo, def.hi)) : k)));
+            K.commit();
+          },
+        });
+        h.node.append(s("path", { class: "km-diamond", d: "M0 -5L5 0L0 5L-5 0Z" }));
+        return h;
+      });
+      return lane;
+    });
+    lanesBox.replaceChildren(...lanes.map((l) => el("div", { class: "km-lane-row" }, el("span", { class: "km-lane-name", text: l.def.label }), l.svg)));
+  };
+  cleanup.push(() => lanes.forEach((l) => (l.diamonds.forEach((d) => d.destroy()), l.fit())));
+
   /* ---------- spacing chart: where the element is, every 50 ms ---------- */
   const gsvg = s("svg", { class: "k-svg km-ghost", "aria-label": "Spacing chart: one tick for every 50 ms of travel" }),
     gLane = s("line", { class: "km-lane" }),
@@ -291,7 +414,13 @@ export function motionStudio(ctx, host) {
     if (!playing) return placeNow();
     const tick = (now) => {
       if (!host.isConnected) return;
-      tNow = ((now - t0) % total()) / total();
+      const v = mv(),
+        [a, b] = range();
+      if (a === 0 && b === 1) tNow = ((now - t0) % total()) / total();
+      else {
+        const len = (b - a) * v.duration;
+        tNow = (v.delay + a * v.duration + ((now - t0) % len)) / total();
+      }
       placeNow();
       raf = requestAnimationFrame(tick);
     };
@@ -305,6 +434,9 @@ export function motionStudio(ctx, host) {
     gNow.setAttribute("x", GX(at.x) - 13);
     gNow.setAttribute("y", gs.h / 2 - 13);
     gNow.style.opacity = String(0.25 + 0.75 * at.opacity);
+    const f = frames(),
+      rot = f.some((k) => /rotate\(/.test(k.transform || "")) ? laneAt({ get: fnOf("rotate") }, f, u, v) : 0;
+    gNow.setAttribute("transform", rot ? `rotate(${fx(rot, 1)} ${fx(GX(at.x))} ${fx(gs.h / 2)})` : "");
     const nx = X(Math.min(ms, span));
     rNow.setAttribute("x1", nx);
     rNow.setAttribute("x2", nx);
@@ -376,10 +508,12 @@ export function motionStudio(ctx, host) {
       try {
         const read = panel.applyMotionCode(section.id, code.value);
         code.removeAttribute("aria-invalid");
+        delete codeNote.dataset.state;
         codeNote.textContent = `Read back: ${read.motion?.mode === "spring" ? `spring ${read.motion.stiffness}/${read.motion.damping}` : read.motion?.bezier ? `bezier ${read.motion.bezier.join(", ")}` : "timing"}${read.frames ? `, ${read.frames.length} keyframes` : ""}.`;
       } catch (err) {
         code.setAttribute("aria-invalid", "true");
-        codeNote.textContent = err.message;
+        codeNote.textContent = `Not read. ${err.message} The panel keeps the last motion that read cleanly.`;
+        codeNote.dataset.state = "bad";
       }
     }, 250);
   });
@@ -400,8 +534,8 @@ export function motionStudio(ctx, host) {
     el(
       "div",
       { class: "k-main" },
-      el("section", { class: "k-block" }, el("div", { class: "km-head" }, el("h3", { class: "k-title", text: "Response" }), mode.node), rsvg),
-      kc ? el("section", { class: "k-block" }, el("h3", { class: "k-title" }, `${kc.label}`, el("small", { text: "offset across, translateX up" })), ksvg) : null,
+      el("section", { class: "k-block" }, el("div", { class: "km-head" }, el("h3", { class: "k-title", text: "Response" }), el("div", { class: "km-playbar" }, loopNote, mode.node)), rsvg),
+      kc ? el("section", { class: "k-block" }, el("h3", { class: "k-title" }, `${kc.label}`, el("small", { text: "offset across, translateX up" })), ksvg, lanesBox) : null,
       el("section", { class: "k-block" }, el("div", { class: "km-head" }, el("h3", { class: "k-title" }, "Spacing", el("small", { text: "one tick per 50 ms" })), el("div", { class: "km-playbar" }, clock, play)), gsvg),
     ),
     el(
@@ -415,7 +549,8 @@ export function motionStudio(ctx, host) {
   );
 
   /* ---------- drawing ---------- */
-  let shownMode = null,
+  let shownTab = null,
+    shownMode = null,
     shownCount = -1;
   function draw() {
     const v = mv(),
@@ -517,6 +652,59 @@ export function motionStudio(ctx, host) {
       endH.at(X(v.delay + v.duration), Y(spring ? motionAt(1, v) : 1));
       endH.text(`${v.duration} ms`);
     }
+    // Loop range.
+    {
+      const [a, b] = range(),
+        whole = a === 0 && b === 1,
+        xa = X(v.delay + a * v.duration),
+        xb = X(v.delay + b * v.duration);
+      for (const [band, x0, x1, y0, y1] of [
+        [rBand, xa, xb, P.t, rs.h - P.b],
+        [kBand, KX(a), KX(b), 8, ks.h - 26],
+      ]) {
+        band.setAttribute("x", fx(x0));
+        band.setAttribute("width", fx(Math.max(0, x1 - x0)));
+        band.setAttribute("y", fx(y0));
+        band.setAttribute("height", fx(Math.max(0, y1 - y0)));
+        band.style.display = whole ? "none" : "";
+      }
+      loopA.at(xa, rs.h - P.b);
+      loopB.at(xb, rs.h - P.b);
+      const ms = (u) => Math.round(v.delay + u * v.duration);
+      loopA.text(`${ms(a)} ms`);
+      loopB.text(`${ms(b)} ms`);
+      loopNote.textContent = whole ? "Loop: whole" : `Loop ${ms(a)}–${ms(b)} ms · Whole`;
+      loopNote.disabled = whole;
+      loopNote.title = whole ? "Drag the flags under the curve to loop part of it" : "Play the whole motion again";
+    }
+    // Lanes.
+    if (K) {
+      const sig = laneDefs().map((d) => d.key).join() + ":" + f.length;
+      if (sig !== laneSig && kfrozen === null) {
+        laneSig = sig;
+        buildLanes();
+      }
+      for (const lane of lanes) {
+        const { def, size } = lane;
+        if (size.w < 10) continue;
+        lane.grid.setAttribute("d", `M${P.l} ${lane.LY(def.lo)}H${size.w - P.r}M${P.l} ${lane.LY(def.hi)}H${size.w - P.r}`);
+        lane.text.replaceChildren(
+          s("text", { x: P.l - 8, y: lane.LY(def.hi) + 4, "text-anchor": "end", text: def.fmt(def.hi) }),
+          s("text", { x: P.l - 8, y: lane.LY(def.lo) + 1, "text-anchor": "end", text: def.fmt(def.lo) }),
+        );
+        let d = "";
+        for (let i = 0; i <= 120; i++) {
+          const u = i / 120;
+          d += `${i ? "L" : "M"}${fx(KX(u) * 1, 1)} ${fx(lane.LY(laneAt(def, f, u, v)), 1)}`;
+        }
+        lane.line.setAttribute("d", d);
+        f.forEach((k, i) => {
+          const val = def.get(k);
+          lane.diamonds[i]?.at(KX(k.offset), lane.LY(clamp(val, def.lo, def.hi)));
+          lane.diamonds[i]?.text(`${def.label} ${def.fmt(val)} at ${fx(k.offset * 100, 0)}%`);
+        });
+      }
+    }
     // Keyframe track.
     if (K && ks.w > 10) {
       let g = "";
@@ -573,9 +761,12 @@ export function motionStudio(ctx, host) {
     }
     // Code.
     codeTabs.set(tab);
-    if (!typing) {
+    // Code that did not read stays in the box with its note until it is fixed or the tab changes.
+    if (!typing && (!code.hasAttribute("aria-invalid") || shownTab !== tab)) {
+      shownTab = tab;
       code.value = panel.motionCode(section.id)[tab];
       code.removeAttribute("aria-invalid");
+      delete codeNote.dataset.state;
       codeNote.textContent = tab === "transition" ? `Easing: ${toEasing(v).length > 60 ? "linear() with " + toEasing(v).split(",").length + " stops" : toEasing(v)}` : "Edit the code; the panel follows.";
     }
   }

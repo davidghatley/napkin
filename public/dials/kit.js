@@ -306,7 +306,10 @@ export function handle(svg, { label, r = 6, cls = "", move, start, end, cancel, 
     text(t) {
       g.setAttribute("aria-valuetext", t);
     },
-    destroy: dispose,
+    destroy() {
+      dispose();
+      g.remove();
+    },
   };
 }
 /** Keep an SVG's user units equal to its CSS pixels, so strokes and text stay true at any size. */

@@ -1,4 +1,4 @@
-import { clamp } from "./values.js";
+import { clamp, looseJson } from "./values.js";
 export function bezierAt(time, p = [0.25, 0.1, 0.25, 1]) {
   const f = (t, a, b) =>
     3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t * t * b + t ** 3;
@@ -377,27 +377,75 @@ export function parseMotionCSS(text) {
   }
   return out;
 }
-/** Read a WAAPI call back: element.animate([frames], { duration, delay, iterations }). */
+/** The text from an opening bracket to its matching close, skipping strings and comments. */
+function balanced(src, from) {
+  const open = src[from],
+    close = open === "[" ? "]" : "}";
+  let depth = 0;
+  for (let i = from; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === '"' || ch === "'" || ch === "`") {
+      const j = src.indexOf(ch, i + 1);
+      if (j < 0) break;
+      i = j;
+    } else if (ch === "/" && src[i + 1] === "/") i = src.indexOf("\n", i) < 0 ? src.length : src.indexOf("\n", i);
+    else if (ch === open) depth++;
+    else if (ch === close && !--depth) return src.slice(from, i + 1);
+  }
+  throw lineError(src, from, `this ${open === "[" ? "list of keyframes" : "options object"} is never closed (missing "${close}")`);
+}
+const lineError = (src, index, what) => {
+  const before = src.slice(0, index).split("\n");
+  return new Error(`Line ${before.length}, column ${before.at(-1).length + 1}: ${what}.`);
+};
+/** Read a piece with looseJson, reporting problems at their line in the whole code box. */
+function readPart(src, at, part) {
+  try {
+    return looseJson(part);
+  } catch (err) {
+    const m = /^Line (\d+), column (\d+): (.*)$/.exec(err.message);
+    const lines = src.slice(0, at).split("\n");
+    if (m) {
+      const line = lines.length + Number(m[1]) - 1,
+        col = Number(m[1]) === 1 ? lines.at(-1).length + Number(m[2]) : Number(m[2]);
+      throw new Error(`Line ${line}, column ${col}: ${m[3]}`);
+    }
+    throw new Error(`Line ${lines.length}: ${err.message}`);
+  }
+}
+/**
+ * Read a WAAPI call back: element.animate([frames], { duration, delay, iterations }).
+ * Tolerant: single or double quotes, bare keys, trailing commas, comments, a bare duration number.
+ */
 export function parseWaapi(text) {
   const src = String(text),
-    list = /animate\(\s*(\[[\s\S]*?\])\s*,\s*(\{[\s\S]*?\})\s*\)/.exec(src);
-  if (!list) return {};
-  const json = (s) =>
-    JSON.parse(
-      s
-        .replace(/([{,]\s*)([A-Za-z_$][\w$]*)\s*:/g, '$1"$2":')
-        .replace(/:\s*Infinity/g, ': "Infinity"')
-        .replace(/,\s*([}\]])/g, "$1"),
-    );
-  const frames = json(list[1]),
-    options = json(list[2]),
-    easing = frames.find((f) => f.easing)?.easing || options.easing,
-    motion = { duration: options.duration, delay: options.delay || 0 };
-  if (easing) Object.assign(motion, parseEasing(easing, motion.duration || 1000));
+    call = /\.animate\s*\(\s*/.exec(src);
+  if (!call) return {};
+  const at = call.index + call[0].length;
+  if (src[at] !== "[") throw lineError(src, at, "animate( should start with a list of keyframes in [ ]");
+  const listText = balanced(src, at),
+    rest = src.slice(at + listText.length),
+    comma = /^\s*,\s*/.exec(rest);
+  const frames = readPart(src, at, listText);
+  if (!Array.isArray(frames) || frames.some((f) => !f || typeof f !== "object")) throw lineError(src, at, "each keyframe should be an object in { }");
+  let options = {};
+  if (comma) {
+    const oAt = at + listText.length + comma[0].length;
+    if (src[oAt] === "{") options = readPart(src, oAt, balanced(src, oAt));
+    else if (/^\d/.test(src.slice(oAt))) options = { duration: parseFloat(src.slice(oAt)) };
+    else throw lineError(src, oAt, "after the keyframes, put the timing as a number or { duration: ... }");
+  }
+  const easing = frames.find((f) => f.easing)?.easing || options.easing,
+    motion = { duration: options.duration ?? 1000, delay: options.delay || 0 };
+  if (easing) {
+    const read = parseEasing(easing, motion.duration || 1000);
+    if (!read) throw lineError(src, src.indexOf(easing), `"${easing}" is not an easing this panel can read (try cubic-bezier(), linear() or ease-out)`);
+    Object.assign(motion, read);
+  }
   return {
     motion,
     frames: frames.map(({ easing: _, ...f }) => f),
-    iterations: options.iterations === "Infinity" ? Infinity : options.iterations,
+    iterations: options.iterations,
   };
 }
 /**

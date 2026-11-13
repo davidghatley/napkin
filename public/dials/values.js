@@ -203,6 +203,14 @@ export function validateValue(value, c) {
     if (v.mode !== undefined && !["bezier", "spring"].includes(v.mode))
       throw new Error("Unknown motion response");
     if (
+      v.loopRange !== undefined &&
+      (!Array.isArray(v.loopRange) ||
+        v.loopRange.length !== 2 ||
+        !v.loopRange.every((n) => Number.isFinite(n) && n >= 0 && n <= 1) ||
+        v.loopRange[0] >= v.loopRange[1])
+    )
+      throw new Error("loopRange needs two numbers from 0 to 1, the first smaller");
+    if (
       v.keyframes !== undefined &&
       (!Array.isArray(v.keyframes) ||
         v.keyframes.some(
