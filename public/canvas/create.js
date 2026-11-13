@@ -8,13 +8,13 @@
 //   initCreate(ctx) -> ctx.create = { targetAt(ev), make({ tool, target, box, point }), atCentre(tool), rename(id, to), startRename(id) }
 import { plain } from './words.js';
 import { VOID } from '/src/model.js';
+import { richText, serialize } from './rich-text.js';
 
 export const DEFAULT = { frame: [320, 180], image: [160, 120], nested: [100, 100] };
 const MIN = { w: 48, h: 32 };
 const TEXT_FONT = 'font: 16px/1.4 system-ui, sans-serif';
 const FILL = '#f4f4f5'; // a frame inside a frame: a light fill so the box can be seen at all
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const textHtml = (t) => esc(t).replace(/\n/g, '<br>');
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(fn, ms = 6000) { const t0 = performance.now(); while (performance.now() - t0 < ms) { const v = fn(); if (v) return v; await sleep(16); } return null; }
 const CONTAINERS = new Set(['html', 'body', 'div', 'section', 'main', 'article', 'aside', 'header', 'footer', 'nav', 'form', 'figure', 'ul', 'ol', 'li', 'td', 'th', 'fieldset', 'details', 'dialog']);
@@ -77,23 +77,20 @@ export function initCreate(ctx) {
   let editing = null;
   function textEditor({ x, y, width, host }) {
     const ed = document.createElement('div');
-    ed.className = 'nk-new-text'; ed.contentEditable = 'plaintext-only'; ed.spellcheck = false;
+    ed.className = 'nk-new-text'; ed.contentEditable = 'true'; ed.spellcheck = false;
     ed.setAttribute('role', 'textbox'); ed.setAttribute('aria-multiline', 'true'); ed.setAttribute('aria-label', 'New text');
     if (width) { ed.style.width = `${width}px`; ed.dataset.fixed = '1'; }
     if (host) host.append(ed);
     else { ed.classList.add('nk-in-frame'); ed.dataset.nodrag = '1'; ed.style.left = `${x}px`; ed.style.top = `${y}px`; world.append(ed); }
     return ed;
   }
-  // Escape, Ctrl/Cmd+Enter or a click elsewhere commit; Enter is a new line (standards section 4 rule 4).
+  // Escape, Ctrl/Cmd+Enter or a click elsewhere commit; Enter is a new line; Ctrl/Cmd+B, I, U format (rich-text.js, the same keys
+  // as text edited again). Resolves to { text, html }: the plain text (empty means nothing was typed) and the markup to write.
   function editUntilDone(ed) {
     return new Promise((resolve) => {
       let done = false;
-      const finish = () => { if (done) return; done = true; ed.contentEditable = 'false'; ed.blur(); editing = null; resolve(ed.innerText.replace(/\n$/, '')); };
-      ed.addEventListener('keydown', (ev) => {
-        if (ev.isComposing || ev.keyCode === 229) return;
-        if (ev.key === 'Escape' || (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey))) { ev.preventDefault(); ev.stopPropagation(); finish(); }
-        else ev.stopPropagation(); // typing never reaches the canvas keys
-      });
+      const finish = () => { if (done) return; done = true; const html = serialize(ed); detach(); ed.contentEditable = 'false'; ed.blur(); editing = null; resolve({ text: ed.textContent, html }); };
+      const detach = richText(ed, { onCommit: finish });
       ed.addEventListener('blur', () => setTimeout(finish, 0));
       editing = { finish };
       ed.focus();
@@ -103,10 +100,10 @@ export function initCreate(ctx) {
     const p = pending({ x, y, w: width, h: 0, name: nextName() });
     p.frame.style.height = ''; p.el.dataset.text = '1';
     const ed = textEditor({ width, host: p.frame });
-    const text = await editUntilDone(ed);
+    const { text, html } = await editUntilDone(ed);
     if (!text.trim()) { p.remove(); return null; } // nothing typed: no frame, no file, no undo step
     const w = width ?? Math.max(MIN.w, Math.ceil(ed.getBoundingClientRect().width / zoom()) + 1);
-    const r = await post('/api/frames', { x, y, width: w, body: `<p style="margin: 0; ${TEXT_FONT}">${textHtml(text)}</p>` });
+    const r = await post('/api/frames', { x, y, width: w, body: `<p style="margin: 0; ${TEXT_FONT}">${html}</p>` });
     if (!r.ok) { p.remove(); ctx.hint(`Could not make the text: ${plain(r.error)}`); return null; }
     p.name(r.name);
     const sec = await adopt(r);
@@ -206,10 +203,10 @@ export function initCreate(ctx) {
       const w = box ? Math.max(MIN.w, Math.round(box.w / z)) : null;
       const a = ctx.view.toWorld(box ? box.left : point.x, box ? box.top : point.y);
       const ed = textEditor({ x: a.x, y: a.y, width: w });
-      const text = await editUntilDone(ed);
+      const { text, html } = await editUntilDone(ed);
       if (!text.trim()) { ed.remove(); return null; }
       // a click gives text that grows with what is typed (it never wraps against the frame's edge); a drag gives a fixed width
-      return insert(t, s, `<p style="${placeCss(s, w, 0)}margin: 0; ${TEXT_FONT}${w ? '' : '; white-space: pre'}">${textHtml(text)}</p>`, 'Added text', ed);
+      return insert(t, s, `<p style="${placeCss(s, w, 0)}margin: 0; ${TEXT_FONT}${w ? '' : '; white-space: pre'}">${html}</p>`, 'Added text', ed);
     }
     const [w, h] = box ? [Math.max(8, Math.round(box.w / z)), Math.max(8, Math.round(box.h / z))] : DEFAULT.image;
     const hold = holdBox(box || { left: point.x, top: point.y, w: w * z, h: h * z }); hold.classList.add('nk-slot');
@@ -302,15 +299,17 @@ export function initCreate(ctx) {
   ctx.on('doc-renamed', (f) => { if (f.from && f.to) swap(f.from, f.to); }); // an undo, a redo, another window, an agent
 
   // In place on the canvas: the label becomes a field with the name selected. Enter commits, Escape cancels, a click away commits.
-  function startRename(id) {
+  // Any other card (a TSX component) renames through the same field: opts { name, check(to), rename(to) } say how.
+  function startRename(id, opts = null) {
     const c = ctx.state.components.get(id);
     const sec = ctx.stage.sections.get(id);
-    if (!frameFile(c) || !sec || c.readOnly) return false;
+    if (!(opts || frameFile(c)) || !sec || c.readOnly) return false;
     const h3 = sec.el.querySelector('.cmp-title h3');
     if (!h3 || sec.el.querySelector('.nk-rename')) return false;
+    const was = opts?.name ?? nameOf(id), checkTo = opts?.check ?? ((to) => check(id, to)), renameTo = opts?.rename ?? ((to) => rename(id, to));
     const input = document.createElement('input');
-    input.className = 'nk-rename'; input.value = nameOf(id); input.spellcheck = false; input.dataset.nodrag = '1';
-    input.setAttribute('aria-label', `Rename ${nameOf(id)}`);
+    input.className = 'nk-rename'; input.value = was; input.spellcheck = false; input.dataset.nodrag = '1';
+    input.setAttribute('aria-label', `Rename ${was}`);
     const msg = document.createElement('span'); msg.className = 'nk-rename-msg'; msg.setAttribute('role', 'alert'); msg.hidden = true;
     const fit = () => { input.style.width = `${Math.max(4, input.value.length + 2)}ch`; };
     fit(); h3.hidden = true; h3.after(input, msg);
@@ -319,13 +318,13 @@ export function initCreate(ctx) {
     const close = () => { done = true; input.remove(); msg.remove(); h3.hidden = false; };
     const commit = async (fromBlur) => {
       if (done) return;
-      const k = check(id, input.value);
+      const k = checkTo(input.value);
       if (k.same) { close(); return; }
       if (k.error) { if (fromBlur) { close(); ctx.hint(plain(k.error)); return; } msg.textContent = k.error; msg.hidden = false; input.focus(); return; }
       done = true; h3.textContent = k.name; input.disabled = true;
-      const r = await rename(id, k.name);
+      const r = await renameTo(k.name);
       input.remove(); msg.remove(); h3.hidden = false;
-      if (!r.ok) { h3.textContent = nameOf(id); if (!fromBlur) startRename(id)?.error?.(r.error); else ctx.hint(plain(r.error)); }
+      if (!r.ok) { h3.textContent = was; if (!fromBlur) startRename(id, opts)?.error?.(r.error); else ctx.hint(plain(r.error)); }
     };
     input.addEventListener('input', () => { fit(); msg.hidden = true; });
     input.addEventListener('keydown', (ev) => {

@@ -1,5 +1,5 @@
 // WPC-28: a person renames and deletes a component on the canvas, with the same engine operations agents use
-// (POST /api/components/:id/rename, DELETE /api/components/:id). Reached from Cmd-K ("Rename component…", "Delete component…"),
+// (POST /api/components/:id/rename, DELETE /api/components/:id). Reached from Cmd-K ("Rename frame or component", "Delete component…"),
 // F2 on a selected component or a component row in the layers tree, and the "More actions" menu on that row.
 // Delete says what uses the component (the engine refuses while anything does), and is undoable: this module keeps the source
 // and the frame position, and Undo (the toast button, or Cmd/Ctrl+Z straight after) writes the file back.
@@ -68,35 +68,31 @@ export function initComponentOps(ctx) {
     return c;
   }
 
-  // An HTML file drawn as a frame is renamed, deleted and duplicated as a file (file-ops.js): in place on its label, one undo step each.
-  const isFile = (c) => c?.kind === 'html' && !c.doc;
-  function rename(id, opts = {}) {
+  // Rename in place: the card's label becomes the field (create.js startRename), as for a frame file. Never a dialog over the canvas.
+  const isFile = (c) => c?.kind === 'html' && !c.doc; // a file drawn as a frame
+  function rename(id) {
     const c = pick(id);
     if (!c) return false;
-    if (isFile(c)) { if (c.fileKind !== 'html') { ctx.hint(`Rename ${c.path} in your editor for now: renaming a React file here comes in the next pass.`); return false; } return ctx.fileOps.rename(c.component); }
+    if (isFile(c) && c.fileKind !== 'html') { ctx.hint(`Rename ${c.path} in your editor for now: renaming a React file here comes in the next pass.`); return false; }
     if (c.readOnly) { ctx.hint(`${c.name} is read-only (${String(c.readOnly).replace(/\.$/, '')}), so it can't be renamed here. Rename it in your editor.`); return false; }
-    openDialog(`<form method="dialog" id="cmp-rename" autocomplete="off"><h2 id="cmp-dialog-title">Rename ${esc(c.name)}</h2>
-      <p>The file, the exported function and its Props type change together, and so do the import and tags in any component that uses it. Where it sits on the canvas stays.</p>
-      <label>New name <input id="cmp-name" aria-label="New component name" value="${esc(c.name)}" spellcheck="false"></label>
-      <p id="cmp-error" role="alert"></p>
-      <div class="cmp-btns"><button type="button" id="cmp-cancel">Cancel</button><button type="submit" id="cmp-ok" class="primary">Rename</button></div></form>`, c.component, opts.fromRow);
-    const input = dialog.querySelector('#cmp-name'), err = dialog.querySelector('#cmp-error');
-    input.focus(); input.select();
-    dialog.querySelector('#cmp-cancel').onclick = close;
+    if (ctx.create?.isFrameFile(c)) return !!ctx.create.startRename(c.component);
+    ctx.stage.reveal?.(c.component);
+    const row = !!document.activeElement?.closest?.('#layers'); // started from a layers row: focus goes back to that row after
     const others = [...ctx.state.components.values()].filter((x) => x !== c).map((x) => x.name);
-    dialog.querySelector('form').onsubmit = async (ev) => {
-      ev.preventDefault();
-      const to = input.value.trim();
-      if (to === c.name) { close(); return; }
-      const bad = checkName('component', to, others);
-      if (bad) { err.textContent = bad; input.focus(); return; }
-      const r = await renameTo(c, to);
-      if (!r.ok) { err.textContent = engineSentence('component', r.error, to); input.focus(); return; }
-      close();
-      last = { kind: 'rename', id: r.id, from: c.name, to: r.name };
-      showToast(`Renamed ${c.name} to ${r.name}. Ctrl+Z puts the old name back.`, true);
-    };
-    return true;
+    const ok = ctx.create?.startRename(c.component, {
+      name: c.name,
+      check: (v) => { const to = String(v ?? '').trim(); if (to === c.name) return { same: true }; const bad = checkName('component', to, others); return bad ? { error: bad } : { name: to }; },
+      rename: async (to) => {
+        fromRow = row;
+        const r = await renameTo(c, to).finally(() => { fromRow = false; });
+        if (!r.ok) return { ok: false, error: engineSentence('component', r.error, to) };
+        last = { kind: 'rename', id: r.id, from: c.name, to: r.name };
+        showToast(`Renamed ${c.name} to ${r.name}. Ctrl+Z puts the old name back.`, true);
+        return r;
+      },
+    });
+    if (!ok) ctx.hint(`${c.name} is not on the canvas right now. Show it, then rename it from its label.`);
+    return !!ok;
   }
 
   async function remove(id, opts = {}) {
@@ -157,11 +153,6 @@ export function initComponentOps(ctx) {
 
   addEventListener('keydown', (ev) => {
     if ((document.body.dataset.modal && document.body.dataset.modal !== 'component') || dialog.open || typing(ev.target) || ev.isComposing) return;
-    // F2: a frame (a file's card or root) renames the file; a layer of a TSX component renames the layer
-    if (ev.key === 'F2' && !ev.defaultPrevented && ctx.state.selection) {
-      if (ctx.ops?.isFrame?.() === false) { if (ctx.state.components.get(ctx.state.selection.component)?.doc && ctx.layers?.rename()) ev.preventDefault(); return; }
-      ev.preventDefault(); rename(); return;
-    }
     if (last && ev.key.toLowerCase() === 'z' && (ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey) { ev.preventDefault(); ev.stopImmediatePropagation(); undoLast(); }
   });
 
