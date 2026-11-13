@@ -105,7 +105,11 @@ The context contains `control`, `host`, `get`, `begin`, `change`, `commit`, `can
 
 ## Validation and revisions
 
-Malformed IDs, duplicate IDs, invalid option values, non-finite numeric values, numeric range violations and malformed core array shapes are rejected before a panel replacement or external update. Color parsing is checked before either operation. Compound domain objects are not a replacement for adapter-side validation: hosts must validate complete shapes and supported operations before writing files. JSON values are cloned at boundaries.
+`render(schema)` repairs instead of refusing. A null or wrong-typed value, a value out of range, an unknown option, a colour the browser cannot read, a bad `min`/`max`/`step`, a missing type, a duplicate id (suffixed `-2`) or a record field of the wrong type is replaced with the nearest value that fits; the row gets a wavy underline and its description says what was repaired, and `panel.problems` lists `{control, problem}` for each. Partial motion values (`{ duration: 300 }`, a bare bezier array, a CSS keyword) are completed silently. Only a schema without a `sections` array is refused. `repairSchema(schema)` in `values.js` returns `{ schema, problems }` without rendering.
+
+Large numbers read as people write them: `1.5T`, `51,654`, `$2.4B` (a currency unit is a prefix). Typed input accepts `1.5k`, `2,400` and `$12`. Seeds and controls with `plain: true` keep every digit.
+
+External updates are stricter: malformed IDs, duplicate IDs, invalid option values, non-finite numeric values, numeric range violations and malformed core array shapes are rejected before an external update. Color parsing is checked before either operation. Compound domain objects are not a replacement for adapter-side validation: hosts must validate complete shapes and supported operations before writing files. JSON values are cloned at boundaries.
 
 `update({id:value}, {revision})` validates the entire patch before applying it. Unedited controls update immediately. Locally active controls queue only the latest external value. Local `commit`/`cancel` emits with the edit's starting revision, then a `conflict` event reports differing local/remote values, then the remote value is applied. Local undo entries for that control are cleared so undo cannot overwrite a newer writer. Durable conflict resolution belongs to the host's `baseRevision` check.
 
