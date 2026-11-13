@@ -3,7 +3,7 @@
 // file and line. As text/plain that is the code to read or paste anywhere; as text/html it is the element's markup (for a React
 // file, the markup the browser drew from it). Cmd-V on a selected parent inserts a copied element through the engine's
 // `insert` op: one edit, one undo.
-//   initCopyCode(ctx) -> ctx.copyCode = { copy(), paste(text, html), prepare() }
+//   initCopyCode(ctx) -> ctx.copyCode = { copy(), paste(text, html, target?), prepare() }; ctx.clip = the last copy's { text, html }
 // The rules that apply are matched where the browser does it: element.matches() and matchMedia() inside the frame. The
 // server only slices bytes (GET /api/component/<id>/copy). The payload is fetched when the element is selected, so the copy
 // event itself can fill the clipboard synchronously, which is the only way a copy event can.
@@ -79,9 +79,11 @@ export function initCopyCode(ctx) {
   function fill(data, p) {
     data.setData('text/plain', p.text);
     data.setData('text/html', p.html);
+    ctx.clip = { text: p.text, html: p.html }; // napkin's own last copy: a menu's Paste uses it when the page may not read the clipboard
   }
   // The page-level copy event. Ours only for an element of an engine component; everything else keeps the browser's own copy.
-  document.addEventListener('copy', (ev) => {
+  // Cut is the same copy, then the element goes (one edit, one undo).
+  const onCopy = (ev) => {
     if (typing(ev.target) || document.body.dataset.play) return;
     const x = sel(); if (!x || !ev.clipboardData) return;
     if (String(getSelection?.() ?? '').trim()) return; // words selected on the page keep the browser's own copy
@@ -89,13 +91,17 @@ export function initCopyCode(ctx) {
     const p = ready.get(key);
     ev.preventDefault();
     ev.stopImmediatePropagation();
-    if (p) { fill(ev.clipboardData, p); toast(p); return; }
+    if (p) { fill(ev.clipboardData, p); toast(p); if (ev.type === 'cut') ctx.ops?.remove(); return; }
     // not fetched yet (a very quick Cmd-C): answer through the async clipboard once it is
     build(x.s, x.c).then(async (q) => {
+      ctx.clip = { text: q.text, html: q.html };
+      if (ev.type === 'cut') ctx.ops?.remove();
       const item = new ClipboardItem({ 'text/plain': new Blob([q.text], { type: 'text/plain' }), 'text/html': new Blob([q.html], { type: 'text/html' }) });
       await navigator.clipboard.write([item]); toast(q);
     }).catch((e) => ctx.hint(`Could not copy: ${plain(e.message || e)}`));
-  }, true);
+  };
+  document.addEventListener('copy', onCopy, true);
+  document.addEventListener('cut', onCopy, true);
 
   // ---------- paste ----------
   const find = (list, id, up = null) => { for (const n of list) { if (n.node === id) return { n, parent: up }; const f = find(n.children, id, n); if (f) return f; } return null; };
@@ -111,16 +117,17 @@ export function initCopyCode(ctx) {
     }
     return null;
   }
-  async function paste(plainText, html) {
+  // `target`: the node to paste into instead of the selected one (a frame's menu pastes into its body)
+  async function paste(plainText, html, target) {
     const x = sel(); if (!x) return null;
     const { s, c } = x;
     const code = markup(plainText, html, isReact(c));
-    if (!code) return null;
+    if (!code) { ctx.hint('Nothing to paste here: copy an element first'); return null; }
     const fr = frameOf(s.component), tree = fr?.tree()?.tree;
-    const at = tree && find(tree, s.node);
+    const at = tree && find(tree, target ?? s.node);
     if (!at) { ctx.hint('Select an element to paste into'); return { ok: false }; }
     // onto a selected element: it becomes the last child. An element that cannot hold children takes it after itself.
-    const into = VOID.has(String(at.n.tag).toLowerCase()) && at.parent ? at.parent : at.n;
+    const into = !target && VOID.has(String(at.n.tag).toLowerCase()) && at.parent ? at.parent : at.n;
     const index = into === at.n ? into.children.length : into.children.indexOf(at.n) + 1;
     const edit = isReact(c) ? { op: 'insert', parent: into.node, index, jsx: code } : { op: 'insert', parent: into.node, index, html: code };
     const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: s.component, baseRevision: c.revision, edits: [edit], summary: `Pasted <${tagOf(code)}>` }) });

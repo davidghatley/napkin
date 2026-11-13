@@ -208,13 +208,6 @@ body[data-left="closed"] #sidebar { visibility: hidden; border-right-width: 0; }
 .ldrop { position: absolute; right: var(--nk-s2); height: 2px; background: var(--nk-accent); pointer-events: none; z-index: 3; }
 .ldrop[hidden] { display: none; }
 .lrename { flex: 1; min-width: 0; height: var(--nk-h-field); padding: 0 var(--nk-s1); border: 1px solid var(--nk-accent); border-radius: var(--nk-radius); background: var(--nk-panel); color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-body) var(--nk-sans); }
-#lmenu { position: fixed; z-index: 60; width: 168px; padding: var(--nk-s1); background: var(--nk-panel); border: var(--nk-border); border-radius: var(--nk-radius-pop); box-shadow: var(--nk-shadow-menu); }
-#lmenu[hidden] { display: none; }
-#lmenu button { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; width: 100%; min-height: var(--nk-h-row); padding: 0 var(--nk-s2); border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); text-align: left; }
-#lmenu button:hover:not(:disabled), #lmenu button:focus-visible { background: var(--nk-hover); outline-offset: calc(var(--nk-ring-width) * -1); }
-#lmenu button:disabled { color: var(--nk-ink-muted); cursor: not-allowed; }
-#lmenu kbd { padding: 0; border: 0; background: none; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label) var(--nk-sans); }
-#lmenu small { display: block; width: 100%; color: var(--nk-ink-muted); font-size: var(--nk-fs-label); line-height: var(--nk-lh-tight); padding-bottom: var(--nk-s1); }
 
 /* The folder's rules and variables: off the panel's face, opened from the palette ("Show styles"); the header's X goes back to layers. */
 #styles { flex: 1; min-height: 0; display: flex; flex-direction: column; }

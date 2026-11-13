@@ -257,6 +257,7 @@ export function initTools(ctx) {
   // --- select-tool niceties ------------------------------------------------------------------------------
   async function deleteSelected() {
     const sel = ctx.state.selection, c = sel && ctx.state.components.get(sel.component);
+    if (c?.kind === 'html' && !c.doc) return ctx.ops?.remove(); // an element of an HTML or React file: the engine's delete (edit-ops.js)
     if (!c?.doc || c.readOnly) return;
     // every selected node except the root, in one batch (one revision)
     const { parentOf } = index(c.doc);
