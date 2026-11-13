@@ -12,6 +12,9 @@ import { openWorkspace } from '../src/workspace.js';
 const fx = (n) => readFileSync(new URL(`../fixtures/${n}/${n}.tsx`, import.meta.url), 'utf8');
 const key = (L, k, extra = {}) => L.q(`document.dispatchEvent(new KeyboardEvent('keydown', ${JSON.stringify({ key: k, bubbles: true, ...extra })}))`);
 const waitFor = (L, expr, ms = 8000) => L.browser.waitFor(expr, ms);
+// rename is in place: the card's label becomes the name field (never a dialog over the canvas)
+const field = `document.querySelector('section.cmp .nk-rename')`;
+const renameTo = (L, v) => L.q(`(() => { const i = ${field}; i.value = ${JSON.stringify(v)}; i.dispatchEvent(new Event('input')); i.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })); })()`);
 
 test('WPC-28: Cmd-K "rename" renames the selected component, in one revision, and the file moves with it', { timeout: 90000 }, async () => {
   const L = await lab({ Card: fx('Card'), Button: fx('Button') });
@@ -20,12 +23,12 @@ test('WPC-28: Cmd-K "rename" renames the selected component, in one revision, an
     await L.q(`napkin.select({ component: ${JSON.stringify(id)}, node: napkin.find('Card').doc.root.id, variant: {} })`);
     // action 1: Cmd-K + "rename"; the palette finds it
     const found = await L.q(`(napkin.quick.build(), napkin.quick.search('rename component').map((i) => i.label).join('|'))`);
-    assert.match(found, /Rename component…/);
-    await L.q(`napkin.quick.search('rename component').find((i) => i.label === 'Rename component…').run()`);
-    await waitFor(L, `document.querySelector('#cmp-dialog')?.open && document.activeElement.id === 'cmp-name'`);
+    assert.match(found, /Rename frame or component \(in its label\)/);
+    await L.q(`napkin.quick.search('rename component').find((i) => i.label === 'Rename frame or component (in its label)').run()`);
+    await waitFor(L, `document.activeElement === ${field} && !document.querySelector('dialog[open]')`);
     // action 2: type and Enter
-    await L.q(`(() => { const i = document.querySelector('#cmp-name'); i.value = 'Panel'; document.querySelector('#cmp-rename').requestSubmit(); })()`);
-    await waitFor(L, `!document.querySelector('#cmp-dialog').open && napkin.find('Panel')`);
+    await renameTo(L, 'Panel');
+    await waitFor(L, `!${field} && napkin.find('Panel')`);
     assert.ok(existsSync(join(L.compDir, 'Panel.tsx')) && !existsSync(join(L.compDir, 'Card.tsx')));
     assert.match(readFileSync(join(L.compDir, 'Panel.tsx'), 'utf8'), /export function Panel\(/);
     assert.equal(await L.id('Panel'), id, 'the id stays');
@@ -38,16 +41,16 @@ test('WPC-28: F2 on a selected component and on a component row opens rename; a 
     const id = await L.id('Card');
     await L.q(`napkin.select({ component: ${JSON.stringify(id)}, node: napkin.find('Card').doc.root.id, variant: {} })`);
     await key(L, 'F2');
-    await waitFor(L, `document.querySelector('#cmp-dialog').open`);
-    const submit = async (v) => { await L.q(`(() => { document.querySelector('#cmp-name').value = ${JSON.stringify(v)}; document.querySelector('#cmp-rename').requestSubmit(); })()`); await sleep(300); return L.q(`document.querySelector('#cmp-error').textContent`); };
+    await waitFor(L, `!!${field} && !document.querySelector('dialog[open]')`);
+    const submit = async (v) => { await renameTo(L, v); await sleep(300); return L.q(`document.querySelector('section.cmp .nk-rename-msg').textContent`); };
     assert.match(await submit('card2!'), /can't be a component name\. Start with a capital letter/);
     assert.match(await submit('Button'), /There is already a component called "Button"\. Pick another name\./);
     assert.ok(existsSync(join(L.compDir, 'Card.tsx')), 'nothing changed');
-    await L.q(`document.querySelector('#cmp-cancel').click()`);
+    await L.q(`${field}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))`);
     // F2 on a focused component row
     await L.q(`document.querySelector('#layers .lcomp[data-component=${JSON.stringify(id)}]').focus()`);
     await L.q(`document.querySelector('#layers .lcomp[data-component=${JSON.stringify(id)}]').dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }))`);
-    await waitFor(L, `document.querySelector('#cmp-dialog').open && document.querySelector('#cmp-dialog h2').textContent === 'Rename Card'`);
+    await waitFor(L, `${field}?.getAttribute('aria-label') === 'Rename Card' && !document.querySelector('dialog[open]')`);
   } finally { await L.close(); }
 });
 
@@ -129,8 +132,8 @@ test('WPC-28: Ctrl+Z after a rename puts file, export names and sidecar back, as
     await L.q(`napkin.select({ component: ${JSON.stringify(id)}, node: napkin.find('Card').doc.root.id, variant: {} })`);
     const before = readFileSync(join(L.compDir, 'Card.tsx'), 'utf8');
     await L.q(`napkin.cmpOps.rename()`);
-    await L.q(`(() => { document.querySelector('#cmp-name').value = 'Panel'; document.querySelector('#cmp-rename').requestSubmit(); })()`);
-    await waitFor(L, `!document.querySelector('#cmp-dialog').open && napkin.find('Panel')?.doc`);
+    await renameTo(L, 'Panel');
+    await waitFor(L, `!${field} && napkin.find('Panel')?.doc`);
     await waitFor(L, `!document.querySelector('#cmp-toast').hidden`);
     assert.equal(await L.q(`napkin.state.selection?.component`), id, 'the selection stays on the renamed component');
     assert.ok(existsSync(join(L.compDir, 'Panel.napkin.json')));
@@ -183,8 +186,8 @@ test('WPC-28: after a rename focus stays on the renamed row; Cancel on delete fr
     const row = `#layers .lcomp[data-component=${JSON.stringify(id)}]`;
     await L.q(`document.querySelector(${JSON.stringify(row)}).focus()`);
     await L.q(`document.querySelector(${JSON.stringify(row)}).dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true }))`);
-    await waitFor(L, `document.querySelector('#cmp-dialog').open`);
-    await L.q(`(() => { document.querySelector('#cmp-name').value = 'Panel'; document.querySelector('#cmp-rename').requestSubmit(); })()`);
+    await waitFor(L, `!!${field}`);
+    await renameTo(L, 'Panel');
     await waitFor(L, `napkin.find('Panel')?.doc && document.activeElement?.classList.contains('lcomp') && document.activeElement.dataset.component === ${JSON.stringify(id)}`);
     // row menu -> Delete -> Cancel
     await L.q(`document.querySelector(${JSON.stringify(row + ' .lmore')}).click()`);

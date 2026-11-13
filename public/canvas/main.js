@@ -63,6 +63,7 @@ import { initInstruments } from './surface-panel.js';
 import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
 import { initCreate } from './create.js';
+import { initTextEdit } from './text-edit.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -146,6 +147,7 @@ initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
 initCreate(ctx); // basics pass 2: draw a frame, text or image on the canvas or into an HTML frame (create.js)
+initTextEdit(ctx); // edit text in an HTML frame again, in place; F2 renames a card from its label (before nav: Enter on text edits it)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
