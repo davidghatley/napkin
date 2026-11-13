@@ -21,8 +21,15 @@ export function initKinds(ctx) {
     scrubVideo = null,
     scrubAt = 0;
   document.querySelector('#world').addEventListener('pointermove', (e) => {
+    const poster = e.target.closest('.kind-compact img.kind-poster');
+    if (poster) { // the poster is shown until you reach for the clip
+      const v = document.createElement('video');
+      Object.assign(v, { muted: true, playsInline: true, preload: 'metadata', poster: poster.src, src: poster.dataset.clip + '#t=0.1' });
+      v.setAttribute('aria-label', poster.alt);
+      poster.replaceWith(v);
+      return;
+    }
     const video = e.target.closest('.kind-compact video');
-    if (video && video.preload === 'none') { video.preload = 'metadata'; video.load(); } // the poster is shown until you reach for the clip
     if (!video || !video.paused || !Number.isFinite(video.duration)) return;
     const b = video.getBoundingClientRect();
     scrubVideo = video;
@@ -135,7 +142,9 @@ export function compactItem(c) {
   if (family === 'image')
     content = `<img decoding="async" alt="${esc(c.name)}" src="${raw}">`;
   else if (family === 'video')
-    content = `<video preload="none" muted playsinline poster="/api/poster/${enc(c.id)}" src="${raw}#t=0.1"></video><span class="kind-stamp">Move across to scrub</span>`;
+    // (a picture until a pointer reaches it: every <video> is a compositor layer of its own and forces layers on what is drawn over it, so a canvas of
+    // hundreds of clips made every pan frame layerize hundreds of layers; the clip element is put in on the first pointer move, for scrubbing)
+    content = `<img class="kind-poster" decoding="async" alt="${esc(c.name)}" src="/api/poster/${enc(c.id)}" data-clip="${raw}"><span class="kind-stamp">Move across to scrub</span>`;
   else if (family === 'font')
     content = `<style>@font-face{font-family:'k${enc(c.id).replaceAll('%', '')}';src:url('${raw}')}</style><pre class="kind-type" style="font-family:'k${enc(c.id).replaceAll('%', '')}'">Aa Bb
 012345</pre>`;

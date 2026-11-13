@@ -145,9 +145,9 @@ code:where(:not(:is(.mount, .preview-inner) *)) { font-family: var(--nk-mono); }
   background-color: var(--nk-bg);
   background-position: 0 0;
 }
-/* The dot grid is an element of its own (#grid, made by view.js) on its own layer: a pan only moves it by a transform, so panning repaints nothing (a changed
-   background-position on #stage repainted the page on every wheel event, and every repaint re-layerizes every drawn frame). */
-#grid { position: absolute; left: 0; top: 0; pointer-events: none; will-change: transform; background-image: radial-gradient(circle at 1px 1px, var(--nk-dot) 1px, transparent 1.4px); }
+/* The dot grid (#grid, made by view.js) is the world's floor: it moves with the world, so a pan or zoom repaints nothing (a changed background-position on
+   #stage repainted the page on every wheel event), and its painted area lets every frame share the world's one layer. */
+#grid { position: absolute; pointer-events: none; background-size: 24px 24px; } /* the world's floor: view.js sets its size and its dots (see there) */
 #stage[data-zoom-band="far"] #grid { display: none; }
 body[data-pan="ready"] #stage { cursor: grab; }
 body[data-pan="drag"] #stage, body[data-pan="drag"] #stage * { cursor: grabbing !important; }

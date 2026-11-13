@@ -712,7 +712,8 @@ export function createStage(ctx, root, world, view) {
     for (const [id, sec] of sections.all()) {
       if (ctx.state.components.get(id)?.item && z < 0.35 && !keep.has(id)) continue;
       if (z * sec.size.w < 20 && !keep.has(id)) continue; // a frame under 20 screen pixels wide cannot be read: it stays the card of its file's first lines
-      if (sec.pending && visible(sec) && isDocSec(id)) {
+      if (mode !== 'exact') { /* a gesture (wheel, drag, pinch) is compositor work only: no frame is loaded or unloaded until the view settles */ }
+      else if (sec.pending && visible(sec) && isDocSec(id)) {
         const isItem = !!ctx.state.components.get(id)?.item;
         if (!isItem && loaded >= DOC_BUDGET && evictItem(keep)) loaded--;
         if (loaded < DOC_BUDGET && started < DOC_BATCH) { loaded++; started++; render(id, true).catch(console.error); } else wanting = true;
@@ -766,7 +767,7 @@ export function createStage(ctx, root, world, view) {
   function titlesNow(v) {
     const lf = view.labelScale(v.z), ls = view.labelScaleLs(v.z), slf = view.settledLabelScale(), sls = view.settledLabelScaleLs();
     if (lf === slf && ls === sls && !titled.size) return;
-    const b = view.stageBox(), m = 0.25;
+    const b = view.stageBox(), m = 0; // (only the titles on screen: each one restyled is paint work in this frame; one that comes into view gets its scale on the next event)
     const x0 = (-v.x - b.width * m) / v.z, x1 = (b.width * (1 + m) - v.x) / v.z, y0 = (-v.y - b.height * m) / v.z, y1 = (b.height * (1 + m) - v.y) / v.z;
     const off = (a, h) => Math.max(a / h, h / a) >= LABEL_STEP;
     for (const [, sec] of sections.all()) {
