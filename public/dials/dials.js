@@ -824,7 +824,14 @@ export class Dials extends EventTarget {
     // A section that scrolls into view draws its rows' figures at once.
     for (const s of this.sections.values()) {
       const mine = lazy.filter((r) => r.section === s);
-      if (mine.length) s.node.addEventListener("contentvisibilityautostatechange", (e) => !e.skipped && mine.forEach(wake), { once: true });
+      if (!mine.length) continue;
+      const node = s.node,
+        on = (e) => {
+          if (e.skipped) return;
+          node.removeEventListener("contentvisibilityautostatechange", on);
+          mine.forEach(wake);
+        };
+      node.addEventListener("contentvisibilityautostatechange", on);
     }
     let i = 0;
     const slice = () => {
