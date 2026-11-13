@@ -1,17 +1,22 @@
 import { clamp } from "./values.js";
 import { curvePoints } from "./motion.js";
+/*
+  Row figures. Every control draws what its value does in one well of the same size
+  (W x H CSS pixels), and that drawing is the control: a drag on it sets the value
+  where the pointer is (see Dials.scrub). Nothing here is decoration; each mark moves
+  with the value.
+*/
+export const W = 76,
+  H = 24;
 export const esc = (s) =>
   String(s).replace(
     /[&<>"']/g,
     (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
-      ],
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
   );
-const path = (points) =>
-  points
-    .map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`)
-    .join(" ");
+const f1 = (n) => Number(n.toFixed(2));
+export const path = (points) =>
+  points.map(([x, y], i) => `${i ? "L" : "M"}${f1(x)} ${f1(y)}`).join(" ");
 export function schedule(steps = 24, curve = "karras", shift = 1) {
   const n = Math.max(1, Math.min(150, Math.round(steps)));
   return Array.from({ length: n + 1 }, (_, i) => {
@@ -36,244 +41,418 @@ export const position = (c, n) =>
 const A = "var(--d-accent)",
   LINE = "var(--d-rule)",
   INK = "var(--d-text)",
-  SOFT = "var(--d-muted)";
-const kindOf = (c) =>
+  SOFT = "var(--d-faint)",
+  PAPER = "var(--d-surface)";
+export const kindOf = (c) =>
   typeof c.figure === "string" ? c.figure : c.figure?.type || c.type;
-// A stretched figure fills its track: x scales with the row, strokes keep their width.
-const stretch = (body) =>
-  `<svg class="d-fig-wide" viewBox="0 0 120 20" preserveAspectRatio="none" aria-hidden="true">${body}</svg>`;
-// A glyph keeps its proportions: circles stay round, corners stay true.
-const glyph = (w, body) =>
-  `<svg class="d-fig-glyph" viewBox="0 0 ${w} 20" width="${w}" height="20" aria-hidden="true">${body}</svg>`;
-const stroke = (d, color = A, width = 1.5, extra = "") =>
-  `<path d="${d}" stroke="${color}" fill="none" stroke-width="${width}" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
-// The meter is the row's track: a hairline range with the value filled in and a thumb at the value.
-const meter = (p) =>
-  `<span class="d-meter" style="--p:${p.toFixed(4)}"><i></i><b></b></span>`;
+const svg = (body, cls = "") =>
+  `<svg${cls ? ` class="${cls}"` : ""} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true">${body}</svg>`;
+const line = (d, color = A, width = 1.5, extra = "") =>
+  `<path d="${d}" stroke="${color}" fill="none" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"${extra}/>`;
+/** The rail every ranged figure shares: 4 px track, filled to the value, a 10 px thumb. */
+export const rail = (p, x0 = 6, w = W - 12, y = 12) => {
+  const x = x0 + p * w;
+  return (
+    `<rect class="d-track" x="${x0}" y="${y - 2}" width="${w}" height="4" rx="2" fill="${LINE}" opacity=".6"/>` +
+    `<rect x="${x0}" y="${y - 2}" width="${f1(x - x0)}" height="4" rx="2" fill="${A}"/>` +
+    `<circle class="d-thumb" cx="${f1(x)}" cy="${y}" r="5" fill="${PAPER}" stroke="${INK}" stroke-width="1.5"/>`
+  );
+};
+// The plain number: ticks every tenth of the range above the rail.
+function ruler(p) {
+  let ticks = "";
+  for (let i = 0; i <= 10; i++) {
+    const x = 6 + (i / 10) * (W - 12);
+    ticks += `<path d="M${f1(x)} ${i % 5 ? 4 : 1.5}V7" stroke="${LINE}"/>`;
+  }
+  return svg(ticks + rail(p, 6, W - 12, 15));
+}
+const optionsOf = (c) =>
+  (c.options || []).map((o) => (typeof o === "object" ? o.value : o));
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Choice glyphs: each option drawn as what it does; the current one in accent, underlined in ink.
+const choiceGlyphs = {
+  align(o, x, w, on) {
+    const color = on ? A : SOFT,
+      lens = [w - 7, w - 13, w - 9],
+      at = (len) =>
+        o === "center" ? x + (w - len) / 2 : o === "right" ? x + w - 3.5 - len : x + 3.5;
+    return lens
+      .map(
+        (len, i) =>
+          `<rect x="${f1(at(len))}" y="${5 + i * 5}" width="${f1(len)}" height="2" rx="1" fill="${color}"/>`,
+      )
+      .join("");
+  },
+  mark(o, x, w, on) {
+    const color = on ? A : SOFT;
+    if (o === "bar")
+      return [6, 11, 8, 14]
+        .map(
+          (h, i) =>
+            `<rect x="${f1(x + 4 + i * ((w - 8) / 4))}" y="${19 - h}" width="${f1((w - 8) / 4 - 1.5)}" height="${h}" fill="${color}"/>`,
+        )
+        .join("");
+    if (o === "line")
+      return line(`M${f1(x + 3)} 17L${f1(x + w * 0.35)} 10L${f1(x + w * 0.62)} 13L${f1(x + w - 3)} 4`, color, 1.5);
+    return [
+      [0.2, 0.75],
+      [0.42, 0.4],
+      [0.62, 0.6],
+      [0.82, 0.18],
+    ]
+      .map(([a, b]) => `<circle cx="${f1(x + a * w)}" cy="${f1(3 + b * 15)}" r="2" fill="${color}"/>`)
+      .join("");
+  },
+};
+function choice(c, v) {
+  const opts = optionsOf(c),
+    n = Math.max(1, opts.length),
+    w = W / n,
+    glyph = choiceGlyphs[c.figure] || choiceGlyphs[c.id];
+  return svg(
+    opts
+      .map((o, i) => {
+        const on = same(o, v),
+          x = i * w;
+        const body = glyph
+          ? glyph(o, x, w, on)
+          : `<rect x="${f1(x + 2.5)}" y="5.5" width="${f1(w - 5)}" height="11" rx="2" fill="${on ? A : "none"}" stroke="${on ? A : LINE}"/>`;
+        return (
+          body +
+          (on ? `<rect x="${f1(x + 2)}" y="${H - 2}" width="${f1(w - 4)}" height="2" fill="${INK}"/>` : "")
+        );
+      })
+      .join(""),
+  );
+}
+export function hash(n) {
+  let s = n >>> 0 || 1;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
 export function figureMarkup(c, v) {
   const n = typeof v === "number" ? v : 0,
     p = position(c, n),
     kind = kindOf(c);
   if (kind === "color")
-    return `<span class="d-bar d-bar-color" style="--swatch:${esc(v)}"><i></i></span>`;
-  if (kind === "gradient")
-    return `<span class="d-bar" style="background:${esc(v)}"><i></i></span>`;
+    return `<span class="d-fig-swatch" style="--swatch:${esc(v)}"><i></i></span>`;
+  if (kind === "gradient") {
+    const stops = (
+      String(v).match(
+        /#[0-9a-f]{3,8}\b|(?:rgb|hsl|oklch|oklab|lab|lch|color)a?\([^)]*\)/gi,
+      ) || []
+    ).length;
+    let ticks = "";
+    for (let i = 0; i < stops; i++) {
+      const x = 5 + (i / Math.max(1, stops - 1)) * (W - 10);
+      ticks += `<path d="M${f1(x)} 17.5l3 4.5h-6Z" fill="${PAPER}" stroke="${INK}" stroke-width="1"/>`;
+    }
+    return (
+      `<span class="d-fig-swatch d-fig-gradient" style="--swatch:${esc(v)}"><i></i></span>` +
+      svg(ticks, "d-fig-over")
+    );
+  }
+  if (kind === "shadow") {
+    const s = v || {},
+      k = 0.35;
+    return `<span class="d-fig-shadow"><i style="box-shadow:${f1((s.x || 0) * k)}px ${f1((s.y || 0) * k)}px ${f1((s.blur || 0) * k)}px ${f1((s.spread || 0) * k)}px ${esc(s.color || "#0003")}"></i></span>`;
+  }
   if (["motion", "spring", "bezier"].includes(kind)) {
     const total = (v?.duration || 1000) + (v?.delay || 0),
       d = (v?.delay || 0) / total,
-      pts = curvePoints(v, 40).map(([x, y]) => [
-        (d + (1 - d) * x) * 120,
-        17 - clamp(y, -0.2, 1.3) * 13,
+      x0 = 4,
+      w = W - 8,
+      pts = curvePoints(v, 48).map(([x, y]) => [
+        x0 + (d + (1 - d) * x) * w,
+        19 - clamp(y, -0.25, 1.35) * 13,
       ]);
-    return stretch(
-      stroke("M0 17.5H120", LINE, 1) +
-        stroke("M0 4H120", LINE, 1, ' stroke-dasharray="1 3"') +
-        stroke(path([[0, 17], ...pts])),
+    return svg(
+      (d > 0
+        ? `<rect x="${x0}" y="3" width="${f1(d * w)}" height="18" fill="${A}" opacity=".12"/>`
+        : "") +
+        line(`M${x0} 6H${x0 + w}`, LINE, 1, ' stroke-dasharray="1 2.5"') +
+        line(`M${x0} 19H${x0 + w}`, LINE, 1) +
+        line(path([[x0, 19], ...pts]), A, 1.5),
+    );
+  }
+  if (kind === "keyframes") {
+    const frames = Array.isArray(v) ? v : [],
+      xs = frames.map((f, i) =>
+        Number.isFinite(f.offset) ? f.offset : i / Math.max(1, frames.length - 1),
+      ),
+      amounts = frames.map((f) => translateOf(f)),
+      hi = Math.max(1, ...amounts.map(Math.abs)),
+      pts = xs.map((x, i) => [5 + x * (W - 10), 18 - (amounts[i] / hi) * 12]);
+    return svg(
+      line(`M5 18H${W - 5}`, LINE, 1) +
+        line(path(pts), A, 1.5) +
+        pts
+          .map(
+            ([x, y]) =>
+              `<path d="M${f1(x)} ${f1(y - 3.5)}l3.5 3.5l-3.5 3.5l-3.5 -3.5Z" fill="${PAPER}" stroke="${INK}" stroke-width="1.25"/>`,
+          )
+          .join(""),
     );
   }
   if (kind === "angle") {
-    const r = (n * Math.PI) / 180;
-    return (
-      glyph(
-        20,
-        `<circle cx="10" cy="10" r="8" fill="none" stroke="${LINE}"/>` +
-          `<path d="M10 10L${(10 + 8 * Math.cos(r)).toFixed(2)} ${(10 - 8 * Math.sin(r)).toFixed(2)}" stroke="${A}" stroke-width="1.5" stroke-linecap="round"/>` +
-          `<circle cx="10" cy="10" r="1.5" fill="${A}"/>`,
-      ) + meter(p)
+    const r = (n * Math.PI) / 180,
+      cx = 12,
+      cy = 12,
+      R = 9,
+      ex = cx + R * Math.cos(r),
+      ey = cy - R * Math.sin(r),
+      turn = ((n % 360) + 360) % 360,
+      arc =
+        turn === 0
+          ? ""
+          : `<path d="M${cx + R} ${cy}A${R} ${R} 0 ${turn > 180 ? 1 : 0} 0 ${f1(ex)} ${f1(ey)}" fill="none" stroke="${A}" stroke-width="2"/>`;
+    return svg(
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${LINE}"/>` +
+        arc +
+        line(`M${cx} ${cy}L${f1(ex)} ${f1(ey)}`, INK, 1.5) +
+        `<circle cx="${cx}" cy="${cy}" r="1.5" fill="${INK}"/>` +
+        rail(p, 30, 40),
     );
   }
-  if (kind === "boolean")
-    return `<span class="d-switch" data-on="${v ? "true" : "false"}"><i></i></span>`;
   if (kind === "vector") {
     const lo = c.min ?? -1,
       hi = c.max ?? 1,
-      x = 2 + clamp((v[0] - lo) / (hi - lo || 1), 0, 1) * 32,
-      y = 18 - clamp((v[1] - lo) / (hi - lo || 1), 0, 1) * 16;
-    return glyph(
-      36,
-      `<rect x="0.5" y="0.5" width="35" height="19" rx="2" fill="none" stroke="${LINE}"/>` +
-        `<path d="M18 1V19M1 10H35" stroke="${LINE}" stroke-dasharray="1 2"/>` +
-        `<path d="M${x.toFixed(1)} 1V19M1 ${y.toFixed(1)}H35" stroke="${A}" stroke-opacity=".35"/>` +
-        `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.5" fill="${A}"/>`,
+      x = 4 + clamp((v[0] - lo) / (hi - lo || 1), 0, 1) * (W - 8),
+      y = H - 4 - clamp((v[1] - lo) / (hi - lo || 1), 0, 1) * (H - 8);
+    return svg(
+      `<path d="M${W / 2} 2V${H - 2}M2 ${H / 2}H${W - 2}" stroke="${LINE}" stroke-dasharray="1 2"/>` +
+        `<path d="M${f1(x)} 1V${H - 1}M1 ${f1(y)}H${W - 1}" stroke="${A}" opacity=".5"/>` +
+        `<circle class="d-thumb" cx="${f1(x)}" cy="${f1(y)}" r="4" fill="${PAPER}" stroke="${INK}" stroke-width="1.5"/>`,
     );
   }
   if (kind === "spacing") {
     const [t, r, b, l] = v,
-      k = (n) => clamp(n / 8, 0, 6);
-    return glyph(
-      36,
-      `<rect x="0.5" y="0.5" width="35" height="19" rx="2" fill="${A}" fill-opacity=".14" stroke="${LINE}"/>` +
-        `<rect x="${(0.5 + k(l)).toFixed(1)}" y="${(0.5 + k(t) / 2).toFixed(1)}" width="${(35 - k(l) - k(r)).toFixed(1)}" height="${(19 - k(t) / 2 - k(b) / 2).toFixed(1)}" fill="var(--d-surface)" stroke="${A}"/>`,
+      k = (q) => clamp(q / 5, 0, 10),
+      ox = 12,
+      ow = W - 24;
+    return svg(
+      `<rect x="${ox + 0.5}" y="1.5" width="${ow - 1}" height="21" rx="1.5" fill="${A}" fill-opacity=".16" stroke="${A}" stroke-opacity=".55"/>` +
+        `<rect x="${f1(ox + 1 + k(l))}" y="${f1(2 + k(t) / 1.6)}" width="${f1(Math.max(2, ow - 2 - k(l) - k(r)))}" height="${f1(Math.max(2, 20 - k(t) / 1.6 - k(b) / 1.6))}" fill="${PAPER}" stroke="${INK}"/>`,
     );
   }
-  if (kind === "shadow")
-    return glyph(
-      40,
-      `<rect x="${(9 + (v.x || 0) / 4).toFixed(1)}" y="${(4 + (v.y || 0) / 6).toFixed(1)}" width="22" height="12" rx="2" fill="${INK}" opacity="${clamp(0.12 + (v.blur || 0) / 200, 0.12, 0.3).toFixed(2)}" style="filter:blur(${clamp((v.blur || 0) / 10, 0, 3)}px)"/>` +
-        `<rect x="9.5" y="3.5" width="21" height="11" rx="2" fill="var(--d-surface)" stroke="${SOFT}"/>`,
-    );
   if (kind === "text" && typeof v === "string") {
-    // Words as bars: the figure grows with the amount of text and wraps like a paragraph.
+    // Words as dashes: the drawing grows with the text and wraps like a paragraph.
     const words = v.trim().split(/\s+/).filter(Boolean);
-    let x = 0,
-      y = 4;
-    const bars = words
-      .slice(0, 22)
-      .map((w) => {
-        const len = Math.min(36, 3 + w.length * 3.4);
-        if (x + len > 120) {
-          x = 0;
-          y += 6;
-        }
-        const r =
-          y < 18
-            ? `<rect x="${x.toFixed(1)}" y="${y}" width="${len.toFixed(1)}" height="3" rx="1.5" fill="${SOFT}" fill-opacity=".55"/>`
-            : "";
-        x += len + 3;
-        return r;
-      })
-      .join("");
-    return stretch(bars || stroke("M0 17.5H120", LINE, 1));
+    let x = 2,
+      y = 5,
+      out = "";
+    for (const word of words.slice(0, 24)) {
+      const len = Math.min(26, 3 + word.length * 2.6);
+      if (x + len > W - 2) {
+        x = 2;
+        y += 6;
+      }
+      if (y > 19) break;
+      out += `<rect x="${f1(x)}" y="${y}" width="${f1(len)}" height="2.5" rx="1.25" fill="${y === 5 ? INK : SOFT}"/>`;
+      x += len + 3;
+    }
+    return svg(out || line(`M2 12H${W - 2}`, LINE, 1, ' stroke-dasharray="2 3"'));
   }
   if (kind === "typography") {
-    const size = v?.size || 16;
+    const size = v?.size || 16,
+      px = clamp(8 + (size - 8) * 0.3, 9, 21);
     return (
-      `<span class="d-fig-type" style="font-family:${esc(v?.family || "inherit")};font-weight:${Number(v?.weight) || 400}">Ag</span>` +
-      meter(clamp((size - 8) / 88, 0, 1))
+      `<span class="d-fig-type" style="font-family:${esc(v?.family || "inherit")};font-weight:${Number(v?.weight) || 400};font-size:${f1(px)}px">Ag</span>` +
+      svg(rail(clamp((size - 8) / 88, 0, 1), 36, 34), "d-fig-over")
     );
   }
   if (kind === "image") {
-    const gamma = v.gamma || 1,
-      pts = Array.from({ length: 32 }, (_, i) => {
-        const x = i / 31;
-        return [
-          x * 120,
-          18 -
-            clamp(
-              (x - (v.black || 0)) / ((v.white ?? 1) - (v.black || 0) || 0.01),
-              0,
-              1,
-            ) **
-              (1 / gamma) *
-              16,
-        ];
-      });
-    return stretch(
-      `<path d="M0 18 ${path(pts).slice(1)} L120 18Z" fill="${A}" fill-opacity=".1"/>` +
-        stroke(path(pts)),
-    );
+    const g = v.gamma || 1,
+      black = v.black || 0,
+      white = v.white ?? 1,
+      curve = v.curve || [0, 0.25, 0.5, 0.75, 1],
+      tone = (x) => {
+        const t = clamp((x - black) / (white - black || 0.01), 0, 1) ** (1 / g),
+          i = Math.min(3, Math.floor(t * 4)),
+          f = t * 4 - i;
+        return curve[i] + (curve[i + 1] - curve[i]) * f;
+      },
+      r = hash(7);
+    let bars = "";
+    for (let i = 0; i < 24; i++) {
+      const h = 2 + (Math.sin(i * 0.55) * 0.5 + 0.5) * 9 + r() * 4;
+      bars += `<rect x="${f1(3 + i * 3)}" y="${f1(22 - h)}" width="2" height="${f1(h)}" fill="${SOFT}" opacity=".4"/>`;
+    }
+    const pts = Array.from({ length: 33 }, (_, i) => [
+      3 + (i / 32) * (W - 6),
+      22 - tone(i / 32) * 20,
+    ]);
+    return svg(bars + line(path(pts), A, 1.5));
   }
   if (kind === "encoding") {
-    // A small chart that uses exactly the channels that are bound: no x means points
-    // stack on one column, no y means one row, color splits two series, size varies radius.
     const pts = [
-      [0.08, 0.7],
-      [0.22, 0.45],
-      [0.34, 0.6],
-      [0.5, 0.3],
-      [0.62, 0.42],
-      [0.78, 0.15],
-      [0.92, 0.25],
-    ];
-    const px = (q) => (v.x ? 4 + q[0] * 52 : 30),
-      py = (q) => (v.y ? 3 + q[1] * 14 : 10),
-      series = [A, SOFT];
-    return glyph(
-      60,
-      `<path d="M1 1V19H59" stroke="${LINE}" fill="none"/>` +
+        [0.06, 0.78],
+        [0.18, 0.55],
+        [0.3, 0.66],
+        [0.42, 0.38],
+        [0.55, 0.47],
+        [0.68, 0.22],
+        [0.8, 0.3],
+        [0.93, 0.1],
+      ],
+      px = (q) => (v.x ? 6 + q[0] * (W - 10) : W / 2),
+      py = (q) => (v.y ? 3 + q[1] * 16 : 12),
+      series = [A, INK, SOFT];
+    return svg(
+      `<path d="M2.5 1V21.5H${W - 1}" stroke="${LINE}" fill="none"/>` +
         pts
           .map(
             (q, i) =>
-              `<circle cx="${px(q).toFixed(1)}" cy="${py(q).toFixed(1)}" r="${v.size ? 1.2 + ((i * 5) % 7) * 0.4 : 2}" fill="${v.color ? series[i % 2] : A}" opacity="${v.x || v.y ? 0.95 : 0.35}"/>`,
+              `<circle cx="${f1(px(q))}" cy="${f1(py(q))}" r="${v.size ? f1(1.3 + ((i * 5) % 7) * 0.33) : 1.9}" fill="${v.color ? series[i % 3] : A}" opacity="${v.x || v.y ? 1 : 0.35}"/>`,
           )
           .join(""),
     );
   }
   if (kind === "sampler") {
     const s = schedule(v.steps, v.scheduler, v.shift),
-      pts = s.map((y, i, arr) => [(i / (arr.length - 1)) * 120, 18 - y * 16]);
-    return stretch(
-      `<path d="M0 18 ${path(pts).slice(1)} L120 18Z" fill="${A}" fill-opacity=".1"/>` +
-        stroke(path(pts)),
+      skip = Math.round((1 - (v.denoise ?? 1)) * (s.length - 1)),
+      pts = s.map((y, i, arr) => [3 + (i / (arr.length - 1)) * (W - 6), 21 - y * 18]);
+    return svg(
+      (skip
+        ? `<rect x="3" y="2" width="${f1(pts[skip][0] - 3)}" height="20" fill="${SOFT}" opacity=".18"/>`
+        : "") +
+        line(path(pts), A, 1.5) +
+        pts
+          .filter((_, i) => i >= skip && i % Math.max(1, Math.round(s.length / 10)) === 0)
+          .map(([x, y]) => `<circle cx="${f1(x)}" cy="${f1(y)}" r="1.4" fill="${INK}"/>`)
+          .join(""),
     );
   }
   if (kind === "seed") {
-    let seed = n >>> 0;
-    return stretch(
-      Array.from({ length: 30 }, (_, i) => {
-        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-        const h = 4 + (seed % 13);
-        return `<rect x="${i * 4}" y="${18 - h}" width="2.6" height="${h}" fill="${SOFT}" fill-opacity=".6"/>`;
-      }).join(""),
+    // The seed as the noise it starts from: the same seed always draws the same field.
+    const r = hash(n);
+    let cells = "";
+    for (let y = 0; y < 4; y++)
+      for (let x = 0; x < 12; x++)
+        cells += `<rect x="${2 + x * 6}" y="${1 + y * 5.5}" width="5" height="4.5" fill="${INK}" opacity="${f1(0.06 + r() * 0.7)}"/>`;
+    return svg(cells);
+  }
+  if (kind === "count") {
+    const shown = clamp(Math.round(n), 0, 16),
+      out = [];
+    for (let i = 0; i < 16; i++) {
+      const x = 2.5 + (i % 8) * 9,
+        y = i < 8 ? 2.5 : 13.5;
+      out.push(
+        `<rect x="${x}" y="${y}" width="7" height="8" rx="1" fill="${i < shown ? A : "none"}" stroke="${i < shown ? A : LINE}"/>`,
+      );
+    }
+    return svg(out.join(""));
+  }
+  if (["select", "segmented"].includes(kind) || (c.options && choiceGlyphs[kind]))
+    return choice(c, v);
+  if (["file", "asset"].includes(kind)) {
+    const name = String(v || ""),
+      ext = (/\.([a-z0-9]+)$/i.exec(name)?.[1] || "").slice(0, 4).toUpperCase();
+    return svg(
+      `<path d="M4.5 2.5H14L18.5 7V21.5H4.5ZM14 2.5V7H18.5" fill="${PAPER}" stroke="${name ? INK : SOFT}"/>` +
+        (name
+          ? `<text x="25" y="16" class="d-pixel-text" fill="${A}">${esc(ext || "FILE")}</text>`
+          : `<path d="M25 12H${W - 4}" stroke="${LINE}" stroke-dasharray="2 3"/>`),
     );
   }
-  if (["select", "segmented"].includes(kind)) {
-    const list = c.options || [];
-    return stretch(
-      list
-        .map(
-          (o, i, arr) =>
-            `<rect x="${(i * 120) / arr.length + 1}" y="15" width="${120 / arr.length - 2}" height="2" fill="${JSON.stringify(typeof o === "object" ? o.value : o) === JSON.stringify(v) ? A : LINE}"/>`,
-        )
-        .join(""),
+  if (kind === "boolean" || ["loop", "split", "labels"].includes(kind)) {
+    const on = !!v;
+    if (kind === "loop")
+      return svg(
+        on
+          ? line("M6 12C6 5 16 5 22 12S38 19 44 12S60 5 66 12", A, 1.5) +
+              `<path d="M63 8.5l3.5 3.5l-3.5 3.5" stroke="${A}" fill="none" stroke-width="1.5"/>` +
+              line("M44 12", A)
+          : line("M6 17C12 6 18 6 22 12", INK, 1.5) +
+              line("M22 12H66", LINE, 1, ' stroke-dasharray="2 3"') +
+              `<circle cx="22" cy="12" r="2" fill="${INK}"/>`,
+      );
+    if (kind === "split")
+      return svg(
+        `<rect x="3" y="3" width="${W - 6}" height="18" rx="2" fill="${SOFT}" opacity=".22"/>` +
+          (on
+            ? `<rect x="${W / 2}" y="3" width="${W / 2 - 3}" height="18" rx="2" fill="${A}"/>`
+            : "") +
+          line(`M${W / 2} 1V23`, INK, 1.5),
+      );
+    if (kind === "labels")
+      return svg(
+        [
+          [10, 16],
+          [28, 10],
+          [46, 14],
+          [62, 6],
+        ]
+          .map(
+            ([x, y]) =>
+              `<circle cx="${x}" cy="${y + 3}" r="2" fill="${A}"/>` +
+              (on ? `<rect x="${x + 3}" y="${y - 4}" width="10" height="3" rx="1" fill="${INK}"/>` : ""),
+          )
+          .join(""),
+      );
+    return svg(
+      `<circle cx="12" cy="12" r="5.5" fill="${on ? A : "none"}" stroke="${on ? A : SOFT}" stroke-width="1.5"/>` +
+        (on ? `<circle cx="12" cy="12" r="9" fill="none" stroke="${A}" opacity=".35"/>` : "") +
+        line(`M26 12H${W - 4}`, on ? A : LINE, on ? 2 : 1, on ? "" : ' stroke-dasharray="2 3"'),
     );
   }
-  if (["file", "asset"].includes(kind))
-    return glyph(
-      16,
-      `<path d="M2.5 1.5H10L13.5 5V18.5H2.5ZM10 1.5V5H13.5" fill="none" stroke="${v ? A : SOFT}"/>`,
-    );
   if (kind === "radius") {
-    const r = Math.min(16, n / 3);
-    return (
-      glyph(
-        20,
-        `<path d="M1.5 18.5V${(1.5 + r).toFixed(2)}A${r.toFixed(2)} ${r.toFixed(2)} 0 0 1 ${(1.5 + r).toFixed(2)} 1.5H18.5" fill="none" stroke="${A}" stroke-width="1.5"/>`,
-      ) + meter(p)
+    const r = clamp((n / Math.max(1, c.max ?? 64)) * 14, 0, 8.25);
+    return svg(
+      `<rect x="3.75" y="3.75" width="24.5" height="16.5" rx="${f1(r)}" fill="${A}" fill-opacity=".14" stroke="${A}" stroke-width="1.5"/>` +
+        rail(p, 36, 34),
     );
   }
-  if (kind === "opacity")
-    return (
-      `<span class="d-fig-alpha"><i style="opacity:${clamp(n / (c.max || 1), 0, 1).toFixed(3)}"></i></span>` +
-      meter(p)
-    );
-  if (typeof v === "string") return stretch(stroke("M0 17.5H120", LINE, 1));
+  if (kind === "opacity") {
+    // Eight steps of the accent at rising opacity; the steps the value reaches are filled.
+    let bars = "";
+    for (let i = 0; i < 8; i++) {
+      const x = 2.5 + i * 9,
+        lit = (i + 0.5) / 8 <= p + 1e-9;
+      bars += `<rect x="${x}" y="4.5" width="8" height="15" rx="1" fill="${A}" fill-opacity="${lit ? f1((i + 1) / 8) : 0}" stroke="${lit ? A : LINE}" stroke-opacity="${lit ? 0.4 : 1}"/>`;
+    }
+    return svg(bars);
+  }
+  if (typeof v === "string")
+    return svg(line(`M2 12H${W - 2}`, LINE, 1, ' stroke-dasharray="2 3"'));
   if (Array.isArray(v) && v.every((x) => typeof x === "number")) {
-    const hi = Math.max(1e-9, ...v.map(Math.abs));
-    return stretch(
+    const hi = Math.max(1e-9, ...v.map(Math.abs)),
+      bw = (W - 4) / Math.min(12, v.length);
+    return svg(
       v
         .slice(0, 12)
         .map(
-          (x, i, arr) =>
-            `<rect x="${(i * 120) / arr.length}" y="${(18 - (Math.abs(x) / hi) * 15).toFixed(1)}" width="${Math.max(2, 120 / arr.length - 3).toFixed(1)}" height="${((Math.abs(x) / hi) * 15).toFixed(1)}" fill="${A}" fill-opacity=".7"/>`,
+          (x, i) =>
+            `<rect x="${f1(2 + i * bw)}" y="${f1(21 - (Math.abs(x) / hi) * 17)}" width="${f1(Math.max(2, bw - 2))}" height="${f1((Math.abs(x) / hi) * 17)}" fill="${A}"/>`,
         )
         .join(""),
     );
   }
   if (v && typeof v === "object")
-    return stretch(
+    return svg(
       Object.keys(v)
         .slice(0, 8)
         .map(
           (k, i) =>
-            `<rect x="${i * 15}" y="${4 + (i % 3) * 3}" width="12" height="${14 - (i % 3) * 3}" fill="${A}" fill-opacity="${(0.25 + 0.1 * (i % 5)).toFixed(2)}"/>`,
+            `<rect x="${3 + i * 9}" y="${6 + (i % 3) * 3}" width="7" height="${14 - (i % 3) * 3}" fill="${A}" fill-opacity="${f1(0.3 + 0.1 * (i % 5))}"/>`,
         )
         .join(""),
     );
-  return meter(p);
+  return ruler(p);
 }
+/** translateX amount of a keyframe record, in px. */
+export const translateOf = (f) =>
+  Number(/translateX\(\s*(-?[\d.]+)/.exec(f?.transform || "")?.[1] || 0);
 export function drawFigure(node, c, v) {
   const kind = kindOf(c),
-    first = node.firstElementChild;
-  // A plain meter only moves its thumb: nothing is rebuilt while a number is scrubbed.
-  if (
-    node.dataset.kind === kind &&
-    node.childElementCount === 1 &&
-    first?.classList.contains("d-meter")
-  ) {
-    first.style.setProperty("--p", position(c, v).toFixed(4));
-    return;
-  }
+    html = figureMarkup(c, v);
   node.dataset.kind = kind;
-  node.innerHTML = figureMarkup(c, v);
+  if (node._html !== html) {
+    node._html = html;
+    node.innerHTML = html;
+  }
 }

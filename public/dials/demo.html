@@ -20,43 +20,38 @@
           /></svg
         >napkin <span>/ dials</span></a
       >
-            <button id="theme" type="button">Dark</button>
+      <div class="depth-all" role="group" aria-label="Set every section's depth">
+        <button type="button" data-depth="1" title="Every section as one row">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="3" rx=".5" fill="currentColor"/></svg>Dials</button
+        ><button type="button" data-depth="2" title="Every section opened">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3.5" width="10" height="9" rx="1" fill="none" stroke="currentColor"/><rect x="3" y="3.5" width="10" height="2.5" fill="currentColor"/><path d="M5 8.5H11M5 10.5H11" stroke="currentColor"/></svg>Benches</button>
+      </div>
+      <button id="help" type="button">Keys <kbd>?</kbd></button>
+      <button id="theme" type="button">Dark</button>
     </header>
     <main>
-      <div class="workspace-bar">
-        <h1>Instruments</h1>
-        <div class="depth-all" role="group" aria-label="Set all section depths">
-          <button type="button" data-depth="1">All dials</button
-          ><button type="button" data-depth="2">All benches</button>
-        </div>
-        <button id="help" type="button">Keyboard map <kbd>?</kbd></button>
-      </div>
       <div id="studies" class="studies"></div>
       <details class="catalog">
         <summary>
-          Catalogue
-          <span>More controls, a plugin, schema source</span>
+          Every control type
+          <span>a plugin control, the schema behind each panel, a 200-control timing</span>
         </summary>
         <div class="catalog-body">
           <div id="gallery"></div>
           <div>
             <h2>Schema</h2>
-            <p>Each panel is rendered from the JSON document shown here.</p>
-            <label for="schema-select">Inspect a schema</label
-            ><select id="schema-select"></select>
-            <pre
-              id="schema-source"
-              tabindex="0"
-              aria-label="Schema source JSON"
-            ></pre>
-            <button id="performance" type="button">Measure 200 controls</button
-            ><output id="performance-result"></output>
+            <p>Each panel above is rendered from one JSON document. Pick one to read it.</p>
+            <div id="schema-pick" class="schema-pick" role="radiogroup" aria-label="Schema to inspect"></div>
+            <pre id="schema-source" tabindex="0" aria-label="Schema source JSON"></pre>
+            <button id="performance" type="button" class="quiet-button">Time a 200-control panel</button>
+            <output id="performance-result"></output>
           </div>
         </div>
       </details>
     </main>
     <footer>
       <output id="event" aria-live="polite">Ready.</output>
+      <span class="foot-keys">Drag a figure or a label · Shift fine · Alt coarse · type digits while dragging · Ctrl K finds anything</span>
     </footer>
     <script type="module" src="./demo.js"></script>
   </body>

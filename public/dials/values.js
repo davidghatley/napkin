@@ -224,6 +224,20 @@ export function validateValue(value, c) {
       value.curve.some((n) => !Number.isFinite(n) || n < 0 || n > 1))
   )
     throw new Error("Image curve needs five output levels between 0 and 1");
+  if (
+    c.type === "keyframes" &&
+    (!Array.isArray(value) ||
+      value.length < 2 ||
+      value.some(
+        (f) =>
+          !f ||
+          typeof f !== "object" ||
+          Array.isArray(f) ||
+          (f.offset !== undefined &&
+            (!Number.isFinite(f.offset) || f.offset < 0 || f.offset > 1)),
+      ))
+  )
+    throw new Error("Keyframes need at least two frame records with offsets from 0 to 1");
   if (c.type === "spacing" && value.some((n) => n < 0))
     throw new Error("Insets must be nonnegative");
   if (

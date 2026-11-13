@@ -1,23 +1,42 @@
 /*
-  Dials: a quiet instrument panel.
-  Hierarchy comes from type weight, spacing and alignment. Hairlines separate; boxes do not.
-  Colour carries meaning (the accent marks a value, a selection, a change) or is the content itself.
+  Dials: a quiet instrument panel with one voice.
+  Ink on paper, one hard accent (cobalt), hairline frames. Inter at three sizes for words;
+  Stem 7, the owner's pixel face, only for the one hero readout in each studio.
+  Every control is a drawing at row height, and the drawing is the control.
   Host napkin tokens win; the fallbacks keep the library standalone.
 */
+@font-face {
+  font-family: "Dials Inter";
+  src: url("./fonts/inter-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Stem 7";
+  src: url("./fonts/Stem7-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Stem 7";
+  src: url("./fonts/Stem7-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: block;
+}
 .dials {
-  --d-native-surface: #fbfbfc;
-  --d-native-well: #f3f4f6;
-  --d-native-hover: #eceef2;
-  --d-native-line: #e3e5ea;
-  --d-native-rule: #c9cdd6;
-  --d-native-text: #1c1f27;
-  --d-native-muted: #4f5663;
-  --d-native-faint: #626a79;
-  --d-native-accent: #3459e2;
-  --d-native-accent-text: #2c52d2;
+  --d-native-surface: #fbfaf7;
+  --d-native-well: #f1f0eb;
+  --d-native-hover: #e9e7e0;
+  --d-native-line: #e2e0d8;
+  --d-native-rule: #bdbab0;
+  --d-native-text: #15161a;
+  --d-native-muted: #4d4f57;
+  --d-native-faint: #66686f;
+  --d-native-accent: #1f45d3;
+  --d-native-accent-text: #1c3fc4;
   --d-native-on: #ffffff;
-  --d-native-good: #1d7a4f;
-  --d-native-bad: #c0352b;
+  --d-native-good: #17734a;
+  --d-native-bad: #b8321f;
   --d-surface: var(--nk-chrome, var(--d-native-surface));
   --d-well: var(--nk-chrome-2, var(--d-native-well));
   --d-hover: var(--nk-chrome-3, var(--d-native-hover));
@@ -31,15 +50,19 @@
   --d-on-accent: var(--nk-on-accent, var(--d-native-on));
   --d-good: var(--nk-ok, var(--d-native-good));
   --d-bad: var(--d-native-bad);
-  --d-soft: color-mix(in srgb, var(--d-accent) 12%, transparent);
-  --d-shadow: 0 0 0 1px color-mix(in srgb, var(--d-text) 9%, transparent),
-    0 24px 64px -16px rgb(16 20 32 / 0.32);
-  --d-sans: var(--nk-sans, "Inter", "Inter Var", ui-sans-serif, system-ui, sans-serif);
+  --d-soft: color-mix(in srgb, var(--d-accent) 10%, transparent);
+  --d-shadow: 0 0 0 1px color-mix(in srgb, var(--d-text) 14%, transparent),
+    0 24px 60px -20px rgb(20 20 30 / 0.35);
+  --d-sans: var(--nk-sans, "Dials Inter", "Inter", ui-sans-serif, system-ui, sans-serif);
   --d-mono: var(--nk-mono, ui-monospace, "SF Mono", Menlo, monospace);
-  --d-row: 28px;
+  --d-pixel: "Stem 7", var(--d-mono);
+  --d-row: 32px;
+  --d-fig-w: 76px;
+  --d-fig-h: 24px;
+  --d-label-w: 92px;
   --d-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   font: 400 12px/16px var(--d-sans);
-  font-feature-settings: "cv11", "ss03";
+  font-feature-settings: "cv11", "ss03", "tnum";
   color: var(--d-text);
   background: var(--d-surface);
   color-scheme: light;
@@ -50,58 +73,58 @@
 }
 @media (prefers-color-scheme: dark) {
   .dials:not([data-theme="light"]) {
-    --d-native-surface: #1b1d23;
-    --d-native-well: #23262d;
-    --d-native-hover: #2b2f37;
-    --d-native-line: #2c2f37;
-    --d-native-rule: #444955;
-    --d-native-text: #e8eaf0;
-    --d-native-muted: #b4bac7;
-    --d-native-faint: #959cab;
-    --d-native-accent: #6e93ff;
-    --d-native-accent-text: #8fadff;
-    --d-native-on: #0d1220;
-    --d-native-good: #5ed39b;
-    --d-native-bad: #ff7a70;
-    --d-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 28px 72px -16px rgb(0 0 0 / 0.7);
+    --d-native-surface: #17181b;
+    --d-native-well: #202125;
+    --d-native-hover: #282a2f;
+    --d-native-line: #2b2d32;
+    --d-native-rule: #4a4d55;
+    --d-native-text: #eeece6;
+    --d-native-muted: #b7b5ae;
+    --d-native-faint: #95948e;
+    --d-native-accent: #7f9bff;
+    --d-native-accent-text: #a3b6ff;
+    --d-native-on: #0c1022;
+    --d-native-good: #5fd29b;
+    --d-native-bad: #ff8070;
+    --d-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 28px 72px -16px rgb(0 0 0 / 0.75);
     color-scheme: dark;
   }
 }
 .dials[data-theme="dark"],
 [data-theme="dark"] .dials {
-  --d-native-surface: #1b1d23;
-  --d-native-well: #23262d;
-  --d-native-hover: #2b2f37;
-  --d-native-line: #2c2f37;
-  --d-native-rule: #444955;
-  --d-native-text: #e8eaf0;
-  --d-native-muted: #b4bac7;
-  --d-native-faint: #959cab;
-  --d-native-accent: #6e93ff;
-  --d-native-accent-text: #8fadff;
-  --d-native-on: #0d1220;
-  --d-native-good: #5ed39b;
-  --d-native-bad: #ff7a70;
-  --d-shadow: 0 0 0 1px rgb(255 255 255 / 0.08), 0 28px 72px -16px rgb(0 0 0 / 0.7);
+  --d-native-surface: #17181b;
+  --d-native-well: #202125;
+  --d-native-hover: #282a2f;
+  --d-native-line: #2b2d32;
+  --d-native-rule: #4a4d55;
+  --d-native-text: #eeece6;
+  --d-native-muted: #b7b5ae;
+  --d-native-faint: #95948e;
+  --d-native-accent: #7f9bff;
+  --d-native-accent-text: #a3b6ff;
+  --d-native-on: #0c1022;
+  --d-native-good: #5fd29b;
+  --d-native-bad: #ff8070;
+  --d-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 28px 72px -16px rgb(0 0 0 / 0.75);
   color-scheme: dark;
 }
 .dials[data-theme="light"],
 [data-theme="light"] .dials {
-  --d-native-surface: #fbfbfc;
-  --d-native-well: #f3f4f6;
-  --d-native-hover: #eceef2;
-  --d-native-line: #e3e5ea;
-  --d-native-rule: #c9cdd6;
-  --d-native-text: #1c1f27;
-  --d-native-muted: #4f5663;
-  --d-native-faint: #626a79;
-  --d-native-accent: #3459e2;
-  --d-native-accent-text: #2c52d2;
+  --d-native-surface: #fbfaf7;
+  --d-native-well: #f1f0eb;
+  --d-native-hover: #e9e7e0;
+  --d-native-line: #e2e0d8;
+  --d-native-rule: #bdbab0;
+  --d-native-text: #15161a;
+  --d-native-muted: #4d4f57;
+  --d-native-faint: #66686f;
+  --d-native-accent: #1f45d3;
+  --d-native-accent-text: #1c3fc4;
   --d-native-on: #ffffff;
-  --d-native-good: #1d7a4f;
-  --d-native-bad: #c0352b;
-  --d-shadow: 0 0 0 1px color-mix(in srgb, var(--d-text) 9%, transparent),
-    0 24px 64px -16px rgb(16 20 32 / 0.32);
+  --d-native-good: #17734a;
+  --d-native-bad: #b8321f;
+  --d-shadow: 0 0 0 1px color-mix(in srgb, var(--d-text) 14%, transparent),
+    0 24px 60px -20px rgb(20 20 30 / 0.35);
   color-scheme: light;
 }
 
@@ -116,6 +139,7 @@
   color: inherit;
   letter-spacing: inherit;
 }
+/* Focus is always visible: a 2 px accent ring outside the element. */
 .dials :is(button, input, select, textarea):focus-visible,
 .dials [tabindex]:focus-visible {
   outline: 2px solid var(--d-accent);
@@ -129,7 +153,7 @@
   background: transparent;
   padding: 0 8px;
   min-height: 24px;
-  border-radius: 5px;
+  border-radius: 3px;
   font-weight: 500;
 }
 .dials button:hover {
@@ -139,37 +163,38 @@
   opacity: 0.45;
   cursor: default;
 }
+/* Fields are underlines, not wells: the value sits on a rule, the rule turns accent when typing. */
 .dials :is(input, textarea) {
   min-width: 0;
   border: 0;
-  border-radius: 5px;
-  padding: 0 6px;
-  height: 24px;
+  border-radius: 0;
+  padding: 0 2px;
+  height: 22px;
   background: transparent;
+  box-shadow: inset 0 -1px 0 var(--d-line);
   font-variant-numeric: tabular-nums;
-
 }
 .dials :is(input, textarea):hover {
-  background: var(--d-well);
+  box-shadow: inset 0 -1px 0 var(--d-rule);
 }
 .dials :is(input, textarea):focus {
-  background: var(--d-surface);
-  box-shadow: inset 0 0 0 1px var(--d-accent);
+  background: var(--d-soft);
+  box-shadow: inset 0 -2px 0 var(--d-accent);
   outline: 0;
 }
 .dials input::placeholder {
   color: var(--d-faint);
 }
 .dials input[aria-invalid="true"] {
-  box-shadow: inset 0 0 0 1px var(--d-bad);
+  box-shadow: inset 0 -2px 0 var(--d-bad);
   color: var(--d-bad);
 }
 .dials textarea {
   resize: vertical;
   width: 100%;
   height: 96px;
-  padding: 6px 8px;
-  background: var(--d-well);
+  padding: 6px 2px;
+  line-height: 18px;
 }
 .d-sr {
   position: absolute;
@@ -182,14 +207,23 @@
 .d-studio-only {
   display: none;
 }
+.d-pixel,
+.d-pixel-text {
+  font-family: var(--d-pixel);
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0;
+  font-feature-settings: normal;
+}
 
-/* Range inputs are drawn: a hairline track and a slim thumb. */
+/* Range inputs (kept for plugins) are drawn like the figures: 4 px rail, filled, round thumb. */
 .dials input[type="range"] {
   appearance: none;
   -webkit-appearance: none;
   height: 20px;
   padding: 0;
   background: transparent;
+  box-shadow: none;
   cursor: ew-resize;
 }
 .dials input[type="range"]:hover,
@@ -198,31 +232,35 @@
   box-shadow: none;
 }
 .dials input[type="range"]::-webkit-slider-runnable-track {
-  height: 1px;
-  background: var(--d-rule);
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--d-rule) 60%, transparent);
 }
 .dials input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 2px;
-  height: 14px;
-  margin-top: -6.5px;
-  border-radius: 1px;
-  background: var(--d-text);
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1.5px var(--d-text);
 }
 .dials input[type="range"]::-moz-range-track {
-  height: 1px;
-  background: var(--d-rule);
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--d-rule) 60%, transparent);
+}
+.dials input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--d-accent);
 }
 .dials input[type="range"]::-moz-range-thumb {
-  width: 2px;
-  height: 14px;
-  border: 0;
-  border-radius: 1px;
-  background: var(--d-text);
-}
-.dials input[type="range"]:focus-visible {
-  outline: 2px solid var(--d-accent);
-  outline-offset: 2px;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--d-text);
+  border-radius: 50%;
+  background: var(--d-surface);
 }
 
 /* ---------- Section: the dial ---------- */
@@ -235,19 +273,20 @@
 .d-section + .d-section {
   border-top: 1px solid var(--d-line);
 }
+/* The dial lines up with the rows beneath it: name over labels, figure over figures. */
 .d-section-head {
-  height: 32px;
+  height: var(--d-row);
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 6px 0 4px;
+  padding: 0 4px 0 0;
   white-space: nowrap;
 }
 .dials .d-section-name {
   flex: none;
-  max-width: 132px;
+  width: calc(var(--d-label-w) + 20px);
   height: 24px;
-  padding: 0 6px 0 2px;
+  padding: 0 4px 0 0;
   font-weight: 600;
   font-size: 12.5px;
   overflow: hidden;
@@ -256,13 +295,19 @@
   user-select: none;
   touch-action: none;
   cursor: ew-resize;
+  display: flex;
+  align-items: center;
+}
+.dials .d-section-name:hover {
+  background: transparent;
+  color: var(--d-accent-text);
 }
 .d-section-name::before {
   content: "";
-  display: inline-block;
+  flex: none;
   width: 5px;
   height: 5px;
-  margin: 0 8px 2px 4px;
+  margin: 0 7px 2px 3px;
   border: solid var(--d-faint);
   border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg);
@@ -270,23 +315,24 @@
 }
 .d-section[data-depth="1"] .d-section-name::before {
   transform: rotate(-45deg);
+  margin-bottom: 0;
 }
-.d-summary-figure {
-  flex: 0 1 96px;
-  min-width: 40px;
+.d-summary-figure.d-figure {
+  flex: none;
 }
 .d-summary {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--d-muted);
+  color: var(--d-text);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .d-depth {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 1px;
   margin-left: auto;
   flex: none;
 }
@@ -300,9 +346,12 @@
   place-items: center;
   color: var(--d-faint);
 }
-.dials .d-depth button[aria-pressed="true"] {
+.dials .d-depth button:hover {
   color: var(--d-text);
-  background: var(--d-well);
+}
+.dials .d-depth button[aria-pressed="true"] {
+  color: var(--d-accent-text);
+  background: var(--d-soft);
 }
 .d-depth svg,
 .d-pane-size svg {
@@ -318,7 +367,7 @@
 .d-section[data-depth="3"] .d-pane-size + .d-depth {
   margin-left: 0;
 }
-/* In a studio the head names the instruments; each one is a tab. */
+/* In a studio the head names the instruments; each one is a tab, the current one underlined. */
 .d-studio-tabs {
   display: none;
   gap: 2px;
@@ -331,15 +380,27 @@
 .d-section[data-depth="3"] :is(.d-summary, .d-summary-figure) {
   display: none;
 }
+/* Opened, the dial hands its figure and value to the first row beneath it. */
+.d-section[data-depth="2"] :is(.d-summary, .d-summary-figure) {
+  visibility: hidden;
+}
 .dials .d-studio-tabs button {
   color: var(--d-muted);
   font-weight: 450;
   padding: 0 8px;
+  height: 32px;
+  border-radius: 0;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+.dials .d-studio-tabs button:hover {
+  background: transparent;
+  color: var(--d-text);
+  box-shadow: inset 0 -2px 0 var(--d-line);
 }
 .dials .d-studio-tabs button[aria-pressed="true"] {
   color: var(--d-text);
   font-weight: 600;
-  background: var(--d-well);
+  box-shadow: inset 0 -2px 0 var(--d-text);
 }
 
 /* The section opens like a drawer: same head, more beneath it. */
@@ -356,45 +417,38 @@
   overflow: hidden;
 }
 .d-rows {
-  padding: 2px 0 6px;
+  padding: 0 0 6px;
+}
+.d-rail {
+  display: none;
 }
 
-/* ---------- Row: label, figure, value ---------- */
+/* ---------- Row: dot, label, figure, value ---------- */
+/* One grammar for every control: the same figure size, the value written on an underline right beside it. */
 .d-row {
   height: var(--d-row);
   display: grid;
-  grid-template-columns: 10px minmax(64px, 88px) minmax(40px, 1fr) minmax(48px, 64px);
+  grid-template-columns: 12px var(--d-label-w) var(--d-fig-w) minmax(0, 1fr);
   align-items: center;
   column-gap: 8px;
-  padding: 0 8px 0 4px;
-  border-radius: 6px;
-}
-.d-row[data-kind="wide"],
-.d-row[data-kind="plugin"] {
-  grid-template-columns: 10px minmax(64px, 88px) minmax(32px, 0.7fr) minmax(88px, 1.3fr);
-}
-.d-row[data-kind="choice"] .d-figure {
-  display: none;
-}
-.d-row[data-kind="choice"] .d-value {
-  grid-column: 3 / 5;
+  padding: 0 4px 0 0;
 }
 .d-row[hidden] {
   display: none;
 }
-.d-row:hover {
-  background: color-mix(in srgb, var(--d-well) 70%, transparent);
+.d-row:hover .d-label {
+  color: var(--d-text);
 }
-.d-row.is-editing {
-  background: var(--d-soft);
+.d-row.is-editing .d-figure {
+  box-shadow: inset 0 0 0 1px var(--d-accent);
 }
 .dials .d-reset {
-  width: 10px;
-  height: 20px;
+  width: 12px;
+  height: 24px;
   min-height: 0;
   padding: 0;
   position: relative;
-  border-radius: 3px;
+  border-radius: 0;
 }
 .dials .d-reset:hover {
   background: transparent;
@@ -402,11 +456,10 @@
 .d-reset::after {
   content: "";
   position: absolute;
-  left: 3px;
-  top: 8px;
+  left: 4px;
+  top: 10px;
   width: 4px;
   height: 4px;
-  border-radius: 50%;
   background: transparent;
   transition: transform 120ms;
 }
@@ -414,7 +467,7 @@
   background: var(--d-accent);
 }
 .is-modified .d-reset:hover::after {
-  transform: scale(1.6);
+  transform: scale(1.75);
 }
 .dials .d-label {
   min-width: 0;
@@ -429,6 +482,7 @@
   cursor: ew-resize;
   user-select: none;
   touch-action: none;
+  border-radius: 0;
 }
 .dials .d-label:hover {
   background: transparent;
@@ -436,154 +490,118 @@
 }
 .is-modified .d-label {
   color: var(--d-text);
+  font-weight: 500;
 }
+/* The figure well: one size for every control. */
 .d-figure {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  height: var(--d-row);
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--d-fig-w);
+  height: var(--d-fig-h);
   overflow: hidden;
   touch-action: none;
   cursor: ew-resize;
-  border-radius: 4px;
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.d-figure:hover {
+  box-shadow: inset 0 0 0 1px var(--d-rule);
 }
 .d-figure svg {
+  position: absolute;
+  inset: 0;
   display: block;
-  flex: none;
   overflow: visible;
 }
-.d-figure .d-fig-wide {
-  flex: 1;
-  width: 100%;
-  min-width: 0;
-  height: 20px;
+.d-figure .d-thumb {
+  transition: r 120ms var(--d-ease);
 }
-/* Meter: hairline range, filled value, thumb. */
-.d-meter {
-  position: relative;
-  flex: 1;
-  min-width: 24px;
-  height: 20px;
+.d-figure:hover .d-thumb,
+.is-editing .d-thumb {
+  r: 6px;
 }
-.d-meter::before {
-  content: "";
-  position: absolute;
-  inset: 9.5px 0 auto;
-  height: 1px;
-  background: var(--d-rule);
+.d-row[data-type="vector"] .d-figure {
+  cursor: crosshair;
 }
-.d-meter i {
-  position: absolute;
-  left: 0;
-  top: 9px;
-  height: 2px;
-  width: calc(var(--p) * 100%);
-  background: var(--d-accent);
-  border-radius: 1px;
-}
-.d-meter b {
-  position: absolute;
-  left: calc(var(--p) * 100%);
-  top: 3px;
-  width: 2px;
-  height: 14px;
-  margin-left: -1px;
-  border-radius: 1px;
-  background: var(--d-text);
-  transition: transform 120ms;
-}
-.d-figure:hover .d-meter b,
-.is-editing .d-meter b {
-  transform: scaleX(1.5);
-}
-.d-bar {
-  flex: 1;
-  height: 16px;
-  border-radius: 3px;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 10%, transparent);
-}
-.d-bar-color {
-  background:
-    linear-gradient(var(--swatch), var(--swatch)),
-    repeating-conic-gradient(#c8cbd2 0 25%, #fff 0 50%) 0 0 / 8px 8px;
-}
-.d-fig-type {
-  flex: none;
-  width: 24px;
-  font-size: 16px;
-  line-height: 20px;
-  color: var(--d-text);
-}
-.d-fig-alpha {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  background: repeating-conic-gradient(#c8cbd2 0 25%, #fff 0 50%) 0 0 / 8px 8px;
-  overflow: hidden;
-}
-.d-fig-alpha i {
-  display: block;
-  height: 100%;
-  background: var(--d-accent);
-}
-.d-switch {
-  position: relative;
-  flex: none;
-  width: 26px;
-  height: 16px;
-  border-radius: 8px;
-  background: var(--d-rule);
-  transition: background-color 120ms;
-}
-.d-switch i {
-  position: absolute;
-  left: 2px;
-  top: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
-  transition: transform 140ms var(--d-ease);
-}
-.d-switch[data-on="true"] {
-  background: var(--d-accent);
-}
-.d-switch[data-on="true"] i {
-  transform: translateX(10px);
-}
-.d-row[data-kind="switch"] .d-figure {
+.d-row:is([data-type="boolean"], [data-type="select"], [data-type="segmented"]) .d-figure {
   cursor: pointer;
 }
-/* Value: the number itself, typed in place. */
+.d-fig-swatch {
+  position: absolute;
+  inset: 0;
+  background: repeating-conic-gradient(#cfccc3 0 25%, #fff 0 50%) 0 0 / 8px 8px;
+}
+.d-fig-swatch i {
+  position: absolute;
+  inset: 0;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 12%, transparent);
+  border-radius: 3px;
+}
+.d-fig-shadow {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.d-fig-shadow i {
+  width: 34px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--d-surface);
+  outline: 1px solid color-mix(in srgb, var(--d-text) 18%, transparent);
+  margin-top: -4px;
+}
+.d-fig-type {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 30px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  color: var(--d-text);
+}
+/* Value: written on an underline beside the figure, typed in place. */
 .d-value {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   min-width: 0;
+  height: 24px;
 }
 .d-value input {
   width: 100%;
-  text-align: right;
+  text-align: left;
   font-weight: 500;
-  padding: 0 4px;
   text-overflow: ellipsis;
 }
-.d-value input:focus {
-  text-align: left;
+.d-row.is-typing .d-value input {
+  background: var(--d-soft);
+  box-shadow: inset 0 -2px 0 var(--d-accent);
+  font-family: var(--d-pixel);
+  font-size: 14px;
 }
 .dials .d-value .d-toggle {
+  width: 100%;
   min-height: 0;
-  height: 24px;
-  padding: 0 4px;
+  height: 22px;
+  padding: 0 2px;
+  text-align: left;
   color: var(--d-muted);
   font-weight: 500;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .d-value .d-toggle:hover {
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--d-rule);
 }
 .dials .d-value .d-toggle[aria-checked="true"] {
   color: var(--d-text);
 }
-/* Segmented choices are the figure: the options themselves, the current one lit. */
+/* Choices are words on the underline; the current one is underlined in ink. */
 .d-segmented,
 .d-choice-seg {
   display: flex;
@@ -592,25 +610,34 @@
 }
 .d-segmented {
   width: 100%;
+  height: 22px;
+  box-shadow: inset 0 -1px 0 var(--d-line);
 }
 .dials :is(.d-segmented, .d-choice-seg) button {
   flex: 0 1 auto;
-  border-radius: 5px;
+  border-radius: 0;
   min-width: 0;
-  height: 24px;
+  height: 22px;
   min-height: 0;
-  padding: 0 8px;
+  padding: 0 6px;
   color: var(--d-muted);
   font-weight: 450;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.dials :is(.d-segmented, .d-choice-seg) button:first-child {
+  padding-left: 2px;
+}
+.dials :is(.d-segmented, .d-choice-seg) button:hover {
+  background: transparent;
+  color: var(--d-text);
+}
 .dials .d-segmented button[aria-checked="true"],
 .dials .d-choice-seg button[aria-pressed="true"] {
   color: var(--d-text);
   font-weight: 600;
-  background: var(--d-hover);
+  box-shadow: inset 0 -2px 0 var(--d-text);
 }
 .d-choice {
   position: relative;
@@ -624,14 +651,20 @@
   position: relative;
   min-width: 72px;
   max-width: 100%;
-  height: 24px;
+  height: 22px;
   min-height: 0;
-  padding: 0 22px 0 8px;
+  padding: 0 20px 0 2px;
   text-align: left;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .d-choice-trigger:hover {
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--d-rule);
 }
 .d-value .d-choice-trigger {
   width: 100%;
@@ -639,8 +672,8 @@
 .d-choice-trigger::after {
   content: "";
   position: absolute;
-  right: 9px;
-  top: 8px;
+  right: 6px;
+  top: 7px;
   width: 4px;
   height: 4px;
   border: solid var(--d-faint);
@@ -654,7 +687,7 @@
   overflow: auto;
   padding: 4px;
   background: var(--d-surface);
-  border-radius: 8px;
+  border-radius: 4px;
   box-shadow: var(--d-shadow);
 }
 .d-choice-pop[hidden] {
@@ -662,7 +695,7 @@
 }
 .d-choice-item {
   padding: 5px 10px;
-  border-radius: 5px;
+  border-radius: 2px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -676,14 +709,18 @@
 }
 .d-choice-item[aria-selected="true"] {
   font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--d-accent);
 }
 
-/* ---------- Bench: the section opened ---------- */
+/* ---------- Bench: the section opened is its rows; studio pieces wait for the studio ---------- */
 .d-lab {
   min-width: 0;
   display: grid;
   gap: 12px;
   padding: 4px 12px 14px;
+}
+.d-section:not([data-depth="3"]) .d-lab {
+  display: none;
 }
 .d-lab h3 {
   margin: 0;
@@ -697,19 +734,6 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 12px;
-}
-/* Instruments without a dedicated studio keep the bench to rows only. */
-.d-section[data-depth="2"] .d-lab:not([data-studio="color"], [data-studio="motion"], [data-studio="typography"], [data-studio="image"], [data-studio="encoding"], [data-studio="sampler"]) {
-  display: none;
-}
-.d-section[data-depth="2"] .d-lab .d-lab-head {
-  display: none;
-}
-.d-section[data-depth="2"] .d-lab {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 200px;
-  border-top: 1px solid var(--d-line);
-  padding-top: 12px;
 }
 .d-plot {
   display: block;
@@ -898,7 +922,7 @@
   width: 100%;
   height: 720px;
   max-height: 90vh;
-  border-radius: 10px;
+  border-radius: 6px;
   box-shadow: var(--d-shadow);
 }
 .d-section[data-depth="3"] > .d-section-head {
@@ -918,12 +942,31 @@
 }
 .d-section[data-depth="3"] .d-section-content {
   display: grid;
-  grid-template-columns: 264px minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
   overflow: visible;
 }
+/* The rail: the bench rows, then what the studio keeps beside them (history, presets, fields). */
 .d-section[data-depth="3"] .d-rows {
-  padding: 10px 6px;
+  grid-column: 1;
+  grid-row: 1;
+  padding: 12px 12px 8px 4px;
   border-right: 1px solid var(--d-line);
+}
+.d-section[data-depth="3"] .d-rail {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding: 12px 16px 16px;
+  border-right: 1px solid var(--d-line);
+  border-top: 1px solid var(--d-line);
+}
+.d-section[data-depth="3"] .d-lab {
+  grid-column: 2;
+  grid-row: 1 / 3;
 }
 .d-section[data-depth="3"] .d-lab {
   padding: 20px 24px;

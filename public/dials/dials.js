@@ -12,7 +12,14 @@ import {
   validateValue,
 } from "./values.js";
 import { parseColor, cssLch } from "./color.js";
-import { drawFigure } from "./figures.js";
+import { drawFigure, translateOf } from "./figures.js";
+/** Replace (or add) translateX in a CSS transform list. */
+export const withTranslate = (transform = "", x) => {
+  const n = `translateX(${Number(Number(x).toFixed(2))}px)`;
+  return /translateX\([^)]*\)/.test(transform)
+    ? transform.replace(/translateX\([^)]*\)/, n)
+    : `${n} ${transform}`.trim();
+};
 import { el, button, pointerSurface, choiceBox } from "./dom.js";
 import { createStudio } from "./studios.js";
 const controls = new Map(),
@@ -65,10 +72,16 @@ const keyBindings = (keys) => [
 ];
 export const bindings = keyBindings(defaultKeys);
 // Depth glyphs: one line, the lines opened, the pane.
+// Depth pictograms drawn at their relative sizes: one row, the opened rows, the whole pane.
 const depthGlyphs = [
-  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
-  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 4.5H13M3 8H13M3 11.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
-  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.75" y="3.25" width="10.5" height="9.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 3.5V12.5" stroke="currentColor" stroke-width="1.5"/></svg>',
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="3" rx=".5" fill="currentColor"/></svg>',
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3.5" width="10" height="9" rx="1" fill="none" stroke="currentColor"/><rect x="3" y="3.5" width="10" height="2.5" fill="currentColor"/><path d="M5 8.5H11M5 10.5H11" stroke="currentColor"/></svg>',
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1" fill="none" stroke="currentColor"/><rect x="1.5" y="2.5" width="13" height="2.5" fill="currentColor"/><rect x="2.5" y="6" width="3" height="6.5" fill="currentColor" opacity=".45"/><path d="M7 11.5L9 8.5L10.5 10L13 7" fill="none" stroke="currentColor"/></svg>',
+];
+const depthNames = [
+  ["Dial", "one row"],
+  ["Bench", "every control"],
+  ["Studio", "the full pane"],
 ];
 const sizeGlyph =
   '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13 7V13H7M13 13L8.5 8.5M3 9V3H9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -176,10 +189,11 @@ export class Dials extends EventTarget {
         role: "group",
         "aria-label": `${section.label} depth`,
       });
-      const buttons = ["Dial", "Bench", "Studio"].map((name, i) => {
+      const buttons = depthNames.map(([name, what], i) => {
         const b = button("", `${section.label}: ${name}`, () =>
           this.setDepth(section.id, i + 1),
         );
+        b.title = `${name}: ${what} (${i + 1})`;
         b.innerHTML = depthGlyphs[i];
         return b;
       });
@@ -222,7 +236,8 @@ export class Dials extends EventTarget {
         ),
       );
       body.append(content);
-      content.append(rowlist, labHost);
+      const railHost = el("div", { class: "d-rail" });
+      content.append(rowlist, railHost, labHost);
       head.insertBefore(tabs, resize);
       node.append(head, body);
       const s = {
@@ -238,6 +253,7 @@ export class Dials extends EventTarget {
         content,
         rowlist,
         labHost,
+        railHost,
         tabs,
         studioControl: first?.id,
         depth: 0,
@@ -295,6 +311,8 @@ export class Dials extends EventTarget {
     const node = el("div", {
       class: "d-row",
       "data-control": c.id,
+      "data-control-id": c.id,
+      "data-type": c.type,
       "data-kind": controls.has(c.type)
         ? "plugin"
         : numeric(c) && c.type !== "seed"
@@ -418,7 +436,15 @@ export class Dials extends EventTarget {
     this.rows.set(c.id, row);
     this.scrub(label, c.id);
     this.scrub(fig, c.id, true);
-    label.addEventListener("dblclick", () => this.reset(c.id));
+    label.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      this.reset(c.id);
+    });
+    // Double click anywhere else on the row opens its studio.
+    node.addEventListener("dblclick", (e) => {
+      if (e.target.closest("input, textarea, .d-label, .d-reset")) return;
+      this.open(c.id);
+    });
     if (c.type === "boolean")
       fig.addEventListener("click", () => this.transact(c.id, !c.value));
     if (c.disabled) {
@@ -572,7 +598,9 @@ export class Dials extends EventTarget {
     const r = this.rows.get(id);
     if (!r) return;
     const { c, input } = r;
-    r.node.classList.toggle("is-modified", !same(c.value, c.default));
+    const modified = !same(c.value, c.default);
+    r.node.classList.toggle("is-modified", modified);
+    r.node.toggleAttribute("data-modified", modified);
     r.node.classList.toggle("is-editing", this.active.has(id));
     r.label.setAttribute(
       "aria-description",
@@ -591,7 +619,7 @@ export class Dials extends EventTarget {
             : input !== document.activeElement &&
                 c.value &&
           typeof c.value === "object" &&
-          !Array.isArray(c.value)
+          (!Array.isArray(c.value) || c.type === "keyframes")
             ? this.summary(c)
             : format(c.value, c);
       else if (input.classList.contains("d-choice"))
@@ -639,6 +667,8 @@ export class Dials extends EventTarget {
       if (c.type === "sampler") return `${v.steps} steps · ${v.scheduler}`;
       if (c.type === "image") return `γ ${v.gamma || 1}`;
       if (c.type === "encoding") return `${v.x || "—"} × ${v.y || "—"}`;
+      if (c.type === "keyframes" && Array.isArray(v))
+        return `${v.length} keys · ${v.map((f) => translateOf(f)).join(" → ")}${c.unit || "px"}`;
     }
     if (typeof v === "string" && c.type === "gradient") {
       const parts = [];
@@ -664,12 +694,14 @@ export class Dials extends EventTarget {
   buildStudio(s, id, update = true) {
     s.lab?.destroy?.();
     s.labHost.replaceChildren();
+    s.railHost.replaceChildren();
     s.studioControl = id;
+    if (s.depth === 3) s.node.dataset.studioFor = id;
     const c = s.schema.controls.find((c) => c.id === id),
       plugin = c && controls.get(c.type);
     s.lab = plugin?.studio
-      ? plugin.studio({ ...this.context(id), panel: this }, s.labHost)
-      : createStudio(this, { ...s.schema, studioControl: id }, s.labHost);
+      ? plugin.studio({ ...this.context(id), panel: this, rail: s.railHost }, s.labHost)
+      : createStudio(this, { ...s.schema, studioControl: id }, s.labHost, s.railHost);
     [...s.tabs.children].forEach((b, i) =>
       b.setAttribute("aria-pressed", String(s.schema.controls[i].id === id)),
     );
@@ -717,7 +749,7 @@ export class Dials extends EventTarget {
       const lch = parseColor(v, this.root);
       lch[0] = clamp(lch[0] + dir * 0.01 * factor, 0, 1);
       result = cssLch(lch);
-    } else if (Array.isArray(v))
+    } else if (Array.isArray(v) && c.type !== "keyframes")
       result = v.map((n, i) =>
         i === 0
           ? Number(
@@ -729,7 +761,15 @@ export class Dials extends EventTarget {
             )
           : n,
       );
-    else if (c.type === "gradient" && typeof v === "string") {
+    else if (c.type === "keyframes" && Array.isArray(v)) {
+      // Arrows move the frame that travels furthest; the others keep their place.
+      const xs = v.map(translateOf),
+        at = xs.reduce((best, x, i) => (Math.abs(x) > Math.abs(xs[best]) ? i : best), 0),
+        next = clamp(xs[at] + dir * (c.step || 1) * factor, c.min ?? -Infinity, c.max ?? Infinity);
+      result = v.map((f, i) =>
+        i === at ? { ...f, transform: withTranslate(f.transform, next) } : f,
+      );
+    } else if (c.type === "gradient" && typeof v === "string") {
       // Arrows turn the gradient's angle; the stops stay where the typed value put them.
       const angle = /(-?\d+(?:\.\d+)?)deg/.exec(v);
       if (!angle) return;
@@ -767,43 +807,101 @@ export class Dials extends EventTarget {
       this.change(id, result);
     else this.transact(id, result);
   }
+  /**
+   * Drag to change a value. On a label the drag is relative (Shift fine, Alt coarse). On a figure
+   * the drawing is the control: a ranged number goes where the pointer is on its track, a vector
+   * follows the pointer in two dimensions, a choice picks the option drawn under the pointer.
+   * While the button is held, typed digits replace the value: Enter (or release) applies them.
+   */
   scrub(target, id, track = false) {
     let startX,
       base,
       direct,
+      typed = "",
+      locked = false,
       moved = false;
+    const onKey = (e) => {
+      const row = this.rows.get(id);
+      if (!row || !numeric(row.c)) return;
+      if (/^[0-9.]$/.test(e.key) || (e.key === "-" && !typed)) typed += e.key;
+      else if (e.key === "Backspace") typed = typed.slice(0, -1);
+      else if (e.key === "Enter" && typed) applyTyped();
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+      row.node.classList.toggle("is-typing", !!typed && !locked);
+      if (row.input && !locked) row.input.value = typed || format(row.c.value, row.c);
+      if (typed) this.announce(`Typed ${typed}`);
+    };
+    const applyTyped = () => {
+      const row = this.rows.get(id);
+      if (!typed || locked || !row) return;
+      locked = true;
+      row.node.classList.remove("is-typing");
+      try {
+        this.change(id, this.parse(typed, row.c));
+      } catch (err) {
+        this.announce(err.message);
+      }
+    };
+    const stopKeys = () =>
+      target.ownerDocument.removeEventListener("keydown", onKey, true);
     this.gestures.push(
       pointerSurface(target, {
         start: (e) => {
           startX = e.clientX;
           base = this.get(id);
           moved = false;
+          typed = "";
+          locked = false;
+          target.ownerDocument.addEventListener("keydown", onKey, true);
           const c = this.rows.get(id)?.c;
-          // On a meter the pointer sets the value where it points; Shift keeps the fine relative drag.
-          direct =
-            track &&
-            !e.shiftKey &&
-            c &&
-            numeric(c) &&
-            c.type !== "seed" &&
-            Number.isFinite(c.min) &&
-            Number.isFinite(c.max)
-              ? target.querySelector(".d-meter")
-              : null;
+          // On a figure the pointer sets the value where it points; Shift keeps the fine relative drag.
+          direct = null;
+          if (track && !e.shiftKey && c) {
+            const svg = target.querySelector("svg");
+            if (
+              numeric(c) &&
+              c.type !== "seed" &&
+              Number.isFinite(c.min) &&
+              Number.isFinite(c.max)
+            )
+              direct = {
+                mode: "range",
+                node: target.querySelector(".d-track") || svg || target,
+              };
+            else if (c.type === "vector") direct = { mode: "vector", node: svg || target };
+            else if (["select", "segmented"].includes(c.type) && c.options?.length)
+              direct = { mode: "choice", node: svg || target };
+          }
           this.begin(id, "scrub");
         },
         move: (e) => {
+          if (locked || typed) return;
           const dx = e.clientX - startX;
           if (Math.abs(dx) > 2) moved = true;
           if (direct) {
             const c = this.rows.get(id).c,
-              r = direct.getBoundingClientRect(),
+              r = direct.node.getBoundingClientRect(),
               t = clamp((e.clientX - r.left) / (r.width || 1), 0, 1);
             moved = moved || e.type === "pointermove";
-            this.change(id, quantize(c.min + t * (c.max - c.min), c));
+            if (direct.mode === "range")
+              this.change(id, quantize(c.min + t * (c.max - c.min), c));
+            else if (direct.mode === "vector") {
+              const lo = c.min ?? -1,
+                hi = c.max ?? 1,
+                u = clamp(1 - (e.clientY - r.top) / (r.height || 1), 0, 1),
+                q = (k) => quantize(lo + k * (hi - lo), { ...c, min: lo, max: hi });
+              this.change(id, [q(t), q(u)]);
+            } else {
+              const opts = c.options.map((o) => (typeof o === "object" ? o.value : o));
+              this.change(id, opts[Math.min(opts.length - 1, Math.floor(t * opts.length))]);
+            }
           } else if (moved) this.adjust(id, Math.round(dx / 2), e, 1, base);
         },
         end: () => {
+          stopKeys();
+          applyTyped();
           this.commit(id);
           if (moved) {
             const swallow = (e) => {
@@ -816,7 +914,11 @@ export class Dials extends EventTarget {
             });
           }
         },
-        cancel: () => this.cancel(id),
+        cancel: () => {
+          stopKeys();
+          this.rows.get(id)?.node.classList.remove("is-typing");
+          this.cancel(id);
+        },
       }),
     );
   }
@@ -1016,22 +1118,46 @@ export class Dials extends EventTarget {
   /** Command palette: type to find a control or a depth command; Enter runs, Shift+Enter opens the studio. */
   palette() {
     if (this.dialog?.open) return;
+    // Commands are exact phrases (`Control Opacity`, `Studio Accent`, `Bench Pigment`, `Reset Wash`),
+    // so a person or an agent can type one whole and press Enter.
     const items = [];
     for (const s of this.sections.values()) {
       const name = s.schema.label || s.schema.id;
-      for (const c of s.schema.controls)
-        items.push({
-          text: `${name} / ${c.label || c.id}`,
-          hint: format(c.value ?? c.default, c).slice(0, 24),
-          run: (studio) => {
-            if (studio) return this.open(c.id);
-            if (s.depth === 1) this.setDepth(s.schema.id, 2, false);
-            this.rows.get(c.id)?.label.focus();
+      for (const c of s.schema.controls) {
+        const label = c.label || c.id,
+          value = format(c.value ?? c.default, c).slice(0, 24);
+        items.push(
+          {
+            text: `Control ${label}`,
+            hint: value,
+            run: (studio) => {
+              if (studio) return this.open(c.id);
+              if (s.depth === 1) this.setDepth(s.schema.id, 2, false);
+              this.rows.get(c.id)?.label.focus();
+            },
           },
-        });
+          {
+            text: `Studio ${label}`,
+            hint: name,
+            run: () => {
+              this.open(c.id);
+              s.buttons[2].focus();
+            },
+          },
+          {
+            text: `Reset ${label}`,
+            hint: "R",
+            run: () => {
+              this.reset(c.id);
+              if (s.depth === 1) this.setDepth(s.schema.id, 2, false);
+              this.rows.get(c.id)?.label.focus();
+            },
+          },
+        );
+      }
       ["Dial", "Bench", "Studio"].forEach((depthName, i) =>
         items.push({
-          text: `${name}: show as ${depthName.toLowerCase()}`,
+          text: `${depthName} ${name}`,
           hint: String(i + 1),
           run: () => {
             this.setDepth(s.schema.id, i + 1);
@@ -1058,7 +1184,12 @@ export class Dials extends EventTarget {
       at = 0;
     const score = (text, q) => {
       if (!q) return 1;
-      const t = text.toLowerCase();
+      const t = text.toLowerCase(),
+        k = q.trim().toLowerCase();
+      // Exact phrases first, then prefixes, then words that start the same, then fuzzy letters.
+      if (t === k) return 4;
+      if (t.startsWith(k)) return 3 + k.length / (t.length * 10);
+      if (t.split(/\s+/).some((w) => w.startsWith(k))) return 2;
       let i = 0,
         gaps = 0,
         last = -1;

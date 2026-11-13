@@ -2921,7 +2921,7 @@ function generalStudio(ctx, host) {
   } else fns.push(() => (preview.textContent = JSON.stringify(ctx.get())));
   return { update: () => fns.forEach((fn) => fn()) };
 }
-export function createStudio(panel, section, host) {
+export function createStudio(panel, section, host, rail = document.createElement("div")) {
   const c =
     section.controls.find((c) => c.id === section.studioControl) ||
     section.controls.find(
@@ -2937,6 +2937,7 @@ export function createStudio(panel, section, host) {
     ...panel.context(c.id, c),
     panel,
     section,
+    rail,
     surface: (node, handlers) => {
       cleanup.push(pointerSurface(node, handlers));
     },

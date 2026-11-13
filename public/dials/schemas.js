@@ -69,6 +69,7 @@ export const samples = [
       ),
       c("align", "segmented", "Align", "left", {
         options: ["left", "center", "right"],
+        figure: "align",
       }),
       c("spacing", "spacing", "Insets", [16, 24, 16, 24]),
       c("copy", "text", "Caption", "A field guide to forms."),
@@ -100,18 +101,24 @@ export const samples = [
         },
         { scrub: "damping" },
       ),
-      c("origin", "vector", "Origin", [0.5, 0.5], {
-        min: 0,
-        max: 1,
-        step: 0.01,
-      }),
+      c(
+        "path",
+        "keyframes",
+        "Path",
+        [
+          { offset: 0, transform: "translateX(0px)", opacity: 0 },
+          { offset: 0.55, transform: "translateX(132px)", opacity: 1 },
+          { offset: 1, transform: "translateX(108px)", opacity: 1 },
+        ],
+        { unit: "px", min: -40, max: 240, property: "transform" },
+      ),
       c("rotation", "angle", "Rotation", 30, {
         min: -180,
         max: 180,
         step: 1,
         unit: "deg",
       }),
-      c("loop", "boolean", "Loop", true),
+      c("loop", "boolean", "Loop", true, { figure: "loop" }),
     ]),
   },
   {
@@ -146,7 +153,7 @@ export const samples = [
         figure: "radius",
       }),
       c("asset", "asset", "Source", "still-life.png"),
-      c("enabled", "boolean", "Adjustments", true),
+      c("enabled", "boolean", "Adjustments", true, { figure: "split" }),
     ]),
   },
   {
@@ -175,7 +182,8 @@ export const samples = [
           })),
         },
       ),
-      c("mark", "select", "Mark", "point", {
+      c("mark", "segmented", "Mark", "point", {
+        figure: "mark",
         options: [
           { label: "Points", value: "point" },
           { label: "Bars", value: "bar" },
@@ -188,7 +196,7 @@ export const samples = [
         step: 1,
         unit: "px",
       }),
-      c("labels", "boolean", "Labels", false),
+      c("labels", "boolean", "Labels", false, { figure: "labels" }),
     ]),
   },
   {
@@ -216,7 +224,7 @@ export const samples = [
         max: 4294967295,
         step: 1,
       }),
-      c("batch", "number", "Batch", 4, { min: 1, max: 32, step: 1 }),
+      c("batch", "number", "Batch", 4, { min: 1, max: 16, step: 1, figure: "count" }),
       c("prompt", "text", "Prompt", "A small world in cobalt and paper."),
     ]),
   },
