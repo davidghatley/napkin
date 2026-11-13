@@ -186,7 +186,7 @@ export function jsonWindow(file, path = [], from = 0, count = 200) {
     const head = r.read(0, 4);
     if ((head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff)) throw new Error('This JSON file is UTF-16 and over 1 MiB. Next: save it as UTF-8, or open it in its own application.');
     let start = firstValue(r);
-    if (start < 0) throw new Error('This JSON file is empty.');
+    if (start < 0) throw new Error('This JSON file is empty. Next: add content to it, or remove the file.');
     let end = r.size;
     for (const step of path) {
       const idx = indexOf(file, st, r, start),
