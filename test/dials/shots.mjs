@@ -62,7 +62,7 @@ try {
         await browser.eval(`document.querySelector("dialog[open]").close();true`);
       }
       // A panel the library has never seen, in a 560 px host: bench, then every tab.
-      const host = `(()=>{let h=document.querySelector("#shot-host");if(!h){h=document.createElement("div");h.id="shot-host";h.style.cssText="position:fixed;left:24px;top:24px;width:560px;height:852px;z-index:500;background:var(--paper,#f5f4ef);overflow:auto;box-shadow:0 0 0 100vmax rgb(0 0 0 / .35)";document.body.append(h);}
+      const host = `(()=>{let h=document.querySelector("#shot-host");if(!h){h=document.createElement("div");h.id="shot-host";h.style.cssText="position:fixed;left:24px;top:24px;width:560px;height:852px;z-index:500;background:${theme==="dark"?"#111114":"#f5f4ef"};overflow:auto;box-shadow:0 0 0 100vmax rgb(0 0 0 / .35)";document.body.append(h);}
         h.replaceChildren();const p=new dialsDemo.Dials(h,{theme:${JSON.stringify(theme)}}).render(dialsDemo.lampRig);window.shotPanel=p;return true})()`;
       if (want("custom")) {
         await browser.eval(host);

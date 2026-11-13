@@ -238,6 +238,8 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
       assert.equal(m.role, "dialog");
       assert.doesNotMatch(m.bg, /rgba|transparent/);
       assert.ok(m.options > 10 && m.figs > 5 && m.preview > 3, JSON.stringify(m));
+      // Figures stay inside their own boxes.
+      assert.equal(await q(`(()=>{const d=document.querySelector("dialog[open]");return [...d.querySelectorAll(".d-palette-fig *, .d-palette-big *")].filter(n=>{const b=n.getBoundingClientRect(),o=n.closest(".d-palette-fig, .d-palette-big").getBoundingClientRect();return b.width>o.width+4||b.height>o.height+4}).length})()`), 0);
       await q(`document.querySelector("dialog[open]").close()`);
       await q("dialsDemo.panels[2].help()");
       assert.equal(await q(`document.querySelector("dialog[open]").getAttribute("role")`), "dialog");
