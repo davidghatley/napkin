@@ -885,7 +885,20 @@ async function sniffCase(b, s, item, c) {
   return { kind: item.kind };
 }
 const CHECKS = {
-  csv: (b, s, i, c) => tableCase(b, s, i, { ...c, keyRe: keyRes.csv(c) }),
+  csv: async (b, s, i, c) => {
+    if (!c.alt) return tableCase(b, s, i, { ...c, keyRe: keyRes.csv(c) });
+    // TSV: pass on either the literal or the quoted reading; fail only if both fail.
+    const errs = [];
+    for (const [name, ref] of [["literal (IANA)", c.ref], ["quoted (Excel/pandas)", c.alt]]) {
+      const cc = { ...c, ref };
+      try {
+        return { reading: name, ...(await tableCase(b, s, i, { ...cc, keyRe: keyRes.csv(cc) })) };
+      } catch (e) {
+        errs.push(`${name} reading: ${e.message}`);
+      }
+    }
+    throw Error(errs.join(" || "));
+  },
   json: jsonCase,
   arrow: (b, s, i, c) => tableCase(b, s, i, { ...c, keyRe: keyRes.csv(c) }, { typed: true }),
   parquet: (b, s, i, c) => tableCase(b, s, i, { ...c, keyRe: keyRes.csv(c) }, { typed: true }),
