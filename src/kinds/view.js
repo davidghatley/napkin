@@ -15,6 +15,7 @@ import {
 import { decodeText } from './registry.js';
 import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
+import { indexable, buildIndex, readRecords } from './rowindex.js';
 const exec = promisify(execFile),
   esc = (s) =>
     String(s).replace(
@@ -315,6 +316,30 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     }
   }
   if (family === 'table') {
+    if (indexable(ctx.head)) {
+      // Every row of the file is reachable: a one-pass index of record offsets, then bounded reads.
+      const csv = ctx.kind === 'csv' || ctx.kind === 'tsv',
+        delimiter = ctx.kind === 'tsv' ? '\t' : ',',
+        index = buildIndex(ctx.file, ctx.key, { quotes: csv, bytes: ctx.bytes, skipBlank: !csv });
+      if (csv) {
+        const headers = readRecords(ctx.file, index, 0, 1, { delimiter, quotes: true })[0] || [],
+          total = Math.max(0, index.total - 1),
+          at = Math.min(offset, Math.max(0, total - 1)),
+          recs = total ? readRecords(ctx.file, index, at + 1, count, { delimiter, quotes: true }) : [];
+        const rows = recs.map((a) => Object.fromEntries(headers.map((k, i) => [k, a[i] ?? null])));
+        return { ...table(rows, headers), offset: at, total, truncated: false };
+      }
+      const at = Math.min(offset, Math.max(0, index.total - 1)),
+        lines = readRecords(ctx.file, index, at, count, { quotes: false }),
+        rows = lines.map((l) => {
+          try {
+            return JSON.parse(l);
+          } catch {
+            return { invalid: l };
+          }
+        });
+      return { ...table(rows), offset: at, total: index.total, truncated: false };
+    }
     let rows,
       headers,
       total = 0;

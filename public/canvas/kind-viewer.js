@@ -130,7 +130,7 @@ const ROW_H = 26, WINDOW_H = 380;
 async function showTable(params = {}) {
   const d = await data(params);
   // A long table scrolls like a document: the scrollbar spans every row, and where it stops decides which rows are drawn.
-  const long = d.total > 400 && (d.starts || d.tables || item.kind === 'arrow' || item.kind === 'sqlite');
+  const long = d.total > 400 && (d.starts || d.tables || ['arrow', 'sqlite', 'csv', 'tsv', 'jsonl'].includes(item.kind));
   const numbered = d.rowStart !== undefined || (long && d.offset !== undefined);
   root.innerHTML =
     bar(
