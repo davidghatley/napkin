@@ -78,6 +78,41 @@ Copy the `.mcp.json` object printed by `open` into your agent project's
 `NAPKIN_URL`, and `NAPKIN_AGENT=claude`. Restart Claude Code and ask it to call
 `list_components`. Keep the server running while the agent works.
 
+### One line per harness
+
+`node src/cli.js open <folder>` prints these with the real address filled in. From this checkout:
+
+```sh
+# Claude Code
+claude mcp add napkin -e NAPKIN_URL=http://127.0.0.1:4810/ -e NAPKIN_AGENT=claude -- node "$PWD/src/mcp.js"
+# Codex
+codex mcp add napkin --env NAPKIN_URL=http://127.0.0.1:4810/ --env NAPKIN_AGENT=codex -- node "$PWD/src/mcp.js"
+# opencode (reads the config from the environment; nothing is written)
+OPENCODE_CONFIG_CONTENT='{"mcp":{"napkin":{"type":"local","command":["node","'"$PWD"'/src/mcp.js"],"environment":{"NAPKIN_URL":"http://127.0.0.1:4810/","NAPKIN_AGENT":"opencode"},"enabled":true}}}' opencode
+# any script: MCP over stdio, or the same tools as plain HTTP under /api
+NAPKIN_URL=http://127.0.0.1:4810/ NAPKIN_AGENT=script node src/mcp.js
+```
+
+The agent gets the whole surface: read what you see and have selected (`get_board`), list and read files,
+place and group work, read and change every control of an item (`get_controls`, `set_control`: the same path the
+item panel uses), propose instead of write (`propose`), ask you a question that shows on the canvas
+(`ask_question`), and do long work as a **run**: a plan of steps with live status, files that land in the run's
+section as they are made, a review queue you clear from the keyboard, checkpoints, and resume after a restart.
+Several agents can work at once; each has a colour, a presence chip and an audit trail. Every tool is also an HTTP
+route; the table is in [docs/agents.md](docs/agents.md).
+
+**The proving task** (what a harness should do from the one line above, with no other hints): start a run, place a
+component and five other kinds of file, group them, tune a real control, propose an edit, ask for review, and resume
+after napkin restarts. To watch a scripted agent do it, open a folder and run the demo against its address:
+
+```sh
+node src/cli.js open ./sample-40          # prints the address
+node tools/agent-demo.mjs http://127.0.0.1:4810/     # add --auto-answer to run unattended
+```
+
+In the canvas, the **Runs** panel (Alt+R) shows the plan, each agent's presence and what waits for you. In the
+review queue: j/k move, **a** approves, **x** rejects, **s** sends back, **c** writes a note, 1 to 9 pick an answer.
+
 To require review, merge this configuration into your project's `napkin.json`:
 
 ```json

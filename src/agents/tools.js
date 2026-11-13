@@ -1,6 +1,7 @@
 // The MCP tools for the shared surface (DREAM 3 D5). src/mcp.js adds TOOLS to its own list and hands unknown tool names to
 // runAgentTool(name, args, backend). Every tool is one HTTP route (src/agents/routes.js, src/kinds/routes.js); the
 // arguments are the route's body, with `run`, `item`, `proposal` and `question` naming the path parameter.
+import { explainError } from '../errors.js';
 const obj = (properties, required = []) => ({ type: 'object', properties, required });
 const str = (description) => ({ type: 'string', description });
 const run = str('run id from start_run');
@@ -52,8 +53,8 @@ Errors end with "Next:" and say what to do. A "stale revision" error means someo
 const q = (o) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== null) p.set(k, String(v)); return p; };
 const enc = encodeURIComponent;
 function fail(r, extra) {
-  const e = new Error(r.json?.error ?? `HTTP ${r.status}`);
-  const { ok: _ok, error: _error, ...rest } = r.json ?? {};
+  const e = new Error(explainError(r.json?.error ?? `HTTP ${r.status}`));
+  const rest = { ...r.json }; delete rest.ok; delete rest.error;
   e.data = { ok: false, ...rest, ...extra };
   throw e;
 }

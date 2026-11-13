@@ -19,11 +19,12 @@ import {
 import { dirname, join, resolve, sep, posix } from 'node:path';
 import { writeAtomic } from '../atomic.js';
 import { stateRoot } from '../doc/folder.js';
+import { explainError } from '../errors.js';
 
 export class RunError extends Error {
-  constructor(message, status = 400, extra) { super(message); this.status = status; this.extra = extra; }
+  constructor(message, status = 400, extra) { super(explainError(message)); this.status = status; this.extra = extra; }
 }
-const fail = (message, status, extra) => { throw new RunError(message, status, extra); };
+const refuse = (message, status, extra) => { throw new RunError(message, status, extra); };
 
 export const STEP_STATUS = ['pending', 'running', 'complete', 'failed', 'skipped', 'blocked'];
 export const RUN_STATUS = ['running', 'paused', 'complete', 'failed', 'cancelled'];
@@ -34,7 +35,7 @@ const LOG_KEEP = 20000;      // events kept on disk
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const uid = (p) => `${p}_${randomBytes(5).toString('hex')}`;
 const text = (v, max, what) => {
-  if (typeof v !== 'string' || !v.trim()) fail(`${what} must be a non-empty string. Next: send ${what}.`);
+  if (typeof v !== 'string' || !v.trim()) refuse(`${what} must be a non-empty string. Next: send ${what}.`);
   return v.trim().slice(0, max);
 };
 
@@ -120,35 +121,35 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   // ------------------------------------------------------------------------------------------------ files
   function folderPath(path) {
     if (typeof path !== 'string' || !path || path.length > 300 || path.includes('\0'))
-      fail('path must be a relative file path inside the opened folder. Next: send e.g. "reports/summary.md".');
+      refuse('path must be a relative file path inside the opened folder. Next: send e.g. "reports/summary.md".');
     const norm = posix.normalize(path.replaceAll('\\', '/'));
     const parts = norm.split('/');
     const odd = parts.find((x) => x === '..' || x === '' || x.startsWith('.') || SKIP.has(x));
     if (norm.startsWith('/') || /^[a-zA-Z]:/.test(norm) || odd !== undefined)
-      fail(`path ${JSON.stringify(path)} is outside what napkin lists${odd ? ` (${JSON.stringify(odd)} is hidden or skipped; so are ${[...SKIP].join(', ')})` : ' (absolute paths are not allowed)'}. Next: use a plain relative path such as "renders/a.svg".`);
+      refuse(`path ${JSON.stringify(path)} is outside what napkin lists${odd ? ` (${JSON.stringify(odd)} is hidden or skipped; so are ${[...SKIP].join(', ')})` : ' (absolute paths are not allowed)'}. Next: use a plain relative path such as "renders/a.svg".`);
     const abs = resolve(root, norm);
-    if (!abs.startsWith(root + sep)) fail('path escapes the opened folder. Next: use a relative path inside it.');
+    if (!abs.startsWith(root + sep)) refuse('path escapes the opened folder. Next: use a relative path inside it.');
     return { rel: parts.join('/'), abs };
   }
   function ensureInside(abs) {
     mkdirSync(dirname(abs), { recursive: true });
     const real = realpathSync(dirname(abs));
-    if (real !== root && !real.startsWith(root + sep)) fail('path escapes the opened folder through a link. Next: use a plain relative path.');
+    if (real !== root && !real.startsWith(root + sep)) refuse('path escapes the opened folder through a link. Next: use a plain relative path.');
   }
   const decode = (content, encoding = 'utf8') => {
-    if (typeof content !== 'string') fail('content must be a string (utf8 text or base64). Next: send content with encoding "utf8" or "base64".');
-    if (encoding !== 'utf8' && encoding !== 'base64') fail('encoding must be "utf8" or "base64". Next: send encoding "utf8" or "base64".');
-    if (content.length > MAX_ARTIFACT * 1.4) fail('content is over 40 MiB. Next: write large files directly in the folder and mention them in a step.', 413);
+    if (typeof content !== 'string') refuse('content must be a string (utf8 text or base64). Next: send content with encoding "utf8" or "base64".');
+    if (encoding !== 'utf8' && encoding !== 'base64') refuse('encoding must be "utf8" or "base64". Next: send encoding "utf8" or "base64".');
+    if (content.length > MAX_ARTIFACT * 1.4) refuse('content is over 40 MiB. Next: write large files directly in the folder and mention them in a step.', 413);
     const buf = Buffer.from(content, encoding);
-    if (encoding === 'base64' && content.length && !buf.length) fail('content is not valid base64. Next: send base64 text.');
-    if (buf.length > MAX_ARTIFACT) fail('content is over 40 MiB. Next: write large files directly in the folder and mention them in a step.', 413);
+    if (encoding === 'base64' && content.length && !buf.length) refuse('content is not valid base64. Next: send base64 text.');
+    if (buf.length > MAX_ARTIFACT) refuse('content is over 40 MiB. Next: write large files directly in the folder and mention them in a step.', 413);
     return buf;
   };
   const currentSha = (abs) => { try { return sha(readFileSync(abs)); } catch { return null; } };
   function detectKind(rel) { try { return items.get(rel).kind; } catch { return null; } }
 
   // ------------------------------------------------------------------------------------------------ runs
-  const getRun = (id) => runs.get(id) ?? fail(`no run ${JSON.stringify(id)}. Next: list_runs, or start_run.`, 404);
+  const getRun = (id) => runs.get(id) ?? refuse(`no run ${JSON.stringify(id)}. Next: list_runs, or start_run.`, 404);
   const summary = (r) => ({
     id: r.id, name: r.name, by: r.by, status: r.status, goal: r.goal, createdAt: r.createdAt, updatedAt: r.updatedAt,
     steps: { total: r.steps.length, complete: r.steps.filter((s) => s.status === 'complete').length, failed: r.steps.filter((s) => s.status === 'failed').length, running: r.steps.filter((s) => s.status === 'running').map((s) => s.id) },
@@ -159,18 +160,18 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   });
   const normStep = (s, i) => {
     const o = typeof s === 'string' ? { label: s } : s;
-    if (!o || typeof o !== 'object') fail('each plan step is a label or { id, label, status }. Next: fix the plan.');
+    if (!o || typeof o !== 'object') refuse('each plan step is a label or { id, label, status }. Next: fix the plan.');
     const id = o.id === undefined ? `s${i + 1}` : text(String(o.id), 80, 'step id');
     const status = o.status ?? 'pending';
-    if (!STEP_STATUS.includes(status)) fail(`step status must be one of ${STEP_STATUS.join(', ')}. Next: use one of them.`);
+    if (!STEP_STATUS.includes(status)) refuse(`step status must be one of ${STEP_STATUS.join(', ')}. Next: use one of them.`);
     return { id, label: text(o.label ?? id, 300, 'step label'), status };
   };
 
   function startRun(by, { name, plan = [], goal } = {}) {
     name = text(name, 120, 'name');
-    if (!Array.isArray(plan) || plan.length > 500) fail('plan must be an array of up to 500 steps. Next: send plan: [{ id, label }].');
+    if (!Array.isArray(plan) || plan.length > 500) refuse('plan must be an array of up to 500 steps. Next: send plan: [{ id, label }].');
     const planned = plan.map(normStep);
-    if (new Set(planned.map((s) => s.id)).size !== planned.length) fail('plan step ids must be unique. Next: give each step its own id.');
+    if (new Set(planned.map((s) => s.id)).size !== planned.length) refuse('plan step ids must be unique. Next: give each step its own id.');
     const now = Date.now();
     const run = {
       id: uid('run'), name, by, goal: typeof goal === 'string' ? goal.slice(0, 600) : undefined, status: 'running', createdAt: now, updatedAt: now,
@@ -189,7 +190,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   function step(by, id, { id: stepId, label, status, note, detail } = {}) {
     const run = getRun(id);
     stepId = text(String(stepId ?? ''), 80, 'step id');
-    if (status !== undefined && !STEP_STATUS.includes(status)) fail(`step status must be one of ${STEP_STATUS.join(', ')}. Next: use one of them.`);
+    if (status !== undefined && !STEP_STATUS.includes(status)) refuse(`step status must be one of ${STEP_STATUS.join(', ')}. Next: use one of them.`);
     let s = run.steps.find((x) => x.id === stepId);
     const now = Date.now();
     if (!s) {
@@ -215,7 +216,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
 
   function setStatus(by, id, status, note) {
     const run = getRun(id);
-    if (!RUN_STATUS.includes(status)) fail(`run status must be one of ${RUN_STATUS.join(', ')}. Next: use one of them.`);
+    if (!RUN_STATUS.includes(status)) refuse(`run status must be one of ${RUN_STATUS.join(', ')}. Next: use one of them.`);
     run.status = status;
     if (note) run.note = String(note).slice(0, 600);
     saveRun(run);
@@ -228,7 +229,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   function artifact(by, id, { path, content, encoding = 'utf8', kind, step: stepId, overwrite = false, note, propose = false, mode = 'write' } = {}) {
     const run = getRun(id);
     if (stepId !== undefined && !run.steps.some((x) => x.id === stepId))
-      fail(`run ${run.id} has no step ${JSON.stringify(stepId)}. Next: add_run_step first, or use one of ${run.steps.slice(0, 8).map((x) => x.id).join(', ')}.`);
+      refuse(`run ${run.id} has no step ${JSON.stringify(stepId)}. Next: add_run_step first, or use one of ${run.steps.slice(0, 8).map((x) => x.id).join(', ')}.`);
     const { rel, abs } = folderPath(path);
     const buf = decode(content, encoding);
     if (propose || mode === 'propose') return propose_({ by, run, rel, abs, buf, note: note ?? 'new file', kind, step: stepId });
@@ -236,7 +237,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     const before = existsSync(abs) ? sha(readFileSync(abs)) : null;
     const digest = sha(buf);
     if (before === digest) { /* the same bytes are already there: attach, do not rewrite */ }
-    else if (before && !overwrite) fail(`${rel} already exists with different content. Next: choose another path, or send overwrite: true to replace it (the previous version is not kept).`, 409);
+    else if (before && !overwrite) refuse(`${rel} already exists with different content. Next: choose another path, or send overwrite: true to replace it (the previous version is not kept).`, 409);
     else writeAtomic(abs, buf, before ? {} : { exclusive: true });
     return attach({ by, run, rel, buf, digest, kind, stepId, note, previous: before && before !== digest ? before : null });
   }
@@ -292,14 +293,14 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     const run = runId ? getRun(runId) : null;
     if (body.replaces) {
       const old = proposals.get(body.replaces);
-      if (!old || old.by !== by) fail(`replaces: no proposal ${JSON.stringify(body.replaces)} of yours. Next: read_events for the sent-back proposal id.`, 404);
+      if (!old || old.by !== by) refuse(`replaces: no proposal ${JSON.stringify(body.replaces)} of yours. Next: read_events for the sent-back proposal id.`, 404);
     }
-    if (body.step !== undefined && run && !run.steps.some((x) => x.id === body.step)) fail(`run ${run.id} has no step ${JSON.stringify(body.step)}. Next: add_run_step first.`);
+    if (body.step !== undefined && run && !run.steps.some((x) => x.id === body.step)) refuse(`run ${run.id} has no step ${JSON.stringify(body.step)}. Next: add_run_step first.`);
     if (body.item !== undefined) { // a proposed instrument change
       let c;
-      try { c = items.controls(String(body.item)); } catch (e) { fail(`${e.message}`, e.status ?? 404); }
+      try { c = items.controls(String(body.item)); } catch (e) { refuse(`${e.message}`, e.status ?? 404); }
       const control = c.sections.flatMap((s) => s.controls).find((x) => x.id === body.control);
-      if (!control) fail(`item ${body.item} has no control ${JSON.stringify(body.control)}. Next: get_controls and use a listed id.`, 404);
+      if (!control) refuse(`item ${body.item} has no control ${JSON.stringify(body.control)}. Next: get_controls and use a listed id.`, 404);
       const p = {
         id: uid('prop'), run: run?.id ?? null, by, kind: 'control', item: String(body.item), control: body.control, label: control.label ?? control.id, value: body.value,
         before: control.value, baseRevision: body.baseRevision ?? c.revision, note: body.note ? String(body.note).slice(0, 600) : '', status: 'pending', comments: [], at: Date.now(),
@@ -321,14 +322,14 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   const persistProposal = (p) => { const run = p.run && runs.get(p.run); if (run) saveRun(run); else saveLoose(); };
 
   function resolve_(by, id, { outcome, comment } = {}) {
-    const p = proposals.get(id) ?? fail(`no proposal ${JSON.stringify(id)}. Next: GET /api/review lists what is waiting.`, 404);
-    const kind = OUTCOMES[String(outcome ?? '').toLowerCase()] ?? fail(`outcome must be accepted, rejected, sent-back or comment. Next: use one of them.`);
-    if (p.by === by) fail('You cannot review your own proposal. Next: leave it for the person (or another agent) to answer.', 403);
+    const p = proposals.get(id) ?? refuse(`no proposal ${JSON.stringify(id)}. Next: GET /api/review lists what is waiting.`, 404);
+    const kind = OUTCOMES[String(outcome ?? '').toLowerCase()] ?? refuse(`outcome must be accepted, rejected, sent-back or comment. Next: use one of them.`);
+    if (p.by === by) refuse('You cannot review your own proposal. Next: leave it for the person (or another agent) to answer.', 403);
     const note = typeof comment === 'string' ? comment.trim().slice(0, 1200) : '';
-    if (p.status !== 'pending' && !(kind === 'comment' && p.status === 'sent-back')) fail(`proposal ${id} is already ${p.status}. Next: read it with get_run.`, 409);
+    if (p.status !== 'pending' && !(kind === 'comment' && p.status === 'sent-back')) refuse(`proposal ${id} is already ${p.status}. Next: read it with get_run.`, 409);
     const run = p.run ? runs.get(p.run) : null;
     if (kind === 'comment') {
-      if (!note) fail('a comment needs text. Next: send comment.');
+      if (!note) refuse('a comment needs text. Next: send comment.');
       p.comments.push({ by, text: note, at: Date.now() });
       persistProposal(p);
       touch(by, run, `commented on ${p.path}`);
@@ -352,18 +353,18 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     const run = p.run ? runs.get(p.run) : null;
     if (p.kind === 'control') {
       try { const r = items.control(p.item, p.control, p.value, p.baseRevision, p.by); return { revision: r.revision, applied: true }; }
-      catch (e) { fail(`${e.message} The proposal stays open. Next: ask the agent to propose again on the new revision, or reject it.`, e.status === 409 ? 409 : (e.status ?? 400)); }
+      catch (e) { refuse(`${e.message} The proposal stays open. Next: ask the agent to propose again on the new revision, or reject it.`, e.status === 409 ? 409 : (e.status ?? 400)); }
     }
     const { abs } = folderPath(p.path);
     ensureInside(abs);
     const buf = readFileSync(contentFile(p.id));
     const now = existsSync(abs) ? sha(readFileSync(abs)) : null;
-    if (now !== p.baseSha) fail(`${p.path} changed on disk after it was proposed. The proposal stays open. Next: reject it, or send it back so the agent proposes again.`, 409);
+    if (now !== p.baseSha) refuse(`${p.path} changed on disk after it was proposed. The proposal stays open. Next: reject it, or send it back so the agent proposes again.`, 409);
     try {
       writeAtomic(abs, buf, { ...(p.baseSha ? { check: () => { if (currentSha(abs) !== p.baseSha) throw new RunError('the file changed while saving', 409); } } : { exclusive: true }) });
     } catch (e) {
       if (e instanceof RunError) throw e;
-      if (e.code === 'EEXIST') fail(`${p.path} appeared after it was proposed. The proposal stays open. Next: reject it or send it back.`, 409);
+      if (e.code === 'EEXIST') refuse(`${p.path} appeared after it was proposed. The proposal stays open. Next: reject it or send it back.`, 409);
       throw e;
     }
     if (run) {
@@ -374,16 +375,16 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     return {};
   }
   function content(id) {
-    const p = proposals.get(id) ?? fail(`no proposal ${JSON.stringify(id)}.`, 404);
-    if (p.kind !== 'file') fail('only file proposals have content.', 404);
-    try { return { bytes: readFileSync(contentFile(id)), mime: p.mime, path: p.path }; } catch { fail('the proposal content is gone (it was resolved).', 404); }
+    const p = proposals.get(id) ?? refuse(`no proposal ${JSON.stringify(id)}.`, 404);
+    if (p.kind !== 'file') refuse('only file proposals have content.', 404);
+    try { return { bytes: readFileSync(contentFile(id)), mime: p.mime, path: p.path }; } catch { refuse('the proposal content is gone (it was resolved).', 404); }
   }
 
   // ------------------------------------------------------------------------------------------------ questions
   function ask(by, { run: runId, text: t, options, multiple, default: def, step: stepId } = {}) {
     const run = runId ? getRun(runId) : null;
     if (options !== undefined && (!Array.isArray(options) || options.length > 40 || options.some((o) => typeof o !== 'string' || !o.trim())))
-      fail('options must be up to 40 non-empty strings. Next: send options: ["yes","no"].');
+      refuse('options must be up to 40 non-empty strings. Next: send options: ["yes","no"].');
     const q = {
       id: uid('q'), run: run?.id ?? null, by, text: text(t, 1200, 'text'), options: options?.map((o) => o.trim().slice(0, 200)) ?? [],
       ...(multiple ? { multiple: true } : {}), ...(def !== undefined ? { default: String(def).slice(0, 200) } : {}), step: stepId ?? null, status: 'open', at: Date.now(),
@@ -395,12 +396,12 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     return { ok: true, id: q.id, question: q.id, status: 'open' };
   }
   function answer(by, id, { answer: a } = {}) {
-    const q = questions.get(id) ?? fail(`no question ${JSON.stringify(id)}. Next: GET /api/review lists what is waiting.`, 404);
-    if (q.by === by) fail('You cannot answer your own question. Next: wait for the person to answer.', 403);
-    if (q.status !== 'open') fail(`question ${id} is already ${q.status}. Next: read the answer with get_run.`, 409);
-    if (typeof a !== 'string' && !Array.isArray(a)) fail('answer must be text (or a list of options). Next: send answer.');
+    const q = questions.get(id) ?? refuse(`no question ${JSON.stringify(id)}. Next: GET /api/review lists what is waiting.`, 404);
+    if (q.by === by) refuse('You cannot answer your own question. Next: wait for the person to answer.', 403);
+    if (q.status !== 'open') refuse(`question ${id} is already ${q.status}. Next: read the answer with get_run.`, 409);
+    if (typeof a !== 'string' && !Array.isArray(a)) refuse('answer must be text (or a list of options). Next: send answer.');
     const value = Array.isArray(a) ? a.map(String) : a.slice(0, 4000);
-    if (typeof value === 'string' && !value.trim()) fail('answer is empty. Next: send some text.');
+    if (typeof value === 'string' && !value.trim()) refuse('answer is empty. Next: send some text.');
     q.status = 'answered'; q.answer = value; q.answeredBy = by; q.answeredAt = Date.now();
     persistQuestion(q);
     touch(by, q.run && runs.get(q.run), 'answered a question');
@@ -409,7 +410,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   }
   const persistQuestion = (q) => { const run = q.run && runs.get(q.run); if (run) saveRun(run); else saveLoose(); };
   async function waitAnswer(id, ms = 0) {
-    const q = questions.get(id) ?? fail(`no question ${JSON.stringify(id)}.`, 404);
+    const q = questions.get(id) ?? refuse(`no question ${JSON.stringify(id)}.`, 404);
     const until = Date.now() + Math.min(Math.max(Number(ms) || 0, 0), 30000);
     while (q.status === 'open' && Date.now() < until) await new Promise((res) => { const t = setTimeout(done, until - Date.now()); function done() { clearTimeout(t); waiters.delete(done); res(); } waiters.add(done); });
     return { ok: true, id: q.id, status: q.status, ...(q.status === 'answered' ? { answer: q.answer, answeredBy: q.answeredBy } : {}) };
@@ -458,7 +459,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     limit = Math.min(Math.max(Number(limit) || 500, 1), 2000);
     const wanted = types ? new Set(String(types).split(',').filter(Boolean)) : null;
     const from = since === 'now' ? seq : since === undefined || since === '' ? (cursors[by] ?? 0) : Number(since);
-    if (!Number.isFinite(from) || from < 0) fail('since must be a number from an earlier read, or "now". Next: omit it to read what is new for you.');
+    if (!Number.isFinite(from) || from < 0) refuse('since must be a number from an earlier read, or "now". Next: omit it to read what is new for you.');
     const pick = () => ring.filter((e) => e.seq > from && (!run || e.run === run) && (!wanted || wanted.has(e.type))).slice(0, limit);
     let out = pick();
     const until = Date.now() + Math.min(Math.max(Number(wait) || 0, 0), 30000);

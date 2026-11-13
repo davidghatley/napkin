@@ -1,5 +1,7 @@
 // Build-first #3 (F06), on TSX and a folder: an agent can list, read and edit through MCP.
 import { test } from 'node:test';
+import { TOOLS as AGENT_TOOL_LIST } from '../src/agents/tools.js';
+const AGENT_TOOLS = new Set(AGENT_TOOL_LIST.map((t) => t.name));
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,7 +15,7 @@ test('scripted MCP client: list, read (with source), apply_edits changes the fil
   const mcp = await startMcp(server.url);
   try {
     assert.ok(mcp.init.result?.capabilities?.tools, 'initialize advertises tools');
-    const tools = (await mcp.request('tools/list', {})).result.tools.map((t) => t.name).sort();
+    const tools = (await mcp.request('tools/list', {})).result.tools.map((t) => t.name).filter((n) => !AGENT_TOOLS.has(n)).sort(); // the shared-surface tools (runs, review, board) have their own tests in test/agents3
     assert.deepEqual(tools, ['add_variant', 'apply_edits', 'create_component', 'delete_component', 'list_components', 'list_tokens', 'propose_adoption', 'read_component', 'rename_component', 'render_component', 'search', 'subscribe']);
     const list = await mcp.call('list_components');
     assert.deepEqual(list.data.map((c) => c.name).sort(), ['Button', 'Card']);

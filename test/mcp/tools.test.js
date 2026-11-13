@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { tempRepo, startServer, startMcp } from '../helpers/harness.js';
+import { TOOLS as AGENT_TOOL_LIST } from '../../src/agents/tools.js';
 
 const EXPECTED = ['add_variant', 'apply_edits', 'create_component', 'delete_component', 'list_components', 'list_tokens', 'propose_adoption', 'read_component', 'rename_component', 'render_component', 'search', 'subscribe'];
 
@@ -11,7 +12,9 @@ test('tools/list lists every tool with an object input schema and a description;
   const mcp = await startMcp(server.url);
   try {
     const { tools } = (await mcp.request('tools/list', {})).result;
-    assert.deepEqual(tools.map((t) => t.name).sort(), EXPECTED);
+    const agentTools = AGENT_TOOL_LIST.map((t) => t.name); // the shared-surface tools (runs, review, board) are tested in test/agents3
+    assert.deepEqual(tools.map((t) => t.name).filter((n) => !agentTools.includes(n)).sort(), EXPECTED);
+    assert.deepEqual(agentTools.filter((n) => !tools.some((t) => t.name === n)), [], 'every shared-surface tool is advertised');
     for (const t of tools) {
       assert.equal(t.inputSchema?.type, 'object', `${t.name} schema`);
       assert.ok(t.description.length > 20, `${t.name} description`);
