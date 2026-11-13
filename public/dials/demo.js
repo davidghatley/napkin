@@ -1,5 +1,5 @@
 import { Dials, registerControl, registerFigure } from "./dials.js";
-import { samples, gallery } from "./schemas.js";
+import { samples, gallery, lampRig } from "./schemas.js";
 import { el } from "./dom.js";
 import { stillLife, adjust } from "./kit.js";
 import { framesAt, motionAt } from "./motion.js";
@@ -7,7 +7,7 @@ import { contrast, parseColor } from "./color.js";
 import { schedule, hash } from "./figures.js";
 const panels = [],
   events = [];
-window.dialsDemo = { panels, samples, events, Dials, registerControl, registerFigure, gallery };
+window.dialsDemo = { panels, samples, events, Dials, registerControl, registerFigure, gallery, lampRig };
 const eventOut = document.querySelector("#event");
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const SVG = "http://www.w3.org/2000/svg";

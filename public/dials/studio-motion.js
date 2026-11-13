@@ -22,9 +22,9 @@ export function motionStudio(ctx, host) {
   const panel = ctx.panel,
     section = ctx.section,
     find = (...types) => section.controls.find((c) => types.includes(c.type));
-  const mc = find("motion"),
+  const mc = find("motion", "spring", "bezier"),
     kc = find("keyframes");
-  const M = mc && panel.context(mc.id),
+  const M = mc && asMotion(panel.context(mc.id), mc.type),
     K = kc && panel.context(kc.id);
   host.classList.add("k-studio", "km");
   host.dataset.layout = "own";
@@ -615,4 +615,18 @@ function niceTicks(lo, hi, n) {
     out = [];
   for (let v = Math.ceil(lo / st) * st; v <= hi; v += st) out.push(v);
   return out;
+}
+
+/** A bezier control may hold just its four numbers, a spring control just its physics: show both as a motion. */
+function asMotion(ctx, type) {
+  if (type === "motion") return ctx;
+  const wasArray = Array.isArray(ctx.get());
+  return {
+    ...ctx,
+    get: () => {
+      const v = ctx.get();
+      return Array.isArray(v) ? { mode: "bezier", bezier: v, duration: 1000, delay: 0 } : { mode: type, ...v };
+    },
+    change: (v) => ctx.change(wasArray ? v.bezier : v),
+  };
 }

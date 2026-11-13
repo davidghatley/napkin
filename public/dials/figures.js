@@ -71,7 +71,7 @@ const optionsOf = (c) =>
   (c.options || []).map((o) => (typeof o === "object" ? o.value : o));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // Choice glyphs: each option drawn as what it does; the current one in accent, underlined in ink.
-const choiceGlyphs = {
+export const choiceGlyphs = {
   align(o, x, w, on) {
     const color = on ? A : SOFT,
       lens = [w - 7, w - 13, w - 9],

@@ -159,7 +159,7 @@ test(
             file: "example.svg",
           };
           for (const [id, text] of Object.entries(values)) {
-            await browser.type(`#gallery [data-control=${id}] input`, text);
+            await browser.type(`#gallery [data-control=${id}] :is(input,textarea)`, text);
             assert.equal(
               await q(
                 `dialsDemo.galleryPanel.rows.get(${JSON.stringify(id)}).node.classList.contains('is-modified')`,
@@ -260,7 +260,7 @@ test(
         "three depths keep nodes and studio keyboard paths; CSS color syntaxes convert",
         async () => {
           await q(
-            'window.keptInput=document.querySelector("[data-control=ink] input");dialsDemo.panels[0].setDepth("pigment",1)',
+            'window.keptInput=document.querySelector("[data-control=ink] textarea");dialsDemo.panels[0].setDepth("pigment",1)',
           );
           await sleep(260);
           assert.equal(
@@ -275,7 +275,7 @@ test(
           await sleep(200);
           assert.equal(
             await q(
-              'keptInput===document.querySelector("[data-control=ink] input")',
+              'keptInput===document.querySelector("[data-control=ink] textarea")',
             ),
             true,
           );

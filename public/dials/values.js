@@ -288,3 +288,68 @@ export function validateSchema(schema) {
     }
   }
 }
+/**
+ * Read a JSON value the way people type it: JSON, or a JavaScript literal with single
+ * quotes, bare keys, trailing commas, comments and Infinity. Never evaluates code.
+ * Throws an Error whose message names the line and column in plain words.
+ */
+export function looseJson(text) {
+  const src = String(text);
+  let out = "",
+    i = 0;
+  while (i < src.length) {
+    const ch = src[i];
+    if (ch === "/" && src[i + 1] === "/") {
+      while (i < src.length && src[i] !== "\n") i++;
+      continue;
+    }
+    if (ch === "/" && src[i + 1] === "*") {
+      const end = src.indexOf("*/", i + 2);
+      i = end < 0 ? src.length : end + 2;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === "`") {
+      let j = i + 1,
+        body = "";
+      while (j < src.length && src[j] !== ch) {
+        if (src[j] === "\\") {
+          body += src[j] + (src[j + 1] ?? "");
+          j += 2;
+          continue;
+        }
+        body += src[j] === '"' ? '\\"' : src[j] === "\n" ? "\\n" : src[j];
+        j++;
+      }
+      if (j >= src.length) throw located(src, i, "a quote is never closed");
+      out += `"${ch === '"' ? body : body.replace(/\\'/g, "'").replace(/\\`/g, "`")}"`;
+      i = j + 1;
+      continue;
+    }
+    if (/[A-Za-z_$]/.test(ch)) {
+      let j = i;
+      while (j < src.length && /[\w$]/.test(src[j])) j++;
+      const word = src.slice(i, j),
+        next = /^\s*:/.test(src.slice(j));
+      if (next) out += `"${word}"`;
+      else if (["true", "false", "null"].includes(word)) out += word;
+      else if (word === "Infinity") out += '"Infinity"';
+      else if (word === "undefined") out += "null";
+      else throw located(src, i, `"${word}" is not a value (put text in quotes)`);
+      i = j;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  out = out.replace(/,(\s*[}\]])/g, "$1");
+  try {
+    return JSON.parse(out, (_k, v) => (v === "Infinity" ? Infinity : v));
+  } catch (err) {
+    const at = /position (\d+)/.exec(err.message);
+    throw new Error(at ? `Could not read this: ${err.message.replace(/ in JSON at position \d+.*/, "")} near character ${Number(at[1]) + 1}` : `Could not read this as a value: ${err.message}`);
+  }
+}
+function located(src, index, what) {
+  const before = src.slice(0, index).split("\n");
+  return new Error(`Line ${before.length}, column ${before.at(-1).length + 1}: ${what}.`);
+}

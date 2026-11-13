@@ -370,13 +370,17 @@ export class Dials extends EventTarget {
       );
       input.setAttribute("aria-labelledby", uid);
     } else {
-      input = el("input", {
-        type: "text",
+      // Numbers sit on one line; anything that can run long (text, colours, JSON) wraps and
+      // grows the row instead of being cut off.
+      const wide = !numeric(c);
+      input = el(wide ? "textarea" : "input", {
+        type: wide ? undefined : "text",
+        rows: wide ? 1 : undefined,
         "aria-labelledby": uid,
         spellcheck: false,
         autocomplete: "off",
-        value: format(c.value, c),
       });
+      input.value = format(c.value, c);
       input.addEventListener("focus", () => {
         input.value = format(c.value, c);
         this.begin(c.id, "entry");
@@ -656,7 +660,7 @@ export class Dials extends EventTarget {
     r.node.querySelector(".d-reset").title =
       `Reset ${c.label} to ${format(c.default, c)}`;
     if (input && (input !== document.activeElement || !this.active.has(id))) {
-      if (input.tagName === "INPUT")
+      if (input.tagName === "INPUT" || input.tagName === "TEXTAREA")
         input.value =
           input !== document.activeElement &&
           typeof c.value === "string" &&
@@ -1186,12 +1190,12 @@ export class Dials extends EventTarget {
     for (const s of this.sections.values()) {
       const name = s.schema.label || s.schema.id;
       for (const c of s.schema.controls) {
-        const label = c.label || c.id,
-          value = format(c.value ?? c.default, c).slice(0, 24);
+        const label = c.label || c.id;
         items.push(
           {
             text: `Control ${label}`,
-            hint: value,
+            hint: name,
+            control: c,
             run: (studio) => {
               if (studio) return this.open(c.id);
               if (s.depth === 1) this.setDepth(s.schema.id, 2, false);
@@ -1201,6 +1205,8 @@ export class Dials extends EventTarget {
           {
             text: `Studio ${label}`,
             hint: name,
+            control: c,
+            what: "Opens the full pane for this control.",
             run: () => {
               this.open(c.id);
               s.buttons[2].focus();
@@ -1209,6 +1215,9 @@ export class Dials extends EventTarget {
           {
             text: `Reset ${label}`,
             hint: "R",
+            control: c,
+            what: "Back to the declared default.",
+            reset: true,
             run: () => {
               this.reset(c.id);
               if (s.depth === 1) this.setDepth(s.schema.id, 2, false);
@@ -1221,6 +1230,8 @@ export class Dials extends EventTarget {
         items.push({
           text: `${depthName} ${name}`,
           hint: String(i + 1),
+          section: s,
+          depthIndex: i,
           run: () => {
             this.setDepth(s.schema.id, i + 1);
             s.buttons[i].focus();
@@ -1282,15 +1293,47 @@ export class Dials extends EventTarget {
               class: "d-palette-item",
               "aria-selected": String(i === at),
             },
-            el("span", { text: it.text }),
+            el("span", { class: "d-palette-fig", "aria-hidden": "true" }),
+            el("span", { class: "d-palette-text", text: it.text }),
             el("kbd", { text: it.hint }),
           );
+          if (it.control) drawFigure(o.firstChild, it.control, this.get(it.control.id));
+          else if (it.section) o.firstChild.innerHTML = depthGlyphs[it.depthIndex];
           o.addEventListener("click", () => run(it, false));
           return o;
         }),
       );
       input.setAttribute("aria-activedescendant", shown.length ? `${listId}-${at}` : "");
+      showPreview(shown[at]);
       if (!shown.length) list.append(el("div", { class: "d-palette-empty", text: "Nothing matches" }));
+    };
+    // The preview: what the highlighted command acts on, drawn, with its whole value.
+    const preview = el("aside", { class: "d-palette-preview", "aria-live": "polite" });
+    const showPreview = (it) => {
+      preview.replaceChildren();
+      if (!it) return;
+      const c = it.control;
+      if (c) {
+        const now = this.get(c.id),
+          shownValue = it.reset ? c.default : now,
+          fig = el("span", { class: "d-palette-big" });
+        drawFigure(fig, c, shownValue);
+        preview.append(
+          el("p", { class: "d-palette-kicker", text: `${this.rows.get(c.id)?.section.schema.label || ""} · ${c.type}` }),
+          el("h3", { text: c.label || c.id }),
+          fig,
+          el("p", { class: "d-palette-value", text: format(shownValue, c) }),
+          el("p", { class: "d-palette-what", text: it.reset ? (same(now, c.default) ? "Already at its default." : `Now ${format(now, c)}; this puts back the default shown above.`) : it.what || "Focus its row: arrows, typing or a drag change it." }),
+        );
+      } else if (it.section) {
+        const g = el("span", { class: "d-palette-big d-palette-depth" });
+        g.innerHTML = depthGlyphs[it.depthIndex];
+        preview.append(
+          el("h3", { text: it.section.schema.label || it.section.schema.id }),
+          g,
+          el("p", { class: "d-palette-what", text: `${depthNames[it.depthIndex][0]}: ${depthNames[it.depthIndex][1]}. ${it.section.schema.controls.length} controls.` }),
+        );
+      }
     };
     const run = (it, studio) => {
       this.dialog.close();
@@ -1314,9 +1357,9 @@ export class Dials extends EventTarget {
     });
     this.dialog = el(
       "dialog",
-      { class: "dials d-help d-palette", "aria-label": "Command palette" },
+      { class: "d-help d-palette", role: "dialog", "aria-modal": "true", "aria-label": "Command palette" },
       input,
-      list,
+      el("div", { class: "d-palette-body" }, list, preview),
       el("p", { class: "d-palette-note", text: "Enter goes to the control. Shift Enter opens its studio. Escape closes." }),
     );
     this.root.append(this.dialog);
@@ -1349,7 +1392,7 @@ export class Dials extends EventTarget {
     }
     this.dialog = el(
       "dialog",
-      { class: "dials d-help", "aria-label": "Instrument keyboard map" },
+      { class: "d-help", role: "dialog", "aria-modal": "true", "aria-label": "Instrument keyboard map" },
       el("h2", { text: "Instrument keys" }),
       ...keyBindings(this.keys).map(([key, text]) =>
         el("p", {}, el("kbd", { text: key }), el("span", { text })),

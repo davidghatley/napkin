@@ -268,3 +268,29 @@ export const gallery = section("geometry", "Geometry", [
   c("seed", "seed", "Seed", 42, { min: 0, max: 4294967295, step: 1 }),
   c("file", "file", "File", ""),
 ]);
+/**
+ * A panel the library was never written for: a stage lamp. Types it knows (vector, angle,
+ * shadow, spacing, seed, range, segmented, text) and one it does not ("dmx-universe"), which
+ * still gets a row figure and a studio from its value alone.
+ */
+export const lampRig = {
+  revision: "lamp-1",
+  sections: [
+    {
+      id: "lamp",
+      label: "Lamp rig",
+      depth: 2,
+      controls: [
+        c("aim", "vector", "Aim", [0.3, -0.4], { min: -1, max: 1, step: 0.01 }),
+        c("tilt", "angle", "Tilt", 35, { min: -90, max: 90, step: 1, unit: "deg" }),
+        c("glow", "shadow", "Glow", { x: 0, y: 0, blur: 32, spread: 4, color: "#ffc85a99" }),
+        c("housing", "spacing", "Housing pad", [8, 12, 8, 12]),
+        c("noise", "seed", "Noise seed", 1234, { min: 0, max: 99999, step: 1 }),
+        c("kelvin", "range", "Colour temperature", 4200, { min: 1800, max: 9000, step: 100, unit: "K" }),
+        c("mode", "segmented", "Mode", "spot", { options: [{ label: "Spot", value: "spot" }, { label: "Wash", value: "wash" }, { label: "Strobe", value: "strobe" }] }),
+        c("dmx", "dmx-universe", "DMX universe", { start: 1, channels: [255, 180, 40, 0, 128, 64, 220, 12], master: 0.8, enabled: true, name: "Front left" }),
+        c("cue", "text", "Cue note", "Slow rise on the second verse, then hold until the lights in the house come down."),
+      ],
+    },
+  ],
+};
