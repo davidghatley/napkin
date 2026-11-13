@@ -5,16 +5,15 @@ const BUFFER_CAP = 32 * LIMIT,
   VERTEX_CAP = 90000;
 const COMPONENT = { 5120: [1, 'getInt8'], 5121: [1, 'getUint8'], 5122: [2, 'getInt16'], 5123: [2, 'getUint16'], 5125: [4, 'getUint32'], 5126: [4, 'getFloat32'] };
 const WIDTH = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT2: 4, MAT3: 9, MAT4: 16 };
-const hint = ' Next: open the model in its own application, or request a smaller entry.';
-const fail = (m) => {
-  throw new Error(m + hint);
+const refuse = (m) => {
+  throw new Error(m + ' Next: open the model in its own application, or request a smaller entry.');
 };
 const round = (v) => Number(v.toPrecision(6));
 export function parseGltf(ctx, jsonOf) {
   let gltf, bin;
   if (ctx.kind === 'glb') {
     const b = window(ctx.file, 0, BUFFER_CAP);
-    if (b.length < 20 || b.toString('ascii', 0, 4) !== 'glTF') fail('This is not a complete GLB file.');
+    if (b.length < 20 || b.toString('ascii', 0, 4) !== 'glTF') refuse('This is not a complete GLB file.');
     for (let at = 12; at + 8 <= b.length; ) {
       const n = b.readUInt32LE(at),
         type = b.readUInt32LE(at + 4);
@@ -22,14 +21,14 @@ export function parseGltf(ctx, jsonOf) {
       else if (type === 0x004e4942 && !bin) bin = b.subarray(at + 8, at + 8 + n);
       at += 8 + n + ((4 - (n % 4)) % 4);
     }
-    if (!gltf) fail('The GLB has no scene description.');
+    if (!gltf) refuse('The GLB has no scene description.');
   } else gltf = jsonOf();
   const notes = new Set();
   const buffers = (gltf.buffers || []).map((b, i) => {
     if (i === 0 && bin) return bin;
     if (b.uri?.startsWith('data:')) return Buffer.from(b.uri.slice(b.uri.indexOf(',') + 1), 'base64');
-    if (!b.uri || /^(?:https?:|\/)/.test(b.uri)) fail('A model buffer must be a file in the opened folder.');
-    if (b.byteLength > BUFFER_CAP) fail('A model buffer exceeds the 32 MiB preview limit.');
+    if (!b.uri || /^(?:https?:|\/)/.test(b.uri)) refuse('A model buffer must be a file in the opened folder.');
+    if (b.byteLength > BUFFER_CAP) refuse('A model buffer exceeds the 32 MiB preview limit.');
     try {
       return window(ctx.resolveRelative(decodeURIComponent(b.uri)), 0, BUFFER_CAP);
     } catch {
@@ -39,9 +38,9 @@ export function parseGltf(ctx, jsonOf) {
   });
   function read(index, { flat = true } = {}) {
     const a = gltf.accessors?.[index];
-    if (!a) fail('A model accessor is missing.');
-    const [width, getter] = COMPONENT[a.componentType] || fail('Unsupported model accessor type.');
-    const dim = WIDTH[a.type] || fail('Unsupported model accessor shape.');
+    if (!a) refuse('A model accessor is missing.');
+    const [width, getter] = COMPONENT[a.componentType] || refuse('Unsupported model accessor type.');
+    const dim = WIDTH[a.type] || refuse('Unsupported model accessor shape.');
     if (a.sparse) notes.add('Sparse accessors are not applied');
     const out = new Array(a.count * dim).fill(0);
     if (a.bufferView === undefined) return out;
