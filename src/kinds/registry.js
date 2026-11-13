@@ -347,12 +347,27 @@ define(
   'parquet',
   (c) => c.head.toString('ascii', 0, 4) === 'PAR1',
 );
+// Arrow IPC: the file format starts with ARROW1; the stream format starts with a message whose header is a Schema.
+const arrowStream = (h) => {
+  try {
+    const at = h.readInt32LE(0) === -1 ? 8 : 4,
+      len = h.readInt32LE(at - 4);
+    if (len <= 0 || len > h.length - at) return false;
+    const m = h.subarray(at, at + len),
+      p = m.readUInt32LE(0),
+      vt = p - m.readInt32LE(p),
+      slot = m.readUInt16LE(vt + 6);
+    return m.readUInt16LE(vt) > 6 && slot > 0 && m[p + slot] === 1;
+  } catch {
+    return false;
+  }
+};
 define(
   'arrow',
-  ['.arrow', '.feather'],
-  'application/vnd.apache.arrow.file',
+  ['.arrow', '.arrows', '.feather', '.ipc'],
+  (c) => (c.head.toString('ascii', 0, 6) === 'ARROW1' ? 'application/vnd.apache.arrow.file' : 'application/vnd.apache.arrow.stream'),
   'arrow',
-  (c) => c.head.toString('ascii', 0, 6) === 'ARROW1',
+  (c) => c.head.toString('ascii', 0, 6) === 'ARROW1' || ((c.ext === '' || vague(c) || ['.arrow', '.arrows', '.ipc'].includes(c.ext)) && arrowStream(c.head)),
 );
 define('ipynb', ['.ipynb'], 'application/x-ipynb+json', 'notebook');
 define(

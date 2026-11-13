@@ -157,9 +157,9 @@ function streamBatches(file, ix, need) {
   try {
     const last = need.length ? ix.batches.indexOf(need.at(-1)) : 0,
       parts = [bytes(fd, ix.schema.at, ix.schema.length)];
-    // Every dictionary written before the last batch read, in stream order, so replacements and deltas apply as written.
-    for (const d of ix.dicts) if (d.before <= last) parts.push(bytes(fd, d.at, d.length));
-    for (const b of need) parts.push(bytes(fd, b.at, b.length));
+    // Every dictionary written before the last batch read and the batches themselves, in stream order, so a replacement or a
+    // delta applies to exactly the batches that follow it.
+    for (const m of [...ix.dicts.filter((d) => d.before <= last), ...need].sort((a, b) => a.at - b.at)) parts.push(bytes(fd, m.at, m.length));
     const sum = parts.reduce((n, p) => n + p.length, 0);
     if (sum > MAX_WINDOW)
       throw new Error(`the record batch that holds these rows is ${(sum / 1048576).toFixed(0)} MiB, over the 256 MiB a window may read; re-export the file with smaller record batches`);
