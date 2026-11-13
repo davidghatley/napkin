@@ -45,7 +45,7 @@ export function initKinds(ctx) {
       for (const item of items) {
         // HTML, TSX and JSX files are always drawn as components (the TSX dialect or the document engine), never twice.
         // They stay items for the API; the canvas draws each of them once, as a component.
-        if (['html', 'tsx', 'jsx'].includes(item.kind) || paths.has(item.path)) continue;
+        if (['html', 'tsx', 'jsx'].includes(item.kind) || paths.has(item.path) || item.path.endsWith('.napkin.json')) continue; // (a component's own sidecar is part of that component)
         seen.add(item.id);
         const old = ctx.state.components.get(item.id);
         const revision = String(item.meta.modifiedAt) + ':' + item.bytes;

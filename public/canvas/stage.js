@@ -22,7 +22,17 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 export function createStage(ctx, root, world, view) {
   world.style.visibility = 'hidden'; // until the first layout: frames are packed together once they are all measured, and nobody sees them move there
-  const sections = new Map(); // component id -> { el, frame, unmounts, token, pos, size, culled }
+  // Components' sections. File items (kinds) are in the same map for get/set/has/delete, but iteration sees components only, so
+  // the inspector, theme, styles and every other loop over the stage's document frames never meets an item card. all() is both.
+  class SectionMap extends Map {
+    items = new Map();
+    set(k, v) { if (v?.item) this.items.set(k, v); else super.set(k, v); return this; }
+    get(k) { return super.get(k) ?? this.items.get(k); }
+    has(k) { return super.has(k) || this.items.has(k); }
+    delete(k) { return this.items.delete(k) || super.delete(k); }
+    all() { return [...super.entries(), ...this.items]; }
+  }
+  const sections = new SectionMap(); // component id -> { el, frame, unmounts, token, pos, size, culled }
   const auto = new Map();     // component id -> { x, y } chosen by the stage for components that have no saved position
   const overlays = root.querySelector('#overlays');
   const mk = (id) => { const o = document.createElement('div'); o.id = id; overlays.append(o); return o; };
@@ -52,7 +62,7 @@ export function createStage(ctx, root, world, view) {
     const el = document.createElement('section');
     el.className = ctx.state.components.get(id)?.item ? 'item-card' : 'cmp'; el.dataset.component = id;
     el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="cmp-path" hidden></span><span class="badge" hidden></span><span class="rev"></span><span class="cmp-note" hidden></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
-    sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false };
+    sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false, item: !!ctx.state.components.get(id)?.item };
     sections.set(id, sec);
     world.append(el);
     const saved = ctx.state.components.get(id)?.canvas;
@@ -116,13 +126,13 @@ export function createStage(ctx, root, world, view) {
     const detail = document.createElement('pre'); detail.textContent = message;
     card.append(summary, detail); return card;
   }
-  const overlapsOthers = (id, sec) => sec.pos && [...sections.entries()].some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
+  const overlapsOthers = (id, sec) => sec.pos && sections.all().some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
   // WPC-23: a frame far off screen is kept at the size it had (or a placeholder's) while it is culled; when it is drawn again it can be bigger
   // than the room it was given. The ones the stage placed itself move aside to free space; nothing else moves.
   function regrown(secs) {
     let changed = false;
     for (const sec of secs) {
-      const id = [...sections].find(([, x]) => x === sec)?.[0];
+      const id = sections.all().find(([, x]) => x === sec)?.[0];
       if (!id || sec.culled) continue;
       const was = { ...sec.size }; measure(sec);
       if (was.w === sec.size.w && was.h === sec.size.h) continue;
@@ -164,7 +174,7 @@ export function createStage(ctx, root, world, view) {
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
-    if ((c.kind === 'html' || c.item) && !sec.docFrame && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER && [...sections].filter(([k, x]) => x.docFrame && !!ctx.state.components.get(k)?.item === !!c.item).length >= DOC_BUDGET) { // (file items and components keep separate budgets)
+    if ((c.kind === 'html' || c.item) && !sec.docFrame && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER && sections.all().filter(([, x]) => x.docFrame).length >= DOC_BUDGET && !(!c.item && evictItem())) { // (components and file items share the budget, components first: a file card gives its frame up for a component)
       sec.pending = true; sec.el.dataset.ready = '1';
       if (!c.item && !sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
       return;
@@ -218,6 +228,15 @@ export function createStage(ctx, root, world, view) {
     sec.docFrame?.destroy(); sec.docFrame = null; sec.pending = true;
     sec.frame.style.minWidth = `${w}px`; sec.frame.style.minHeight = `${h}px`;
     sec.frame.innerHTML = c?.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : `<div class="bundle-pending">${esc(c?.name ?? id)} · ${esc(c?.path ?? '')}<br>loads when you scroll to it</div>`;
+  }
+
+  // The loaded file card farthest from the view gives its live frame back to the budget. False when none is loaded.
+  function evictItem(keep = new Set(ctx.state.selections.map((s) => s.component))) {
+    const b = view.get(), cx = (-b.x + view.stageBox().width / 2) / b.z, cy = (-b.y + view.stageBox().height / 2) / b.z;
+    const loaded = [...sections.items].filter(([id, x]) => x.docFrame && x.pos && !keep.has(id)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
+    if (!loaded.length) return false;
+    unloadDoc(loaded[0][0], loaded[0][1]);
+    return true;
   }
 
   // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
@@ -347,7 +366,7 @@ export function createStage(ctx, root, world, view) {
   function rearrange(changed) {
     if (!laidOut) return;
     const z = view.get().z, gapX = MASONRY_GAP;
-    const list = [...sections].filter(([, s]) => s.pos).map(([id, s]) => { if (!home.has(id)) home.set(id, { ...s.pos }); return { id, s, h: home.get(id) }; }).sort((a, b) => a.h.x - b.h.x || a.h.y - b.h.y);
+    const list = sections.all().filter(([, s]) => s.pos).map(([id, s]) => { if (!home.has(id)) home.set(id, { ...s.pos }); return { id, s, h: home.get(id) }; }).sort((a, b) => a.h.x - b.h.x || a.h.y - b.h.y);
     const done = []; let moved = false;
     for (const { id, s, h } of list) {
       let x = id === changed || !auto.has(id) ? s.pos.x : h.x, y = id === changed || !auto.has(id) ? s.pos.y : h.y;
@@ -364,7 +383,7 @@ export function createStage(ctx, root, world, view) {
   }
   function layoutAll() {
     home.clear();
-    const ids = [...sections.keys()];
+    const ids = sections.all().map(([k]) => k);
     // Frames placed one by one while the first renders were still on their way were placed by a placeholder size; now that
     // the sizes are known, the ones without a saved position are packed once, together (WPC-23: no overlaps after a reload).
     for (const id of ids) if (!placed(id)) auto.delete(id);
@@ -423,7 +442,7 @@ export function createStage(ctx, root, world, view) {
   function placeNew(id) {
     if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); return; }
     const me = sections.get(id), z = Math.max(RESERVE_Z, Math.min(1, view.get().z)); // (the room for a title is bounded: a zoomed-out view must not make every new frame's slot huge)
-    const others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([k, s]) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
+    const others = sections.all().filter(([k, s]) => k !== id && s.pos).map(([k, s]) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
     const mine = headBox(me, z), { h } = me.size, w = mine.w;
     SHELF_W = Math.max(SHELF_W, w);
     const { x, y } = freeSlot(w, h, mine.top, others);
@@ -439,7 +458,7 @@ export function createStage(ctx, root, world, view) {
   function ghostSlot(key, size) {
     const z = Math.max(RESERVE_Z, Math.min(1, view.get().z)), lf = Math.min(16, Math.max(1, 1 / z));
     const top = Math.ceil(52 * lf) + CLEAR, w = size.w, h = size.h;
-    const others = [...sections.values()].filter((s) => s.pos).map((s) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
+    const others = sections.all().map(([, s]) => s).filter((s) => s.pos).map((s) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
     for (const [k, g] of ghosts) if (k !== key && g.pos) others.push({ x: g.pos.x, y: g.pos.y - top, w: g.size.w, h: g.size.h + top });
     SHELF_W = Math.max(SHELF_W, w);
     return freeSlot(w, h, top, others);
@@ -499,11 +518,11 @@ export function createStage(ctx, root, world, view) {
     const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y));
     return { x: x0, y: y0, w: Math.max(...rs.map((r) => r.x + r.w)) - x0, h: Math.max(...rs.map((r) => r.y + r.h)) - y0 };
   };
-  const allRect = () => union([...sections.keys()].map(componentRect));
+  const allRect = () => union(sections.all().map(([k]) => k).map(componentRect));
   function nodeRect(sel) { live(sel.component); const el = selectedElement(sel); return el ? elementRect(el) : null; }
   const selectionRect = () => (ctx.state.selections.length ? union(ctx.state.selections.map(nodeRect)) : null);
   // The first view of a folder frames its components (the work it was opened for); file items sit beside them and Shift+1 shows everything.
-  const workRect = () => { const own = [...sections.keys()].filter((id) => !ctx.state.components.get(id)?.item); return own.length ? union(own.map(componentRect)) : allRect(); };
+  const workRect = () => { const own = [...sections.keys()]; return own.length ? union(own.map(componentRect)) : allRect(); };
   view.setFitters({ all: allRect, selection: selectionRect, work: workRect });
 
   // ---------------------------------------------------------------------------------------------- overlays
@@ -654,7 +673,7 @@ export function createStage(ctx, root, world, view) {
     cullQueued = false;
     const mode = cullMode; cullMode = 'exact';
     const drawn = []; // frames un-culled in this pass
-    if (sections.size <= CULL_AFTER) { for (const sec of sections.values()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); } if (drawn.length) regrown(drawn); return; }
+    if (sections.size + sections.items.size <= CULL_AFTER) { for (const [, sec] of sections.all()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); } if (drawn.length) regrown(drawn); return; }
     const { x, y, z } = view.get(), b = view.stageBox();
     const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
     const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
@@ -664,22 +683,22 @@ export function createStage(ctx, root, world, view) {
     // A frame of the document engine is a whole page, so they load progressively and under a budget: a few per pass for the frames in view (at fit-all too), never more than
     // DOC_BUDGET at once. When the frames in view want more than the budget, the loaded ones farthest from the view are unloaded (they keep their size and their name).
     const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html' || ctx.state.components.get(id)?.item;
-    const loadedOf = (item) => [...sections].filter(([k, x]) => x.docFrame && !!ctx.state.components.get(k)?.item === item).length;
-    const budget = { true: loadedOf(true), false: loadedOf(false) }; let started = 0, wanting = false;
-    for (const [id, sec] of sections) {
+    let loaded = sections.all().filter(([, x]) => x.docFrame).length, started = 0, wanting = false;
+    for (const [id, sec] of sections.all()) {
       if (ctx.state.components.get(id)?.item && z < 0.35 && !keep.has(id)) continue;
       if (sec.pending && visible(sec) && isDocSec(id)) {
         const isItem = !!ctx.state.components.get(id)?.item;
-        if (budget[isItem] < DOC_BUDGET && started < DOC_BATCH) { budget[isItem]++; started++; render(id, true).catch(console.error); } else wanting = true;
+        if (!isItem && loaded >= DOC_BUDGET && evictItem(keep)) loaded--;
+        if (loaded < DOC_BUDGET && started < DOC_BATCH) { loaded++; started++; render(id, true).catch(console.error); } else wanting = true;
       } else if (sec.pending && visible(sec)) render(id, true).catch(console.error);
     }
     if (wanting) { // unload the farthest loaded frames to make room, then come back for the rest
       const cy = (-y + b.height / 2) / z, cx = (-x + b.width / 2) / z;
-      const away = [...sections].filter(([id, sec]) => sec.docFrame && sec.pos && !keep.has(id) && !visible(sec)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
+      const away = sections.all().filter(([id, sec]) => sec.docFrame && sec.pos && !keep.has(id) && !visible(sec)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
       for (const [id, sec] of away.slice(0, DOC_BATCH)) unloadDoc(id, sec);
       setTimeout(() => queueCull(), 120);
     }
-    for (const [id, sec] of sections) {
+    for (const [id, sec] of sections.all()) {
       if (!sec.pos || !sec.size.w) continue;
       let off;
       if (mode !== 'exact') { // a gesture (pan or zoom): nothing is taken out, what comes into view is drawn within a frame
@@ -716,7 +735,7 @@ export function createStage(ctx, root, world, view) {
     const b = view.stageBox(), m = 0.25;
     const x0 = (-v.x - b.width * m) / v.z, x1 = (b.width * (1 + m) - v.x) / v.z, y0 = (-v.y - b.height * m) / v.z, y1 = (b.height * (1 + m) - v.y) / v.z;
     const off = (a, h) => Math.max(a / h, h / a) >= LABEL_STEP;
-    for (const sec of sections.values()) {
+    for (const [, sec] of sections.all()) {
       if (sec.culled || !sec.pos || !sec.size.w) continue;
       if (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 * lf > y1 || sec.pos.y + sec.size.h < y0) continue;
       if (off(lf, sec.headLf ?? slf)) { const head = sec.el.querySelector('.cmp-head'); if (head) { head.style.setProperty('--nk-lf', String(lf)); sec.headLf = lf; titled.add(sec); } }
@@ -728,7 +747,7 @@ export function createStage(ctx, root, world, view) {
     for (const [gid, gsec] of sections) if (gsec.docFrame) gsec.docFrame.grip.tabIndex = ctx.state.selections.some((q) => q.component === gid) ? 0 : -1; // only the selected frame's grip is a Tab stop
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
-    for (const [id, sec] of sections) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }
+    for (const [id, sec] of sections.all()) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }
     const n = ctx.state.selections.length;
     selectBox.dataset.more = String(n - 1);
     refreshOverlays();
