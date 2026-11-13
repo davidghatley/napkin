@@ -195,7 +195,7 @@ export function imageStudio(ctx, host) {
   const tris = { black: tri("black", "Black point", "is-black"), gamma: tri("gamma", "Grey point (gamma)", "is-grey"), white: tri("white", "White point", "is-white") };
 
   /* ---- side: hero, fields ---- */
-  const big = hero("Gamma");
+  const big = hero("Midtone gamma");
   const readout = el("div", { class: "k-stats" });
   const mk = (label, key, min, max, step, digits, track) => field(ctx, { label, min, max, step, digits, track, get: (v) => v[key] ?? (key === "white" ? 1 : key === "saturation" ? 1 : key === "gamma" ? 1 : 0), put: put(key) });
   const tonal = [

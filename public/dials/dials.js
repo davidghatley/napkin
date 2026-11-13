@@ -750,6 +750,13 @@ export class Dials extends EventTarget {
     if (s.depth === 3) s.node.dataset.studioFor = id;
     const c = s.schema.controls.find((c) => c.id === id),
       plugin = c && controls.get(c.type);
+    [...s.tabs.children].forEach((b, i) =>
+      b.setAttribute("aria-pressed", String(s.schema.controls[i].id === id)),
+    );
+    // A studio is drawn when it is opened, so swapping a whole panel stays cheap.
+    s.lab = null;
+    s.labStale = s.depth !== 3;
+    if (s.labStale) return;
     s.lab = plugin?.studio
       ? plugin.studio({ ...this.context(id), panel: this, rail: s.railHost }, s.labHost)
       : createStudio(this, { ...s.schema, studioControl: id }, s.labHost, s.railHost);
@@ -982,6 +989,7 @@ export class Dials extends EventTarget {
     cancelAnimationFrame(s.depthFrame);
     s.depth = clamp(depth, 1, 3);
     s.node.dataset.depth = s.depth;
+    if (s.depth === 3 && s.labStale) this.buildStudio(s, s.studioControl);
     // Contract hook: the open studio names the control it is for.
     if (s.depth === 3) s.node.dataset.studioFor = s.studioControl || s.schema.controls[0]?.id || "";
     else delete s.node.dataset.studioFor;

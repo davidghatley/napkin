@@ -78,6 +78,10 @@ a {
   gap: 8px;
   border-bottom: 1px solid var(--line);
 }
+.mast-title {
+  margin: 0 auto 0 0;
+  font: inherit;
+}
 .wordmark {
   display: flex;
   align-items: center;
@@ -208,12 +212,13 @@ main {
 .subject-color .cta {
   justify-self: start;
   align-self: start;
-  height: 26px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 14px;
   border-radius: 3px;
   color: #fff;
-  font-size: 12px;
-  font-weight: 600;
+  /* Large bold text: the accent is graded for it (AA large at 3:1). */
+  font-size: 19px;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
 }

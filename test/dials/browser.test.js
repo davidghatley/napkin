@@ -337,13 +337,13 @@ test(
             await q('dialsDemo.panels[2].get("ease").stiffness'),
             220,
           );
-          await focus('#sample-motion [aria-label="Timeline playhead"]');
-          await key("ArrowRight");
-          assert.ok(
-            await q(
-              'Number(document.querySelector("#sample-motion .d-track input").value)>0',
-            ),
+          await q('document.querySelectorAll("#sample-motion .km-key")[1].focus()');
+          await key("ArrowDown");
+          assert.equal(
+            await q('dialsDemo.panels[2].get("path")[1].transform'),
+            "translateX(131px)",
           );
+          await q('dialsDemo.panels[2].reset("path")');
           await shot("flow-motion-studio-dark");
           await q(
             'dialsDemo.panels[2].setDepth("time",2);document.querySelector("#theme").click();window.scrollTo(0,0)',
@@ -379,6 +379,7 @@ test(
       await t.test(
         "compound studios edit real values and retain focused controls",
         async () => {
+          await q('dialsDemo.panels[1].setDepth("type",3,false)');
           await browser.type('#sample-typography [aria-label="Size"]', "42px");
           assert.equal(await q('dialsDemo.panels[1].get("typeface").size'), 42);
           await browser.type('#sample-typography [aria-label="Weight"]', "700");
@@ -389,33 +390,34 @@ test(
           const before = await q(
             'Array.from(document.querySelector("#sample-image canvas").getContext("2d").getImageData(170,90,1,1).data)',
           );
+          await q('dialsDemo.panels[1].setDepth("type",2,false);dialsDemo.panels[3].setDepth("darkroom",3,false)');
           await browser.type('#sample-image [aria-label="Gamma"]', "1.4");
           await sleep(50);
           const after = await q(
             'Array.from(document.querySelector("#sample-image canvas").getContext("2d").getImageData(170,90,1,1).data)',
           );
           assert.notDeepEqual(after, before);
+          await q('dialsDemo.panels[3].setDepth("darkroom",2,false);dialsDemo.panels[5].setDepth("sampler",3,false)');
           await browser.type('#sample-generation [aria-label="Steps"]', "31");
           assert.equal(
             await q('dialsDemo.panels[5].get("sampling").steps'),
             31,
           );
-          await focus('#sample-generation [aria-label="Lock or unlock seed"]');
+          await q('[...document.querySelectorAll("#sample-generation .kx-btn")].find(b=>/^Seed/.test(b.textContent)).focus()');
           await key(" ", "Space");
           assert.equal(
             await q('dialsDemo.panels[5].get("sampling").locked'),
             false,
           );
-          await focus('#sample-data [aria-label="x field"] button');
-          await key("Enter");
-          await key("End");
-          await key("Enter");
+          await q('dialsDemo.panels[5].setDepth("sampler",2,false);dialsDemo.panels[4].setDepth("shelf",3,false)');
+          await focus('#sample-data [aria-label="x field"] [aria-checked=true]');
+          await key("ArrowLeft");
           assert.equal(
             await q('dialsDemo.panels[4].get("channels").x'),
             "mass",
           );
           await q(
-            'dialsDemo.panels[0].open("ink");document.querySelector("#sample-color").scrollIntoView()',
+            'dialsDemo.panels[4].setDepth("shelf",2,false);dialsDemo.panels[0].open("ink");document.querySelector("#sample-color").scrollIntoView()',
           );
           await sleep(180);
           await focus("#sample-color .d-swatches button");
@@ -424,18 +426,15 @@ test(
           assert.equal(await q("document.activeElement===keptSwatch"), true);
           await q('dialsDemo.panels[2].open("ease")');
           await sleep(180);
-          await focus('#sample-motion [aria-label="Key 2 value"]');
-          await q(
-            "document.activeElement.select();window.keptKey=document.activeElement",
-          );
-          await browser.send("Input.insertText", { text: ".65" });
+          await q('document.querySelectorAll("#sample-motion .km-key")[1].focus();window.keptKey=document.activeElement');
+          await key("ArrowUp");
+          await sleep(40);
           assert.equal(await q("document.activeElement===keptKey"), true);
           assert.equal(
-            await q('dialsDemo.panels[2].get("ease").keyframes[1].value'),
-            0.65,
+            await q('dialsDemo.panels[2].get("path")[1].transform'),
+            "translateX(133px)",
           );
-          await key("Enter");
-          await key("Tab");
+          await q('dialsDemo.panels[2].reset("path")');
           await q(
             'dialsDemo.panels[0].setDepth("pigment",2);dialsDemo.panels[2].setDepth("time",2)',
           );

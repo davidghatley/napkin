@@ -78,7 +78,7 @@ export function field(ctx, spec) {
     input = el("input", {
       type: "text",
       class: "k-field-input",
-      "aria-labelledby": id,
+      "aria-label": label,
       spellcheck: false,
       autocomplete: "off",
       inputmode: "decimal",

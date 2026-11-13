@@ -108,7 +108,7 @@ export function typeStudio(ctx, host) {
   /* ---- side ---- */
   const big = hero("Size / weight");
   const weightChips = chips(
-    "Weight",
+    "Weight steps",
     WEIGHTS.filter((w) => w >= axis.min && w <= axis.max).map((w) => ({ value: w, label: String(w) })),
     (w) => edit((v) => withWeight(v, w), "weight-chip"),
     {
