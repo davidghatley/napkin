@@ -665,7 +665,7 @@ th small {
   white-space: pre;
   overflow: auto;
 }
-.pdf-page{display:grid;place-items:start center;padding:12px;background:var(--panel-2,#e9ece8)}.pdf-page canvas{max-width:100%;height:auto;background:#fff;box-shadow:0 1px 8px #0003}
+.pdf-page{display:grid;place-items:start center;overflow:auto;max-height:78vh;padding:12px;background:var(--panel-2,#e9ece8)}.pdf-page canvas{max-width:none;height:auto;background:#fff;box-shadow:0 1px 8px #0003}
 .archive nav ul{list-style:none;margin:0;padding:0}.archive nav li{margin:0}
 .vscroll{overflow:auto;position:relative;border-top:1px solid var(--line)}
 .vwin{position:sticky;top:0}

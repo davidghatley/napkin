@@ -157,7 +157,7 @@ export function compactItem(c) {
   else if (family === 'binary')
     content = `<pre class="kind-code">${esc(text.match(/.{1,32}/g)?.join('\n'))}</pre><p class="kind-caption">${esc(c.meta.strings?.join(' · ') || 'No printable strings in this window')}</p>`;
   else if (family === 'audio')
-    content = `<div class="kind-audio"><svg viewBox="0 0 400 180" role="img" aria-label="Audio waveform"><line x1="0" x2="400" y1="90" y2="90" stroke="currentColor"/>${(c.meta.peaks || []).map((v, i) => `<rect x="${i * 4}" y="${90 - v * 500}" width="3" height="${Math.max(1, v * 1000)}" fill="currentColor"/>`).join('')}</svg><audio preload="none" src="${raw}" controls></audio><p class="kind-caption">${c.meta.duration ? c.meta.duration.toFixed(2) + ' s · ' : ''}${c.meta.sampleRate ? c.meta.sampleRate + ' Hz' : 'Audio track'}</p></div>`;
+    content = `<div class="kind-audio"><svg class="kind-wave" viewBox="0 0 400 180" role="img" aria-label="Audio waveform"><line x1="0" x2="400" y1="90" y2="90" stroke="currentColor"/>${(c.meta.peaks || []).map((v, i) => `<rect x="${i * 4}" y="${90 - v * 500}" width="3" height="${Math.max(1, v * 1000)}" fill="currentColor"/>`).join('')}</svg><audio preload="none" src="${raw}" controls></audio><p class="kind-caption">${c.meta.duration ? c.meta.duration.toFixed(2) + ' s · ' : ''}${c.meta.sampleRate ? c.meta.sampleRate + ' Hz' : 'Audio track'}</p></div>`;
   else if (c.meta.graph) content = miniGraph(c.meta.graph);
   else if (c.meta.archive)
     content = `<div class="kind-archive"><h3>${c.meta.archive.length} archive entries</h3>${c.meta.archive.map((e) => `<p style="padding-left:${Math.min(6, e.name.split('/').length) * 12}px"><b>${esc(e.name)}</b><small>${e.bytes.toLocaleString()} bytes</small></p>`).join('')}</div>`;
@@ -165,7 +165,7 @@ export function compactItem(c) {
     content = `<div class="kind-notebook">${c.meta.cells.map((cell) => `<div><small>${cell.type === 'code' ? 'In [' + (cell.count ?? ' ') + ']' : 'Markdown'}</small><pre>${esc(cell.text)}</pre></div>`).join('')}</div>`;
   else if (c.meta.events)
     content = `<div class="kind-timeline">${c.meta.events.map((e) => `<div><b>${esc(e.type)}</b><small>${esc(e.time)}</small><p>${esc(e.text)}</p></div>`).join('')}</div>`;
-  else if (c.meta.chart) content = miniChart(c.meta.chart);
+  else if (c.meta.spec) content = '<div class="kind-chart-host"><p class="kind-caption">Drawing the chart</p></div>';
   else if (c.meta.mesh) content = miniMesh(c.meta.mesh);
   else if (c.meta.animation) {
     const a = c.meta.animation,
@@ -179,7 +179,7 @@ export function compactItem(c) {
         : '#35836a';
     content = `<div class="kind-motion">${a.kind === 'waapi' ? `<div>${esc(a.text || 'Motion')}</div>` : `<svg viewBox="0 0 ${Number(a.width) || 320} ${Number(a.height) || 240}">${(a.shapes || []).map((s) => (s.type === 'el' ? `<ellipse cx="${(a.width || 320) / 2}" cy="${(a.height || 240) / 2}" rx="${Number(s.size?.[0] || 80) / 2}" ry="${Number(s.size?.[1] || 80) / 2}" fill="${color}"/>` : `<rect x="80" y="60" width="${Number(s.size?.[0] || 80)}" height="${Number(s.size?.[1] || 80)}" rx="12" fill="${color}"/>`)).join('')}</svg>`}</div>`;
   } else if (family === 'pdf')
-    content = `<div class="kind-paper"><small>PDF document</small>${(c.meta.documentText || []).map((s) => `<h2>${esc(s)}</h2>`).join('') || `<h2>${esc(c.name)}</h2>`}<div class="kind-paper-lines"></div></div>`;
+    content = `<div class="kind-paper kind-pdf-host"><small>PDF document</small>${(c.meta.documentText || []).map((s) => `<h2>${esc(s)}</h2>`).join('') || `<h2>${esc(c.name)}</h2>`}<div class="kind-paper-lines"></div></div>`;
   else if (family === 'markdown')
     content = `<article class="kind-prose">${text
       .split('\n')
@@ -197,15 +197,62 @@ export function compactItem(c) {
   // paths need not enter the canvas DOM; focusing still opens the fully interactive viewer.
   // Text-like files keep real text in the card (it is what you read, search and select); heavier surfaces are cached images.
   const plain = ['md', 'txt', 'csv', 'tsv', 'json', 'jsonl', 'code', 'diff', 'patch', 'css', 'css-keyframes', 'yaml', 'toml', 'xml', 'shader'].includes(c.kind);
-  if (!plain && !['image', 'video', 'font', 'audio'].includes(family)) content = cachedSurface(content);
-  else if (family === 'audio')
-    content = content.replace(/<svg[\s\S]*?<\/svg>/, (svg) => cachedSurface(svg));
+  if (!plain && !c.meta.spec && family !== 'pdf' && !['image', 'video', 'font', 'audio'].includes(family)) content = cachedSurface(content);
   return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}">${content}${headline(c)}<span class="kind-stamp">${esc(c.kind)} · ${c.bytes.toLocaleString()} bytes</span></div>`;
 }
 function cachedSurface(content) {
   const style = `*{box-sizing:border-box}body,div{color:#263e33}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 monospace;padding:18px;margin:0}small{font:10px monospace;color:#74957f}p{font:12px/1.5 system-ui;margin:8px 0}h3{font:600 24px system-ui}svg{width:100%;height:300px;display:block}.kind-mini-table{font:12px/1.6 monospace;padding:12px}.kind-mini-table>div{display:flex;border-bottom:1px solid #d8e1d6}.kind-mini-table span{flex:1;padding:8px;overflow:hidden}.kind-mini-table small{display:block}.kind-mini-table svg{height:25px;width:70px}.kind-mini-table>div:first-child{background:#e1eadd}.kind-caption{font:11px monospace;padding:6px 18px}.kind-archive,.kind-prose,.kind-timeline{padding:16px 22px}.kind-archive p{padding:7px;border-bottom:1px solid #d6e0d4}.kind-archive small,.kind-timeline small{float:right}.kind-notebook{padding:12px}.kind-notebook>div{border:1px solid #d2e0d1;border-radius:4px;margin-bottom:10px}.kind-notebook small{display:block;background:#e2ebdd;padding:5px 8px}.kind-notebook pre{padding:10px}.kind-timeline>div{border-left:2px solid #9bbaa4;padding:0 0 14px 18px}.kind-motion{background:#e0e9d9;min-height:340px;display:grid;place-content:center}.kind-motion>div{background:#35836a;color:white;border-radius:16px;padding:25px;font:30px system-ui}.kind-paper{margin:18px 70px;padding:30px;background:white;min-height:290px}.kind-paper h2{font:26px Georgia;color:#2c7155}.kind-paper-lines{height:80px;background:repeating-linear-gradient(transparent,transparent 15px,#d5dfd2 15px,#d5dfd2 16px)}`;
   const xml = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="340"><foreignObject width="480" height="340"><div xmlns="http://www.w3.org/1999/xhtml" style="width:480px;height:340px;overflow:hidden;background:#f5f5ee"><style>${style}</style>${content.replaceAll('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" ')}</div></foreignObject></svg>`;
   return `<img class="kind-surface" alt="File preview" decoding="async" src="data:image/svg+xml,${enc(xml)}">`;
+}
+const seen = new WeakSet(),
+  lookup = new Map();
+const getData = (id, q = '') => {
+  const k = id + q;
+  if (!lookup.has(k)) {
+    lookup.set(k, fetch('/api/item-data/' + enc(id) + q).then((r) => (r.ok ? r.json() : Promise.reject(new Error('no data')))));
+    if (lookup.size > 400) lookup.delete(lookup.keys().next().value);
+  }
+  return lookup.get(k);
+};
+// A card shows the item's own content. Cheap kinds draw from metadata; audio, PDF and chart cards fetch or
+// compute theirs when they first come near the screen, so a thousand cards never start a thousand decodes.
+function enhance(cell, c) {
+  const host = cell.querySelector('.kind-compact');
+  if (!host) return;
+  const family = c.meta.family;
+  if (family === 'audio')
+    getData(c.id).then((d) => {
+      const svg = host.querySelector('.kind-wave');
+      if (!svg || !d.peaks?.length) return;
+      const w = 400 / d.peaks.length;
+      svg.innerHTML = '<line x1="0" x2="400" y1="90" y2="90" stroke="currentColor" opacity=".4"/>' + d.peaks.map((v, i) => `<rect x="${(i * w).toFixed(2)}" y="${(90 - Math.max(1, Math.min(1, v) * 85)).toFixed(1)}" width="${Math.max(1, w - 0.8).toFixed(2)}" height="${Math.max(2, Math.min(1, v) * 170).toFixed(1)}" fill="currentColor"/>`).join('');
+    }).catch(() => {});
+  else if (family === 'pdf')
+    getData(c.id, '?page=1&dpi=60').then((d) => {
+      const el = host.querySelector('.kind-pdf-host');
+      if (el && d.image) el.outerHTML = `<img class="kind-pdf-page" alt="First page of ${esc(c.name)}" src="${d.image}">`;
+    }).catch(() => {});
+  else if (c.meta.spec)
+    Promise.all([import('./vega-lite.js'), import('./chart-spec.js')]).then(async ([vl, cs]) => {
+      const dir = c.path.split('/').slice(0, -1),
+        load = async (u) => {
+          if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(u)) throw new Error('only files in this folder can be read');
+          const r = await fetch('/raw/' + [...dir, ...u.split('/')].map(enc).join('/'));
+          if (!r.ok) throw new Error('not found');
+          return r.text();
+        };
+      const { svg } = await vl.renderVegaLite(cs.chartSpec(c.meta.spec), { load });
+      const el = host.querySelector('.kind-chart-host');
+      if (el) el.innerHTML = svg;
+    }).catch(() => {});
+}
+function whenNear(cell, fn) {
+  if (typeof IntersectionObserver === 'undefined') return fn();
+  const io = new IntersectionObserver((es) => {
+    if (es.some((e) => e.isIntersecting)) { io.disconnect(); fn(); }
+  }, { rootMargin: '300px' });
+  io.observe(cell);
 }
 function miniHist(bins) {
   const max = Math.max(1, ...bins);
@@ -235,33 +282,33 @@ function miniGraph(g) {
       '',
     )}${ns.map((n) => `<g transform="translate(${n.x} ${n.y})"><rect width="190" height="80" rx="8" fill="#e0e9dc" stroke="#a5bdac"/><text x="12" y="28" font-size="14" fill="#245d45">${esc(String(n.title).slice(0, 22))}</text><text x="12" y="59" font-size="12" fill="#6b8f78">#${esc(n.id)}</text></g>`).join('')}</svg>`;
 }
-function miniChart(c) {
-  const ps = c.points,
-    max = Math.max(1, ...ps.map((p) => p.y)),
-    px = (i) => 30 + (i * 420) / Math.max(1, ps.length - 1),
-    py = (v) => 275 - (v / max) * 220;
-  return `<div class="kind-caption">${esc(c.title || '')}</div><svg class="kind-chart" viewBox="0 0 480 300"><path d="M25 25V275H460" fill="none" stroke="#bdcdbd"/>${c.mark === 'line' ? `<path d="${ps.map((p, i) => `${i ? 'L' : 'M'}${px(i)},${py(p.y)}`).join(' ')}" stroke="#35836a" stroke-width="4" fill="none"/>` : ps.map((p, i) => `<rect x="${30 + (i * 420) / ps.length}" y="${py(p.y)}" width="${Math.max(1, 420 / ps.length - 9)}" height="${Math.max(0, 275 - py(p.y))}" rx="3" fill="#35836a"/>`).join('')}</svg>`;
-}
+// The scene as it is posed in the file: world-space triangles with their own material colors.
 function miniMesh(mesh) {
-  const vs = mesh.vertices;
-  if (!vs.length) return '';
-  const lo = [0, 1, 2].map((i) => Math.min(...vs.map((v) => v[i]))),
-    hi = [0, 1, 2].map((i) => Math.max(...vs.map((v) => v[i]))),
-    scale = 190 / Math.max(0.001, ...hi.map((n, i) => n - lo[i])),
-    points = vs.map((v) => {
-      const x = (v[0] - (lo[0] + hi[0]) / 2) * scale,
-        y = (v[1] - (lo[1] + hi[1]) / 2) * scale,
-        z = (v[2] - (lo[2] + hi[2]) / 2) * scale;
-      return [240 + x * 0.86 + z * 0.5, 180 - y + z * 0.2];
-    });
-  return `<svg class="kind-mesh" viewBox="0 0 480 340">${mesh.faces
-    .filter((f) => f.every((i) => points[i]))
-    .slice(0, 500)
-    .map(
-      (f, i) =>
-        `<polygon points="${f.map((i) => points[i].join(',')).join(' ')}" fill="hsl(152 24% ${35 + (i % 7) * 4}%)" stroke="#80a78d" stroke-width="1"/>`,
-    )
-    .join('')}</svg>`;
+  const t = mesh.tris;
+  if (!t?.length) return '';
+  const n = t.length / 9,
+    lo = [Infinity, Infinity, Infinity],
+    hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < t.length; i += 3) for (let k = 0; k < 3; k++) { lo[k] = Math.min(lo[k], t[i + k]); hi[k] = Math.max(hi[k], t[i + k]); }
+  const c = lo.map((v, i) => (v + hi[i]) / 2),
+    scale = 200 / Math.max(0.001, ...hi.map((v, i) => v - lo[i])),
+    yaw = 0.6,
+    pitch = 0.45,
+    cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch);
+  const proj = (i) => {
+    const x = (t[i] - c[0]) * scale, y = (t[i + 1] - c[1]) * scale, z = (t[i + 2] - c[2]) * scale;
+    const x1 = x * cy + z * sy, z1 = -x * sy + z * cy, y2 = y * cp - z1 * sp, z2 = y * sp + z1 * cp;
+    return [240 + x1, 175 - y2, z2];
+  };
+  const faces = [];
+  for (let k = 0; k < n; k++) {
+    const p = [proj(k * 9), proj(k * 9 + 3), proj(k * 9 + 6)],
+      ux = p[1][0] - p[0][0], uy = p[1][1] - p[0][1], vx = p[2][0] - p[0][0], vy = p[2][1] - p[0][1],
+      shade = 0.62 + 0.38 * Math.abs(Math.sin(k * 1.7 + (ux * vy - uy * vx > 0 ? 1 : 0)));
+    faces.push({ z: (p[0][2] + p[1][2] + p[2][2]) / 3, p, rgb: mesh.colors[k].map((v) => Math.round(v * shade)) });
+  }
+  faces.sort((a, b) => a.z - b.z);
+  return `<svg class="kind-mesh" viewBox="0 0 480 340">${faces.map((f) => `<polygon points="${f.p.map((q) => q[0].toFixed(1) + ',' + q[1].toFixed(1)).join(' ')}" fill="rgb(${f.rgb})" stroke="rgb(${f.rgb})" stroke-width=".6"/>`).join('')}</svg>`;
 }
 export function createItemFrame(ctx, id) {
   const c = ctx.state.components.get(id),
@@ -270,6 +317,7 @@ export function createItemFrame(ctx, id) {
   cell.dataset.variant = '{}';
   cell.dataset.n = 'item';
   cell.innerHTML = compactItem(c);
+  whenNear(cell, () => enhance(cell, c));
   const grip = document.createElement('span');
   grip.hidden = true;
   cell.append(grip);

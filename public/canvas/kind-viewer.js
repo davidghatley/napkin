@@ -1,5 +1,6 @@
 import { plain } from './words.js';
 import { renderVegaLite } from './vega-lite.js';
+import { chartSpec } from './chart-spec.js';
 import { modelView } from './model-view.js';
 // The same live surface is used in /view and in canvas frames. No remote scripts or GPU renderer.
 const item = JSON.parse(document.querySelector('#item').textContent),
@@ -217,34 +218,6 @@ function jsonTree(v, key = 'root', depth = 0) {
       : note('Expand this value in the source')
   }${entries.length > 200 ? note('Showing 200 entries') : ''}</details>`;
 }
-// The small chart shapes napkin has always accepted become the same specification the interpreter runs.
-function chartSpec(j) {
-  if (j.mark || j.layer || j.hconcat || j.vconcat || j.concat || j.facet || j.repeat) return j;
-  const flat = (v) => (Array.isArray(v) ? v : Array.isArray(v?.values) ? v.values : []);
-  const series = Array.isArray(j.series) ? j.series : null;
-  let rows = [];
-  const named = series && series.length && series.every((x) => x && typeof x === 'object' && (Array.isArray(x.values) || Array.isArray(x.data)));
-  if (named) series.forEach((x, k) => flat(x.values ?? x.data).forEach((v, i) => rows.push(typeof v === 'object' ? { series: x.name ?? 'Series ' + (k + 1), ...v } : { x: i + 1, y: v, series: x.name ?? 'Series ' + (k + 1) })));
-  else rows = flat(series || j.data || j.values).map((v, i) => (v && typeof v === 'object' ? { ...v } : { x: i + 1, y: v }));
-  const sample = rows[0] && typeof rows[0] === 'object' ? rows[0] : {};
-  const xf = typeof j.x === 'string' ? j.x : j.encoding?.x?.field || (sample.x !== undefined ? 'x' : Object.keys(sample)[0]);
-  const yf = typeof j.y === 'string' ? j.y : j.encoding?.y?.field || (sample.y !== undefined ? 'y' : Object.keys(sample).find((k) => k !== xf && typeof sample[k] === 'number'));
-  const mark = typeof j.type === 'string' ? j.type : 'bar';
-  const continuous = rows.length > 0 && rows.every((r) => typeof r[xf] === 'number') && mark !== 'bar';
-  return {
-    title: j.title,
-    data: { values: rows },
-    mark: mark === 'scatter' ? 'point' : mark === 'pie' ? 'arc' : mark,
-    encoding:
-      mark === 'pie'
-        ? { theta: { field: yf, type: 'quantitative' }, color: { field: xf, type: 'nominal' } }
-        : {
-            x: { field: xf, type: continuous ? 'quantitative' : 'nominal' },
-            y: { field: yf, type: 'quantitative' },
-            ...(named ? { color: { field: 'series', type: 'nominal' } } : {}),
-          },
-  };
-}
 async function chartView(j) {
   const rel = (u) => {
     if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(u)) throw new Error('only files in this folder can be read');
@@ -370,7 +343,7 @@ async function pdfViewer(page = Number(r.page) || 1) {
   }
   root.innerHTML =
     bar(label, `Page ${d.page} of ${d.pages}`) +
-    `<div class="toolbar"><button id="prev" aria-label="Previous page"${d.page <= 1 ? ' disabled' : ''}>←</button><span class="meta">${d.page} / ${d.pages}</span><button id="next" aria-label="Next page"${d.page >= d.pages ? ' disabled' : ''}>→</button></div><div class="pdf-page"><canvas aria-label="PDF page ${d.page}"></canvas></div>`;
+    `<div class="toolbar"><button id="prev" aria-label="Previous page"${d.page <= 1 ? ' disabled' : ''}>←</button><span class="meta">${d.page} / ${d.pages}</span><button id="next" aria-label="Next page"${d.page >= d.pages ? ' disabled' : ''}>→</button></div><div class="pdf-page" tabindex="0" aria-label="Page ${d.page}. Page Up and Page Down change page, plus and minus zoom."><canvas style="width:${d.zoom}%" aria-label="PDF page ${d.page}"></canvas></div>`;
   const img = new Image();
   img.onload = () => {
     const c = root.querySelector('canvas');
@@ -382,6 +355,11 @@ async function pdfViewer(page = Number(r.page) || 1) {
     g.drawImage(img, 0, 0);
   };
   img.src = d.image;
+  const pg = root.querySelector('.pdf-page');
+  pg.onkeydown = (e) => {
+    if (e.key === 'PageDown' && d.page < d.pages) { e.preventDefault(); pdfViewer(d.page + 1).catch(error); }
+    else if (e.key === 'PageUp' && d.page > 1) { e.preventDefault(); pdfViewer(d.page - 1).catch(error); }
+  };
   root.querySelector('#prev').onclick = () => pdfViewer(d.page - 1).catch(error);
   root.querySelector('#next').onclick = () => pdfViewer(d.page + 1).catch(error);
 }
@@ -583,6 +561,20 @@ async function run() {
         )
         .join(''),
     );
+    svg.tabIndex = 0;
+    svg.setAttribute('role', 'slider');
+    svg.setAttribute('aria-label', 'Audio waveform. Left and right arrows seek, Home and End jump.');
+    svg.onkeydown = (e) => {
+      const step = e.shiftKey ? 15 : 5;
+      if (!Number.isFinite(audio.duration)) return;
+      if (e.key === 'ArrowRight') audio.currentTime = Math.min(audio.duration, audio.currentTime + step);
+      else if (e.key === 'ArrowLeft') audio.currentTime = Math.max(0, audio.currentTime - step);
+      else if (e.key === 'Home') audio.currentTime = 0;
+      else if (e.key === 'End') audio.currentTime = audio.duration;
+      else if (e.key === ' ') audio.paused ? audio.play() : audio.pause();
+      else return;
+      e.preventDefault();
+    };
     svg.onclick = (e) => {
       if (Number.isFinite(audio.duration)) {
         const b = svg.getBoundingClientRect();

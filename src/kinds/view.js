@@ -91,6 +91,19 @@ function wavPeaks(ctx) {
     sampleRate: rate,
   };
 }
+// At most three decoders run at once, however many cards ask.
+let running = 0;
+const waiting = [];
+async function limited(fn) {
+  if (running >= 3) await new Promise((r) => waiting.push(r));
+  running++;
+  try {
+    return await fn();
+  } finally {
+    running--;
+    waiting.shift()?.();
+  }
+}
 const audioCache = new Map();
 async function audio(ctx) {
   const key = ctx.file + ctx.key;
@@ -98,32 +111,38 @@ async function audio(ctx) {
   let result = ctx.kind === 'wav' ? wavPeaks(ctx) : null;
   if (!result) {
     try {
-      const { stdout } = await exec(
+      const decode = (extra, timeout) => limited(() => exec(
         'ffmpeg',
         [
           '-v',
           'error',
           '-i',
           ctx.file,
-          '-t',
-          '60',
+          ...extra,
           '-ac',
           '1',
           '-ar',
-          '8000',
+          '1000',
           '-f',
           'f32le',
           'pipe:1',
         ],
-        { encoding: 'buffer', maxBuffer: 4 * 1024 * 1024, timeout: 5000 },
-      );
+        { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout },
+      ));
+      // The whole file when it decodes in time, otherwise its first minute.
+      let out;
+      try {
+        out = (await decode([], 20000)).stdout;
+      } catch {
+        out = (await decode(['-t', '60'], 8000)).stdout;
+      }
       const peaks = Array(240).fill(0),
-        n = stdout.length / 4;
+        n = Math.floor(out.length / 4);
       for (let i = 0; i < n; i++) {
         const j = Math.min(239, Math.floor((i / n) * 240));
-        peaks[j] = Math.max(peaks[j], Math.abs(stdout.readFloatLE(i * 4)));
+        peaks[j] = Math.max(peaks[j], Math.abs(out.readFloatLE(i * 4)));
       }
-      result = { peaks, sampledSeconds: n / 8000 };
+      result = { peaks, sampledSeconds: n / 1000 };
     } catch {
       result = {
         peaks: [],
@@ -132,7 +151,7 @@ async function audio(ctx) {
     }
   }
   audioCache.set(key, result);
-  while (audioCache.size > 30) audioCache.delete(audioCache.keys().next().value);
+  while (audioCache.size > 300) audioCache.delete(audioCache.keys().next().value);
   return result;
 }
 function model(ctx) {
@@ -155,13 +174,14 @@ async function pdfPage(ctx, query) {
       while (pdfCache.size > 50) pdfCache.delete(pdfCache.keys().next().value);
     }
     const page = Math.min(pages, Math.max(1, Math.trunc(Number(query.get('page') ?? ctx.recipe.page ?? 1)) || 1)),
-      dpi = Math.min(200, Math.max(40, Number(query.get('dpi')) || 110));
-    const { stdout } = await exec(
+      zoom = Math.min(400, Math.max(25, Number(ctx.recipe.zoom) || 100)),
+      dpi = Math.min(300, Math.max(40, Number(query.get('dpi')) || Math.round((110 * zoom) / 100)));
+    const { stdout } = await limited(() => exec(
       'pdftocairo',
       ['-png', '-r', String(dpi), '-f', String(page), '-l', String(page), '-singlefile', ctx.file, '-'],
       { encoding: 'buffer', maxBuffer: 24 * 1024 * 1024, timeout: 10000 },
-    );
-    return { pages, page, image: 'data:image/png;base64,' + stdout.toString('base64') };
+    ));
+    return { pages, page, zoom, image: 'data:image/png;base64,' + stdout.toString('base64') };
   } catch (e) {
     return { pages: pages ?? null, page: 1, note: 'This PDF could not be drawn here. Open it in a PDF reader.' };
   }

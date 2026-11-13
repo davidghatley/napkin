@@ -66,6 +66,29 @@ export function openItems(
   }
   const state = join(stateDir, digest(Buffer.from(root))),
     layoutFile = join(state, 'kind-layout.json');
+  // Item edit history survives a restart: steps are kept next to the layout, paths relative to the folder.
+  const undoFile = join(state, 'kind-undo.json');
+  const toDisk = () => {
+    const out = {};
+    let budget = 8 * 1024 * 1024;
+    for (const [id, steps] of history)
+      out[id] = steps
+        .slice()
+        .reverse()
+        .filter((st) => (budget -= (st.after?.length || 0) + (st.before?.length || 0)) > 0)
+        .reverse()
+        .map((st) => ({ target: relative(root, st.target).split(sep).join('/'), before: st.before?.toString('base64') ?? null, after: st.after.toString('base64'), revision: st.revision, by: st.by }));
+    return out;
+  };
+  const saveHistory = () => {
+    try {
+      writeItemLayout(undoFile, toDisk());
+    } catch {}
+  };
+  try {
+    for (const [id, steps] of Object.entries(JSON.parse(readFileSync(undoFile, 'utf8'))))
+      history.set(id, steps.map((st) => ({ target: resolve(root, st.target), before: st.before === null ? null : Buffer.from(st.before, 'base64'), after: Buffer.from(st.after, 'base64'), revision: st.revision, by: st.by })));
+  } catch {}
   let frames = {};
   try {
     frames = JSON.parse(readFileSync(layoutFile, 'utf8'));
@@ -264,6 +287,7 @@ export function openItems(
     steps.push({ target, before, after, revision, by });
     while (steps.length > 50) steps.shift();
     history.set(id, steps);
+    saveHistory();
     changed(id, revision);
     return { ok: true, revision };
   }
@@ -287,6 +311,7 @@ export function openItems(
     last = 0;
     const revision = ctx(id).revision;
     if (steps.length) steps.at(-1).revision = revision;
+    saveHistory();
     changed(id, revision);
     return { ok: true, revision };
   }

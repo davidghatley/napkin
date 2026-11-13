@@ -32,3 +32,42 @@ test('content decides the kind when the name does not, and a recipe can override
     rmSync(dir, { recursive: true, force: true });
   }
 });
+test('item undo history survives a restart', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-kinds-undo-'));
+  try {
+    writeFileSync(join(dir, 'c.json'), '{"a": 1}');
+    const state = join(dir, '.state');
+    let items = openItems(dir, { stateDir: state });
+    const c = items.controls('c.json'),
+      ctl = c.sections.flatMap((s) => s.controls).find((x) => x.label === 'a');
+    items.control('c.json', ctl.id, 7, c.revision, 'me');
+    items.close();
+    items = openItems(dir, { stateDir: state });
+    items.undo('c.json', 'me');
+    assert.equal(JSON.parse((await import('node:fs')).readFileSync(join(dir, 'c.json'), 'utf8')).a, 1);
+    items.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+test('the PDF zoom control changes what is drawn', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'napkin-kinds-pdf-'));
+  try {
+    (await import('node:fs')).copyFileSync('test/kinds/samples/guide.pdf', join(dir, 'guide.pdf'));
+    const items = openItems(dir, { stateDir: join(dir, '.state') });
+    const size = async () => {
+      const ctx = items.context('guide.pdf');
+      const d = await ctx.definition.preview(ctx, new URLSearchParams());
+      return { zoom: d.zoom, bytes: d.image.length };
+    };
+    const before = await size(),
+      c = items.controls('guide.pdf');
+    items.control('guide.pdf', 'view:zoom', 200, c.revision, 'me');
+    const after = await size();
+    assert.equal(after.zoom, 200);
+    assert.ok(after.bytes > before.bytes * 1.5, JSON.stringify({ before, after }));
+    items.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
