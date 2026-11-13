@@ -1,0 +1,146 @@
+[
+  {
+    "theme": "light",
+    "name": "color",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "color",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "typography",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "typography",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "motion",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "motion",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "image",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "image",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "data",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "data",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "generation",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "light",
+    "name": "generation",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "color",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "color",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "typography",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "typography",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "motion",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "motion",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "image",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "image",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "data",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "data",
+    "studio": "studio",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "generation",
+    "studio": "bench",
+    "violations": []
+  },
+  {
+    "theme": "dark",
+    "name": "generation",
+    "studio": "studio",
+    "violations": []
+  }
+]

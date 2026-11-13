@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dials</title>
+    <link rel="stylesheet" href="./dials.css" />
+    <link rel="stylesheet" href="./demo.css" />
+  </head>
+  <body>
+    <a class="skip" href="#studies">Skip to instruments</a>
+    <header class="mast">
+      <h1 class="mast-title"><a class="wordmark" href="./demo.html"
+        ><svg viewBox="0 0 20 20" width="22" height="22" aria-hidden="true">
+          <path
+            d="M3 3H17V11L11 17H3ZM11 17V11H17"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          /></svg
+        >napkin <span>/ dials</span></a
+      ></h1>
+      <div class="depth-all" role="group" aria-label="Set every section's depth">
+        <button type="button" data-depth="1" title="Every section as one row">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3.5" y="7" width="9" height="3" rx=".5" fill="currentColor"/></svg>Dials</button
+        ><button type="button" data-depth="2" title="Every section opened">
+          <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="3" y="3.5" width="10" height="9" rx="1" fill="none" stroke="currentColor"/><rect x="3" y="3.5" width="10" height="2.5" fill="currentColor"/><path d="M5 8.5H11M5 10.5H11" stroke="currentColor"/></svg>Benches</button>
+      </div>
+      <button id="help" type="button">Keys <kbd>?</kbd></button>
+      <button id="theme" type="button">Dark</button>
+    </header>
+    <main>
+      <div id="studies" class="studies"></div>
+      <details class="catalog">
+        <summary>
+          Every control type
+          <span>a plugin control, the schema behind each panel, a 200-control timing</span>
+        </summary>
+        <div class="catalog-body">
+          <div id="gallery"></div>
+          <div>
+            <h2>Schema</h2>
+            <p>Each panel above is rendered from one JSON document. Pick one to read it.</p>
+            <div id="schema-pick" class="schema-pick" role="radiogroup" aria-label="Schema to inspect"></div>
+            <pre id="schema-source" tabindex="0" aria-label="Schema source JSON"></pre>
+            <button id="performance" type="button" class="quiet-button">Time a 200-control panel</button>
+            <output id="performance-result"></output>
+          </div>
+        </div>
+      </details>
+    </main>
+    <footer>
+      <output id="event" aria-live="polite">Ready.</output>
+      <span class="foot-keys">Drag a figure or a label · Shift fine · Alt coarse · type digits while dragging · Ctrl K finds anything</span>
+    </footer>
+    <script type="module" src="./demo.js"></script>
+  </body>
+</html>

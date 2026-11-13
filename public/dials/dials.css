@@ -1,0 +1,4635 @@
+/*
+  Dials: a quiet instrument panel with one voice.
+  Ink on paper, one hard accent (cobalt), hairline frames. Inter at three sizes for words;
+  Stem 7, the owner's pixel face, only for the one hero readout in each studio.
+  Every control is a drawing at row height, and the drawing is the control.
+  Host napkin tokens win; the fallbacks keep the library standalone.
+*/
+@font-face {
+  font-family: "Dials Inter";
+  src: url("./fonts/inter-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Stem 7";
+  src: url("./fonts/Stem7-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: block;
+}
+@font-face {
+  font-family: "Stem 7";
+  src: url("./fonts/Stem7-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: block;
+}
+.dials {
+  --d-native-surface: #fbfaf7;
+  --d-native-well: #f1f0eb;
+  --d-native-hover: #e9e7e0;
+  --d-native-line: #e2e0d8;
+  --d-native-rule: #bdbab0;
+  --d-native-text: #15161a;
+  --d-native-muted: #4d4f57;
+  --d-native-faint: #66686f;
+  --d-native-accent: #1f45d3;
+  --d-native-accent-text: #1c3fc4;
+  --d-native-on: #ffffff;
+  --d-native-good: #17734a;
+  --d-native-bad: #b8321f;
+  --d-surface: var(--nk-chrome, var(--d-native-surface));
+  --d-well: var(--nk-chrome-2, var(--d-native-well));
+  --d-hover: var(--nk-chrome-3, var(--d-native-hover));
+  --d-line: var(--nk-line, var(--d-native-line));
+  --d-rule: var(--nk-line-2, var(--d-native-rule));
+  --d-text: var(--nk-text, var(--d-native-text));
+  --d-muted: var(--nk-text-2, var(--d-native-muted));
+  --d-faint: var(--nk-text-3, var(--d-native-faint));
+  --d-accent: var(--nk-accent, var(--d-native-accent));
+  --d-accent-text: var(--nk-accent-text, var(--d-native-accent-text));
+  --d-on-accent: var(--nk-on-accent, var(--d-native-on));
+  --d-good: var(--nk-ok, var(--d-native-good));
+  --d-bad: var(--d-native-bad);
+  --d-soft: color-mix(in srgb, var(--d-accent) 10%, transparent);
+  --d-shadow: 0 0 0 1px color-mix(in srgb, var(--d-text) 14%, transparent),
+    0 24px 60px -20px rgb(20 20 30 / 0.35);
+  --d-sans: var(--nk-sans, "Dials Inter", "Inter", ui-sans-serif, system-ui, sans-serif);
+  --d-mono: var(--nk-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  --d-pixel: "Stem 7", var(--d-mono);
+  --d-row: 32px;
+  --d-fig-w: 76px;
+  --d-fig-h: 24px;
+  --d-label-w: 92px;
+  --d-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  font: 400 12px/16px var(--d-sans);
+  font-feature-settings: "cv11", "ss03", "tnum";
+  color: var(--d-text);
+  background: var(--d-surface);
+  color-scheme: light;
+  min-width: 0;
+  accent-color: var(--d-accent);
+  text-align: left;
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-color-scheme: dark) {
+  .dials:not([data-theme="light"]) {
+    --d-native-surface: #17181b;
+    --d-native-well: #202125;
+    --d-native-hover: #282a2f;
+    --d-native-line: #2b2d32;
+    --d-native-rule: #4a4d55;
+    --d-native-text: #eeece6;
+    --d-native-muted: #b7b5ae;
+    --d-native-faint: #95948e;
+    --d-native-accent: #7f9bff;
+    --d-native-accent-text: #a3b6ff;
+    --d-native-on: #0c1022;
+    --d-native-good: #5fd29b;
+    --d-native-bad: #ff8070;
+    --d-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 28px 72px -16px rgb(0 0 0 / 0.75);
+    color-scheme: dark;
+  }
+}
+.dials[data-theme="dark"],
+[data-theme="dark"] .dials {
+  --d-native-surface: #17181b;
+  --d-native-well: #202125;
+  --d-native-hover: #282a2f;
+  --d-native-line: #2b2d32;
+  --d-native-rule: #4a4d55;
+  --d-native-text: #eeece6;
+  --d-native-muted: #b7b5ae;
+  --d-native-faint: #95948e;
+  --d-native-accent: #7f9bff;
+  --d-native-accent-text: #a3b6ff;
+  --d-native-on: #0c1022;
+  --d-native-good: #5fd29b;
+  --d-native-bad: #ff8070;
+  --d-shadow: 0 0 0 1px rgb(255 255 255 / 0.1), 0 28px 72px -16px rgb(0 0 0 / 0.75);
+  color-scheme: dark;
+}
+.dials[data-theme="light"],
+[data-theme="light"] .dials {
+  --d-native-surface: #fbfaf7;
+  --d-native-well: #f1f0eb;
+  --d-native-hover: #e9e7e0;
+  --d-native-line: #e2e0d8;
+  --d-native-rule: #bdbab0;
+  --d-native-text: #15161a;
+  --d-native-muted: #4d4f57;
+  --d-native-faint: #66686f;
+  --d-native-accent: #1f45d3;
+  --d-native-accent-text: #1c3fc4;
+  --d-native-on: #ffffff;
+  --d-native-good: #17734a;
+  --d-native-bad: #b8321f;
+  --d-shadow: 0 0 0 1px color-mix(in srgb, var(--d-text) 14%, transparent),
+    0 24px 60px -20px rgb(20 20 30 / 0.35);
+  color-scheme: light;
+}
+
+/* ---------- Base ---------- */
+.dials * {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--d-rule) transparent;
+}
+.dials :is(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+/* Focus is always visible: a 2 px accent ring outside the element. */
+.dials :is(button, input, select, textarea):focus-visible,
+.dials [tabindex]:focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 1px;
+  position: relative;
+  z-index: 1;
+}
+.dials button {
+  border: 0;
+  cursor: pointer;
+  background: transparent;
+  padding: 0 8px;
+  min-height: 24px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+.dials button:hover {
+  background: var(--d-hover);
+}
+.dials button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+/* Fields are underlines, not wells: the value sits on a rule, the rule turns accent when typing. */
+.dials :is(input, textarea) {
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  padding: 0 2px;
+  height: 22px;
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+  font-variant-numeric: tabular-nums;
+}
+.dials :is(input, textarea):hover {
+  box-shadow: inset 0 -1px 0 var(--d-rule);
+}
+.dials :is(input, textarea):focus {
+  background: var(--d-soft);
+  box-shadow: inset 0 -2px 0 var(--d-accent);
+  outline: 0;
+}
+.dials input::placeholder {
+  color: var(--d-faint);
+}
+.dials input[aria-invalid="true"] {
+  box-shadow: inset 0 -2px 0 var(--d-bad);
+  color: var(--d-bad);
+}
+.dials textarea {
+  resize: vertical;
+  width: 100%;
+  height: 96px;
+  padding: 6px 2px;
+  line-height: 18px;
+}
+.d-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.d-studio-only {
+  display: none;
+}
+.d-pixel,
+.d-pixel-text {
+  font-family: var(--d-pixel);
+  font-weight: 400;
+  font-size: 10px;
+  letter-spacing: 0;
+  font-feature-settings: normal;
+}
+
+/* Range inputs (kept for plugins) are drawn like the figures: 4 px rail, filled, round thumb. */
+.dials input[type="range"] {
+  appearance: none;
+  -webkit-appearance: none;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: ew-resize;
+}
+.dials input[type="range"]:hover,
+.dials input[type="range"]:focus {
+  background: transparent;
+  box-shadow: none;
+}
+.dials input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--d-rule) 60%, transparent);
+}
+.dials input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1.5px var(--d-text);
+}
+.dials input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--d-rule) 60%, transparent);
+}
+.dials input[type="range"]::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--d-accent);
+}
+.dials input[type="range"]::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid var(--d-text);
+  border-radius: 50%;
+  background: var(--d-surface);
+}
+
+/* ---------- Section: the dial ---------- */
+.d-section {
+  position: relative;
+  min-width: 0;
+  isolation: isolate;
+  background: var(--d-surface);
+}
+.d-section + .d-section {
+  border-top: 1px solid var(--d-line);
+}
+/* The dial lines up with the rows beneath it: name over labels, figure over figures. */
+.d-section-head {
+  height: var(--d-row);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 0;
+  white-space: nowrap;
+}
+.dials .d-section-name {
+  flex: none;
+  width: calc(var(--d-label-w) + 20px);
+  height: 24px;
+  padding: 0 4px 0 0;
+  font-weight: 600;
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  user-select: none;
+  touch-action: none;
+  cursor: ew-resize;
+  display: flex;
+  align-items: center;
+}
+.dials .d-section-name:hover {
+  background: transparent;
+  color: var(--d-accent-text);
+}
+.d-section-name::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin: 0 7px 2px 3px;
+  border: solid var(--d-faint);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+  transition: transform 140ms var(--d-ease);
+}
+.d-section[data-depth="1"] .d-section-name::before {
+  transform: rotate(-45deg);
+  margin-bottom: 0;
+}
+.d-summary-figure.d-figure {
+  flex: none;
+}
+.d-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--d-text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.d-depth {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+  flex: none;
+}
+.dials .d-depth button,
+.dials .d-pane-size {
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--d-faint);
+}
+.dials .d-depth button:hover {
+  color: var(--d-text);
+}
+.dials .d-depth button[aria-pressed="true"] {
+  color: var(--d-accent-text);
+  background: var(--d-soft);
+}
+.d-depth svg,
+.d-pane-size svg {
+  display: block;
+}
+.dials .d-pane-size.d-studio-only {
+  display: none;
+}
+.dials .d-section[data-depth="3"] .d-pane-size.d-studio-only {
+  display: grid;
+  margin-left: auto;
+}
+.d-section[data-depth="3"] .d-pane-size + .d-depth {
+  margin-left: 0;
+}
+/* In a studio the head names the instruments; each one is a tab, the current one underlined. */
+.d-studio-tabs {
+  display: none;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+.d-section[data-depth="3"] .d-studio-tabs.d-studio-only {
+  display: flex;
+}
+.d-section[data-depth="3"] :is(.d-summary, .d-summary-figure) {
+  display: none;
+}
+/* Opened, the dial hands its figure and value to the first row beneath it. */
+.d-section[data-depth="2"] :is(.d-summary, .d-summary-figure) {
+  visibility: hidden;
+}
+.dials .d-studio-tabs button {
+  color: var(--d-muted);
+  font-weight: 450;
+  padding: 0 8px;
+  height: 32px;
+  border-radius: 0;
+  box-shadow: inset 0 -2px 0 transparent;
+}
+.dials .d-studio-tabs button:hover {
+  background: transparent;
+  color: var(--d-text);
+  box-shadow: inset 0 -2px 0 var(--d-line);
+}
+.dials .d-studio-tabs button[aria-pressed="true"] {
+  color: var(--d-text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--d-text);
+}
+
+/* The section opens like a drawer: same head, more beneath it. */
+.d-section-inner {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 160ms var(--d-ease);
+}
+.d-section[data-depth="1"] .d-section-inner {
+  grid-template-rows: 0fr;
+}
+.d-section-content {
+  min-height: 0;
+  overflow: hidden;
+}
+.d-rows {
+  padding: 0 0 6px;
+}
+.d-rail {
+  display: none;
+}
+
+/* ---------- Row: dot, label, figure, value ---------- */
+/* One grammar for every control: the same figure size, the value written on an underline right beside it. */
+.d-row {
+  min-height: var(--d-row);
+  display: grid;
+  grid-template-columns: 12px var(--d-label-w) var(--d-fig-w) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 8px;
+  padding: 0 4px 0 0;
+}
+.d-row[hidden] {
+  display: none;
+}
+.d-row:hover .d-label {
+  color: var(--d-text);
+}
+.d-row.is-editing .d-figure {
+  box-shadow: inset 0 0 0 1px var(--d-accent);
+}
+.dials .d-reset {
+  width: 12px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  position: relative;
+  border-radius: 0;
+}
+.dials .d-reset:hover {
+  background: transparent;
+}
+.d-reset::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 10px;
+  width: 4px;
+  height: 4px;
+  background: transparent;
+  transition: transform 120ms;
+}
+.is-modified .d-reset::after {
+  background: var(--d-accent);
+}
+.is-modified .d-reset:hover::after {
+  transform: scale(1.75);
+}
+.dials .d-label {
+  min-width: 0;
+  min-height: 24px;
+  height: auto;
+  padding: 4px 0;
+  text-align: left;
+  font-weight: 450;
+  line-height: 14px;
+  color: var(--d-muted);
+  white-space: normal;
+  overflow-wrap: break-word;
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+  border-radius: 0;
+}
+.dials .d-label:hover {
+  background: transparent;
+  color: var(--d-text);
+}
+.is-modified .d-label {
+  color: var(--d-text);
+  font-weight: 500;
+}
+/* The figure well: one size for every control. */
+.d-figure {
+  position: relative;
+  display: block;
+  flex: none;
+  width: var(--d-fig-w);
+  height: var(--d-fig-h);
+  overflow: hidden;
+  touch-action: none;
+  cursor: ew-resize;
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.d-figure:hover {
+  box-shadow: inset 0 0 0 1px var(--d-rule);
+}
+.d-figure svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: visible;
+}
+.d-figure .d-thumb {
+  transition: r 120ms var(--d-ease);
+}
+.d-figure:hover .d-thumb,
+.is-editing .d-thumb {
+  r: 6px;
+}
+.d-row[data-type="vector"] .d-figure {
+  cursor: crosshair;
+}
+.d-row:is([data-type="boolean"], [data-type="select"], [data-type="segmented"]) .d-figure {
+  cursor: pointer;
+}
+.d-fig-swatch {
+  position: absolute;
+  inset: 0;
+  background: repeating-conic-gradient(#cfccc3 0 25%, #fff 0 50%) 0 0 / 8px 8px;
+}
+.d-fig-swatch i {
+  position: absolute;
+  inset: 0;
+  background: var(--swatch);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 12%, transparent);
+  border-radius: 3px;
+}
+.d-fig-shadow {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.d-fig-shadow i {
+  width: 34px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--d-surface);
+  outline: 1px solid color-mix(in srgb, var(--d-text) 18%, transparent);
+  margin-top: -4px;
+}
+.d-fig-type {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  width: 30px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  color: var(--d-text);
+}
+/* Value: written on an underline beside the figure, typed in place. */
+.d-value {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 24px;
+}
+.d-value input {
+  width: 100%;
+  text-align: left;
+  font-weight: 500;
+}
+/* Long values wrap and the row grows; nothing is cut off with an ellipsis. */
+.dials .d-value textarea {
+  width: 100%;
+  min-height: 20px;
+  height: auto;
+  padding: 2px 4px;
+  field-sizing: content;
+  resize: none;
+  overflow: hidden;
+  font: inherit;
+  font-weight: 500;
+  line-height: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.d-row.is-typing .d-value textarea {
+  background: var(--d-soft);
+  box-shadow: inset 0 -2px 0 var(--d-accent);
+}
+.d-row.is-typing .d-value input {
+  background: var(--d-soft);
+  box-shadow: inset 0 -2px 0 var(--d-accent);
+  font-family: var(--d-pixel);
+  font-size: 14px;
+}
+.dials .d-value .d-toggle {
+  width: 100%;
+  min-height: 0;
+  height: 22px;
+  padding: 0 2px;
+  text-align: left;
+  color: var(--d-muted);
+  font-weight: 500;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .d-value .d-toggle:hover {
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--d-rule);
+}
+.dials .d-value .d-toggle[aria-checked="true"] {
+  color: var(--d-text);
+}
+/* Choices are words on the underline; the current one is underlined in ink. */
+.d-segmented,
+.d-choice-seg {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+.d-segmented {
+  width: 100%;
+  height: 22px;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials :is(.d-segmented, .d-choice-seg) button {
+  flex: 0 1 auto;
+  border-radius: 0;
+  min-width: 0;
+  height: 22px;
+  min-height: 0;
+  padding: 0 6px;
+  color: var(--d-muted);
+  font-weight: 450;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dials :is(.d-segmented, .d-choice-seg) button:first-child {
+  padding-left: 2px;
+}
+.dials :is(.d-segmented, .d-choice-seg) button:hover {
+  background: transparent;
+  color: var(--d-text);
+}
+.dials .d-segmented button[aria-checked="true"],
+.dials .d-choice-seg button[aria-pressed="true"] {
+  color: var(--d-text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--d-text);
+}
+.d-choice {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.d-value > .d-choice {
+  width: 100%;
+}
+.dials .d-choice-trigger {
+  position: relative;
+  min-width: 72px;
+  max-width: 100%;
+  height: 22px;
+  min-height: 0;
+  padding: 0 20px 0 2px;
+  text-align: left;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .d-choice-trigger:hover {
+  background: transparent;
+  box-shadow: inset 0 -1px 0 var(--d-rule);
+}
+.d-value .d-choice-trigger {
+  width: 100%;
+}
+.d-choice-trigger::after {
+  content: "";
+  position: absolute;
+  right: 6px;
+  top: 7px;
+  width: 4px;
+  height: 4px;
+  border: solid var(--d-faint);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+.d-choice-pop {
+  position: fixed;
+  z-index: 300;
+  max-height: 260px;
+  overflow: auto;
+  padding: 4px;
+  background: var(--d-surface);
+  border-radius: 4px;
+  box-shadow: var(--d-shadow);
+}
+.d-choice-pop[hidden] {
+  display: none;
+}
+.d-choice-item {
+  padding: 5px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.d-choice-item:hover,
+.d-choice-item:focus-visible {
+  background: var(--d-hover);
+  outline: 0;
+}
+.d-choice-item:focus-visible {
+  box-shadow: inset 0 0 0 1.5px var(--d-accent);
+}
+.d-choice-item[aria-selected="true"] {
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--d-accent);
+}
+
+/* ---------- Bench: the section opened is its rows; studio pieces wait for the studio ---------- */
+.d-lab {
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+  padding: 4px 12px 14px;
+}
+.d-section:not([data-depth="3"]) .d-lab {
+  display: none;
+}
+.d-lab h3 {
+  margin: 0;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--d-text);
+}
+.d-lab-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.d-plot {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+  touch-action: none;
+  cursor: crosshair;
+}
+.d-plot-passive {
+  cursor: default;
+}
+.d-note {
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--d-muted);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.d-note:empty {
+  display: none;
+}
+.d-lab-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 20px;
+}
+.d-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  height: var(--d-row);
+  color: var(--d-muted);
+  white-space: nowrap;
+}
+.d-field > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.d-field input {
+  width: 72px;
+  flex: none;
+  text-align: right;
+  font-weight: 500;
+  color: var(--d-text);
+}
+.d-field-slide {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) 72px;
+  grid-column: 1 / -1;
+}
+.d-lab-sliders {
+  grid-template-columns: 1fr;
+}
+.d-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  min-width: 0;
+}
+.d-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--d-muted);
+}
+.d-tool input {
+  max-width: 150px;
+}
+.dials :is(.d-tools, .d-presets) > button {
+  color: var(--d-text);
+  font-weight: 500;
+}
+
+.d-swatches {
+  display: flex;
+  gap: 2px;
+  min-height: 24px;
+}
+.dials .d-swatches button {
+  flex: 1;
+  min-width: 12px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 10%, transparent);
+  transition: transform 120ms var(--d-ease);
+}
+.dials .d-swatches button:hover {
+  background: var(--swatch);
+  transform: translateY(-1px);
+}
+.dials .d-swatches button.d-plate {
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 6px 7px;
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink, #fff);
+}
+.d-plate b {
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 15px;
+}
+.d-plate small {
+  font-size: 10.5px;
+  line-height: 14px;
+}
+.d-plate small:empty {
+  display: none;
+}
+
+.d-drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-height: 32px;
+  border-radius: 6px;
+  color: var(--d-muted);
+}
+.d-drop.is-over {
+  box-shadow: inset 0 0 0 1.5px var(--d-accent);
+  background: var(--d-soft);
+}
+.dials .d-drop-button {
+  color: var(--d-text);
+  padding: 0 8px;
+  margin-left: -8px;
+}
+.d-drop-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.d-eye {
+  width: 100%;
+  cursor: crosshair;
+}
+.d-eye[hidden] {
+  display: none;
+}
+.d-metric {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.d-metric > span {
+  color: var(--d-muted);
+}
+.d-metric strong {
+  font-weight: 600;
+}
+
+/* ---------- Studio: the section takes the pane ---------- */
+.d-section[data-depth="3"] {
+  resize: both;
+  overflow: auto;
+  min-width: min(100%, 360px);
+  min-height: 520px;
+  width: 100%;
+  height: 720px;
+  max-height: 90vh;
+  border-radius: 6px;
+  box-shadow: var(--d-shadow);
+}
+.d-section[data-depth="3"] > .d-section-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  height: 44px;
+  padding: 0 10px 0 8px;
+  background: var(--d-surface);
+  border-bottom: 1px solid var(--d-line);
+}
+.d-section[data-depth="3"] .d-studio-only {
+  display: block;
+}
+.d-section[data-depth="3"] .d-studio-only.d-tools {
+  display: flex;
+}
+.d-section[data-depth="3"] .d-section-content {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  overflow: visible;
+}
+/* The rail: the bench rows, then what the studio keeps beside them (history, presets, fields). */
+.d-section[data-depth="3"] .d-rows {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 12px 12px 8px 4px;
+  border-right: 1px solid var(--d-line);
+}
+.d-section[data-depth="3"] .d-rail {
+  grid-column: 1;
+  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  padding: 12px 16px 16px;
+  border-right: 1px solid var(--d-line);
+  border-top: 1px solid var(--d-line);
+}
+.d-section[data-depth="3"] .d-lab {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+.d-section[data-depth="3"] .d-lab {
+  padding: 20px 24px;
+  gap: 16px;
+  align-content: start;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] {
+  position: fixed;
+  inset: var(--d-studio-top, 56px) var(--d-studio-side, 24px) var(--d-studio-bottom, 24px);
+  margin: auto;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 0 0 100vmax rgb(10 12 18 / 0.32),
+    var(--d-shadow);
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] > .d-section-inner {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-section-content {
+  min-height: 100%;
+}
+/* A studio without its own layout: the main figure left, what tunes it right. */
+.d-col {
+  display: contents;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  grid-template-areas: "head head" "main side";
+  align-content: start;
+  gap: 16px 32px;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) > .d-lab-head {
+  grid-area: head;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+  min-width: 0;
+}
+
+.d-section[data-depth="3"] .d-lab-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* Rows outside the visible area are not styled, laid out or painted until they scroll in. */
+.d-section .d-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--d-row);
+}
+
+/* ---------- Colour studio ---------- */
+/* Pieces that only belong to the full studio. */
+.d-section:not([data-depth="3"]) .d-deep {
+  display: none;
+}
+
+.d-cx {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 20px 40px;
+  min-width: 0;
+}
+.d-cx-main,
+.d-cx-side {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  min-width: 0;
+}
+.d-cx-field {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  column-gap: 8px;
+}
+.d-cx-axis-y {
+  position: relative;
+  font-size: 10.5px;
+  color: var(--d-faint);
+  font-variant-numeric: tabular-nums;
+}
+.d-cx-axis-y span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+}
+.d-cx-axis-y span:first-child {
+  transform: none;
+}
+.d-cx-axis-y span:last-child {
+  transform: translateY(-100%);
+}
+.d-cx-axis-x {
+  grid-column: 2;
+  position: relative;
+  height: 20px;
+  font-size: 10.5px;
+  color: var(--d-faint);
+  font-variant-numeric: tabular-nums;
+}
+.d-cx-axis-x span {
+  position: absolute;
+  top: 5px;
+  transform: translateX(-50%);
+}
+.d-cx-axis-x span:first-child {
+  transform: none;
+}
+.d-cx-axis-x span:last-child {
+  transform: translateX(-100%);
+}
+.d-cx-plane {
+  position: relative;
+  line-height: 0;
+  min-width: 0;
+}
+.d-cx-plane .d-plot {
+  border-radius: 6px;
+}
+/* Readouts sit on the axes they measure and follow the point. */
+.d-cx-tag {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--d-text);
+  color: var(--d-surface);
+  font: 600 10.5px/14px var(--d-sans);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.d-cx-tag[data-axis="y"] {
+  left: -42px;
+  transform: translateY(-50%);
+}
+.d-cx-tag[data-axis="x"] {
+  top: calc(100% + 3px);
+  transform: translateX(-50%);
+}
+.d-cx-tag[data-axis="g"] {
+  background: transparent;
+  color: #fff;
+  font-weight: 500;
+  text-shadow: 0 0 2px rgb(0 0 0 / 0.9), 0 0 6px rgb(0 0 0 / 0.5);
+  transform: translate(8px, -100%);
+}
+.d-cx-strip {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) 56px;
+  column-gap: 8px;
+  align-items: center;
+}
+.d-cx-strip > span:first-child {
+  color: var(--d-muted);
+  text-align: right;
+}
+.d-cx-strip .d-plot {
+  border-radius: 4px;
+  cursor: ew-resize;
+}
+.d-cx-strip output {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.d-cx-proof {
+  display: grid;
+}
+.d-cx-sample {
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 8%, transparent);
+}
+.d-cx-sample {
+  min-height: 140px;
+  padding: 14px 16px 12px;
+  display: grid;
+  align-content: space-between;
+  gap: 8px;
+}
+.d-cx-sample strong {
+  font-size: 56px;
+  line-height: 1;
+  font-weight: 650;
+  letter-spacing: -0.03em;
+}
+.d-cx-sample p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+.d-cx-grades {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 16px;
+  padding: 10px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.d-cx-grade b {
+  display: block;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.d-cx-grade span {
+  color: var(--d-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.d-cx-grade em {
+  font-style: normal;
+  font-weight: 600;
+  margin-left: 4px;
+}
+.d-cx-grade em[data-pass="true"] {
+  color: var(--d-good);
+}
+.d-cx-grade em[data-pass="false"] {
+  color: var(--d-bad);
+}
+.d-cx-backs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.d-cx-backs > span {
+  color: var(--d-muted);
+  margin-right: auto;
+}
+.dials .d-cx-backs button {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 22%, transparent);
+}
+.dials .d-cx-backs button[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--d-surface), 0 0 0 3.5px var(--d-accent);
+}
+.d-cx-backs input {
+  width: 84px;
+  text-align: right;
+  font-weight: 500;
+}
+.d-cx-code {
+  display: grid;
+  gap: 4px;
+}
+.d-cx-code output {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.d-cx-section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.d-cx-section > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 24px;
+}
+.d-cx-section > header h3 {
+  flex: none;
+}
+.d-cx-section > header > :last-child:not(h3) {
+  margin-left: auto;
+}
+.d-cx-ramp .d-swatches button.d-plate {
+  min-height: 60px;
+}
+.d-cx-harmony .d-swatches button.d-plate {
+  min-height: 44px;
+}
+.d-cx-history .d-swatches {
+  justify-content: flex-start;
+}
+.dials .d-cx-history .d-swatches button {
+  flex: 0 0 24px;
+  min-height: 24px;
+}
+.d-cx-token {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.d-cx-token input {
+  flex: 1;
+}
+.d-cx-channels {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 12px;
+}
+.d-cx-channels .d-field {
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+  gap: 0;
+  font-size: 11px;
+}
+.d-cx-channels .d-field input {
+  width: 100%;
+  margin-left: -6px;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 500;
+  height: 26px;
+}
+/* The bench keeps the plane, the proof and the numbers; the studio adds the rest. */
+.d-section[data-depth="2"] .d-cx {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px 16px;
+}
+.d-section[data-depth="2"] .d-cx-side {
+  gap: 10px;
+}
+.d-section[data-depth="2"] :is(.d-cx-axis-x, .d-cx-axis-y, .d-cx-tag, .d-cx-strip, .d-cx-sample p) {
+  display: none;
+}
+.d-section[data-depth="2"] .d-cx-field {
+  grid-template-columns: minmax(0, 1fr);
+}
+.d-section[data-depth="2"] .d-cx-sample {
+  min-height: 0;
+  padding: 8px 12px;
+}
+.d-section[data-depth="2"] .d-cx-sample strong {
+  font-size: 28px;
+}
+.d-section[data-depth="2"] .d-cx-grades {
+  padding: 4px 0 0;
+}
+.d-section[data-depth="2"] .d-cx-grade b {
+  font-size: 14px;
+  line-height: 18px;
+}
+.d-section[data-depth="2"] .d-cx-channels {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 12px;
+}
+.d-section[data-depth="2"] .d-cx-channels .d-field {
+  flex-direction: row;
+  align-items: center;
+  height: 24px;
+}
+.d-section[data-depth="2"] .d-cx-channels .d-field input {
+  font-size: 12px;
+  height: 22px;
+  margin: 0 -6px 0 0;
+  text-align: right;
+}
+.d-section[data-depth="2"] .d-cx-grades {
+  grid-template-columns: 1fr;
+}
+.d-section[data-depth="2"] .d-cx-grade + .d-cx-grade {
+  display: none;
+}
+.d-section[data-depth="2"] .d-cx-grade {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* ---------- Motion studio ---------- */
+
+.d-mx-main,
+
+.d-track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+.d-track {
+  padding: 0 2%;
+}
+.d-track input {
+  width: 100%;
+  height: 16px;
+}
+
+.d-key,
+.d-keyframes-head {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) minmax(0, 1fr) 24px;
+  gap: 4px;
+  align-items: center;
+}
+.d-key {
+  height: 26px;
+}
+.d-key input {
+  width: 100%;
+  text-align: right;
+  font-weight: 500;
+}
+.dials .d-key button {
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  color: var(--d-faint);
+}
+
+.d-mx-ruler span,
+.d-cx-axis-x span,
+.d-cx-axis-y span {
+  white-space: nowrap;
+}
+
+.dials .d-mx-keyacts button,
+
+.d-section[data-depth="2"] .d-cx-ramp > header {
+  display: none;
+}
+.dials .d-section[data-depth="2"] .d-cx-ramp .d-swatches button.d-plate {
+  min-height: 22px;
+}
+.d-section[data-depth="2"] .d-cx-ramp .d-plate > * {
+  display: none;
+}
+/* Bench: just the curve and the numbers that shape it. */
+
+.d-section[data-depth="2"] .d-mx-main > :not(.d-mx-graph-wrap),
+.d-section[data-depth="2"] .d-mx-graph-wrap > :not(.d-mx-graph),
+.d-section[data-depth="2"] .d-mx-side > :not(.d-mx-numbers),
+.d-section[data-depth="2"] .d-mx-numbers > header,
+
+/* ---------- Other studios: same type, spacing and controls ---------- */
+.d-color-preview,
+
+.d-type-lab h4,
+
+.d-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  color: var(--d-muted);
+  min-height: 16px;
+}
+.d-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.d-legend i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Image stage with crop and mask handles drawn on the image. */
+
+.d-palettes,
+
+/* ---------- Dialogs ---------- */
+/* Dialogs sit in the top layer but inherit the panel's tokens. The background is set with
+   enough weight that a host rule such as `.card .dials { background: transparent }` cannot
+   reach it: a palette over page text must be opaque. */
+.dials dialog.d-help {
+  max-width: 620px;
+  padding: 24px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--d-surface);
+  background-color: var(--d-surface);
+  color: var(--d-text);
+  box-shadow: var(--d-shadow);
+  font: 400 12px/16px var(--d-sans);
+  font-feature-settings: "cv11", "ss03", "tnum";
+  isolation: isolate;
+}
+.d-help::backdrop {
+  background: rgb(10 12 18 / 0.36);
+}
+.d-help h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.d-help p {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 16px;
+  margin: 0;
+  padding: 4px 0;
+}
+.d-help kbd {
+  font: 500 11.5px var(--d-sans);
+  color: var(--d-accent-text);
+}
+.d-keymap {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 12px;
+}
+.d-keymap label {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 12px;
+  align-items: center;
+  color: var(--d-muted);
+}
+.dials dialog.d-palette {
+  width: min(720px, 94vw);
+  max-width: none;
+  padding: 0;
+}
+.d-palette-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  min-height: 336px;
+}
+.d-palette-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-left: 1px solid var(--d-line);
+  background: var(--d-well);
+  min-width: 0;
+}
+.d-palette-preview h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+}
+.d-palette-kicker,
+.d-palette-what {
+  margin: 0;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--d-muted);
+}
+.d-palette-big {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 76 / 24;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1px var(--d-line);
+}
+.d-palette-big svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.d-palette-depth {
+  aspect-ratio: 2 / 1;
+  color: var(--d-accent);
+}
+.d-palette-value {
+  margin: 0;
+  font: 500 12px/16px var(--d-mono);
+  overflow-wrap: anywhere;
+  color: var(--d-text);
+}
+.d-palette-fig {
+  position: relative;
+  flex: none;
+  width: 38px;
+  height: 12px;
+  display: grid;
+  place-items: center;
+  color: var(--d-accent);
+}
+.d-palette-fig svg {
+  width: 38px;
+  height: 12px;
+}
+.d-palette-fig:has(> svg[width="16"]) svg {
+  width: 12px;
+  height: 12px;
+}
+.d-palette-text {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .d-palette-body {
+    grid-template-columns: 1fr;
+  }
+  .d-palette-preview {
+    display: none;
+  }
+}
+.d-palette > input {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 0;
+  border-bottom: 1px solid var(--d-line);
+  font-size: 14px;
+}
+.d-palette > input:focus {
+  box-shadow: none;
+}
+.d-palette-list {
+  max-height: 400px;
+  overflow: auto;
+  padding: 4px;
+}
+.d-palette-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  height: 32px;
+  align-items: center;
+  padding: 0 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.d-palette-item[aria-selected="true"] {
+  background: var(--d-well);
+  box-shadow: inset 2px 0 0 var(--d-accent);
+}
+.d-palette-item kbd {
+  font: 11px var(--d-sans);
+  color: var(--d-muted);
+  font-variant-numeric: tabular-nums;
+}
+.d-palette-empty,
+.d-palette-note,
+.dials dialog.d-palette .d-palette-note {
+  margin: 0;
+  padding: 8px 16px 12px;
+  font-size: 11px;
+  color: var(--d-muted);
+}
+
+/* ---------- Narrow and reduced motion ---------- */
+@media (max-width: 1100px) {
+  .d-section[data-depth="3"] :is(.d-cx, .d-mx) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .d-section[data-depth="3"] .d-section-content {
+    grid-template-columns: 1fr;
+  }
+  .d-section[data-depth="3"] .d-rows {
+    border-right: 0;
+    border-bottom: 1px solid var(--d-line);
+  }
+  .d-section[data-depth="3"] .d-lab {
+    padding: 14px;
+  }
+  .d-section[data-depth="2"] :is(.d-cx, .d-mx) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .d-cx-channels {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .d-help p {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dials *,
+  .dials *::before,
+  .dials *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Type bench: the specimen and its four numbers; the ladder, axes and glyphs wait for the studio. */
+
+/* ---------- Studio kit: one field, one hero, one choice row, one handle ---------- */
+.d-section[data-depth="3"] .d-lab.k-studio {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
+  gap: 28px 36px;
+  align-content: start;
+  padding: 20px 28px 28px;
+}
+.k-main,
+.k-side {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.k-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.k-title {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--d-text);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.k-title small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--d-faint);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.k-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.k-hero-label {
+  font-size: 11.5px;
+  color: var(--d-muted);
+}
+.k-hero-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.k-hero-num {
+  font-family: var(--d-pixel);
+  font-size: 48px;
+  line-height: 44px;
+  color: var(--d-text);
+  letter-spacing: 0;
+  font-feature-settings: normal;
+}
+.k-hero-unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--d-muted);
+}
+.k-hero-note {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--d-accent-text);
+}
+.k-hero-note:empty {
+  display: none;
+}
+.k-hero-note[data-tone="good"] {
+  color: var(--d-good);
+}
+.k-hero-note[data-tone="bad"] {
+  color: var(--d-bad);
+}
+.k-hero-note[data-tone="quiet"] {
+  color: var(--d-muted);
+}
+.k-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+}
+.k-fields.k-one {
+  grid-template-columns: minmax(0, 1fr);
+}
+.k-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name input" "bar bar";
+  align-items: center;
+  gap: 3px 8px;
+  min-width: 0;
+}
+.k-field-name {
+  grid-area: name;
+  font-size: 11.5px;
+  color: var(--d-muted);
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-field-name:hover {
+  color: var(--d-text);
+}
+.dials .k-field-input {
+  grid-area: input;
+  width: 76px;
+  height: 20px;
+  text-align: right;
+  font-weight: 500;
+}
+.k-bar {
+  grid-area: bar;
+  position: relative;
+  height: 14px;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 7px;
+}
+.k-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--d-rule) 60%, transparent);
+}
+.k-field-painted .k-bar::before {
+  top: 3px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 10%, transparent);
+}
+.k-bar i {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  height: 4px;
+  width: calc(var(--p, 0) * 100%);
+  border-radius: 2px;
+  background: var(--d-accent);
+}
+.k-field-painted .k-bar i {
+  display: none;
+}
+.k-bar b {
+  position: absolute;
+  left: calc(var(--p, 0) * 100%);
+  top: 0;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border-radius: 50%;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1.5px var(--d-text), 0 1px 2px rgb(0 0 0 / 0.15);
+  transition: transform 120ms var(--d-ease);
+}
+.k-bar:hover b,
+.k-bar:focus-visible b {
+  transform: scale(1.15);
+}
+.dials .k-bar:focus-visible {
+  outline-offset: 3px;
+}
+.k-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  min-width: 0;
+}
+.dials .k-chip {
+  height: 26px;
+  min-height: 0;
+  padding: 0 8px;
+  border-radius: 0;
+  color: var(--d-muted);
+  font-weight: 450;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .k-chip:hover {
+  background: transparent;
+  color: var(--d-text);
+  box-shadow: inset 0 -1px 0 var(--d-rule);
+}
+.dials .k-chip[aria-checked="true"] {
+  color: var(--d-text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--d-text);
+}
+.dials .k-chip-glyph {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 7px;
+  font-size: 11px;
+}
+.dials .k-chip-glyph svg {
+  display: block;
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.dials .k-chip-glyph[aria-checked="true"] svg {
+  box-shadow: 0 0 0 1.5px var(--d-text);
+}
+.k-handle {
+  cursor: grab;
+  outline: none;
+}
+.k-handle:active {
+  cursor: grabbing;
+}
+.k-handle-hit {
+  fill: transparent;
+}
+.k-typed rect {
+  fill: var(--d-text);
+}
+.k-typed text {
+  fill: var(--d-surface);
+  font: 600 11px var(--d-sans);
+  font-variant-numeric: tabular-nums;
+}
+.k-handle-dot {
+  fill: var(--d-surface);
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+  transition: r 120ms var(--d-ease);
+}
+.k-handle:hover .k-handle-dot {
+  stroke: var(--d-accent);
+}
+.k-handle:focus-visible .k-handle-dot {
+  stroke: var(--d-accent);
+  stroke-width: 3;
+}
+.k-handle.is-accent .k-handle-dot {
+  fill: var(--d-accent);
+  stroke: var(--d-surface);
+}
+.k-svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+}
+.k-svg text {
+  font: 400 10.5px var(--d-sans);
+  fill: var(--d-faint);
+  font-variant-numeric: tabular-nums;
+}
+.k-svg .k-strong {
+  font-weight: 600;
+  fill: var(--d-text);
+}
+
+.k-grid line,
+
+.k-hint {
+  margin-top: 4px;
+  display: grid;
+  gap: 4px;
+}
+.k-hint p {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--d-faint);
+}
+.k-hint kbd {
+  flex: none;
+  min-width: 44px;
+  font: 500 10.5px var(--d-sans);
+  color: var(--d-muted);
+}
+
+.k-drop {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px;
+  border: 1px dashed var(--d-rule);
+  border-radius: 4px;
+  color: var(--d-muted);
+  font-size: 11.5px;
+}
+.k-drop.is-over {
+  border-color: var(--d-accent);
+  background: var(--d-soft);
+}
+.k-drop canvas,
+.k-drop svg {
+  grid-row: span 2;
+  width: 56px;
+  height: 40px;
+  border-radius: 2px;
+  object-fit: cover;
+}
+.dials .k-drop button {
+  justify-self: start;
+  padding: 0;
+  height: 20px;
+  min-height: 0;
+  color: var(--d-accent-text);
+  font-weight: 600;
+}
+.dials .k-drop button:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.k-looks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 10px;
+}
+.dials .k-look {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: auto;
+  padding: 0;
+  align-items: stretch;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 450;
+  color: var(--d-muted);
+  border-radius: 0;
+}
+.dials .k-look:hover {
+  background: transparent;
+  color: var(--d-text);
+}
+.k-look canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 2px;
+  display: block;
+}
+.dials .k-look[aria-pressed="true"] {
+  color: var(--d-text);
+  font-weight: 600;
+}
+.dials .k-look[aria-pressed="true"] canvas {
+  box-shadow: 0 0 0 2px var(--d-surface), 0 0 0 3.5px var(--d-text);
+}
+
+/* ---------- Image studio ---------- */
+.ki-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin: 6px;
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.ki-stage canvas {
+  border-radius: 3px;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.ki-over {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  overflow: visible;
+}
+.ki-shade {
+  fill: rgb(10 11 14 / 0.62);
+}
+.ki-vignette {
+  fill: rgb(10 11 14 / 0.38);
+}
+.ki-frame {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+}
+.ki-thirds {
+  stroke: rgb(255 255 255 / 0.32);
+  stroke-width: 1;
+  fill: none;
+}
+.ki-ring {
+  fill: none;
+  stroke: #fff;
+  stroke-dasharray: 4 3;
+}
+.ki-split {
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.k-svg .ki-tag {
+  fill: #fff;
+  font-weight: 600;
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 0.45);
+  stroke-width: 3px;
+}
+.ki-over .k-handle-dot {
+  fill: #fff;
+  stroke: #15161a;
+}
+.ki-over .ki-crop .k-handle-dot {
+  r: 4.5;
+}
+.ki-split-h .k-handle-dot {
+  fill: #fff;
+}
+.ki-split-glyph {
+  fill: none;
+  stroke: #15161a;
+  stroke-width: 1.4;
+  pointer-events: none;
+}
+.ki-mask .k-handle-dot {
+  fill: var(--d-accent);
+  stroke: #fff;
+}
+.ki-tone {
+  height: 220px;
+}
+.ki-grid {
+  stroke: var(--d-line);
+  fill: none;
+}
+.ki-hist {
+  fill: color-mix(in srgb, var(--d-text) 13%, transparent);
+}
+.ki-ident {
+  stroke: var(--d-rule);
+  stroke-dasharray: 3 3;
+}
+.ki-curve {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 1.75;
+}
+.ki-tri .k-handle-dot {
+  display: none;
+}
+.ki-tri-shape {
+  stroke: var(--d-text);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+.ki-tri.is-black .ki-tri-shape {
+  fill: #000;
+}
+.ki-tri.is-grey .ki-tri-shape {
+  fill: #8a8a8a;
+}
+.ki-tri.is-white .ki-tri-shape {
+  fill: #fff;
+}
+.ki-tri:focus-visible .ki-tri-shape,
+.ki-tri:hover .ki-tri-shape {
+  stroke: var(--d-accent);
+  stroke-width: 2.2;
+}
+.ki-hero-row {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ki-src-name {
+  color: var(--d-text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--d-line);
+}
+.k-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.k-stat span {
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.k-stat b {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Motion studio ---------- */
+.km-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+}
+.km-response {
+  height: 250px;
+}
+.km-track {
+  height: 168px;
+}
+.km-ghost {
+  height: 96px;
+}
+.km-grid {
+  stroke: var(--d-line);
+  fill: none;
+}
+.km-delay {
+  fill: color-mix(in srgb, var(--d-text) 5%, transparent);
+}
+.km-cut {
+  fill: color-mix(in srgb, var(--d-bad) 9%, transparent);
+}
+.km-arm {
+  stroke: var(--d-accent);
+  stroke-width: 1.25;
+  fill: none;
+}
+.km-curve,
+.km-path {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.km-settle {
+  stroke: var(--d-text);
+  stroke-dasharray: 3 3;
+}
+.km-now {
+  stroke: var(--d-accent);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.km-chip rect {
+  fill: var(--d-text);
+}
+.km-chip text {
+  fill: var(--d-surface);
+  font: 500 11px var(--d-sans);
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+.km-edge .k-handle-dot {
+  fill: var(--d-text);
+  stroke: var(--d-surface);
+}
+.km-key .k-handle-dot {
+  display: none;
+}
+.km-diamond {
+  fill: var(--d-surface);
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+}
+.km-key:hover .km-diamond,
+.km-key:focus-visible .km-diamond {
+  fill: var(--d-accent);
+  stroke: var(--d-accent);
+}
+.km-lane {
+  stroke: var(--d-rule);
+}
+.km-loop {
+  fill: color-mix(in srgb, var(--d-accent) 10%, transparent);
+  stroke: color-mix(in srgb, var(--d-accent) 45%, transparent);
+  stroke-dasharray: 2 3;
+}
+.km-loop-edge .k-handle-dot {
+  fill: var(--d-accent);
+  stroke: var(--d-surface);
+}
+.km-loop-flag {
+  fill: var(--d-accent);
+  stroke: var(--d-accent);
+  stroke-width: 1.5;
+}
+.km-loop-reset {
+  font: 500 12px var(--d-sans);
+  color: var(--d-text);
+  background: none;
+  border: 1px solid var(--d-line);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-variant-numeric: tabular-nums;
+}
+.km-loop-reset:disabled {
+  color: var(--d-muted);
+  border-color: transparent;
+}
+.km-lanes {
+  display: grid;
+  gap: 2px;
+  margin-top: 4px;
+}
+.km-lane-row {
+  position: relative;
+}
+.km-lane-name {
+  position: absolute;
+  left: 52px;
+  top: 4px;
+  pointer-events: none;
+  font: 500 11px var(--d-sans);
+  color: var(--d-muted);
+}
+.km-lane-svg {
+  height: 64px;
+  border-top: 1px solid var(--d-line);
+}
+.km-lane-svg text {
+  font: 500 10px var(--d-sans);
+  fill: var(--d-muted);
+  font-variant-numeric: tabular-nums;
+}
+.km-ticks {
+  stroke: var(--d-text);
+  stroke-width: 1.25;
+}
+.km-ghost-start {
+  fill: none;
+  stroke: var(--d-rule);
+  stroke-dasharray: 3 2;
+}
+.km-ghost-end {
+  fill: none;
+  stroke: var(--d-text);
+}
+.km-block {
+  fill: var(--d-accent);
+}
+.km-playbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.km-clock {
+  font-family: var(--d-pixel);
+  font-size: 12px;
+  white-space: pre;
+  color: var(--d-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dials .km-play,
+.dials .km-copy {
+  height: 24px;
+  min-height: 0;
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--d-accent-text);
+}
+.dials .km-play:hover,
+.dials .km-copy:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.km-presets {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.dials .km-presets .k-chip-glyph {
+  box-shadow: none;
+  padding: 0 0 2px;
+}
+.dials .km-presets .k-chip-glyph svg {
+  width: 56px;
+  height: 40px;
+  max-width: 100%;
+}
+.km-pre-curve {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+}
+.km-pre-guide {
+  stroke: var(--d-line);
+  stroke-dasharray: 2 2;
+}
+.dials .km-presets .k-chip-glyph[aria-checked="true"] svg {
+  box-shadow: 0 0 0 2px var(--d-accent);
+}
+.dials .km-code {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--d-well);
+  color: var(--d-text);
+  font: 11px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  overflow: auto;
+  tab-size: 2;
+}
+.dials .km-code:focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 0;
+}
+.km-code[aria-invalid="true"] {
+  box-shadow: inset 2px 0 0 var(--d-bad);
+}
+.km-code-note {
+  font-size: 11px;
+  color: var(--d-muted);
+  min-height: 16px;
+  overflow-wrap: anywhere;
+}
+.km-code-note[data-state="bad"] {
+  font-size: 12px;
+  color: var(--d-text);
+  border-left: 3px solid var(--d-bad);
+  padding: 4px 0 4px 8px;
+  background: color-mix(in srgb, var(--d-bad) 8%, transparent);
+}
+.km-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.km-table th {
+  text-align: right;
+  font-weight: 500;
+  color: var(--d-muted);
+  padding: 0 0 4px;
+  border-bottom: 1px solid var(--d-line);
+}
+.km-table td {
+  text-align: right;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--d-line);
+}
+.km-table th:first-child,
+.km-table td:first-child {
+  text-align: left;
+}
+
+/* ---------- Colour studio, round 5 ---------- */
+.d-cx-grades .d-cx-grade:first-child b {
+  font-family: var(--d-pixel);
+  font-size: 44px;
+  line-height: 44px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.d-cx-main .d-cx-channels {
+  padding: 4px 0 2px;
+}
+.d-rail .d-cx-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.d-rail .d-cx-section header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.d-rail .d-cx-section h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.d-cx-well.d-drop {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 10px;
+  border: 1px dashed var(--d-rule);
+  border-radius: 4px;
+}
+.d-cx-well.is-over {
+  border-color: var(--d-accent);
+  background: var(--d-soft);
+}
+.d-cx-dropper {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--d-well);
+  color: var(--d-text);
+}
+.dials .d-cx-well .d-drop-button {
+  justify-self: start;
+  padding: 0;
+  min-height: 0;
+  height: 18px;
+  color: var(--d-accent-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.d-cx-well .d-drop-hint {
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.d-rail .d-cx-token {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.d-rail .d-cx-token input {
+  flex: 1;
+  min-width: 0;
+}
+.d-rail .d-eye {
+  width: 100%;
+  height: auto;
+  border-radius: 3px;
+}
+.d-section[data-depth="3"] .d-cx-grades {
+  grid-template-columns: auto 1fr;
+  gap: 0 28px;
+  align-items: end;
+}
+.d-section[data-depth="3"] .d-cx-grades .d-cx-grade:first-child b {
+  white-space: nowrap;
+  font-size: 40px;
+  line-height: 40px;
+}
+.d-rail .d-cx-history > div:has(> :only-child)::after {
+  content: "Each change you commit lands here, newest last.";
+  font-size: 11px;
+  color: var(--d-muted);
+  align-self: center;
+  margin-left: 6px;
+}
+.d-rail .d-cx-history > div > * {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---------- Sampler studio ---------- */
+.kx-plot {
+  height: 300px;
+}
+.kx-ladder {
+  height: 130px;
+}
+.kx-skip {
+  fill: color-mix(in srgb, var(--d-text) 6%, transparent);
+}
+.kx-ghost {
+  fill: none;
+  stroke: var(--d-faint);
+  stroke-dasharray: 4 3;
+}
+.k-svg .kx-ghost-label {
+  fill: var(--d-muted);
+  paint-order: stroke;
+  stroke: var(--d-surface);
+  stroke-width: 4px;
+}
+.kx-curve {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 2;
+}
+.kx-dots {
+  stroke: var(--d-text);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.kx-bar {
+  fill: var(--d-accent);
+}
+.kx-bar.is-skipped {
+  fill: none;
+  stroke: var(--d-rule);
+}
+.kx-scheds {
+  grid-template-columns: repeat(3, minmax(0, 72px));
+}
+.dials .kx-btn {
+  height: 24px;
+  min-height: 0;
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--d-accent-text);
+}
+.dials .kx-btn:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.dials .kx-btn[aria-pressed="true"] {
+  color: var(--d-text);
+}
+.kx-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.kx-tile {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kx-tile canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  image-rendering: auto;
+}
+.kx-tile figcaption {
+  font-family: var(--d-pixel);
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.d-rail .k-stats {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.d-rail .k-stat {
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+/* ---------- Type studio ---------- */
+.kt-spec-wrap {
+  min-height: 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: 20px 24px;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--lead, 36px) - 1px), color-mix(in srgb, var(--d-accent) 22%, transparent) calc(var(--lead, 36px) - 1px) var(--lead, 36px))
+      0 20px / 100% calc(100% - 20px) no-repeat,
+    var(--d-well);
+}
+.kt-spec {
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--d-text);
+  cursor: text;
+  font-kerning: normal;
+}
+.kt-spec-wrap:focus-within {
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+.kt-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+}
+.kt-ladder {
+  display: flex;
+  flex-direction: column;
+}
+.dials .kt-rung {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: baseline;
+  gap: 8px;
+  height: auto;
+  min-height: 0;
+  padding: 2px 6px 2px 0;
+  border-radius: 0;
+  text-align: left;
+  color: var(--d-text);
+  overflow: hidden;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .kt-rung:hover {
+  background: transparent;
+}
+.kt-rung-px {
+  font-family: var(--d-pixel);
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.kt-rung-ag {
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 1.15;
+  min-width: 0;
+}
+.kt-use {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.kt-use-head {
+  color: var(--d-text);
+  overflow-wrap: anywhere;
+}
+.kt-use-body {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--d-text);
+}
+.kt-use-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.dials .kt-rung[aria-checked="true"] {
+  box-shadow: inset 2px 0 0 var(--d-accent), inset 0 -1px 0 var(--d-line);
+  padding-left: 8px;
+}
+.dials .kt-rung[aria-checked="true"] .kt-rung-px {
+  color: var(--d-accent-text);
+}
+.kt-pad {
+  height: 300px;
+  background: var(--d-well);
+  border-radius: 3px;
+}
+.k-svg .kt-cell {
+  fill: color-mix(in srgb, var(--d-text) 22%, transparent);
+}
+.kt-cross {
+  stroke: var(--d-accent);
+  stroke-dasharray: 2 3;
+}
+.kt-chip-ag {
+  font-size: 26px;
+  fill: var(--d-text);
+}
+.kt-weights {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.dials .kt-weights .k-chip-glyph {
+  box-shadow: none;
+  padding: 0 0 2px;
+}
+.dials .kt-weights .k-chip-glyph svg {
+  width: 100%;
+  background: transparent;
+}
+.dials .kt-weights .k-chip-glyph[aria-checked="true"] svg {
+  box-shadow: inset 0 -2px 0 var(--d-accent);
+  border-radius: 0;
+}
+.kt-glyphs {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  font-size: 16px;
+  line-height: 28px;
+  text-align: center;
+  color: var(--d-text);
+}
+
+/* ---------- Data studio ---------- */
+.kd-chart {
+  height: 360px;
+}
+.kd-mark {
+  stroke: var(--d-surface);
+  stroke-width: 1;
+  transition: opacity 120ms var(--d-ease);
+}
+.kd-mark.is-hot {
+  stroke: var(--d-text);
+  stroke-width: 2;
+}
+.kd-chart:has(.is-hot) .kd-mark:not(.is-hot) {
+  opacity: 0.35;
+}
+.kd-line {
+  fill: none;
+  stroke-width: 2;
+}
+.k-svg .kd-label {
+  font-size: 10px;
+  fill: var(--d-muted);
+}
+.kd-glyph-fill {
+  fill: var(--d-text);
+}
+.kd-legend {
+  display: flex;
+  gap: 12px;
+}
+.kd-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--d-muted);
+}
+.kd-key i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.kd-table-wrap {
+  max-height: 240px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.kd-table th {
+  position: sticky;
+  top: 0;
+  background: var(--d-surface);
+}
+.kd-table tr.is-hot td {
+  background: var(--d-soft);
+  font-weight: 600;
+}
+.kd-slot {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+.kd-slot.is-over {
+  background: var(--d-soft);
+  box-shadow: inset 0 0 0 1px var(--d-accent);
+}
+.kd-slot-name {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.kd-fields {
+  display: grid;
+  gap: 8px;
+}
+.kd-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 26px;
+  gap: 4px 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--d-well);
+  cursor: grab;
+  font-size: 12px;
+}
+.kd-field:focus-visible {
+  outline: 2px solid var(--d-accent);
+}
+.kd-field.is-used {
+  box-shadow: inset 2px 0 0 var(--d-accent);
+}
+.kd-tag {
+  font-family: var(--d-pixel);
+  font-size: 10px;
+  color: var(--d-accent-text);
+}
+.kd-spark {
+  grid-column: 1 / 3;
+  width: 100%;
+  height: 26px;
+}
+.kd-spark-bar {
+  fill: color-mix(in srgb, var(--d-text) 42%, transparent);
+}
+/* A choice drawn by its figure shows only the chosen word beside it. */
+.d-row[data-type="segmented"] .d-segmented button:not([aria-checked="true"]) {
+  display: none;
+}
+.d-row[data-type="segmented"] .d-segmented button[aria-checked="true"] {
+  box-shadow: none;
+  padding: 0;
+}
+
+/* ---------- Instruments: the studio for every other control (instruments.js) ---------- */
+/* One frame for all: the stage fills the main column, the strip sits under it, the side
+   holds the readout, fields, the default and this session. Nothing is left blank. */
+.d-section[data-depth="3"] .d-lab.ki {
+  grid-template-rows: minmax(0, 1fr);
+  align-content: stretch;
+}
+.ki .k-main {
+  min-height: 0;
+}
+.ki-stage-block {
+  flex: 1 1 auto;
+  min-height: 320px;
+}
+.ki-stage-block > :last-child {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.ki-svg {
+  min-height: 280px;
+  height: 100%;
+}
+.ki-svg text {
+  font-size: 11px;
+}
+.ki-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.ki-ticks {
+  stroke: var(--d-rule);
+  stroke-width: 1;
+  fill: none;
+}
+.ki-track {
+  fill: color-mix(in srgb, var(--d-rule) 55%, transparent);
+}
+.ki-fill,
+.ki-layer {
+  fill: var(--d-accent);
+}
+.ki-default {
+  fill: var(--d-faint);
+}
+.ki-off {
+  fill: var(--d-line);
+}
+.ki-dial {
+  fill: none;
+  stroke: var(--d-line);
+  stroke-width: 1.5;
+}
+.ki-dead {
+  fill: none;
+  stroke: var(--d-well);
+  stroke-width: 14;
+}
+.ki-arc-fill {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.ki-needle {
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+}
+.ki-object {
+  fill: var(--d-soft);
+  stroke: var(--d-accent);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.ki-card {
+  fill: var(--d-soft);
+  stroke: var(--d-accent);
+  stroke-width: 1.5;
+}
+.ki-outline {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-opacity: 0.25;
+}
+.ki-arc {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+.ki-dim,
+.ki-grid-line {
+  stroke: var(--d-line);
+  stroke-width: 1;
+  fill: none;
+}
+.ki-dim {
+  stroke: var(--d-rule);
+  stroke-dasharray: 2 3;
+}
+.ki-axis {
+  stroke: var(--d-rule);
+}
+.ki-cross {
+  stroke: var(--d-accent);
+  stroke-opacity: 0.45;
+}
+.ki-pad {
+  fill: var(--d-well);
+  cursor: crosshair;
+}
+.ki-tile {
+  fill: var(--d-well);
+  stroke: var(--d-line);
+  cursor: pointer;
+}
+.ki-tile.is-on {
+  fill: var(--d-accent);
+  stroke: none;
+}
+.ki-check-a {
+  fill: var(--d-surface);
+}
+.ki-check-b {
+  fill: var(--d-line);
+}
+.ki-page-line {
+  fill: var(--d-rule);
+}
+.ki-layer-text {
+  font: 700 32px var(--d-pixel) !important;
+  fill: var(--d-on-accent) !important;
+}
+.ki-lamp {
+  stroke: var(--d-line);
+}
+.ki-curve {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-width: 2;
+}
+.ki-loop-mark {
+  stroke: var(--d-accent);
+  stroke-dasharray: 2 3;
+}
+.ki-dot {
+  fill: var(--d-accent);
+}
+.ki-switch-on {
+  fill: var(--d-accent);
+}
+.ki-switch-off {
+  fill: var(--d-line);
+}
+.ki-switch-knob {
+  fill: var(--d-surface);
+  stroke: var(--d-text);
+  stroke-opacity: 0.2;
+}
+.ki-band-fill {
+  fill: var(--d-soft);
+  fill-rule: evenodd;
+}
+.ki-content {
+  fill: var(--d-surface);
+  stroke: var(--d-accent);
+  stroke-dasharray: 3 3;
+}
+.ki-ring {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-dasharray: 3 4;
+}
+.ki-bar {
+  fill: var(--d-accent);
+  fill-opacity: 0.75;
+}
+.ki-bar.is-focus {
+  fill-opacity: 1;
+}
+/* A drawing at another value: the row figure, larger. */
+.ki-mini {
+  display: block;
+  width: 100%;
+  aspect-ratio: 76 / 24;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--d-well);
+}
+.ki-mini svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.ki-mini-fill {
+  padding: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 8%, transparent);
+}
+.ki-mini-shadow {
+  display: grid;
+  place-items: center;
+}
+.ki-mini-shadow i {
+  width: 44%;
+  height: 52%;
+  border-radius: 3px;
+  background: var(--d-surface);
+}
+.ki-strip,
+.ki-session {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+}
+.dials .ki-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  height: auto;
+  min-height: 0;
+  padding: 4px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--d-muted);
+  font-size: 11px;
+  line-height: 14px;
+}
+.dials .ki-cell:hover {
+  background: var(--d-well);
+  color: var(--d-text);
+}
+.dials .ki-cell[aria-checked="true"] {
+  color: var(--d-text);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1.5px var(--d-text);
+}
+.ki-cell-text,
+.ki-long,
+.ki-compare-cell b,
+.ki-asset-meta dd {
+  overflow-wrap: anywhere;
+}
+.ki-long {
+  display: block;
+  font: 500 13px/18px var(--d-mono);
+  color: var(--d-text);
+  white-space: pre-wrap;
+}
+.ki-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ki-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ki-compare-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+.ki-compare-cell figcaption {
+  display: flex;
+  flex-direction: column;
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.ki-compare-cell b {
+  font-weight: 500;
+  color: var(--d-text);
+}
+.ki-compare-cell.is-now .ki-mini {
+  box-shadow: inset 0 0 0 1.5px var(--d-accent);
+}
+.ki-delta {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--d-muted);
+}
+.dials .ki-reset {
+  align-self: flex-start;
+}
+/* Boolean: both states, side by side. */
+.ki-pair {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+  gap: 12px;
+  min-height: 360px;
+}
+.dials .ki-pair-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  height: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--d-well);
+  text-align: left;
+}
+.dials .ki-pair-pane:hover {
+  background: var(--d-hover);
+}
+.dials .ki-pair-pane[aria-checked="true"] {
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+.ki-pair-art {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.ki-pair-art > * {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+}
+.ki-pair-art canvas {
+  object-fit: contain;
+}
+.ki-pair-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.ki-pair-name b {
+  font: 700 22px/22px var(--d-pixel);
+}
+.ki-pair-what {
+  color: var(--d-muted);
+  font: 400 11px/15px var(--d-mono);
+}
+/* Choices: every option drawn as a card. */
+.ki-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-auto-rows: minmax(150px, 1fr);
+  gap: 12px;
+}
+.dials .ki-card-pick {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  height: auto;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--d-well);
+  text-align: left;
+}
+.dials .ki-card-pick:hover {
+  background: var(--d-hover);
+}
+.dials .ki-card-pick[aria-checked="true"] {
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+.ki-card-art {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 72px;
+  color: var(--d-accent);
+}
+.ki-card-art svg {
+  width: min(80%, 200px);
+  height: auto;
+}
+.ki-card-word {
+  font: 600 22px/1.1 var(--d-sans);
+  letter-spacing: -0.01em;
+  color: var(--d-text);
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+.ki-card-name {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+.ki-card-name kbd {
+  font: 11px var(--d-sans);
+  color: var(--d-faint);
+}
+.ki-blend {
+  position: relative;
+  width: 110px;
+  height: 72px;
+}
+.ki-blend i {
+  position: absolute;
+  top: 0;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--d-accent);
+}
+.ki-blend i + i {
+  left: 38px;
+  background: #ee5228;
+}
+/* Text: an editor that reads as paper, then how it sets. */
+.ki-text {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.ki-text > .k-block {
+  flex: 1 1 auto;
+}
+.dials .ki-editor {
+  flex: none;
+  field-sizing: content;
+  min-height: calc(3 * 26px + 28px);
+  max-height: 50%;
+  overflow: auto;
+  width: 100%;
+  padding: 14px 16px;
+  resize: none;
+  border-radius: 6px;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  font: 400 16px/26px var(--d-sans);
+  color: var(--d-text);
+}
+.dials .ki-editor:focus {
+  box-shadow: inset 0 0 0 1.5px var(--d-accent);
+}
+.ki-set {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-top: 1px solid var(--d-line);
+}
+.ki-set span {
+  font-size: 11px;
+  color: var(--d-faint);
+}
+.ki-set:last-child {
+  flex: 1;
+}
+.ki-specimen {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+}
+.ki-set p {
+  margin: 0;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ki-help {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--d-muted);
+}
+.ki-tokens {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 10px 8px;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--d-well);
+}
+.ki-token {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  grid-template-areas: "word w" "bar bar";
+  gap: 3px 8px;
+  align-items: baseline;
+  padding: 6px 10px 8px;
+  border-radius: 6px;
+  background: var(--d-surface);
+  font-size: calc(15px + var(--w) * 18px);
+  line-height: 1.1;
+  font-weight: calc(300 + var(--w) * 400);
+  cursor: default;
+}
+.ki-token:focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 1px;
+}
+.ki-token small {
+  grid-area: w;
+  font: 700 10px var(--d-pixel);
+  color: var(--d-muted);
+}
+.ki-token i {
+  grid-area: bar;
+  height: 3px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--d-accent) calc(var(--w) * 100%), var(--d-line) 0);
+}
+/* Gradient: the band, its stops beneath. */
+.ki-gradient {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ki-band {
+  flex: 1 1 auto;
+  min-height: 200px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 10%, transparent);
+  cursor: copy;
+}
+.ki-stops {
+  flex: none;
+  height: 44px;
+}
+.k-handle.is-picked .k-handle-dot {
+  stroke: var(--d-accent);
+  stroke-width: 3;
+}
+/* Shadow: a card on the page, a dot and a ring on top. */
+.ki-shadow-stage {
+  position: relative;
+  min-height: 300px;
+  border-radius: 8px;
+  background: var(--d-well);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+.ki-shadow-card {
+  position: relative;
+  width: min(52%, 360px);
+  aspect-ratio: 16 / 11;
+  border-radius: 8px;
+  background: var(--d-surface);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
+  box-sizing: border-box;
+  font-size: 13px;
+  font-weight: 600;
+}
+.ki-sc-media {
+  flex: 1 1 auto;
+  border-radius: 4px;
+  background: linear-gradient(160deg, color-mix(in oklab, var(--d-accent) 30%, var(--d-well)), var(--d-well));
+}
+.ki-sc-line {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--d-line);
+}
+.ki-sc-line.is-short {
+  width: 60%;
+}
+.ki-shadow-page {
+  position: absolute;
+  inset: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.ki-shadow-page i {
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--d-text) 7%, transparent);
+}
+.ki-shadow-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.ki-field-wide,
+.ki-lane-stack {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--d-muted);
+}
+.dials .ki-text-field {
+  height: 28px;
+  font: 500 12px var(--d-mono);
+  box-shadow: inset 0 -1px 0 var(--d-rule);
+}
+/* Seeds: neighbours of the current seed. */
+.ki-seeds {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-content: start;
+}
+.dials .ki-seed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: auto;
+  padding: 4px;
+  border-radius: 6px;
+  font: 700 11px var(--d-pixel);
+  color: var(--d-muted);
+}
+.ki-seed canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 4px;
+  image-rendering: pixelated;
+}
+.dials .ki-seed[aria-checked="true"] {
+  color: var(--d-text);
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+/* Asset: the file, large; the chooser; what it is. */
+.ki-asset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 12px;
+}
+.ki-asset-preview {
+  display: grid;
+  place-items: center;
+  min-height: 240px;
+  border-radius: 8px;
+  background: var(--d-well);
+  overflow: hidden;
+}
+.ki-asset-preview > :is(canvas, img) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.ki-asset-doc {
+  font: 700 40px var(--d-pixel);
+  color: var(--d-accent);
+}
+.ki-asset-meta {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 12px;
+}
+.ki-asset-meta dt {
+  color: var(--d-muted);
+}
+.ki-asset-meta dd {
+  margin: 0;
+}
+/* Record: one lane per part. */
+.ki-lanes {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-content: start;
+  overflow: auto;
+}
+.ki-lane .k-bar {
+  height: 18px;
+}
+.ki-lane .k-bar::before,
+.ki-lane .k-bar i {
+  top: 6px;
+  height: 6px;
+}
+.ki-lane .k-bar b {
+  top: 1px;
+  width: 16px;
+  height: 16px;
+  margin-left: -8px;
+}
+.ki-lane-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.ki-lane-bars {
+  min-height: 120px;
+  height: 140px;
+}
+.dials .ki-switch {
+  height: 24px;
+  min-width: 48px;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--d-rule);
+}
+.dials .ki-switch[aria-checked="true"] {
+  background: var(--d-accent);
+  color: var(--d-on-accent);
+  box-shadow: none;
+}
+.dials .ki-source {
+  min-height: 132px;
+  font: 400 11.5px/16px var(--d-mono);
+  resize: none;
+}
+.ki-error {
+  font-size: 11.5px;
+  color: var(--d-bad);
+}
+.ki-error:empty {
+  display: none;
+}
+
+/* ---------- Studio rail and narrow hosts ---------- */
+/* In the studio rail a row is two lines: label and figure, then the whole value beneath. */
+.d-section[data-depth="3"] .d-rows .d-row {
+  grid-template-columns: 12px minmax(0, 1fr) var(--d-fig-w);
+  grid-template-areas: "dot label fig" ". value value";
+  row-gap: 0;
+  padding-bottom: 6px;
+}
+.d-section[data-depth="3"] .d-rows .d-row > .d-reset {
+  grid-area: dot;
+}
+.d-section[data-depth="3"] .d-rows .d-row > .d-label {
+  grid-area: label;
+}
+.d-section[data-depth="3"] .d-rows .d-row > .d-figure {
+  grid-area: fig;
+}
+.d-section[data-depth="3"] .d-rows .d-row > .d-value {
+  grid-area: value;
+}
+/* The tabs wrap rather than clip. */
+.d-section[data-depth="3"] > .d-section-head {
+  height: auto;
+  min-height: 44px;
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.d-section[data-depth="3"] .d-studio-tabs.d-studio-only {
+  flex-wrap: wrap;
+  flex: 1 1 0;
+}
+.d-section[data-depth="3"] {
+  container: dials-studio / inline-size;
+}
+@container dials-studio (max-width: 820px) {
+  .d-section-content {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto !important;
+  }
+  .d-rows,
+  .d-rail,
+  .d-lab {
+    grid-column: 1 !important;
+    grid-row: auto !important;
+    border-right: 0 !important;
+  }
+  .d-rows {
+    border-bottom: 1px solid var(--d-line);
+  }
+  .d-rail {
+    order: 3;
+  }
+  .d-lab.k-studio {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding: 16px !important;
+  }
+  .d-section-head > .d-studio-tabs {
+    order: 9;
+    flex-basis: 100% !important;
+    padding-left: 24px;
+  }
+  .ki-stage-block {
+    min-height: 360px;
+  }
+}
+.ki-declared {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 3px 12px;
+  margin: 0;
+  font-size: 11.5px;
+}
+.ki-declared dt {
+  color: var(--d-faint);
+}
+.ki-declared dd {
+  margin: 0;
+  font-family: var(--d-mono);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+@container dials-studio (max-width: 820px) {
+  .d-lab {
+    order: 1;
+  }
+  .d-rows {
+    order: 2;
+  }
+}
+/* Values without spaces (JSON, colour functions) break anywhere rather than run past the row. */
+.d-row:not([data-type="text"]) .d-value textarea {
+  word-break: break-all;
+}
+
+.d-cx-pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+.d-cx-pair {
+  display: grid;
+  border-radius: 3px;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  font-variant-numeric: tabular-nums;
+}
+.d-cx-pair-spec {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 10px 10px 8px;
+}
+.d-specimen {
+  display: block;
+  width: calc(var(--w) * 1px);
+  max-width: 100%;
+  overflow: visible;
+  font-family: var(--d-sans);
+}
+.d-cx-sample-line {
+  width: 100%;
+}
+.d-cx-pair-cap {
+  display: grid;
+  gap: 1px;
+  padding: 5px 10px 6px;
+  background: var(--d-surface);
+  color: var(--d-text);
+  border-top: 1px solid var(--d-line);
+}
+.d-cx-pair-cap span {
+  font-size: 11px;
+  font-weight: 600;
+}
+.d-cx-pair-cap small {
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.d-plate.is-mid > :is(b, small) {
+  background: color-mix(in srgb, var(--d-surface) 92%, transparent);
+  color: var(--d-text);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+
+/* ---------- Repaired values and long labels (round 7) ---------- */
+.d-row[data-invalid] .d-label {
+  text-decoration: underline wavy color-mix(in srgb, var(--d-bad) 70%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.dials .d-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+/* The session list: earlier values as buttons in a plain list. */
+ul.ki-session {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ul.ki-session > li {
+  display: block;
+  min-width: 0;
+}
+ul.ki-session > li > .ki-cell {
+  width: 100%;
+}
+.ki-changed[hidden],
+.k-block[hidden] {
+  display: none;
+}
+/* Instruments give the stage the room: the side keeps only what tunes the value. */
+.d-section[data-depth="3"] .d-lab.k-studio.ki {
+  grid-template-columns: minmax(0, 2.3fr) minmax(220px, 0.85fr);
+}
+
+/* Tabs never clip a name: long names end in an ellipsis (the full name is the tooltip). */
+.dials .d-studio-tabs button {
+  flex: none;
+  max-width: 15em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Narrow studios (a 560 px window, a phone): the tabs become one scrolling line under the
+   head, so every sibling stays one tap or one arrow away. */
+@container dials-studio (max-width: 820px) {
+  .d-section[data-depth="3"] .d-section-head > .d-studio-tabs.d-studio-only {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    padding-left: 0;
+    margin: 0 -10px 0 -8px;
+    padding: 0 10px 0 8px;
+    border-top: 1px solid var(--d-line);
+    mask-image: linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 20px), transparent);
+  }
+  .d-section[data-depth="3"] .d-section-head > .d-studio-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .dials .d-studio-tabs button {
+    max-width: 11em;
+  }
+}
+@media (max-width: 600px) {
+  .dials[data-studio-mode="viewport"] .d-section[data-depth="3"] {
+    inset: var(--d-studio-top, 52px) 6px 6px;
+  }
+}
+/* Words and numerals inside row figures (dates, links, matrix sizes). */
+.d-fig-word {
+  font: 500 9.5px/1 var(--d-sans);
+  letter-spacing: 0;
+}
+.d-fig-num {
+  font: 600 9px/1 var(--d-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Shape instruments (instruments-shapes.js) ---------- */
+.ki-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.dials a.kx-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  font-size: 12px;
+}
+/* Matrix: a grid of cells, heat behind each number, sums in the margin. */
+.ki-matrix-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 260px);
+  grid-template-areas: "grid fig" "tools tools";
+  gap: 18px 28px;
+  align-items: start;
+}
+.ki-matrix-wrap {
+  grid-area: grid;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.ki-matrix-stage > .ki-actions {
+  grid-area: tools;
+}
+.ki-matrix-figure {
+  grid-area: fig;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ki-matrix-figure[hidden] {
+  display: none;
+}
+.ki-matrix-figure figcaption {
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--d-muted);
+}
+.ki-matrix-preview {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  background: var(--d-well);
+}
+.ki-mx-before {
+  fill: none;
+  stroke: var(--d-rule);
+  stroke-width: 0.012;
+  opacity: 0.7;
+}
+.ki-mx-glyph-before {
+  fill: none;
+  stroke: var(--d-faint);
+  stroke-width: 0.05;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.45;
+}
+.ki-mx-after {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-width: 0.014;
+  opacity: 0.55;
+}
+.ki-mx-glyph {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-width: 0.07;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ki-matrix {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+}
+.ki-matrix-row {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(56px, 1fr));
+  gap: 4px;
+}
+.ki-matrix-cell {
+  --heat: 0%;
+  display: grid;
+  place-items: center;
+  height: 56px;
+  min-width: 0;
+  border-radius: 4px;
+  --t: 0;
+  position: relative;
+  isolation: isolate;
+  /* Heat is a level rising from the cell floor; the numeral always sits on a light tint. */
+  background: linear-gradient(to top, color-mix(in oklab, var(--d-accent) 34%, var(--d-well)) calc(var(--t) * 100%), color-mix(in oklab, var(--d-accent) 7%, var(--d-well)) 0);
+  color: var(--d-text);
+  font: 500 15px/1 var(--d-sans);
+  font-variant-numeric: tabular-nums;
+  cursor: ns-resize;
+  user-select: none;
+  touch-action: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.ki-matrix-cell:focus-visible {
+  outline: 2px solid var(--d-text);
+  outline-offset: 1px;
+}
+.dials .ki-matrix-input {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--d-surface);
+  color: var(--d-text);
+  font: inherit;
+  text-align: center;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+.ki-matrix-sums {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 4px 12px;
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.ki-sum-title {
+  grid-column: 1 / -1;
+  font-weight: 600;
+  color: var(--d-text);
+  margin-top: 4px;
+}
+.ki-sum {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+}
+.ki-sum i {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--d-accent) calc(var(--w) * 100%), var(--d-well) 0);
+}
+.ki-sum b {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--d-text);
+}
+/* Palette: swatches, then the lightness line you drag. */
+.ki-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+}
+.ki-swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px;
+}
+.dials .ki-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  height: auto;
+  padding: 6px;
+  border-radius: 6px;
+  text-align: left;
+}
+.dials .ki-swatch[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+.ki-swatch i {
+  display: block;
+  height: 88px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 12%, transparent);
+}
+.ki-swatch b {
+  font: 500 11px/14px var(--d-mono);
+  color: var(--d-text);
+  overflow-wrap: anywhere;
+}
+.ki-swatch small {
+  font-size: 10.5px;
+  color: var(--d-muted);
+}
+.ki-ramp-chart {
+  min-height: 200px;
+  height: 220px;
+}
+.ki-ramp-line {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+.ki-ramp-chart .k-handle-dot {
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+}
+.ki-mini-swatches {
+  display: flex;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+.ki-mini-swatches i {
+  flex: 1;
+  height: 100%;
+  min-height: 28px;
+}
+/* Tags: chips you remove, and a field that adds. */
+.ki-tags-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+ul.ki-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dials .ki-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 8px 0 14px;
+  border-radius: 18px;
+  background: var(--d-well);
+  color: var(--d-text);
+  font-size: 15px;
+}
+.ki-tag i {
+  font-style: normal;
+  color: var(--d-faint);
+  font-size: 16px;
+  padding: 0 4px;
+}
+.ki-tag i:hover {
+  color: var(--d-bad);
+}
+/* Date: a month of days, and the hours of one. */
+.ki-date {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.ki-cal-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 520px;
+}
+.ki-cal-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ki-cal-nav[hidden],
+.ki-cal[hidden] {
+  display: none;
+}
+.ki-cal-title {
+  flex: 1;
+  text-align: center;
+  font: 600 15px/1 var(--d-sans);
+}
+.dials .ki-cal-step {
+  width: 32px;
+  height: 32px;
+  font-size: 18px;
+}
+.ki-cal {
+  display: grid;
+  gap: 4px;
+}
+.ki-cal-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+.ki-cal-head span {
+  text-align: center;
+  font-size: 11px;
+  color: var(--d-faint);
+}
+.dials .ki-cal-day {
+  height: 40px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--d-text);
+  background: var(--d-well);
+}
+.dials .ki-cal-day[aria-selected="true"] {
+  background: var(--d-accent);
+  color: var(--d-on-accent);
+  font-weight: 600;
+}
+.ki-day {
+  min-height: 96px;
+  height: 96px;
+}
+.ki-day-band {
+  fill: color-mix(in oklab, var(--d-text) 16%, var(--d-well));
+}
+.ki-day-light {
+  fill: color-mix(in oklab, #f0c050 35%, var(--d-well));
+}
+/* Link: the address set in its parts. */
+.ki-url {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.ki-url-parts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 4px;
+  padding: 20px;
+  border-radius: 6px;
+  background: var(--d-well);
+  font: 400 20px/1.35 var(--d-sans);
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.ki-url-scheme,
+.ki-url-sep {
+  color: var(--d-faint);
+}
+.ki-url-host {
+  font-weight: 650;
+  color: var(--d-text);
+}
+.ki-url-seg {
+  color: var(--d-accent-text);
+}
+.ki-url-hash {
+  color: var(--d-muted);
+}
+.ki-url-params {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ki-url-params:empty::after {
+  content: "No query in this address.";
+  font-size: 12px;
+  color: var(--d-faint);
+}
+.ki-lane-row {
+  display: grid;
+  grid-template-columns: minmax(60px, 120px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+/* Timecode: four numerals, each dragged. */
+.ki-tc-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.ki-tc {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px;
+}
+.ki-tc-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.ki-tc-cell small {
+  font-size: 11px;
+  color: var(--d-faint);
+}
+.ki-tc-group {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--d-well);
+  font: 400 clamp(36px, 7cqi, 64px) / 1 var(--d-pixel);
+  color: var(--d-text);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.ki-tc-group:focus-visible {
+  outline: 2px solid var(--d-accent);
+}
+.ki-tc-colon {
+  font: 400 clamp(36px, 7cqi, 64px) / 1 var(--d-pixel);
+  color: var(--d-faint);
+  padding-top: 10px;
+}
+.ki-tc-ruler {
+  min-height: 80px;
+  height: 80px;
+}
+/* Flags: one switch per key. */
+.ki-flags-stage {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ki-flags {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+}
+.dials .ki-flag {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "dot name" "dot state";
+  align-items: center;
+  gap: 2px 12px;
+  height: auto;
+  padding: 14px;
+  border-radius: 6px;
+  background: var(--d-well);
+  text-align: left;
+}
+.ki-flag i {
+  grid-area: dot;
+  width: 30px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--d-rule);
+  position: relative;
+}
+.ki-flag i::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--d-surface);
+}
+.ki-flag[aria-checked="true"] i {
+  background: var(--d-accent);
+}
+.ki-flag[aria-checked="true"] i::after {
+  left: 14px;
+}
+.ki-flag b {
+  grid-area: name;
+  font-weight: 600;
+  color: var(--d-text);
+  overflow-wrap: anywhere;
+}
+.ki-flag span {
+  grid-area: state;
+  font-size: 11px;
+  color: var(--d-muted);
+}
+/* No value yet. */
+.ki-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 520px;
+  padding: 28px;
+  border-radius: 8px;
+  background: var(--d-well);
+}
+.ki-empty-lead {
+  margin: 0;
+  font: 600 18px/1.3 var(--d-sans);
+}
+/* Many options: find, then a dense list. */
+.ki-many {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.ki-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 2px 8px;
+  max-height: 460px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.dials .ki-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 4px;
+  text-align: left;
+  color: var(--d-text);
+  font-weight: 450;
+}
+.dials .ki-option[hidden] {
+  display: none;
+}
+.ki-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ki-option small {
+  color: var(--d-faint);
+  font-variant-numeric: tabular-nums;
+}
+.dials .ki-option[aria-checked="true"] {
+  background: var(--d-accent);
+  color: var(--d-on-accent);
+}
+.dials .ki-option[aria-checked="true"] small {
+  color: inherit;
+}
+/* Profile: a list of numbers as a line. */
+.ki-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+}
+.ki-profile > svg {
+  flex: 1 1 auto;
+}
+.ki-profile-area {
+  fill: var(--d-accent);
+  fill-opacity: 0.12;
+}
+.ki-profile-line {
+  fill: none;
+  stroke: var(--d-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.ki-profile-dot {
+  fill: var(--d-surface);
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+.ki-profile-dot.is-focus {
+  fill: var(--d-accent);
+  stroke: var(--d-surface);
+  stroke-width: 2;
+}
+.ki-profile-tag rect {
+  fill: var(--d-text);
+}
+.ki-profile-tag text {
+  fill: var(--d-surface);
+  font: 500 11px var(--d-sans);
+}
+.ki-stage-block > :is(.ki-matrix-stage, .ki-palette, .ki-date, .ki-url, .ki-tc-stage, .ki-flags-stage, .ki-tags-stage, .ki-many, .ki-empty) {
+  flex: 0 0 auto;
+}
+/* The side column is narrow: fields pair up only when both names fit. */
+.k-side .k-fields:not(.k-one) {
+  grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+}
+/* Batch: the chosen tiles are a contact sheet of seeded sketches. */
+.ki-tile.is-on {
+  fill: color-mix(in oklab, var(--d-accent) 16%, var(--d-surface));
+  stroke: var(--d-accent);
+  stroke-width: 1.5;
+}
+.ki-batch-sun,
+.ki-batch-hill,
+.ki-batch-seed {
+  pointer-events: none;
+}
+.ki-batch-hill {
+  fill: var(--d-accent);
+  fill-opacity: 0.85;
+}
+.ki-svg text.ki-batch-seed {
+  fill: var(--d-on-accent);
+  font: 500 11px/1 var(--d-mono);
+}
+/* Point size: the section's data at true size. */
+.ki-plot {
+  fill: var(--d-surface);
+  stroke: var(--d-line);
+}
+.ki-pt {
+  fill-opacity: 0.85;
+}
+.ki-pt-0 {
+  fill: var(--d-accent);
+}
+.ki-pt-1 {
+  fill: var(--d-text);
+}
+.ki-pt-2 {
+  fill: color-mix(in oklab, var(--d-accent) 45%, var(--d-faint));
+}
+/* Choices: the chosen option applied, above compact cards. */
+.ki-choice {
+  display: grid;
+  grid-template-rows: minmax(200px, 1fr) auto;
+  gap: 14px;
+  height: 100%;
+}
+.ki-choice-preview {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  padding: 16px 20px;
+  border-radius: 3px;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  color: var(--d-accent);
+  overflow: hidden;
+}
+.ki-choice-preview svg {
+  width: 100%;
+  height: 100%;
+  max-height: 320px;
+}
+.ki-choice-preview svg[viewBox="0 0 24 24"] {
+  width: auto;
+  height: min(100%, 200px);
+}
+.ki-choice-preview .ki-axis {
+  stroke: var(--d-line);
+}
+.ki-choice-preview .ki-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke: var(--d-accent);
+}
+.ki-choice-preview .ki-line-1 {
+  stroke: var(--d-text);
+}
+.ki-choice-preview .ki-line-2 {
+  stroke: color-mix(in oklab, var(--d-accent) 45%, var(--d-faint));
+}
+.ki-align-text {
+  width: 100%;
+  max-width: 24em;
+  padding: 14px 16px;
+  border-inline: 1px dashed var(--d-line);
+  margin: 0;
+  color: var(--d-text);
+  font: 400 17px/1.5 var(--d-sans);
+}
+.ki-choice .ki-cards {
+  grid-auto-rows: 112px;
+}
+.ki-choice .ki-card-art svg {
+  width: auto;
+  height: 52px;
+}
+/* Prompt: the word tray takes its content's height; emphasis columns fill the rest. */
+.ki-prompt-below {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.ki-prompt-below > .k-block:first-child {
+  flex: none;
+}
+.ki-prompt-below > .k-block:first-child .ki-tokens {
+  min-height: 0;
+  flex: none;
+}
+.ki-prompt-below > .k-block:last-child {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.ki-emph {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 180px;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 12px 6px;
+  border-radius: 3px;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.ki-emph-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ki-emph-bar {
+  position: relative;
+  flex: 1 1 auto;
+  border-radius: 2px;
+  background: var(--d-well);
+}
+.ki-emph-bar i {
+  position: absolute;
+  inset: auto 0 0 0;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--d-accent) 55%, var(--d-well));
+}
+.ki-emph-col.is-weighed .ki-emph-bar i {
+  background: var(--d-accent);
+}
+.ki-emph-col small {
+  font-size: 11px;
+  color: var(--d-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The weight-1 line sits at half the bar height (bars run 0 to 2). */
+.ki-emph-one {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(6px + 17px + (100% - 10px - 6px - 17px) / 2);
+  border-top: 1px dashed var(--d-text);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 1;
+}
+/* Key map: keys sit at their own width, rows have a rhythm, the second heading has room. */
+.dials dialog.d-help:not(.d-palette) {
+  max-width: 660px;
+}
+.d-help p > kbd {
+  justify-self: start;
+  align-self: start;
+  white-space: normal;
+  max-width: 100%;
+}
+.d-help h2 ~ p:not(.d-note) {
+  padding: 5px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--d-line) 60%, transparent);
+  align-items: baseline;
+}
+.d-help h2:not(:first-child) {
+  margin-top: 22px;
+}
+.d-help p.d-note {
+  display: block;
+  margin: 0 0 6px;
+  color: var(--d-muted);
+}
+.d-keymap {
+  gap: 6px;
+}
+/* Motion lanes: the name and the value at the playhead sit on their own line above the lane,
+   so nothing overlaps the first diamond; keyed section controls can be added and removed. */
+.km-lane-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0 2px 52px;
+  min-height: 18px;
+}
+.km-lane-head .km-lane-name {
+  position: static;
+  color: var(--d-text);
+  font: 600 11.5px var(--d-sans);
+}
+.km-lane-now {
+  font: 500 11px var(--d-mono);
+  color: var(--d-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dials .km-unkey {
+  margin-left: auto;
+  height: 22px;
+  font-size: 11px;
+}
+.km-lane-row.is-control .km-lane-name::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: var(--d-accent);
+}
+.km-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0 2px 52px;
+}
+.km-key-label {
+  font-size: 11px;
+  color: var(--d-muted);
+  margin-right: 4px;
+}
