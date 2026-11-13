@@ -25,10 +25,17 @@
   font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); font-variant-numeric: tabular-nums; letter-spacing: 0;
 }
 .nk-mi .ico { margin-right: calc(var(--nk-s1) * -1); color: var(--nk-ink-muted); }
-/* the item under the pointer or the keyboard: one fill; the keyboard adds the ring (standards section 10) */
+/* the item under the pointer or the keyboard: one fill; the keyboard adds the ring (standards section 10: 2 px accent, 2 px outside;
+   the menu's 4 px padding leaves room for it, so it is not drawn inset). An item the pointer moved to shows no ring. */
 .nk-mi:focus { background: var(--nk-hover); }
-.nk-mi:focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: calc(var(--nk-ring-width) * -1); }
+.nk-mi:focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: var(--nk-ring-offset); }
+.nk-menu[data-input="pointer"] .nk-mi:focus-visible { outline: none; }
 .nk-mi[aria-expanded="true"] { background: var(--nk-hover); }
 .nk-mi:active:not([aria-disabled="true"]) { background: var(--nk-press); }
+/* dimmed: no fill, no press and no accent ring. The keyboard can still reach it (its reason is read out and shown on hover), so
+   it is marked with a thin muted outline instead of the ring an item that runs shows. */
 .nk-mi[aria-disabled="true"] { opacity: .4; }
+.nk-mi[aria-disabled="true"]:focus, .nk-mi[aria-disabled="true"][aria-expanded="true"] { background: none; }
+.nk-mi[aria-disabled="true"]:focus-visible { outline: 1px solid var(--nk-ink-muted); outline-offset: calc(var(--nk-ring-offset) * -1); }
+.nk-menu[data-input="pointer"] .nk-mi[aria-disabled="true"]:focus-visible { outline: none; }
 .nk-msep { flex: none; height: 1px; margin: var(--nk-s1) calc(var(--nk-s1) * -1); background: var(--nk-line); }

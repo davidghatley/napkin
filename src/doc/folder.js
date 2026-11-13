@@ -525,7 +525,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return done2(comp, step, 'edit');
   }
 
-  // ---------- frame files: make, remove, rename (decision 0023) ----------
+  // ---------- the whole text of a component's file, and the lines each element spans (the code strip shows and highlights them) ----------
+  function source(id) {
+    const comp = component(id), e = read(comp.path);
+    let lines = {}, cols = {};
+    try {
+      const { flat } = nodesOf(comp), at = flat.filter((n) => n.id !== undefined && n.start !== undefined);
+      lines = Object.fromEntries(at.map((n) => [n.id, [lineOf(e.s, n.start), lineOf(e.s, Math.max(n.start, n.end - 1))]]));
+      cols = Object.fromEntries(at.map((n) => [n.id, fromL(e.s.slice(e.s.lastIndexOf('\n', n.start - 1) + 1, n.start)).length])); // its first character's column (text, not bytes)
+    } catch { /* a file that does not parse: the text alone */ }
+    return { ok: true, component: comp.id, file: comp.path, kind: comp.kind, revision: e.rev, source: fromL(e.s), lines, cols };
+  }
+
+  // ---------- frame files: make, duplicate, remove, rename (decision 0023) ----------
   // Each is one step on the caller's undo stack of that file, so Ctrl+Z after drawing a frame removes the file and its card,
   // and redo brings both back. Nothing is ever overwritten: a new file is written exclusively, a rename is a hard link then an
   // unlink (refused when the name is taken), and a removal or an undo checks the file still holds what napkin wrote.
@@ -690,6 +702,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     push(undo, t, st); redo.set(t, (redo.get(t) || []).filter((s) => s.by !== by));
     return fileDone(t, by, st, 'edit');
   }
+  // POST /api/frames/duplicate: { from, x?, y? } -> a copy beside the file, named with the next free number (orbit.html ->
+  // orbit-2.html), its card at x, y with the original's width. It is a create step: one undo removes the copy and its card.
+  function duplicateFrame(from, { x, y, by = 'unknown' } = {}) {
+    const f = frameFile(from);
+    let text; try { text = read(f).s; } catch { throw new DocError(`${f} is gone. Next: check the file list`, 404); }
+    const dir = posix.dirname(f), ext = extname(f), stem = basename(f, ext).replace(/-\d+$/, '');
+    let n = 2, p; do p = posix.join(dir, `${stem}-${n++}${ext}`).replace(/^\.\//, ''); while (existsSync(abs(p)));
+    const place = placeOf(x, y, layout[f]?.width);
+    put(p, text, place);
+    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `created ${p} (a copy of ${f})` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
+    return { ...fileDone(p, by, st, 'edit'), path: p, from: f, canvas: layout[p] };
+  }
   // Undo or redo a file step. A create undone removes the file (if it still holds what napkin wrote); a delete undone writes it back.
   function fileStep(id, k, by, kind) {
     const [fromStack, toStack] = kind === 'undo' ? [undo, redo] : [redo, undo];
@@ -757,14 +782,14 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   scan(); watchDirs();
   return {
     root, state, events,
-    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout,
+    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout, source,
     latest(verb, by) { // the newest step this caller can undo (or redo) in any component: { component, at } | null
       let best = null;
       for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };
       return best;
     },
     undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'), pendingStep,
-    createFrame, removeFrame, renameFrame, nextFrame, componentFrom,
+    createFrame, duplicateFrame, removeFrame, renameFrame, nextFrame, componentFrom,
     history: (id) => [...(history.get(has(id) ? component(id).id : id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,
     rescan: () => { scan(); watchDirs(); },
