@@ -356,3 +356,12 @@ Still open: none that block the first passes.
 - Paper docs index: https://www.paper.design/docs
 
 Not reached or empty on the point: Figma keyboard-shortcut page (returned a plan table), Figma Layers panel article (thin), tldraw context-menu and keyboard-shortcut pages (404), Figma UI3 help article (404), all Paper canvas behaviour.
+
+## Amendments after pass 1 (2026-11-13)
+
+These replace anything above that disagrees.
+1. Top bar right group, left to right: people (presence circles), Jump to…, theme. Right-aligned and flush to the bar padding, with the same 4 px gap as the tool group. People are leftmost so that more of them grow into free space; beyond five, a "+N" chip (David).
+2. Top bar left group: glyph, folder name, panel toggle, with the same tight gap, in both panel states (David).
+3. The left panel collapses with the top-bar toggle or Ctrl+\. No edge handle, no collapse animation; the picture on the canvas stays still.
+4. Key labels follow the platform through one helper (`public/canvas/keylabel.js`): Ctrl K on Linux and Windows, the Command sign on macOS.
+5. Chrome colours are written once with `light-dark()`; chrome tokens are the `--nk-` set in `public/canvas/canvas.css`.

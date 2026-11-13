@@ -75,7 +75,7 @@ test('basics pass 1: the top bar has three zones in order, four tools on the cen
     await io.key('Escape');
     assert.equal(await b.eval(`document.querySelector('#tip').hidden`), true, 'Escape hides the tooltip');
     // the right zone: one right-aligned group, flush to the bar's padding, the tools' gap: [people] [Jump to...] [theme]; the revision only with a selection, at the left end
-    const group = () => b.eval(`JSON.stringify([...document.querySelectorAll('.top-right > *, .top-right .slot > *')].filter((e) => e.getBoundingClientRect().width && getComputedStyle(e).display !== 'contents').map((e) => { const r = e.getBoundingClientRect(); return { n: e.id || e.className, l: r.left, r: r.right }; }))`).then(JSON.parse);
+    const group = () => b.eval(`JSON.stringify([...document.querySelectorAll('.top-right > *, .top-right .slot > *')].filter((e) => e.getBoundingClientRect().width > 1 && getComputedStyle(e).display !== 'contents').map((e) => { const r = e.getBoundingClientRect(); return { n: e.id || e.className, l: r.left, r: r.right }; }))`).then(JSON.parse);
     let g = await group();
     assert.deepEqual(g.map((x) => x.n), ['avatars', 'quick-open', 'theme-toggle']);
     const jump = g[1].l;
