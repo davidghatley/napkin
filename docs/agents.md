@@ -95,6 +95,8 @@ proposals, a question, a checkpoint and a resume. `--auto-answer` answers for yo
 ## Round 2 changes
 
 - Board groups: `set_board` accepts `addGroups`, `removeGroups` and `moveItems`, which apply to the current list and never drop another writer's groups. Replacing the whole `groups` list needs `baseRevision` once any group exists (otherwise a 409 says so).
+- Saved views: `addViews` and `removeViews` never drop another writer's views. Replacing `views` with a list that leaves out an existing view needs `baseRevision` (409 otherwise).
+- On the canvas each run is a region with a progress header; groups whose files belong to a run are drawn inside it, and `Arrange by run` keeps them as blocks inside the run. The view follows the newest run until you move it yourself; `Fit to run` (palette) frames it again.
 - Review: text proposals show the changed lines on the card; `D` (or the Full diff button) opens the complete diff with line numbers, `N`/`P` jump between changes, and `A`/`X`/`S` decide from inside it.
 - The runs panel is docked along the bottom and the canvas shrinks to make room. Every file a run made is listed with its folder. Groups and runs are drawn as labelled regions behind their cards, and "Arrange by run" (command, or `set_board` with `arrange: { by: "run" }`) packs each section together.
 - Direct control writes (`POST /api/control`) appear in the audit as `item-control` events and show their writer as present.

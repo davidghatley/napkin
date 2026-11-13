@@ -81,9 +81,33 @@ export function createBoard({ root, stateDir = stateRoot(), emit = () => {}, bro
       }
       next.groups = checkGroups(list); changed.push('groups');
     }
+    // Saved views follow the same rule as groups: a replacement that would drop a view someone else saved needs the revision it was read at.
+    const checkViews = (v, what) => {
+      if (!Array.isArray(v) || v.length > 200 || v.some((x) => !x || typeof x !== 'object')) bad(`${what} must be an array of up to 200 saved views ({ id, name, ... }). Next: send ${what}: [{ id, name }].`);
+      return v;
+    };
     if (body.views !== undefined) {
-      if (!Array.isArray(body.views) || body.views.length > 200) bad('views must be an array of up to 200 saved views. Next: send views: [].');
-      next.views = body.views; changed.push('views');
+      checkViews(body.views, 'views');
+      const kept = new Set(body.views.map((x) => x.id)), dropped = s.views.filter((x) => !kept.has(x.id));
+      if (dropped.length && body.baseRevision === undefined)
+        bad(`replacing the views would drop ${dropped.length} saved view(s) another writer may have added. Next: send baseRevision: ${s.revision} (from get_board), or use addViews: [{ id, name }] / removeViews: [ids], which never replace.`, 409);
+      next.views = JSON.parse(JSON.stringify(body.views)); changed.push('views');
+    }
+    if (body.addViews !== undefined || body.removeViews !== undefined) {
+      let list = JSON.parse(JSON.stringify(next.views));
+      if (body.addViews !== undefined) {
+        for (const v of checkViews(body.addViews, 'addViews')) {
+          if (typeof v.id !== 'string' || !v.id) bad('every saved view needs a string id. Next: give it an id.');
+          const at = list.findIndex((x) => x.id === v.id);
+          if (at < 0) list.push(v); else list[at] = { ...list[at], ...v };
+        }
+      }
+      if (body.removeViews !== undefined) {
+        if (!Array.isArray(body.removeViews) || body.removeViews.some((x) => typeof x !== 'string')) bad('removeViews is an array of view ids. Next: send removeViews: ["v1"].');
+        list = list.filter((x) => !body.removeViews.includes(x.id));
+      }
+      if (list.length > 200) bad('at most 200 saved views. Next: remove some with removeViews.', 413);
+      next.views = list; if (!changed.includes('views')) changed.push('views');
     }
     if (body.selection !== undefined) {
       if (!Array.isArray(body.selection) || body.selection.length > 2000 || body.selection.some((x) => typeof x !== 'string')) bad('selection must be an array of item ids. Next: send selection: ["id"].');
@@ -100,7 +124,7 @@ export function createBoard({ root, stateDir = stateRoot(), emit = () => {}, bro
       if (!v || ![v.x, v.y, v.z].every(Number.isFinite)) bad('view must be { x, y, z } numbers. Next: fix view.');
       next.view = { x: v.x, y: v.y, z: v.z }; changed.push('view');
     }
-    if (!changed.length) bad('send at least one of arrange, groups, addGroups, removeGroups, moveItems, views, selection, compare, presentation. Next: add a field.');
+    if (!changed.length) bad('send at least one of arrange, groups, addGroups, removeGroups, moveItems, views, addViews, removeViews, selection, compare, presentation. Next: add a field.');
     if (JSON.stringify(next).length > MAX_BYTES) bad('the board is over 1 MiB. Next: send fewer groups or views.', 413);
     // The person's own state (selection, view, compare, presentation) is shown live but not written to the audit log.
     const persisted = changed.some((k) => ['arrange', 'groups', 'views'].includes(k));

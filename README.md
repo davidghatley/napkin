@@ -73,10 +73,10 @@ that have no override. This is the setup for [scene S1](docs/DREAM.md).
 
 ## Connect an agent
 
-Copy the `.mcp.json` object printed by `open` into your agent project's
-`.mcp.json`. It uses `node`, this checkout's `src/mcp.js`, the running canvas's
-`NAPKIN_URL`, and `NAPKIN_AGENT=claude`. Restart Claude Code and ask it to call
-`list_components`. Keep the server running while the agent works.
+Start the canvas (`node src/cli.js open <folder>`), then add napkin to your harness with the one line for it below. `open` also prints
+a ready-to-paste `.mcp.json` object with the real address. Restart the harness and ask it to call `get_board`: that returns what you see and
+have selected, and its tool list is the whole surface (`start_run` begins a plan, `add_artifact` places a file, `propose` and
+`ask_question` put a card in front of you). Keep the server running while the agent works.
 
 ### One line per harness
 

@@ -11,8 +11,10 @@
 .rp-toggle:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 1px; }
 .rp-title { font-weight: 650; font-size: 12.5px; letter-spacing: -.01em; }
 .rp-badge { background: var(--nk-accent); color: var(--nk-on-accent); border-radius: 999px; padding: 1px 8px; font-weight: 600; font-size: 11px; }
+.rp-sum { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nk-text-2); font-variant-numeric: tabular-nums; }
+.rp-sum b { color: var(--nk-text); font-weight: 600; }
 .rp-quiet { color: var(--nk-text-3); }
-.rp-agents { display: flex; gap: 6px; min-width: 0; overflow: hidden; margin-left: auto; }
+.rp-agents { display: flex; gap: 6px; min-width: 0; overflow: hidden; margin-left: auto; flex: none; max-width: 40%; }
 .rp-who { display: inline-flex; align-items: center; gap: 5px; max-width: 150px; min-width: 0; white-space: nowrap; font-weight: 550; color: var(--nk-text); }
 .rp-who i { width: 8px; height: 8px; border-radius: 50%; background: var(--rp-c, var(--nk-text-3)); flex: none; }
 .rp-who small { color: var(--nk-text-3); font-weight: 400; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -110,5 +112,11 @@
 #run-groups { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
 .rg-box { position: absolute; box-sizing: border-box; border: 1.5px dashed var(--nk-line-2); border-radius: 14px; background: color-mix(in srgb, var(--nk-accent) 4%, transparent); }
 .rg-box[data-kind="run"] { border-style: solid; border-color: color-mix(in srgb, var(--nk-accent) 45%, var(--nk-line-2)); }
-.rg-label { position: absolute; left: 14px; top: 8px; display: inline-flex; gap: 10px; align-items: baseline; font: 600 22px var(--nk-sans); color: var(--nk-text-2); max-width: calc(100% - 28px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rg-label small { font-weight: 400; font-size: 16px; color: var(--nk-text-3); }
+.rg-label { position: absolute; left: 14px; top: calc(6px * var(--rg-ls, 1)); display: flex; gap: calc(10px * var(--rg-ls, 1)); align-items: baseline; font: 600 calc(22px * var(--rg-ls, 1))/1.2 var(--nk-sans); color: var(--nk-text-2); max-width: calc(100% - 28px); white-space: nowrap; overflow: hidden; }
+.rg-label b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 650; }
+.rg-label small { flex: none; max-width: 60%; overflow: hidden; text-overflow: ellipsis; font-weight: 400; font-size: .8em; color: var(--nk-text-3); }
+.rg-box[data-kind="run"] .rg-label { color: var(--nk-text); }
+.rg-bar { position: absolute; left: 14px; right: 14px; top: calc(32px * var(--rg-ls, 1)); height: calc(4px * var(--rg-ls, 1)); border-radius: 2px; background: var(--nk-line); overflow: hidden; }
+.rg-bar i { display: block; height: 100%; background: var(--nk-accent); }
+.rg-box[data-status="complete"] .rg-bar i { background: var(--nk-ok); }
+.rg-box[data-status="failed"] .rg-bar i { background: var(--nk-measure); }

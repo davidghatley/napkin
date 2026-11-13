@@ -94,8 +94,19 @@ export function initRuns(ctx) {
     S.busy.delete(p.id);
     if (!r.ok) S.errors.set(p.id, plain(r.error));
     else { S.announce = `${outcome === 'accepted' ? 'Approved' : outcome === 'rejected' ? 'Rejected' : outcome === 'sent-back' ? 'Sent back' : 'Commented on'} ${p.path ?? p.label}`; if (outcome === 'comment') drafts.delete(p.id); else drafts.delete(p.id); }
+    const at = cards().findIndex((c) => c.dataset.proposalId === p.id);
     await loadReview(); if (p.run) await loadRun(p.run);
     schedule(true);
+    if (r.ok) afterDecision(at);
+  }
+  // A decision (also one made inside the full diff) lands the person on the next waiting card; with none left, back on the canvas.
+  function afterDecision(at) {
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const a = document.activeElement;
+      if (a && a !== document.body && root.contains(a) && a.closest?.('.rp-card')) return; // still on a card
+      const list = cards(), next = list[Math.min(Math.max(at, 0), list.length - 1)];
+      if (next) next.focus({ preventScroll: true }); else document.querySelector('#stage')?.focus();
+    }));
   }
   async function answer(q, value) {
     if (S.busy.has(q.id)) return;
@@ -105,8 +116,10 @@ export function initRuns(ctx) {
     const r = await post(`/api/questions/${encodeURIComponent(q.id)}/answer`, { answer: value });
     S.busy.delete(q.id);
     if (!r.ok) S.errors.set(q.id, plain(r.error)); else { S.announce = 'Answered'; drafts.delete(q.id); }
+    const at = cards().findIndex((c) => c.dataset.questionId === q.id);
     await loadReview(); if (q.run) await loadRun(q.run);
     schedule(true);
+    if (r.ok) afterDecision(at);
   }
 
   // ------------------------------------------------------------------------------------------------ drawing
@@ -199,6 +212,14 @@ export function initRuns(ctx) {
     }
     return el;
   }
+  // One line that says where the newest unfinished run is, so the drawer can stay folded and the person still knows.
+  function summaryOf(runs) {
+    const r = runs.find((x) => x.status === 'running') ?? runs[0];
+    if (!r) return null;
+    const total = r.steps.length, done = r.steps.filter((s) => s.status === 'complete').length;
+    const cur = r.steps.find((s) => s.status === 'running') ?? r.steps.find((s) => s.status === 'pending');
+    return h('span', { class: 'rp-sum', 'data-run-id': r.id }, h('b', { text: r.name }), total ? ` ${done} / ${total}` : '', r.status !== 'running' ? ` · ${r.status}` : cur ? ` · ${cur.label}` : '');
+  }
   function pick(path) {
     if (!ctx.state.components.get(path)) { ctx.hint?.(`${path} is not on the canvas yet`); return; }
     ctx.select({ component: path, node: 'item', variant: {} });
@@ -225,6 +246,7 @@ export function initRuns(ctx) {
       h('button', { type: 'button', class: 'rp-toggle', 'aria-expanded': String(open), 'aria-controls': 'rp-body', title: 'Runs and review (Alt+R)', 'aria-keyshortcuts': 'Alt+R', onclick: () => fold() },
         h('span', { class: 'rp-title', text: 'Runs' }),
         waiting ? h('span', { class: 'rp-badge', text: `${waiting} waiting for you` }) : h('span', { class: 'rp-quiet', text: runs.length ? `${runs.length} run${runs.length === 1 ? '' : 's'}` : 'agents here' })),
+      summaryOf(runs),
       h('span', { class: 'rp-agents', 'aria-label': 'Agents here' }, here.slice(0, 5).map((a) => tint(h('span', { class: 'rp-who live', title: `${a.name}: ${a.label ?? ''}` }, h('i'), a.name, a.label && h('small', { text: a.label })), a))));
     body.id = 'rp-body'; body.hidden = !open;
     const nodes = [];
@@ -241,6 +263,7 @@ export function initRuns(ctx) {
       el?.focus({ preventScroll: true }); if (typing && el?.setSelectionRange) try { el.setSelectionRange(typing.at, typing.at); } catch { /* not a text field */ }
     }
     tagCards();
+    for (const ol of root.querySelectorAll('.rp-steps')) { const cur = ol.querySelector('[data-status="running"]') ?? ol.querySelector('li:not([data-status="complete"])'); if (cur) ol.scrollTop = Math.max(0, cur.offsetTop - ol.offsetTop - ol.clientHeight / 2); }
   }
   // The stage gives the drawer its room (CSS: margin-bottom: var(--nk-rp-h)).
   const sizeDock = () => requestAnimationFrame(() => { const st = document.querySelector('#stage'); if (st) st.style.marginBottom = !root.hidden && root.dataset.dock === '1' ? `${root.offsetHeight}px` : ''; });

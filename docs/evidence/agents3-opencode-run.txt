@@ -1,0 +1,22 @@
+opencode run (model opencode/glm-5.3-flash-free), started from the README one-line config, prompt: make a small study of a commuter dashboard (start a run, place html+svg+csv+md, group, propose, ask, checkpoint). No other hints.
+
+napkin_start_run completed {"name":"Commuter dashboard study","plan":[{"id":"s1","label":"Place dashboard HTML study"},{"id":"s2","label"
+napkin_add_artifact completed {"content":"<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Commuter Dashboard — Study</titl
+napkin_add_artifact completed {"content":"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"640\" height=\"220\" viewBox=\"0 0 640 220\">\n 
+napkin_add_artifact completed {"content":"day,depart,arrive,duration_min\nMon,7:55,8:41,46\nTue,7:58,8:39,41\nWed,7:56,8:44,48\nThu,7:54,8:3
+napkin_add_artifact completed {"content":"# Commuter dashboard — study notes\n\nSmall study of a commuter dashboard: what a morning commuter
+napkin_add_run_step completed {"id":"s1","run":"run_8872742bb3","status":"complete"}
+napkin_add_run_step completed {"id":"s2","run":"run_8872742bb3","status":"complete"}
+napkin_add_run_step completed {"id":"s3","run":"run_8872742bb3","status":"complete"}
+napkin_add_run_step completed {"id":"s4","run":"run_8872742bb3","status":"complete"}
+napkin_set_board completed {"addGroups":[{"id":"commuter-study","items":["commuter/dashboard.html","commuter/route.svg","commuter/commute
+napkin_add_run_step completed {"id":"s5","note":"Group \"Commuter dashboard study\" added (board rev 1)","run":"run_8872742bb3","status":"co
+napkin_propose error {"note":"Small edit: name the data window in the dashboard header so the 42-min figure is traceable at a glanc
+napkin_propose completed {"content":"<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>Commuter Dashboard — Study</titl
+napkin_ask_question completed {"options":["Live feed — talk to real-time data","Recorded — keep the 5-day CSV","Both — recorded now, live la
+napkin_add_run_step completed {"id":"s6","note":"Proposal prop_56e7a59e6d pending review","run":"run_8872742bb3","status":"complete"}
+napkin_add_run_step completed {"id":"s7","note":"Question q_bad41f52b9 open on canvas","run":"run_8872742bb3","status":"complete"}
+napkin_checkpoint_run completed {"label":"Study placed: 4 files in group \"Commuter dashboard study\"; proposal prop_56e7a59e6d and question q
+napkin_add_run_step completed {"id":"s8","run":"run_8872742bb3","status":"complete"}
+
+result: run Commuter dashboard study, status complete, steps 8/8, artifacts 4, pending proposals 1, pending questions 1, checkpoint true
