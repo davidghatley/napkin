@@ -104,7 +104,6 @@ async function limited(fn) {
     waiting.shift()?.();
   }
 }
-const extraRate = (out, seconds, rate) => (seconds && out.length / 4 / seconds < rate * 1.5 ? out.length / 4 / seconds : rate);
 const audioCache = new Map();
 async function audio(ctx) {
   const key = ctx.file + ctx.key;
@@ -149,7 +148,7 @@ async function audio(ctx) {
         const j = Math.min(239, Math.floor((i / n) * 240));
         peaks[j] = Math.max(peaks[j], Math.abs(out.readFloatLE(i * 4)));
       }
-      result = { peaks, sampledSeconds: n / (extraRate(out, seconds, rate)) };
+      result = { peaks, sampledSeconds: n / rate };
     } catch {
       result = {
         peaks: [],
