@@ -1,20 +1,16 @@
+import { parquetInfo, parquetRows } from './parquet.js';
 import { statSync } from 'node:fs';
 import { dirname, posix } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import {
-  window,
-  delimited,
-  table,
-  parquetMeta,
-  parquetTable,
-  zipDirectory,
-  zipEntry,
-  LIMIT,
-} from './readers.js';
+import { window, zipDirectory, zipEntry, LIMIT } from './readers.js';
+import { tableWindow, recordsToRows, parseExact } from './cells.js';
 import { decodeText } from './registry.js';
 import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
+import { parseGltf, parseObj } from './gltf.js';
+import { utf16, buildIndex, readRecords } from './rowindex.js';
+import { jsonWindow, jsonRecords } from './jsonscan.js';
 const exec = promisify(execFile),
   esc = (s) =>
     String(s).replace(
@@ -89,6 +85,19 @@ function wavPeaks(ctx) {
     sampleRate: rate,
   };
 }
+// At most three decoders run at once, however many cards ask.
+let running = 0;
+const waiting = [];
+async function limited(fn) {
+  if (running >= 3) await new Promise((r) => waiting.push(r));
+  running++;
+  try {
+    return await fn();
+  } finally {
+    running--;
+    waiting.shift()?.();
+  }
+}
 const audioCache = new Map();
 async function audio(ctx) {
   const key = ctx.file + ctx.key;
@@ -96,32 +105,44 @@ async function audio(ctx) {
   let result = ctx.kind === 'wav' ? wavPeaks(ctx) : null;
   if (!result) {
     try {
-      const { stdout } = await exec(
+      // Sample rate follows the length so a long file stays within the buffer: 8 kHz for short files, down to 2 kHz.
+      let seconds = 0;
+      try {
+        seconds = Number((await exec('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', ctx.file], { timeout: 4000 })).stdout) || 0;
+      } catch {}
+      const rate = seconds ? Math.max(2000, Math.min(8000, Math.floor(96e6 / 4 / seconds))) : 4000;
+      const decode = (extra, timeout) => limited(() => exec(
         'ffmpeg',
         [
           '-v',
           'error',
           '-i',
           ctx.file,
-          '-t',
-          '60',
+          ...extra,
           '-ac',
           '1',
           '-ar',
-          '8000',
+          String(rate),
           '-f',
           'f32le',
           'pipe:1',
         ],
-        { encoding: 'buffer', maxBuffer: 4 * 1024 * 1024, timeout: 5000 },
-      );
+        { encoding: 'buffer', maxBuffer: 100 * 1024 * 1024, timeout },
+      ));
+      // The whole file when it decodes in time, otherwise its first minute.
+      let out;
+      try {
+        out = (await decode([], 20000)).stdout;
+      } catch {
+        out = (await decode(['-t', '60'], 8000)).stdout;
+      }
       const peaks = Array(240).fill(0),
-        n = stdout.length / 4;
+        n = Math.floor(out.length / 4);
       for (let i = 0; i < n; i++) {
         const j = Math.min(239, Math.floor((i / n) * 240));
-        peaks[j] = Math.max(peaks[j], Math.abs(stdout.readFloatLE(i * 4)));
+        peaks[j] = Math.max(peaks[j], Math.abs(out.readFloatLE(i * 4)));
       }
-      result = { peaks, sampledSeconds: n / 8000 };
+      result = { peaks, sampledSeconds: n / rate };
     } catch {
       result = {
         peaks: [],
@@ -130,73 +151,15 @@ async function audio(ctx) {
     }
   }
   audioCache.set(key, result);
-  while (audioCache.size > 30) audioCache.delete(audioCache.keys().next().value);
+  while (audioCache.size > 300) audioCache.delete(audioCache.keys().next().value);
   return result;
 }
 function model(ctx) {
-  let vertices = [],
-    faces = [];
-  if (ctx.kind === 'obj') {
-    for (const line of ctx.text.split(/\r?\n/)) {
-      const parts = line.trim().split(/\s+/);
-      if (parts[0] === 'v') vertices.push(parts.slice(1, 4).map(Number));
-      if (parts[0] === 'f')
-        faces.push(
-          parts.slice(1).map((v) => {
-            const n = Number(v.split('/')[0]);
-            return n < 0 ? vertices.length + n : n - 1;
-          }),
-        );
-      if (vertices.length > 50000 || faces.length > 50000) break;
-    }
-    return { vertices, faces, limited: ctx.bytes > LIMIT };
-  }
-  let gltf, bin;
-  if (ctx.kind === 'glb') {
-    const b = window(ctx.file, 0, 8 * LIMIT);
-    if (b.length < 20) throw new Error('Truncated GLB. Next: open the model or archive in its own application, or request a smaller entry.');
-    const n = b.readUInt32LE(12);
-    if (n > LIMIT) throw new Error('GLB JSON exceeds 1 MiB. Next: open the model or archive in its own application, or request a smaller entry.');
-    gltf = JSON.parse(b.toString('utf8', 20, 20 + n).trim());
-    const p = 20 + n;
-    if (p + 8 <= b.length) bin = b.subarray(p + 8, p + 8 + b.readUInt32LE(p));
-  } else gltf = jsonData(ctx);
-  const buffers = (gltf.buffers || []).map((b, i) => {
-    if (i === 0 && bin) return bin;
-    if (b.byteLength > 8 * LIMIT) throw new Error('Model buffer exceeds 8 MiB preview limit. Next: open the model or archive in its own application, or request a smaller entry.');
-    if (b.uri?.startsWith('data:'))
-      return Buffer.from(b.uri.slice(b.uri.indexOf(',') + 1), 'base64');
-    if (!b.uri || /^(?:https?:|\/)/.test(b.uri))
-      throw new Error('Model buffer must be in the opened folder. Next: open the model or archive in its own application, or request a smaller entry.');
-    return window(ctx.resolveRelative(b.uri), 0, 8 * LIMIT);
+  if (ctx.kind === 'obj') return parseObj(ctx.text, ctx.bytes > LIMIT);
+  return parseGltf(ctx, () => {
+    if (ctx.bytes > 8 * LIMIT) throw new Error('This glTF description is over 8 MiB. Next: open the model in its own application, or request a smaller entry.');
+    return JSON.parse(decodeText(window(ctx.file, 0, 8 * LIMIT)));
   });
-  const accessor = (index) => {
-    const a = gltf.accessors[index],
-      v = gltf.bufferViews[a.bufferView],
-      b = buffers[v.buffer],
-      dim = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[a.type],
-      width = { 5121: 1, 5123: 2, 5125: 4, 5126: 4 }[a.componentType];
-    if (!dim || !width) throw new Error('Unsupported model accessor. Next: open the model or archive in its own application, or request a smaller entry.');
-    const read = (p) => (a.componentType === 5126 ? b.readFloatLE(p) : b.readUIntLE(p, width));
-    return Array.from({ length: Math.min(a.count, 50000) }, (_, i) =>
-      Array.from({ length: dim }, (_, j) =>
-        read(
-          (v.byteOffset || 0) + (a.byteOffset || 0) + i * (v.byteStride || dim * width) + j * width,
-        ),
-      ),
-    );
-  };
-  for (const mesh of gltf.meshes || [])
-    for (const p of mesh.primitives || []) {
-      if (p.attributes?.POSITION === undefined) continue;
-      const vs = accessor(p.attributes.POSITION),
-        base = vertices.length;
-      vertices.push(...vs);
-      const idx = p.indices === undefined ? vs.map((_, i) => i) : accessor(p.indices).flat();
-      for (let i = 0; i + 2 < idx.length; i += 3)
-        faces.push(idx.slice(i, i + 3).map((n) => n + base));
-    }
-  return { vertices, faces };
 }
 // A PDF page is drawn by poppler into a PNG; headless and embedded browsers have no PDF plugin.
 const pdfCache = new Map();
@@ -211,13 +174,14 @@ async function pdfPage(ctx, query) {
       while (pdfCache.size > 50) pdfCache.delete(pdfCache.keys().next().value);
     }
     const page = Math.min(pages, Math.max(1, Math.trunc(Number(query.get('page') ?? ctx.recipe.page ?? 1)) || 1)),
-      dpi = Math.min(200, Math.max(40, Number(query.get('dpi')) || 110));
-    const { stdout } = await exec(
+      zoom = Math.min(400, Math.max(25, Number(ctx.recipe.zoom) || 100)),
+      dpi = Math.min(300, Math.max(40, Number(query.get('dpi')) || Math.round((110 * zoom) / 100)));
+    const { stdout } = await limited(() => exec(
       'pdftocairo',
       ['-png', '-r', String(dpi), '-f', String(page), '-l', String(page), '-singlefile', ctx.file, '-'],
       { encoding: 'buffer', maxBuffer: 24 * 1024 * 1024, timeout: 10000 },
-    );
-    return { pages, page, image: 'data:image/png;base64,' + stdout.toString('base64') };
+    ));
+    return { pages, page, zoom, image: 'data:image/png;base64,' + stdout.toString('base64') };
   } catch (e) {
     return { pages: pages ?? null, page: 1, note: 'This PDF could not be drawn here. Open it in a PDF reader.' };
   }
@@ -246,29 +210,12 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     return { entries };
   }
   if (family === 'parquet') {
-    const meta = parquetMeta(ctx.file);
-    try {
-      return {
-        ...parquetTable(ctx.file, Math.max(0, Number(query.get('group')) || 0)),
-        createdBy: meta.createdBy,
-      };
-    } catch (e) {
-      return {
-        columns: meta.schema
-          .filter((s) => s[1] !== undefined)
-          .map((s) => ({
-            name: s[4]?.toString(),
-            type: ['boolean', 'int32', 'int64', 'int96', 'float', 'double', 'bytes', 'fixed'][s[1]],
-            bins: [],
-          })),
-        rows: [],
-        total: meta.rows,
-        groups: meta.groups.length,
-        note: e.message,
-      };
-    }
+    // `group` (older callers) names a row group; `offset` is any row of the file.
+    const info = parquetInfo(ctx.file);
+    const at = query.get('group') !== null ? info.starts[Math.max(0, Number(query.get('group')) || 0)] ?? 0 : offset;
+    return parquetRows(ctx.file, at, count, ctx.recipe.columnTypes || {});
   }
-  if (family === 'arrow') return arrowTable(ctx.file, offset, count);
+  if (family === 'arrow') return arrowTable(ctx.file, offset, count, ctx.recipe.columnTypes || {});
   if (family === 'sqlite') {
     const { DatabaseSync } = await import('node:sqlite');
     const db = new DatabaseSync(ctx.file, {
@@ -283,29 +230,17 @@ export async function previewData(ctx, query = new URLSearchParams()) {
         .all()
         .map((r) => r.name);
       const name = query.get('table') || tables[0];
-      if (!tables.includes(name)) return { tables, ...table([]) };
+      if (!tables.includes(name)) return { tables, ...tableWindow([], []) };
       const quoted = '"' + name.replaceAll('"', '""') + '"',
-        rows = sqliteRows(db, name, count, offset);
-      const total = db.prepare(`SELECT count(*) AS n FROM ${quoted}`).get().n;
-      const shaped = table(
-        rows.map((r) =>
-          Object.fromEntries(
-            Object.entries(r).map(([k, v]) => [
-              k,
-              typeof v === 'bigint' ? String(v) : v instanceof Uint8Array ? Buffer.from(v).toString('hex') : v,
-            ]),
-          ),
-        ),
-      );
-      // SQLite has no boolean type: an integer column that only holds 0 and 1 is shown as one.
-      const declared = new Map(
-        db.prepare('PRAGMA table_info(' + quoted + ')').all().map((c) => [c.name, String(c.type).toUpperCase()]),
-      );
+        got = sqliteRows(db, name, count, offset),
+        total = db.prepare(`SELECT count(*) AS n FROM ${quoted}`).get().n,
+        shaped = tableWindow(got.names, got.rows, { overrides: ctx.recipe.columnTypes || {} });
+      // SQLite has no boolean type: a column declared INT or BOOL that only holds 0 and 1 is labelled boolean (cells still read 0 and 1).
       shaped.columns.forEach((c, i) => {
         const vals = shaped.rows.map((r) => r[i]).filter((v) => v !== null);
-        if (/INT|BOOL/.test(declared.get(c.name) || '') && vals.length >= 4 && vals.every((v) => v === 0 || v === 1)) {
+        if (!c.overridden && /INT|BOOL/i.test(got.declared[i]) && vals.length >= 4 && vals.every((v) => v === '0' || v === '1')) {
           c.type = 'boolean';
-          c.bins = [vals.filter((v) => v === 0).length, vals.filter((v) => v === 1).length];
+          c.bins = [vals.filter((v) => v === '0').length, vals.filter((v) => v === '1').length];
           c.min = c.max = null;
         }
       });
@@ -315,33 +250,33 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     }
   }
   if (family === 'table') {
-    let rows,
-      headers,
-      total = 0;
-    const b = window(ctx.file, 0, 8 * LIMIT),
-      sample = decodeText(b),
-      truncated = b.length < ctx.bytes;
-    const text = truncated ? sample.slice(0, Math.max(0, sample.lastIndexOf('\n') + 1)) : sample;
-    if (ctx.kind === 'csv' || ctx.kind === 'tsv') {
-      const delimiter = ctx.kind === 'tsv' ? '\t' : ',';
-      headers = delimited(text, delimiter, { limit: 1 })[0] || [];
-      const r = delimited(text, delimiter, { offset: offset + 1, limit: count });
-      total = Math.max(0, r.total - 1);
-      rows = r.map((a) => Object.fromEntries(headers.map((k, i) => [k, a[i] ?? null])));
-    } else {
-      rows = [];
-      for (const match of text.matchAll(/[^\r\n]+/g)) {
-        if (total >= offset && rows.length < count) {
-          try {
-            rows.push(JSON.parse(match[0]));
-          } catch {
-            rows.push({ invalid: match[0] });
-          }
-        }
-        total++;
-      }
+    // Every row of the file is reachable: a one-pass index of record offsets, then bounded reads.
+    const csv = ctx.kind === 'csv' || ctx.kind === 'tsv',
+      delimiter = ctx.kind === 'tsv' ? '\t' : ',',
+      overrides = ctx.recipe.columnTypes || {},
+      index = buildIndex(ctx.file, ctx.key, { quotes: csv, delimiter, bytes: ctx.bytes, skipBlank: !csv, enc: utf16(ctx.head) });
+    if (csv) {
+      const headers = readRecords(ctx.file, index, 0, 1, { delimiter, quotes: true })[0] || [],
+        total = Math.max(0, index.total - 1),
+        at = Math.min(offset, Math.max(0, total - 1)),
+        recs = total ? readRecords(ctx.file, index, at + 1, count, { delimiter, quotes: true }) : [];
+      const shaped = tableWindow(headers, recs, { overrides }),
+        ragged = recs.some((r) => r.length !== headers.length);
+      return { ...shaped, offset: at, total, truncated: false, ...(ragged ? { note: 'Some rows in this window have a different number of cells than the header; missing cells are shown empty, extra cells get unnamed columns.' } : {}) };
     }
-    return { ...table(rows, headers), offset, total: truncated ? null : total, truncated };
+    const at = Math.min(offset, Math.max(0, index.total - 1)),
+      lines = readRecords(ctx.file, index, at, count, { quotes: false });
+    let invalid = 0;
+    const records = lines.map((l) => {
+      try {
+        return parseExact(l);
+      } catch {
+        invalid++;
+        return { 'not JSON': l };
+      }
+    });
+    const { names, rows } = recordsToRows(records);
+    return { ...tableWindow(names, rows, { overrides }), offset: at, total: index.total, truncated: false, ...(invalid ? { note: invalid + ' lines in this window are not JSON; they are shown as written.' } : {}) };
   }
   if (family === 'binary') {
     const start = Math.max(0, Number(query.get('offset') ?? ctx.recipe.offset) || 0),
@@ -355,12 +290,27 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     };
   }
   if (family === 'json') {
-    const data = jsonData(ctx),
+    // The tree is drawn from the text itself (numbers keep the digits written in the file); a list of records is also a table.
+    if (ctx.bytes > LIMIT) {
+      // Over 1 MiB the file is read in bounded windows (jsonscan.js): a list of records is a table that scrolls through every record, anything else
+      // is a tree whose branches fetch their children when opened. Nothing is cut: the whole file stays reachable.
+      const path = (query.get('path') || '').split('.').filter((x) => x !== '');
+      if (!path.length && !query.has('tree')) {
+        const t = jsonRecords(ctx.file, offset, count);
+        if (t) {
+          const { names, rows } = recordsToRows(t.records);
+          return { ...tableWindow(names, rows, { overrides: ctx.recipe.columnTypes || {} }), large: true, total: t.total, offset: t.offset, asTable: true, ...(t.capped ? { note: 'Only the first 3,000,000 records are indexed.' } : {}) };
+        }
+      }
+      return { large: true, path, ...jsonWindow(ctx.file, path, Math.max(0, Number(query.get('from')) || 0), 200) };
+    }
+    const data = parseExact(ctx.text),
       list = Array.isArray(data) ? data : null;
-    // A list of records is also a table, with the same typed columns and distributions as a CSV.
-    if (list && list.length > 1 && list.slice(0, 200).every((r) => r && typeof r === 'object' && !Array.isArray(r)))
-      return { data, ...table(list.slice(offset, offset + count)), total: list.length, offset, asTable: true };
-    return { data };
+    if (list && list.length > 1 && list.slice(0, 200).every((r) => r && typeof r === 'object' && !Array.isArray(r))) {
+      const { names, rows } = recordsToRows(list.slice(offset, offset + count));
+      return { text: ctx.text, ...tableWindow(names, rows, { overrides: ctx.recipe.columnTypes || {} }), total: list.length, offset, asTable: true };
+    }
+    return { text: ctx.text };
   }
   if (['chart', 'animation', 'notebook', 'graph'].includes(family)) return { data: jsonData(ctx) };
   if (family === 'timeline') {

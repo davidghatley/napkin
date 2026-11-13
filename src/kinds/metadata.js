@@ -1,7 +1,12 @@
 import { fontInfo } from './fontinfo.js';
-import { delimited, table, zipDirectory, parquetMeta } from './readers.js';
+import { parseGltf, parseObj } from './gltf.js';
+import { flattenScene } from '../../public/canvas/model-view.js';
+import { decodeText } from './registry.js';
+import { delimited, zipDirectory, window } from './readers.js';
+import { tableWindow, recordsToRows, parseExact } from './cells.js';
 import { DatabaseSync } from 'node:sqlite';
-import { arrowTable } from './arrow.js';
+import { parquetInfo } from './parquet.js';
+import { arrowInfo, arrowSmall } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
 // Small, source-derived previews let a zoomed-out folder remain useful without 1,000 browsing contexts.
 export function cardMetadata(ctx, family) {
@@ -13,50 +18,46 @@ export function cardMetadata(ctx, family) {
     if (ctx.bytes <= 65536) j = JSON.parse(text);
   } catch {}
   if (family === 'table') {
-    let rows, headers;
+    let t;
     if (ctx.kind === 'csv' || ctx.kind === 'tsv') {
       const parsed = delimited(text, ctx.kind === 'tsv' ? '\t' : ',', { limit: 101 });
       if (ctx.bytes > b.length) parsed.pop();
-      headers = parsed.shift() || [];
-      rows = parsed
-        .slice(0, 100)
-        .map((r) => Object.fromEntries(headers.map((k, i) => [k, r[i] ?? null])));
-    } else
-      rows = text
+      const headers = parsed.shift() || [];
+      t = tableWindow(headers, parsed.slice(0, 100));
+    } else {
+      const records = text
         .split('\n')
         .filter(Boolean)
         .slice(0, 100)
         .flatMap((line) => {
           try {
-            return [JSON.parse(line)];
+            return [parseExact(line)];
           } catch {
             return [];
           }
         });
-    const t = table(rows, headers);
+      const { names, rows } = recordsToRows(records);
+      t = tableWindow(names, rows);
+    }
     result.table = {
       columns: t.columns.slice(0, 8),
       rows: t.rows.slice(0, 6).map((r) => r.slice(0, 8)),
     };
   }
   if (family === 'parquet') {
-    const p = parquetMeta(ctx.file);
+    const p = parquetInfo(ctx.file);
     result.table = {
-      columns: p.schema
-        .filter((s) => s[1] !== undefined)
-        .map((s) => ({
-          name: s[4]?.toString(),
-          type: ['boolean', 'int32', 'int64', 'int96', 'float', 'double', 'bytes', 'fixed'][s[1]],
-          bins: [],
-        })),
+      columns: p.leaves.map((s) => ({ name: s.name, type: String(s.type || s.converted_type || '').toLowerCase(), bins: [] })),
       rows: [],
     };
-    result.summary = `${p.rows.toLocaleString()} rows · ${p.groups.length} row groups`;
+    result.summary = `${p.rows.toLocaleString()} rows · ${p.metadata.row_groups.length} row groups`;
   }
   if (family === 'arrow') {
-    const t = arrowTable(ctx.file, 0, 8);
-    result.table = { columns: t.columns, rows: t.rows };
-    result.summary = t.batches + ' record batches';
+    const info = arrowInfo(ctx.file);
+    // A small file is read whole here; a large one fills its card from the first window when the card comes near the screen.
+    const t = ctx.bytes <= 8 * 1024 * 1024 ? arrowSmall(ctx.file, 6) : null;
+    result.table = t ? { columns: t.columns.slice(0, 8), rows: t.rows.map((r) => r.slice(0, 8)) } : { columns: [], rows: [] };
+    result.summary = `${info.total.toLocaleString()} rows · ${info.batches} record batch${info.batches === 1 ? '' : 'es'}`;
   }
   if (family === 'sqlite') {
     const db = new DatabaseSync(ctx.file, { readOnly: true });
@@ -67,21 +68,8 @@ export function cardMetadata(ctx, family) {
         )
         .get()?.name;
       if (name) {
-        const rows = sqliteRows(db, name, 8);
-        const t = table(
-          rows.map((r) =>
-            Object.fromEntries(
-              Object.entries(r).map(([k, v]) => [
-                k,
-                typeof v === 'bigint'
-                  ? String(v)
-                  : v instanceof Uint8Array
-                    ? '[' + v.length + ' bytes]'
-                    : v,
-              ]),
-            ),
-          ),
-        );
+        const { names, rows } = sqliteRows(db, name, 8);
+        const t = tableWindow(names, rows);
         result.table = { columns: t.columns, rows: t.rows };
         result.summary = name;
       }
@@ -139,92 +127,18 @@ export function cardMetadata(ctx, family) {
           return [];
         }
       });
-  if (family === 'chart' && j) {
-    const rows =
-      (Array.isArray(j.data) ? j.data : null) || j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [];
-    const x = j.encoding?.x?.field || (typeof j.x === 'string' ? j.x : undefined),
-      y = j.encoding?.y?.field || (typeof j.y === 'string' ? j.y : undefined);
-    result.chart = {
-      title: j.title,
-      mark: typeof j.mark === 'object' ? j.mark.type : j.mark || j.type || 'bar',
-      points: Array.isArray(rows)
-        ? rows
-            .slice(0, 40)
-            .map((v, i) => ({ x: v[x] ?? v.x ?? i, y: Number(v[y] ?? v.y ?? v.value ?? v) }))
-            .filter((p) => Number.isFinite(p.y))
-        : [],
-    };
-  }
-  if (family === 'model' && ctx.kind === 'obj') {
-    const vertices = [],
-      faces = [];
-    for (const line of text.split('\n')) {
-      const p = line.trim().split(/\s+/);
-      if (p[0] === 'v' && vertices.length < 2000) vertices.push(p.slice(1, 4).map(Number));
-      if (p[0] === 'f' && faces.length < 1000)
-        faces.push(
-          p.slice(1).map((v) => {
-            const n = Number(v.split('/')[0]);
-            return n < 0 ? vertices.length + n : n - 1;
-          }),
-        );
-    }
-    result.mesh = { vertices, faces };
-  }
-  if (family === 'model' && ['glb', 'gltf'].includes(ctx.kind)) {
-    let g = j,
-      bin;
-    if (ctx.kind === 'glb' && b.length > 20) {
-      const n = b.readUInt32LE(12);
-      if (n < 60000) {
-        g = JSON.parse(b.toString('utf8', 20, 20 + n).trim());
-        bin = b.subarray(28 + n);
-      }
-    }
-    if (g) {
-      const buffers = (g.buffers || []).map((v, i) =>
-          i === 0 && bin
-            ? bin
-            : v.uri?.startsWith('data:')
-              ? Buffer.from(v.uri.slice(v.uri.indexOf(',') + 1), 'base64')
-              : null,
-        ),
-        vertices = [],
-        faces = [];
-      const accessor = (index) => {
-        const a = g.accessors[index],
-          view = g.bufferViews[a.bufferView],
-          data = buffers[view.buffer];
-        if (!data) return [];
-        const dim = a.type === 'VEC3' ? 3 : 1,
-          width = { 5121: 1, 5123: 2, 5125: 4, 5126: 4 }[a.componentType];
-        if (!width) return [];
-        const out = [];
-        for (let i = 0; i < Math.min(2000, a.count); i++) {
-          const p =
-            (view.byteOffset || 0) + (a.byteOffset || 0) + i * (view.byteStride || width * dim);
-          if (p + width * dim > data.length) break;
-          out.push(
-            Array.from({ length: dim }, (_, n) =>
-              a.componentType === 5126
-                ? data.readFloatLE(p + n * width)
-                : data.readUIntLE(p + n * width, width),
-            ),
-          );
-        }
-        return out;
-      };
-      for (const mesh of g.meshes || [])
-        for (const p of mesh.primitives || []) {
-          if (p.attributes?.POSITION === undefined) continue;
-          const vs = accessor(p.attributes.POSITION),
-            base = vertices.length;
-          vertices.push(...vs);
-          const idx = p.indices === undefined ? vs.map((_, i) => i) : accessor(p.indices).flat();
-          for (let i = 0; i + 2 < idx.length; i += 3)
-            faces.push(idx.slice(i, i + 3).map((v) => v + base));
-        }
-      result.mesh = { vertices, faces };
+  // The card draws a chart from its own specification, so the spec travels with the metadata.
+  if (family === 'chart' && j) result.spec = j;
+  if (family === 'model' && ctx.bytes <= 4 * 1024 * 1024) {
+    try {
+      const scene =
+        ctx.kind === 'obj'
+          ? parseObj(text, ctx.bytes > b.length)
+          : parseGltf(ctx, () => j ?? JSON.parse(decodeText(window(ctx.file, 0, 4 * 1024 * 1024))));
+      result.mesh = flattenScene(scene, 500);
+      result.mesh.animated = scene.animations.length > 0;
+    } catch (e) {
+      result.previewNote = e.message;
     }
   }
   if (family === 'animation' && j) {

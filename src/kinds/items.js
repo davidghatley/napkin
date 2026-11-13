@@ -9,7 +9,7 @@ import {
 import { resolve, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { writeItemValue, removeItemRecipe, writeItemLayout } from '../commit.js';
-import { context, detectKind, decodeText } from './registry.js';
+import { context, detectKind, decodeText, kinds } from './registry.js';
 import { explainError } from '../errors.js';
 import { window, LIMIT } from './readers.js';
 import { validate } from './controls.js';
@@ -66,6 +66,29 @@ export function openItems(
   }
   const state = join(stateDir, digest(Buffer.from(root))),
     layoutFile = join(state, 'kind-layout.json');
+  // Item edit history survives a restart: steps are kept next to the layout, paths relative to the folder.
+  const undoFile = join(state, 'kind-undo.json');
+  const toDisk = () => {
+    const out = {};
+    let budget = 8 * 1024 * 1024;
+    for (const [id, steps] of history)
+      out[id] = steps
+        .slice()
+        .reverse()
+        .filter((st) => (budget -= (st.after?.length || 0) + (st.before?.length || 0)) > 0)
+        .reverse()
+        .map((st) => ({ target: relative(root, st.target).split(sep).join('/'), before: st.before?.toString('base64') ?? null, after: st.after.toString('base64'), revision: st.revision, by: st.by }));
+    return out;
+  };
+  const saveHistory = () => {
+    try {
+      writeItemLayout(undoFile, toDisk());
+    } catch {}
+  };
+  try {
+    for (const [id, steps] of Object.entries(JSON.parse(readFileSync(undoFile, 'utf8'))))
+      history.set(id, steps.map((st) => ({ target: resolve(root, st.target), before: st.before === null ? null : Buffer.from(st.before, 'base64'), after: Buffer.from(st.after, 'base64'), revision: st.revision, by: st.by })));
+  } catch {}
   let frames = {};
   try {
     frames = JSON.parse(readFileSync(layoutFile, 'utf8'));
@@ -122,12 +145,23 @@ export function openItems(
     const file = abs(id),
       st = statSync(file);
     if (!st.isFile()) throw new ItemError('This item is not a file. Next: choose a file item.', 404);
-    const key = `${st.dev}:${st.ino}:${st.size}:${st.mtimeNs ?? st.mtimeMs}:${st.ctimeMs}`;
+    // "Open as": a recipe may name a kind, for a file whose name and contents give no hint.
+    let override = null,
+      sidecar = '';
+    try {
+      const rs = statSync(file + '.napkin-recipe.json');
+      sidecar = `:${rs.size}:${rs.mtimeMs}`;
+      if (rs.size < 65536) {
+        const asked = JSON.parse(readFileSync(file + '.napkin-recipe.json', 'utf8')).kind;
+        override = kinds().find((k) => k.id === asked) || null;
+      }
+    } catch {}
+    const key = `${st.dev}:${st.ino}:${st.size}:${st.mtimeNs ?? st.mtimeMs}:${st.ctimeMs}${sidecar}`;
     let cached = cache.get(id);
     if (!cached || cached.key !== key) {
       const head = window(file),
         ctx = context(id, head, st.size),
-        definition = detectKind(ctx);
+        definition = override || detectKind(ctx);
       ctx.kind = definition.id;
       ctx.definition = definition;
       ctx.file = file;
@@ -253,6 +287,7 @@ export function openItems(
     steps.push({ target, before, after, revision, by });
     while (steps.length > 50) steps.shift();
     history.set(id, steps);
+    saveHistory();
     changed(id, revision);
     return { ok: true, revision };
   }
@@ -276,6 +311,7 @@ export function openItems(
     last = 0;
     const revision = ctx(id).revision;
     if (steps.length) steps.at(-1).revision = revision;
+    saveHistory();
     changed(id, revision);
     return { ok: true, revision };
   }

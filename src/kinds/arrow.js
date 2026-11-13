@@ -1,177 +1,221 @@
-import { window, table, LIMIT } from './readers.js';
-import { statSync } from 'node:fs';
-// Arrow IPC file metadata is FlatBuffers. Read the footer and requested primitive vectors only.
-function fb(b) {
-  const i32 = (p) => b.readInt32LE(p),
-    u16 = (p) => b.readUInt16LE(p),
-    i64 = (p) => Number(b.readBigInt64LE(p));
-  const field = (p, n) => {
-    const v = p - i32(p),
-      slot = v + 4 + 2 * n;
-    return slot < v + u16(v) && u16(slot) ? p + u16(slot) : 0;
+// Arrow IPC (file and stream formats) through Apache Arrow's own JavaScript reader (src/vendor/apache-arrow, Apache-2.0).
+// napkin only finds where each message sits: one pass over the message headers (a few bytes each, bodies are skipped)
+// records the schema, every dictionary batch and every record batch with its row count. A window of rows is then decoded by
+// read by Arrow itself: a file through its own file reader (footer, dictionaries, random access to the batches that hold the
+// rows), a stream by handing Arrow a small stream made of the schema, the dictionaries and only the batches that hold the rows.
+// Dictionaries, nulls, nested types, many batches and both IPC formats are decoded by the reference implementation.
+import { openSync, readSync, closeSync, fstatSync } from 'node:fs';
+import { tableFromIPC, RecordBatchReader, Table } from '../vendor/apache-arrow/arrow.js';
+import { tableWindow, cellText } from './cells.js';
+const MAX_WINDOW = 256 * 1024 * 1024,
+  indexes = new Map();
+function bytes(fd, at, n) {
+  const b = Buffer.alloc(Math.max(0, n)),
+    got = n > 0 ? readSync(fd, b, 0, n, at) : 0;
+  return b.subarray(0, got);
+}
+// The handful of FlatBuffers fields a message header needs (Message: header_type, header, bodyLength; RecordBatch: length).
+function fbTable(b, p) {
+  const vt = p - b.readInt32LE(p),
+    size = b.readUInt16LE(vt);
+  const at = (n) => {
+    const slot = 4 + 2 * n;
+    return slot < size && b.readUInt16LE(vt + slot) ? p + b.readUInt16LE(vt + slot) : 0;
   };
-  const ref = (p) => p + i32(p),
-    vec = (p, n) => {
-      const f = field(p, n);
-      return f ? ref(f) : 0;
-    };
   return {
-    b,
-    field,
-    ref,
-    vec,
-    i64,
-    string: (p, n) => {
-      const v = vec(p, n);
-      return v ? b.toString('utf8', v + 4, v + 4 + i32(v)) : '';
-    },
-    root: ref(0),
+    u8: (n) => (at(n) ? b[at(n)] : 0),
+    i64: (n) => (at(n) ? b.readBigInt64LE(at(n)) : 0n),
+    ref: (n) => (at(n) ? fbTable(b, at(n) + b.readUInt32LE(at(n))) : null),
   };
 }
-export function arrowTable(file, offset = 0, count = 80) {
-  const size = statSync(file).size,
-    tail = window(file, size - 10, 10);
-  if (tail.toString('ascii', 4) !== 'ARROW1')
-    throw new Error('Arrow stream files need a stream adapter. Next: convert to the Arrow file format or register a kind plugin.');
-  const n = tail.readUInt32LE(0);
-  if (n > 8 * LIMIT) throw new Error('Arrow footer exceeds 8 MiB. Next: re-export the file with fewer batches.');
-  const f = fb(window(file, size - 10 - n, n)),
-    sf = f.field(f.root, 1),
-    schema = f.ref(sf),
-    fields = f.vec(schema, 1),
-    cols = [];
-  for (let i = 0; i < Math.min(64, f.b.readInt32LE(fields)); i++) {
-    const p = f.ref(fields + 4 + i * 4),
-      t = f.field(p, 2),
-      tt = f.field(p, 3),
-      type = tt ? f.ref(tt) : 0;
-    cols.push({
-      name: f.string(p, 0),
-      type: t ? f.b[t] : 0,
-      bits: type && f.field(type, 0) ? f.b.readInt32LE(f.field(type, 0)) : 32,
-      signed: type && f.field(type, 1) ? !!f.b[f.field(type, 1)] : true,
-    });
-  }
-  const blocks = f.vec(f.root, 3),
-    num = f.b.readInt32LE(blocks);
-  if (!num)
-    return table(
-      [],
-      cols.map((c) => c.name),
-    );
-  let block = 0,
-    skip = offset,
-    msg,
-    batch,
-    buffers,
-    total = 0,
-    bodyAt;
-  for (let i = 0; i < num; i++) {
-    block = blocks + 4 + i * 24;
-    const start = f.i64(block),
-      ml = f.b.readInt32LE(block + 8);
-    if (ml > 8 * LIMIT) throw new Error('Arrow message exceeds the read limit. Next: re-export the file with smaller batches.');
-    const m = window(file, start, ml),
-      prefix = m.readInt32LE(0) === -1 ? 8 : 4;
-    msg = fb(m.subarray(prefix));
-    const headerType = msg.field(msg.root, 1);
-    if (!headerType || msg.b[headerType] !== 3)
-      throw new Error('Arrow dictionary batches need an adapter. Next: export without dictionary encoding or register a kind plugin.');
-    batch = msg.ref(msg.field(msg.root, 2));
-    if (msg.field(batch, 3)) throw new Error('Compressed Arrow IPC needs an adapter. Next: export uncompressed or register a kind plugin.');
-    const lf = msg.field(batch, 0),
-      rows = lf ? msg.i64(lf) : 0;
-    total += rows;
-    if (skip < rows) {
-      bodyAt = start + ml;
-      count = Math.min(count, rows - skip);
-      break;
-    }
-    skip -= rows;
-  }
-  if (bodyAt === undefined)
-    return {
-      ...table(
-        [],
-        cols.map((c) => c.name),
-      ),
-      total: offset,
-    };
-  buffers = msg.vec(batch, 2);
-  let bi = 0;
-  const arrays = [];
-  const buf = () => {
-    const p = buffers + 4 + bi++ * 16;
-    return { at: bodyAt + msg.i64(p), length: msg.i64(p + 8) };
-  };
-  for (const col of cols) {
-    if (![2, 3, 4, 5, 6, 8, 10, 19, 20].includes(col.type))
-      throw new Error('Nested or dictionary Arrow values need an adapter. Next: flatten the columns or register a kind plugin.');
-    const valid = buf(),
-      validBits = valid.length
-        ? window(file, valid.at + Math.floor(skip / 8), Math.ceil((count + (skip % 8)) / 8))
-        : null;
-    let values = [];
-    if ([4, 5, 19, 20].includes(col.type)) {
-      const offsets = buf(),
-        data = buf(),
-        wide = [19, 20].includes(col.type),
-        width = wide ? 8 : 4,
-        off = window(file, offsets.at + skip * width, (count + 1) * width),
-        read = (i) => (wide ? Number(off.readBigInt64LE(i * width)) : off.readInt32LE(i * width)),
-        available = Math.max(0, off.length / width - 1);
-      if (available) {
-        const start = read(0),
-          length = read(available) - start;
-        if (length > LIMIT) throw new Error('Arrow text window exceeds 1 MiB. Next: request a smaller row window.');
-        const text = window(file, data.at + start, length);
-        for (let i = 0; i < available; i++)
-          values.push(text.toString('utf8', read(i) - start, read(i + 1) - start));
+function index(file) {
+  const fd = openSync(file, 'r');
+  try {
+    const st = fstatSync(fd),
+      size = st.size,
+      key = `${file}:${size}:${st.mtimeMs}`;
+    if (indexes.has(key)) return indexes.get(key);
+    const head = bytes(fd, 0, 8),
+      format = head.toString('latin1', 0, 6) === 'ARROW1' ? 'file' : 'stream';
+    // A file is a stream between its leading magic and its footer.
+    const footer = format === 'file' && size >= 18 && bytes(fd, size - 6, 6).toString('latin1') === 'ARROW1' ? bytes(fd, size - 10, 4).readInt32LE(0) : null,
+      limit = footer !== null ? size - 10 - footer : size;
+    let at = format === 'file' ? 8 : 0,
+      schema = null,
+      total = 0,
+      ended = false;
+    const dicts = [],
+      batches = [];
+    while (at + 4 <= limit) {
+      const pre = bytes(fd, at, 8);
+      let metaAt = at + 4,
+        metaLen = pre.readInt32LE(0);
+      if (metaLen === -1) {
+        if (pre.length < 8) break;
+        metaLen = pre.readInt32LE(4);
+        metaAt = at + 8;
       }
-    } else {
-      const data = buf(),
-        width =
-          col.type === 6
-            ? 0
-            : col.type === 3
-              ? [2, 4, 8][col.bits] || 4
-              : col.type === 10
-                ? 8
-                : Math.max(1, col.bits / 8),
-        b = window(
-          file,
-          data.at + (width ? skip * width : Math.floor(skip / 8)),
-          width ? count * width : Math.ceil((count + (skip % 8)) / 8),
-        );
-      for (
-        let i = 0;
-        i < count && (width ? (i + 1) * width <= b.length : i < b.length * 8 - (skip % 8));
-        i++
-      ) {
-        let v;
-        if (col.type === 6) v = !!((b[(i + (skip % 8)) >> 3] >> ((i + (skip % 8)) & 7)) & 1);
-        else if (col.type === 3)
-          v = width === 8 ? b.readDoubleLE(i * width) : b.readFloatLE(i * width);
-        else if (width === 8)
-          v = Number(col.signed ? b.readBigInt64LE(i * 8) : b.readBigUInt64LE(i * 8));
-        else v = col.signed ? b.readIntLE(i * width, width) : b.readUIntLE(i * width, width);
-        values.push(v);
+      if (metaLen === 0) {
+        ended = true;
+        break;
       }
+      if (metaLen < 0 || metaLen > 64 * 1024 * 1024) throw new Error('An Arrow message header is damaged or over 64 MiB. Next: re-export the file, or open it in its own application.');
+      const meta = bytes(fd, metaAt, metaLen);
+      if (meta.length < metaLen) break;
+      const message = fbTable(meta, meta.readUInt32LE(0)),
+        type = message.u8(1),
+        body = Number(message.i64(3)),
+        length = metaAt - at + metaLen + body;
+      if (at + length > size) break;
+      if (type === 1) schema = { at, length: metaAt - at + metaLen };
+      else if (type === 2) dicts.push({ at, length, before: batches.length });
+      else if (type === 3) {
+        const rows = Number(message.ref(2)?.i64(0) ?? 0n);
+        batches.push({ at, length, rows, start: total });
+        total += rows;
+      }
+      at += length;
     }
-    if (validBits)
-      values = values.map((v, i) =>
-        (validBits[(i + (skip % 8)) >> 3] >> ((i + (skip % 8)) & 7)) & 1 ? v : null,
-      );
-    arrays.push(values);
+    // Arrow files keep the schema in their footer (the JavaScript writer writes no schema message); streams must start with one.
+    if (!schema && format === 'stream') throw new Error('This Arrow file has no schema message. Next: check that it was written completely, or open it in its own application.');
+    const result = { format, schema, dicts, batches, total, size, complete: ended || at >= limit };
+    indexes.set(key, result);
+    while (indexes.size > 16) indexes.delete(indexes.keys().next().value);
+    return result;
+  } finally {
+    closeSync(fd);
   }
+}
+// The column type as Arrow names it, in words the table header shows.
+function typeName(t) {
+  const s = String(t);
+  if (t.dictionary) return typeName(t.dictionary) + ' (dictionary)';
+  if (/^u?int/i.test(s)) return 'integer ' + s.toLowerCase();
+  if (/^float/i.test(s)) return 'number ' + s.toLowerCase();
+  if (/^(large)?utf8/i.test(s)) return 'string';
+  if (/^bool/i.test(s)) return 'boolean';
+  if (/^(date|timestamp)/i.test(s)) return 'date ' + s.toLowerCase();
+  return s;
+}
+const valueType = (t) => (t.dictionary ? t.dictionary : t);
+// Timestamps are shown in ISO form from their stored integer, so microseconds and nanoseconds keep their digits.
+function arrowCell(v, type) {
+  if (v === null || v === undefined) return null;
+  const t = valueType(type),
+    s = String(t);
+  if (/^Timestamp/.test(s) && (typeof v === 'number' || typeof v === 'bigint')) {
+    const unit = t.unit; // 0 s, 1 ms, 2 us, 3 ns
+    if (typeof v === 'number') return new Date(v).toISOString();
+    const per = [1n, 1n, 1000n, 1000000n][unit],
+      ms = unit === 0 ? v * 1000n : v / per - (v % per < 0n ? 1n : 0n),
+      rest = unit >= 2 ? ((v % per) + per) % per : 0n,
+      iso = new Date(Number(ms)).toISOString();
+    return unit >= 2 ? iso.replace('Z', String(rest).padStart(unit === 2 ? 3 : 6, '0') + 'Z') : iso;
+  }
+  if (/^Date/.test(s) && (typeof v === 'number' || v instanceof Date)) return new Date(Number(v)).toISOString().slice(0, 10);
+  return cellText(v && typeof v === 'object' && typeof v.toJSON === 'function' && !(v instanceof Uint8Array) ? v.toJSON() : v);
+}
+export function arrowInfo(file) {
+  const ix = index(file);
+  return { total: ix.total, batches: ix.batches.length, format: ix.format, complete: ix.complete };
+}
+// A read-only file handle for Arrow's random-access reader, served by synchronous positioned reads.
+function handle(file) {
+  const fd = openSync(file, 'r'),
+    size = fstatSync(fd).size;
   return {
-    ...table(
-      Array.from({ length: Math.max(0, ...arrays.map((a) => a.length)) }, (_, i) =>
-        Object.fromEntries(cols.map((c, j) => [c.name, arrays[j][i]])),
-      ),
-    ),
-    offset,
-    total,
-    batches: num,
+    fd,
+    async stat() {
+      return { size };
+    },
+    async read(buffer, offset, length, position) {
+      return { bytesRead: readSync(fd, buffer, offset, length, position), buffer };
+    },
+    async close() {},
+    done: () => closeSync(fd),
   };
+}
+async function fileBatches(file, ix, need) {
+  const h = handle(file);
+  try {
+    const reader = await RecordBatchReader.from(h);
+    await reader.open();
+    const out = [];
+    for (const b of need) {
+      const i = ix.batches.indexOf(b),
+        batch = await reader.readRecordBatch(i);
+      if (!batch || batch.numRows !== b.rows) throw new Error('This Arrow file\'s footer and its record batches disagree. Next: re-export the file, or open it in its own application.');
+      out.push(batch);
+    }
+    return { schema: reader.schema, table: new Table(reader.schema, out) };
+  } finally {
+    h.done();
+  }
+}
+function streamBatches(file, ix, need) {
+  const fd = openSync(file, 'r');
+  try {
+    const last = need.length ? ix.batches.indexOf(need.at(-1)) : 0,
+      parts = [bytes(fd, ix.schema.at, ix.schema.length)];
+    // Every dictionary written before the last batch read and the batches themselves, in stream order, so a replacement or a
+    // delta applies to exactly the batches that follow it.
+    for (const m of [...ix.dicts.filter((d) => d.before <= last), ...need].sort((a, b) => a.at - b.at)) parts.push(bytes(fd, m.at, m.length));
+    const sum = parts.reduce((n, p) => n + p.length, 0);
+    if (sum > MAX_WINDOW)
+      throw new Error(`The record batch that holds these rows is ${(sum / 1048576).toFixed(0)} MiB, over the 256 MiB a window may read. Next: re-export the file with smaller record batches.`);
+    parts.push(Buffer.from([255, 255, 255, 255, 0, 0, 0, 0]));
+    const table = tableFromIPC(Buffer.concat(parts));
+    return { schema: table.schema, table };
+  } finally {
+    closeSync(fd);
+  }
+}
+export async function arrowTable(file, offset = 0, count = 80, overrides = {}) {
+  const ix = index(file),
+    start = Math.max(0, Math.min(offset, Math.max(0, ix.total - 1))),
+    end = Math.min(ix.total, start + count),
+    need = ix.batches.filter((b) => b.start < end && b.start + b.rows > start);
+  if (need.reduce((n, b) => n + b.length, 0) > MAX_WINDOW)
+    throw new Error('The record batch that holds these rows is over the 256 MiB a window may read. Next: re-export the file with smaller record batches.');
+  let t;
+  try {
+    t = ix.format === 'file' ? await fileBatches(file, ix, need) : streamBatches(file, ix, need);
+  } catch (e) {
+    throw new Error(/Next:/.test(e.message) ? e.message : `Arrow could not read this file: ${e.message}. Next: open it in its own application; napkin still shows its metadata and bytes.`);
+  }
+  const fields = t.schema.fields,
+    from = need.length ? start - need[0].start : 0,
+    columns = fields.map((_, i) => t.table.getChildAt(i)),
+    rows = [];
+  for (let r = from; r < Math.min(t.table.numRows, from + (end - start)); r++)
+    rows.push(columns.map((c, i) => arrowCell(c.get(r), fields[i].type)));
+  const shaped = tableWindow(
+    fields.map((f) => f.name),
+    rows,
+    { declared: fields.map((f) => typeName(f.type)), overrides },
+  );
+  return {
+    ...shaped,
+    offset: start,
+    rowStart: start,
+    total: ix.total,
+    batches: ix.batches.length,
+    format: ix.format,
+    ...(ix.complete ? {} : { note: 'The file ends before its last message; the rows shown are the ones written completely.' }),
+  };
+}
+// A small file read whole (synchronously), for its card.
+export function arrowSmall(file, count) {
+  const fd = openSync(file, 'r');
+  let t;
+  try {
+    t = tableFromIPC(bytes(fd, 0, fstatSync(fd).size));
+  } finally {
+    closeSync(fd);
+  }
+  const fields = t.schema.fields,
+    columns = fields.map((_, i) => t.getChildAt(i)),
+    rows = [];
+  for (let r = 0; r < Math.min(count, t.numRows); r++) rows.push(columns.map((c, i) => arrowCell(c.get(r), fields[i].type)));
+  return tableWindow(fields.map((f) => f.name), rows, { declared: fields.map((f) => typeName(f.type)) });
 }

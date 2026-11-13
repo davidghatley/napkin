@@ -24,7 +24,7 @@ test('live viewers draw their contents and mixed items join the canvas and panel
         e.params.exceptionDetails.exception?.description || e.params.exceptionDetails.text,
       );
   });
-  const evidence = resolve('test/kinds/evidence');
+  const evidence = process.env.KINDS_EVIDENCE ? resolve(process.env.KINDS_EVIDENCE) : join(dir, 'evidence');
   mkdirSync(evidence, { recursive: true });
   const checks = [
     ['color.png', 'document.querySelector("img")?.naturalWidth>0'],
@@ -36,7 +36,7 @@ test('live viewers draw their contents and mixed items join the canvas and panel
     ['inter.woff2', 'document.fonts.check("16px specimen")'],
     [
       'pyramid.obj',
-      'document.querySelector("canvas")?.getContext("2d").getImageData(300,150,300,300).data.some(v=>v>0)',
+      '(()=>{const c=document.querySelector("canvas.model");if(!c)return false;const s=Object.assign(document.createElement("canvas"),{width:c.width,height:c.height}),g=s.getContext("2d");g.drawImage(c,0,0);return g.getImageData(300,150,300,300).data.some(v=>v>0)})()',
     ],
     ['study.ipynb', 'document.querySelectorAll(".nb-cell").length===2'],
     ['garden.zip', 'document.querySelectorAll(".archive nav button").length===3'],
@@ -44,7 +44,8 @@ test('live viewers draw their contents and mixed items join the canvas and panel
     ['run.jsonl', 'document.querySelectorAll(".event").length===4'],
     ['bytes.bin', 'document.querySelector(".strings")?.textContent.includes("useful string")'],
     ['growth.vl.json', '!!document.querySelector(".chart .series")'],
-    ['leaf.lottie.json', '!!document.querySelector(".motion-stage ellipse")'],
+    ["leaf.lottie.json", "[...document.querySelectorAll(\".motion-stage svg path\")].some(p=>{const b=p.getBBox();return b.width>20&&b.height>20})"],
+    ["nested.lottie.json", "[...document.querySelectorAll(\".motion-stage svg path\")].some(p=>{const b=p.getBBox();return b.width>20&&b.height>20})"],
     ['motion.css', '!!document.querySelector(".css-preview")'],
     ['turn.mp4', 'document.querySelector("video")?.videoWidth>0'],
     ['guide.pdf', '!!document.querySelector(".pdf-page canvas")'],

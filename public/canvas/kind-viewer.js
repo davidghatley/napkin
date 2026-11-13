@@ -1,4 +1,8 @@
 import { plain } from './words.js';
+import { renderVegaLite } from './vega-lite.js';
+import { chartSpec } from './chart-spec.js';
+import { modelView } from './model-view.js';
+import { modelThree } from './model-three.js';
 // The same live surface is used in /view and in canvas frames. No remote scripts or GPU renderer.
 const item = JSON.parse(document.querySelector('#item').textContent),
   root = document.querySelector('#viewer'),
@@ -59,20 +63,6 @@ function source(text, kind = 'code') {
     )
     .join('')}</pre>`;
 }
-function inline(t) {
-  return esc(t)
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
-    .replace(
-      /!\[([^\]]*)\]\(([^)]+)\)/g,
-      (_, alt, url) => `<img alt="${alt}" src="${safeUrl(url, true)}">`,
-    )
-    .replace(
-      /\[([^\]]+)\]\(([^)]+)\)/g,
-      (_, name, url) => `<a href="${safeUrl(url)}" rel="noreferrer" target="_blank">${name}</a>`,
-    );
-}
 function safeUrl(u, image = false) {
   if (/^https?:\/\//.test(u) || u.startsWith('#')) return u;
   if (/^[a-z]+:/i.test(u)) return '#';
@@ -80,57 +70,45 @@ function safeUrl(u, image = false) {
   parts.pop();
   return '/raw/' + [...parts, ...u.split('/')].map(enc).join('/');
 }
+// Markdown is rendered by marked (public/canvas/markdown-runtime.js, MIT) with GitHub's dialect: tables, task lists,
+// strikethrough, autolinks, nested lists, fenced code. Raw HTML inside the file is shown as text, never run, and links and images
+// resolve inside the opened folder.
+let md = null;
+async function loadMarkdown() {
+  if (md) return md;
+  const { Marked } = await import('./markdown-runtime.js');
+  md = new Marked({
+    gfm: true,
+    renderer: {
+      html: ({ text }) => esc(text),
+      link({ href, title, tokens }) {
+        return `<a href="${esc(safeUrl(href))}"${title ? ` title="${esc(title)}"` : ''} rel="noreferrer" target="_blank">${this.parser.parseInline(tokens)}</a>`;
+      },
+      image: ({ href, title, text }) => `<img alt="${esc(text)}" src="${esc(safeUrl(href, true))}"${title ? ` title="${esc(title)}"` : ''}>`,
+      code: ({ text }) => `<pre><code>${highlight(text)}</code></pre>`,
+    },
+  });
+  return md;
+}
 function markdown(t) {
   t = t.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
-  let html = '',
-    code = false,
-    block = [],
-    list = false;
-  for (const line of t.split('\n')) {
-    if (line.startsWith('```')) {
-      if (code) {
-        html += `<pre><code>${highlight(block.join('\n'))}</code></pre>`;
-        block = [];
-      }
-      code = !code;
-      continue;
-    }
-    if (code) {
-      block.push(line);
-      continue;
-    }
-    const m = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (!/^\s*[-*]\s/.test(line) && list) {
-      html += '</ul>';
-      list = false;
-    }
-    if (m) html += `<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`;
-    else if (/^\s*[-*]\s/.test(line)) {
-      if (!list) {
-        html += '<ul>';
-        list = true;
-      }
-      html += `<li>${inline(line.replace(/^\s*[-*]\s/, ''))}</li>`;
-    } else if (line.startsWith('>')) html += `<blockquote>${inline(line.slice(1))}</blockquote>`;
-    else if (line.trim()) html += `<p>${inline(line)}</p>`;
-  }
-  if (list) html += '</ul>';
-  if (code) html += `<pre>${esc(block.join('\n'))}</pre>`;
-  return `<article class="prose" style="--font-size:${Number(r.fontSize) || 15}px">${html}</article>`;
+  return `<article class="prose" style="--font-size:${Number(r.fontSize) || 15}px">${md.parse(t)}</article>`;
 }
 function hist(bins) {
   const max = Math.max(1, ...bins);
   return `<svg class="hist" data-distribution viewBox="0 0 100 27" aria-label="Column distribution">${bins.map((v, i) => `<rect x="${(i * 100) / bins.length}" y="${27 - (v / max) * 25}" width="${Math.max(1, 100 / bins.length - 1)}" height="${(v / max) * 25}"/>`).join('')}</svg>`;
 }
+// Cells arrive as the exact text of the file; the column type only decides alignment and the distribution.
 function table(d, numbered = false) {
-  const first = d.rowStart ?? d.offset ?? 0;
-  return `<div class="table-scroll"><table><thead><tr>${numbered ? '<th scope="col" data-type="number" class="rownum">row<small>number</small></th>' : ''}${(d.columns || []).map((c) => `<th scope="col" data-type="${esc(c.type)}">${esc(c.name)}<small>${esc(c.type)}${c.distinct !== undefined ? ` · ${c.distinct} distinct` : ''}${c.missing ? ` · ${c.missing} missing` : ''}</small>${hist(c.bins || [])}${c.min !== null && c.min !== undefined ? `<small>${esc(c.min)} — ${esc(c.max)}</small>` : ''}</th>`).join('')}</tr></thead><tbody>${(d.rows || []).map((row, n) => `<tr>${numbered ? `<td class="num rownum">${fmt(first + n + 1)}</td>` : ''}${row.map((v) => `<td class="${typeof v === 'number' ? 'num' : v === null ? 'null' : ''}">${v === null ? '∅' : esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  const first = d.rowStart ?? d.offset ?? 0,
+    numeric = (d.columns || []).map((c) => /int|num|float|double|decimal/i.test(c.type));
+  return `<div class="table-scroll"><table><thead><tr>${numbered ? '<th scope="col" data-type="number" class="rownum">row<small>number</small></th>' : ''}${(d.columns || []).map((c) => `<th scope="col" data-type="${esc(c.type)}">${esc(c.name)}<small>${esc(c.type)}${c.distinct !== undefined ? ` · ${c.distinct} distinct` : ''}${c.missing ? ` · ${c.missing} missing` : ''}</small>${hist(c.bins || [])}${c.min !== null && c.min !== undefined ? `<small>${esc(c.min)} — ${esc(c.max)}</small>` : ''}</th>`).join('')}</tr></thead><tbody>${(d.rows || []).map((row, n) => `<tr>${numbered ? `<td class="num rownum">${fmt(first + n + 1)}</td>` : ''}${row.map((v, i) => `<td class="${v === null ? 'null' : numeric[i] ? 'num' : ''}">${v === null ? '∅' : esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
 const ROW_H = 26, WINDOW_H = 380;
 async function showTable(params = {}) {
   const d = await data(params);
   // A long table scrolls like a document: the scrollbar spans every row, and where it stops decides which rows are drawn.
-  const long = d.total > 400 && (d.starts || d.tables || item.kind === 'arrow' || item.kind === 'sqlite');
+  const long = d.total > 400 && (d.starts || d.tables || d.large || ['arrow', 'sqlite', 'csv', 'tsv', 'jsonl', 'parquet'].includes(item.kind));
   const numbered = d.rowStart !== undefined || (long && d.offset !== undefined);
   root.innerHTML =
     bar(
@@ -190,7 +168,7 @@ function virtualRows(d, params) {
         if (g === at) return;
         q = { ...params, group: g };
         at = g;
-      } else q = { ...params, offset: Math.max(0, Math.min(d.total - 1, row)) };
+      } else q = { ...params, offset: Math.max(0, Math.min(d.total - Math.min(d.rows?.length || 80, d.total), row)) };
       try {
         const n = await data(q);
         if (mine !== seq) return;
@@ -202,61 +180,146 @@ function virtualRows(d, params) {
     }, 60);
   });
 }
-function jsonTree(v, key = 'root', depth = 0) {
-  if (v === null || typeof v !== 'object')
-    return `<div class="json-leaf"><span class="json-key">${esc(key)}</span> <span class="tok-${typeof v === 'string' ? 'string' : 'number'}">${esc(JSON.stringify(v))}</span></div>`;
-  const entries = Object.entries(v);
-  return `<details${depth < 2 ? ' open' : ''}><summary><span class="json-key">${esc(key)}</span> <span class="meta">${Array.isArray(v) ? '[' : '{'} ${entries.length} ${Array.isArray(v) ? ']' : '}'}</span></summary>${
-    depth < 12
-      ? entries
-          .slice(0, 200)
-          .map(([k, x]) => jsonTree(x, k, depth + 1))
-          .join('')
-      : note('Expand this value in the source')
-  }${entries.length > 200 ? note('Showing 200 entries') : ''}</details>`;
+// JSON is parsed from the file's text with each number's own digits (a 19-digit id or 1.50 is shown as written).
+class Exact {
+  constructor(source) {
+    this.source = source;
+  }
 }
-function chart(j) {
-  let rows =
-      (Array.isArray(j.data) ? j.data : null) || j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [],
-    encs = j.encoding || {},
-    xkey = encs.x?.field || (typeof j.x === 'string' ? j.x : undefined),
-    ykey = encs.y?.field || (typeof j.y === 'string' ? j.y : undefined);
-  if (!Array.isArray(rows)) rows = [];
-  if (!xkey && rows[0] && typeof rows[0] === 'object') xkey = Object.keys(rows[0])[0];
-  if (!ykey && rows[0] && typeof rows[0] === 'object')
-    ykey = Object.keys(rows[0]).find((k) => k !== xkey && typeof rows[0][k] === 'number');
-  const points = rows
-    .slice(0, 200)
-    .map((v, i) => ({ x: v[xkey] ?? v.x ?? i, y: Number(v[ykey] ?? v.y ?? v.value ?? v) }))
-    .filter((p) => Number.isFinite(p.y));
-  if (!points.length)
-    return (
-      note('No inline numeric series found. External data sources need an adapter.') +
-      `<div class="json-tree">${jsonTree(j)}</div>`
-    );
-  const max = Math.max(0, ...points.map((p) => p.y)),
-    min = Math.min(0, ...points.map((p) => p.y)),
-    range = max - min || 1,
-    w = 600,
-    h = 260,
-    px = (i) => 50 + (i * (w - 75)) / Math.max(1, points.length - 1),
-    py = (v) => h - 25 - ((v - min) / range) * (h - 55),
-    mark = typeof j.mark === 'object' ? j.mark.type : j.mark || j.type || 'bar';
-  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(j.title || label)}"><line class="axis" x1="45" x2="585" y1="${py(0)}" y2="${py(0)}"/>${Array.from(
-    { length: 5 },
-    (_, i) => {
-      const v = min + (range * i) / 4;
-      return `<line class="axis" x1="45" x2="585" y1="${py(v)}" y2="${py(v)}"/><text x="38" text-anchor="end" y="${py(v) + 3}">${Number(v.toPrecision(3))}</text>`;
-    },
-  ).join(
-    '',
-  )}${mark === 'line' || mark === 'area' ? `<path class="series" d="${points.map((p, i) => `${i ? 'L' : 'M'}${px(i)},${py(p.y)}`).join(' ')}"/>` : points.map((p, i) => (mark === 'point' || mark === 'circle' ? `<circle class="mark" cx="${px(i)}" cy="${py(p.y)}" r="4"><title>${esc(p.x)}: ${p.y}</title></circle>` : `<rect class="mark" x="${45 + (i * 540) / points.length + 3}" y="${Math.min(py(0), py(p.y))}" width="${Math.max(1, 540 / points.length - 6)}" height="${Math.abs(py(p.y) - py(0))}"><title>${esc(p.x)}: ${p.y}</title></rect>`)).join('')}${points
-    .filter((_, i) => i % Math.max(1, Math.ceil(points.length / 8)) === 0)
-    .map(
-      (p) =>
-        `<text x="${px(points.indexOf(p))}" y="255" text-anchor="middle">${esc(String(p.x).slice(0, 12))}</text>`,
-    )
-    .join('')}</svg>`;
+const parseExact = (t) =>
+  JSON.parse(t, (k, v, c) => (typeof v === 'number' && typeof c?.source === 'string' && String(v) !== c.source ? new Exact(c.source) : v));
+// Every value of the file is reachable: a branch draws its children when it is opened, 200 at a time, with a button for the next
+// 200, so a list of a million entries opens as fast as a list of ten and its last entry is still one click range away.
+const PAGE = 200;
+function jsonLeaf(v, key) {
+  const text = v instanceof Exact ? v.source : JSON.stringify(v),
+    type = typeof v === 'string' ? 'string' : 'number';
+  return `<div class="json-leaf"><span class="json-key">${esc(key)}</span> <span class="tok-${type}">${esc(text)}</span></div>`;
+}
+function jsonNode(v, key, depth) {
+  if (v === null || typeof v !== 'object' || v instanceof Exact) return jsonLeaf(v, key);
+  const n = Array.isArray(v) ? v.length : Object.keys(v).length;
+  return `<details data-depth="${depth}"${depth < 2 ? ' open' : ''}><summary><span class="json-key">${esc(key)}</span> <span class="meta">${Array.isArray(v) ? '[' : '{'} ${fmt(n)} ${Array.isArray(v) ? ']' : '}'}</span></summary></details>`;
+}
+function jsonTree(host, value) {
+  const values = new WeakMap();
+  const fill = (el, v, depth, from = 0) => {
+    const entries = Array.isArray(v) ? v : Object.keys(v),
+      n = entries.length,
+      to = Math.min(n, from + PAGE);
+    let html = '';
+    for (let i = from; i < to; i++) {
+      const k = Array.isArray(v) ? i : entries[i];
+      html += jsonNode(v[k], String(k), depth + 1);
+    }
+    el.querySelector(':scope > .json-more')?.remove();
+    const before = el.querySelectorAll(':scope > details').length;
+    el.insertAdjacentHTML('beforeend', html + (to < n ? `<button type="button" class="json-more">Show entries ${fmt(to + 1)}–${fmt(Math.min(n, to + PAGE))} of ${fmt(n)}</button>` : ''));
+    const kids = [...el.querySelectorAll(':scope > details')].slice(before);
+    let j = 0;
+    for (let i = from; i < to; i++) {
+      const k = Array.isArray(v) ? i : entries[i],
+        x = v[k];
+      if (x !== null && typeof x === 'object' && !(x instanceof Exact)) {
+        const d = kids[j++];
+        values.set(d, { v: x, depth: depth + 1 });
+        if (d.open) fill(d, x, depth + 1);
+      }
+    }
+    el.dataset.filled = to;
+  };
+  host.innerHTML = jsonNode(value, 'root', 0);
+  const top = host.querySelector('details');
+  if (!top) return;
+  values.set(top, { v: value, depth: 0 });
+  fill(top, value, 0);
+  host.addEventListener('toggle', (e) => {
+    const d = e.target;
+    if (d.tagName === 'DETAILS' && d.open && !d.dataset.filled && values.has(d)) fill(d, values.get(d).v, values.get(d).depth);
+  }, true);
+  host.addEventListener('click', (e) => {
+    const more = e.target.closest('.json-more');
+    if (!more) return;
+    const d = more.parentElement,
+      { v, depth } = values.get(d);
+    fill(d, v, depth, Number(d.dataset.filled));
+  });
+}
+// A tree over a file the server reads in windows: each branch asks for its children by their positions (path = child indexes from the root).
+function largeJsonTree(host, first) {
+  const leaf = (e) => {
+    const text = e.text ?? '';
+    const shown = e.kind === 'string' ? JSON.stringify(text) + (e.more ? ` … (${fmt(e.more)} characters, shortened)` : '') : text;
+    return `<div class="json-leaf" role="treeitem"><span class="json-key">${esc(e.key)}</span> <span class="tok-${e.kind === 'string' ? 'string' : 'number'}">${esc(shown)}</span>${e.damaged ? ' <span class="meta">(not valid JSON here)</span>' : ''}</div>`;
+  };
+  const fill = (el, w, path) => {
+    el.querySelector(':scope > .json-more')?.remove();
+    for (const e of w.entries) {
+      const p = [...path, e.index];
+      if (e.kind !== 'object' && e.kind !== 'array') {
+        el.insertAdjacentHTML('beforeend', leaf(e));
+        continue;
+      }
+      const det = document.createElement('details');
+      det.setAttribute('role', 'treeitem');
+      const sum = document.createElement('summary');
+      sum.innerHTML = `<span class="json-key">${esc(e.key)}</span> <span class="meta">${e.kind === 'array' ? '[' : '{'} ${e.count !== undefined ? fmt(e.count) + ' entries' : fmt(e.bytes) + ' bytes'} ${e.kind === 'array' ? ']' : '}'}</span>`;
+      det.append(sum);
+      det.addEventListener('toggle', async () => {
+        if (!det.open || det.dataset.filled) return;
+        det.dataset.filled = '1';
+        try {
+          fill(det, await data({ path: p.join('.'), from: 0 }), p);
+        } catch (err) {
+          det.insertAdjacentHTML('beforeend', `<p class="error" role="alert">${esc(err.message)}</p>`);
+        }
+      });
+      el.append(det);
+    }
+    const to = w.from + w.entries.length;
+    if (to < w.total) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'json-more';
+      b.textContent = `Show entries ${fmt(to + 1)}–${fmt(Math.min(w.total, to + 200))} of ${fmt(w.total)}`;
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          fill(el, await data({ path: path.join('.'), from: to }), path);
+        } catch (err) {
+          b.disabled = false;
+          error(err);
+        }
+      });
+      el.append(b);
+    }
+    if (w.capped) el.insertAdjacentHTML('beforeend', '<div class="note">Only the first 3,000,000 entries of this branch are indexed.</div>');
+  };
+  host.innerHTML = '';
+  if (first.scalar) return void (host.innerHTML = leaf({ key: 'value', kind: first.kind, text: first.text }));
+  const top = document.createElement('details');
+  top.open = true;
+  top.innerHTML = `<summary><span class="json-key">root</span> <span class="meta">${first.container === 'array' ? '[' : '{'} ${fmt(first.total)} entries ${first.container === 'array' ? ']' : '}'}</span></summary>`;
+  host.append(top);
+  fill(top, first, []);
+}
+async function chartView(j) {
+  const rel = (u) => {
+    if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(u)) throw new Error('only files in this folder can be read');
+    return safeUrl(u);
+  };
+  const load = async (u) => {
+    const res = await fetch(rel(u));
+    if (!res.ok) throw new Error('not found');
+    return res.text();
+  };
+  const spec = chartSpec(j);
+  const { svg, notes, empty } = await renderVegaLite(spec, { load });
+  return (
+    svg +
+    (empty ? note('This chart has no rows to draw.') : '') +
+    (notes.length ? note('Not drawn: ' + notes.join('. ') + '.') : '')
+  );
 }
 function graph(j) {
   let nodes = Array.isArray(j.nodes)
@@ -365,7 +428,7 @@ async function pdfViewer(page = Number(r.page) || 1) {
   }
   root.innerHTML =
     bar(label, `Page ${d.page} of ${d.pages}`) +
-    `<div class="toolbar"><button id="prev" aria-label="Previous page"${d.page <= 1 ? ' disabled' : ''}>←</button><span class="meta">${d.page} / ${d.pages}</span><button id="next" aria-label="Next page"${d.page >= d.pages ? ' disabled' : ''}>→</button></div><div class="pdf-page"><canvas aria-label="PDF page ${d.page}"></canvas></div>`;
+    `<div class="toolbar"><button id="prev" aria-label="Previous page"${d.page <= 1 ? ' disabled' : ''}>←</button><span class="meta">${d.page} / ${d.pages}</span><button id="next" aria-label="Next page"${d.page >= d.pages ? ' disabled' : ''}>→</button></div><div class="pdf-page" tabindex="0" aria-label="Page ${d.page}. Page Up and Page Down change page, plus and minus zoom."><canvas style="width:${d.zoom}%" aria-label="PDF page ${d.page}"></canvas></div>`;
   const img = new Image();
   img.onload = () => {
     const c = root.querySelector('canvas');
@@ -377,6 +440,11 @@ async function pdfViewer(page = Number(r.page) || 1) {
     g.drawImage(img, 0, 0);
   };
   img.src = d.image;
+  const pg = root.querySelector('.pdf-page');
+  pg.onkeydown = (e) => {
+    if (e.key === 'PageDown' && d.page < d.pages) { e.preventDefault(); pdfViewer(d.page + 1).catch(error); }
+    else if (e.key === 'PageUp' && d.page > 1) { e.preventDefault(); pdfViewer(d.page - 1).catch(error); }
+  };
   root.querySelector('#prev').onclick = () => pdfViewer(d.page - 1).catch(error);
   root.querySelector('#next').onclick = () => pdfViewer(d.page + 1).catch(error);
 }
@@ -398,194 +466,121 @@ function notebook(j) {
     )
     .join('')}</div>`;
 }
-function turningModel(mesh) {
-  root.innerHTML =
-    bar(label, `${fmt(mesh.vertices.length)} vertices · ${fmt(mesh.faces.length)} faces`) +
-    `<canvas class="model" width="900" height="600" aria-label="Turning 3D model"></canvas>` +
-    (mesh.limited ? note('Mesh preview is bounded to the source window.') : '');
-  const canvas = root.querySelector('canvas'),
-    ctx = canvas.getContext('2d'),
-    vs = mesh.vertices,
-    fs = mesh.faces;
-  if (!vs.length) {
-    root.insertAdjacentHTML('beforeend', note('No triangle positions were found'));
-    return;
+// Lottie runs on lottie-web (public/canvas/lottie-runtime.js, MIT): the format's own player, so precompositions, masks, mattes,
+// gradients, trim paths, repeaters, text and expressions are drawn by the code that defines them.
+let lottieLoad = null;
+const loadLottie = () =>
+  (lottieLoad ||= new Promise((ok, no) => {
+    if (window.lottie) return ok(window.lottie);
+    const s = document.createElement('script');
+    s.src = '/canvas/lottie-runtime.js';
+    s.onload = () => ok(window.lottie);
+    s.onerror = () => no(new Error('The Lottie player could not be loaded. Reload the page to try again; the file is unchanged.'));
+    document.head.append(s);
+  }));
+// Hand-written and generated files often list a shape and its fill straight on the layer. The player wants them in a group
+// with a transform, so loose items are wrapped in one (the drawing is the same, nothing is added to the file on disk).
+function groupLoose(layers) {
+  for (const l of layers || []) {
+    if (l.ty !== 4 || !Array.isArray(l.shapes) || l.shapes.every((x) => x.ty === 'gr' || x.ty === 'tr')) continue;
+    const loose = l.shapes.filter((x) => x.ty !== 'gr'),
+      at = l.shapes.findIndex((x) => x.ty !== 'gr'),
+      rest = l.shapes.filter((x) => x.ty === 'gr');
+    const group = { ty: 'gr', nm: 'Group', it: [...loose.filter((x) => x.ty !== 'tr'), loose.find((x) => x.ty === 'tr') || { ty: 'tr', p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } }] };
+    rest.splice(Math.min(at, rest.length), 0, group);
+    l.shapes = rest;
   }
-  const lo = [0, 1, 2].map((i) => Math.min(...vs.map((v) => v[i]))),
-    hi = [0, 1, 2].map((i) => Math.max(...vs.map((v) => v[i]))),
-    center = lo.map((n, i) => (n + hi[i]) / 2),
-    scale = 230 / Math.max(0.001, ...hi.map((n, i) => n - lo[i]));
-  let angle = Number(r.rotation) || 0,
-    active = true;
-  document.addEventListener('visibilitychange', () => {
-    active = !document.hidden;
-  });
-  const draw = (t) => {
-    if (active) {
-      if (!isReduced && r.spin !== false) angle += 0.35;
-      const a = (angle * Math.PI) / 180,
-        project = vs.map((v) => {
-          const x = (v[0] - center[0]) * scale,
-            y = (v[1] - center[1]) * scale,
-            z = (v[2] - center[2]) * scale;
-          return [
-            450 + x * Math.cos(a) + z * Math.sin(a),
-            315 - y * 0.9 + (z * Math.cos(a) - x * Math.sin(a)) * 0.3,
-            z * Math.cos(a) - x * Math.sin(a),
-          ];
-        });
-      ctx.clearRect(0, 0, 900, 600);
-      ctx.strokeStyle = '#b0c3b8';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 11; i++) {
-        const x = 130 + i * 64;
-        ctx.beginPath();
-        ctx.moveTo(x, 440);
-        ctx.lineTo(x + 90, 540);
-        ctx.moveTo(130, 440 + i * 10);
-        ctx.lineTo(860, 440 + i * 10);
-        ctx.stroke();
-      }
-      const sorted = fs
-        .slice(0, 16000)
-        .map((f) => ({ f, z: f.reduce((s, i) => s + (project[i]?.[2] || 0), 0) / f.length }))
-        .sort((a, b) => a.z - b.z);
-      for (const { f, z } of sorted) {
-        if (f.some((i) => !project[i])) continue;
-        ctx.beginPath();
-        f.forEach((i, j) =>
-          j ? ctx.lineTo(project[i][0], project[i][1]) : ctx.moveTo(project[i][0], project[i][1]),
-        );
-        ctx.closePath();
-        if (!r.wireframe) {
-          ctx.fillStyle = `hsl(158 21% ${Math.max(22, Math.min(76, 48 + z / 12))}%)`;
-          ctx.fill();
-        }
-        ctx.strokeStyle = r.wireframe ? '#2e6d5b' : '#345f5180';
-        ctx.stroke();
-      }
-      if (!fs.length) {
-        ctx.fillStyle = '#28785d';
-        for (const [x, y] of project) ctx.fillRect(x, y, 3, 3);
-      }
-    }
-    requestAnimationFrame(draw);
-  };
-  requestAnimationFrame(draw);
-  canvas.onpointermove = (e) => {
-    if (e.buttons) angle += e.movementX;
-  };
 }
-// A small Lottie vector player: shape layers, transforms, paths, fills, strokes and animated properties.
-function lottie(j) {
+// Defaults the Lottie format allows a file to leave out but lottie-web reads without a fallback (a layer with no start time
+// "st" draws nothing at all). Filling them changes nothing the file says; the file on disk is untouched.
+function lottieDefaults(comp) {
+  const prop = (p) => {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return;
+    if (p.a === undefined && 'k' in p) p.a = Array.isArray(p.k) && p.k.length && typeof p.k[0] === 'object' && p.k[0] !== null && 't' in p.k[0] ? 1 : 0;
+  };
+  const shapes = (list) => {
+    for (const x of list || []) {
+      for (const v of Object.values(x)) prop(v);
+      if (x.ty === 'gr') shapes(x.it);
+    }
+  };
+  const layers = (list, ip, op) =>
+    (list || []).forEach((l, i) => {
+      l.st ??= 0;
+      l.sr ??= 1;
+      l.ind ??= i + 1;
+      l.ddd ??= 0;
+      l.ip ??= ip;
+      l.op ??= op;
+      l.ks ??= {};
+      for (const k of ['a', 'p', 's', 'r', 'o']) l.ks[k] ??= { a: 0, k: k === 's' ? [100, 100, 100] : k === 'o' ? 100 : k === 'r' ? 0 : [0, 0, 0] };
+      for (const v of Object.values(l.ks)) prop(v);
+      shapes(l.shapes);
+    });
+  layers(comp.layers, comp.ip, comp.op);
+  for (const asset of comp.assets || []) if (asset.layers) layers(asset.layers, comp.ip, comp.op);
+}
+// Image assets name a folder (u) and a file (p) relative to the animation; they are read through the folder's own file route.
+function lottieAssets(comp) {
+  for (const asset of comp.assets || []) {
+    if (asset.layers || !asset.p || asset.e === 1 || /^data:/.test(asset.p)) continue;
+    const ref = (asset.u || '') + asset.p;
+    asset.u = '';
+    asset.p = /^(https?:)?\/\//i.test(ref) ? '#' : safeUrl(ref, true);
+  }
+}
+async function lottie(j) {
+  const lib = await loadLottie();
+  j = JSON.parse(JSON.stringify(j));
+  lottieDefaults(j);
+  groupLoose(j.layers);
+  for (const a of j.assets || []) groupLoose(a.layers);
+  lottieAssets(j);
   root.innerHTML =
     bar(label, `${j.w} × ${j.h} · ${j.fr} fps`) +
-    `<div class="motion-stage"><svg viewBox="0 0 ${Number(j.w) || 512} ${Number(j.h) || 512}" role="img" aria-label="Vector animation"></svg></div>`;
-  const svg = root.querySelector('svg');
-  function prop(p, frame, fallback) {
-    if (p === undefined) return fallback;
-    let k = p.k ?? p;
-    if (!p.a) return k;
-    if (!Array.isArray(k)) return fallback;
-    let a = k[0],
-      b;
-    for (let i = 0; i < k.length; i++) {
-      if (k[i].t <= frame) {
-        a = k[i];
-        b = k[i + 1];
-      }
+    '<div class="motion-stage"><div class="lottie-host" tabindex="0" role="img" aria-label="Vector animation. Space plays or pauses, arrow keys step."></div></div>';
+  const host = root.querySelector('.lottie-host'),
+    notes = [];
+  let anim;
+  try {
+    anim = lib.loadAnimation({
+      container: host,
+      renderer: 'svg',
+      loop: true,
+      autoplay: !(isReduced || r.paused),
+      animationData: j,
+      rendererSettings: { preserveAspectRatio: 'xMidYMid meet', progressiveLoad: false },
+    });
+  } catch (e) {
+    return void root.insertAdjacentHTML('beforeend', note('This animation could not be played: ' + e.message + '. The file may not follow the Lottie format.'));
+  }
+  anim.setSpeed(Number(r.speed) || 1);
+  if (isReduced || r.paused) anim.goToAndStop(Number(j.ip) || 0, true);
+  anim.addEventListener('data_failed', () => root.insertAdjacentHTML('beforeend', note('Some of this animation could not be loaded.')));
+  // A drawing with no visible geometry is reported, never left as a silent blank stage.
+  anim.addEventListener('DOMLoaded', () => {
+    const svg = host.querySelector('svg'),
+      drawn = [...(svg?.querySelectorAll('path,image,text') || [])].some((el) => (el.tagName === 'path' ? (el.getAttribute('d') || '').replace(/[^0-9]/g, '').length > 0 : true));
+    if (!drawn) root.insertAdjacentHTML('beforeend', note('The player drew nothing for this animation: its layers have no shapes, images or text it can show at this frame.'));
+    const missing = [...(svg?.querySelectorAll('image') || [])].filter((im) => !im.getAttribute('href') && !im.getAttribute('xlink:href'));
+    if (missing.length) root.insertAdjacentHTML('beforeend', note(missing.length + ' image layers have no picture.'));
+  });
+  for (const asset of j.assets || [])
+    if (asset.p && !asset.layers && asset.p !== '#' && !/^data:/.test(asset.p)) {
+      const probe = new Image();
+      probe.onerror = () => root.insertAdjacentHTML('beforeend', note('Image ' + asset.id + ' (' + decodeURIComponent(asset.p.split('/').pop()) + ') could not be found next to the animation.'));
+      probe.src = asset.p;
     }
-    if (!a) return fallback;
-    const s = a.s ?? fallback,
-      e = a.e ?? b?.s ?? s;
-    if (!b || a.h) return s;
-    const t = Math.max(0, Math.min(1, (frame - a.t) / (b.t - a.t)));
-    return Array.isArray(s)
-      ? s.map((v, i) => (typeof v === 'number' ? v + (Number(e[i] ?? v) - v) * t : v))
-      : s;
-  }
-  function transform(t, frame) {
-    const p = prop(t?.p, frame, [0, 0]),
-      a = prop(t?.a, frame, [0, 0]),
-      s = prop(t?.s, frame, [100, 100]),
-      rot = prop(t?.r, frame, 0);
-    return `translate(${p[0] || 0} ${p[1] || 0}) rotate(${Array.isArray(rot) ? rot[0] : rot}) scale(${(s[0] ?? 100) / 100} ${(s[1] ?? 100) / 100}) translate(${-a[0] || 0} ${-a[1] || 0})`;
-  }
-  function shapes(list, frame) {
-    let fill = 'none',
-      stroke = 'none',
-      sw = 1,
-      html = '';
-    for (const s of list) {
-      if (s.ty === 'fl') {
-        const c = prop(s.c, frame, [0, 0, 0]);
-        fill = `rgb(${c
-          .slice(0, 3)
-          .map((v) => Math.round(v * 255))
-          .join(',')})`;
-      }
-      if (s.ty === 'st') {
-        const c = prop(s.c, frame, [0, 0, 0]);
-        stroke = `rgb(${c
-          .slice(0, 3)
-          .map((v) => Math.round(v * 255))
-          .join(',')})`;
-        sw = Number(prop(s.w, frame, 1));
-      }
-    }
-    for (const s of list) {
-      if (s.ty === 'gr') {
-        const tr = s.it.find((x) => x.ty === 'tr');
-        html += `<g transform="${transform(tr, frame)}">${shapes(s.it, frame)}</g>`;
-      }
-      if (s.ty === 'rc' || s.ty === 'el') {
-        const p = prop(s.p, frame, [0, 0]),
-          size = prop(s.s, frame, [50, 50]),
-          style = `fill="${fill}" stroke="${stroke}" stroke-width="${sw}"`;
-        html +=
-          s.ty === 'el'
-            ? `<ellipse cx="${p[0]}" cy="${p[1]}" rx="${size[0] / 2}" ry="${size[1] / 2}" ${style}/>`
-            : `<rect x="${p[0] - size[0] / 2}" y="${p[1] - size[1] / 2}" width="${size[0]}" height="${size[1]}" rx="${Number(prop(s.r, frame, 0))}" ${style}/>`;
-      }
-      if (s.ty === 'sh') {
-        let path = prop(s.ks, frame, null);
-        if (Array.isArray(path)) path = path[0];
-        if (path?.v?.length) {
-          const v = path.v;
-          let d = `M${v[0].join(',')}`;
-          for (let k = 1; k < v.length + (path.c ? 1 : 0); k++) {
-            const prev = (k - 1) % v.length,
-              n = k % v.length,
-              o = path.o?.[prev] || [0, 0],
-              i = path.i?.[n] || [0, 0];
-            d += ` C${v[prev][0] + o[0]},${v[prev][1] + o[1]} ${v[n][0] + i[0]},${v[n][1] + i[1]} ${v[n].join(',')}`;
-          }
-          html += `<path d="${d}${path.c ? 'Z' : ''}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
-        }
-      }
-    }
-    return html;
-  }
-  const start = performance.now();
-  function tick(now) {
-    const frame =
-      isReduced || r.paused
-        ? Number(j.ip) || 0
-        : (Number(j.ip) || 0) +
-          ((((now - start) / 1000) * (j.fr || 30) * (r.speed || 1)) %
-            Math.max(1, (j.op || 60) - (j.ip || 0)));
-    svg.innerHTML = (j.layers || [])
-      .slice()
-      .reverse()
-      .filter((l) => frame >= (l.ip ?? 0) && frame < (l.op ?? Infinity))
-      .map(
-        (l) =>
-          `<g transform="${transform(l.ks, frame)}" opacity="${Number(prop(l.ks?.o, frame, 100)) / 100}">${l.ty === 4 ? shapes(l.shapes || [], frame) : l.ty === 1 ? `<rect width="${l.sw || j.w}" height="${l.sh || j.h}" fill="${esc(l.sc || '#158474')}"/>` : l.ty === 5 ? `<text font-size="32">${esc(l.t?.d?.k?.[0]?.s?.t || '')}</text>` : ''}</g>`,
-      )
-      .join('');
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
+  if ((j.layers || []).some((l) => l.ddd === 1 || l.ty === 13)) notes.push('3D layers and cameras are drawn flat');
+  if (notes.length) root.insertAdjacentHTML('beforeend', note('Partly drawn: ' + notes.join('. ') + '.'));
+  host.addEventListener('keydown', (e) => {
+    if (e.key === ' ') anim.isPaused ? anim.play() : anim.pause();
+    else if (e.key === 'ArrowRight') anim.goToAndStop(Math.min(anim.totalFrames, anim.currentFrame + 1), true);
+    else if (e.key === 'ArrowLeft') anim.goToAndStop(Math.max(0, anim.currentFrame - 1), true);
+    else if (e.key === 'Home') anim.goToAndStop(0, true);
+    else return;
+    e.preventDefault();
+  });
 }
 async function run() {
   if (item.family === 'image') {
@@ -656,6 +651,20 @@ async function run() {
         )
         .join(''),
     );
+    svg.tabIndex = 0;
+    svg.setAttribute('role', 'slider');
+    svg.setAttribute('aria-label', 'Audio waveform. Left and right arrows seek, Home and End jump.');
+    svg.onkeydown = (e) => {
+      const step = e.shiftKey ? 15 : 5;
+      if (!Number.isFinite(audio.duration)) return;
+      if (e.key === 'ArrowRight') audio.currentTime = Math.min(audio.duration, audio.currentTime + step);
+      else if (e.key === 'ArrowLeft') audio.currentTime = Math.max(0, audio.currentTime - step);
+      else if (e.key === 'Home') audio.currentTime = 0;
+      else if (e.key === 'End') audio.currentTime = audio.duration;
+      else if (e.key === ' ') audio.paused ? audio.play() : audio.pause();
+      else return;
+      e.preventDefault();
+    };
     svg.onclick = (e) => {
       if (Number.isFinite(audio.duration)) {
         const b = svg.getBoundingClientRect();
@@ -683,7 +692,43 @@ async function run() {
   }
   if (item.family === 'pdf') return pdfViewer();
   if (item.family === 'zip') return archive();
-  if (item.family === 'model') return turningModel(await data());
+  if (item.family === 'model') {
+    const args = { root, recipe: r, label, bar, note, fmt, isReduced, esc };
+    const soft = async () => modelView({ ...args, scene: await data() });
+    const real = async () => {
+      const buffer = await (await fetch(raw)).arrayBuffer();
+      return modelThree({ ...args, buffer, kind: item.kind === 'obj' ? 'obj' : 'gltf', itemId: item.id, fallback: soft });
+    };
+    // On its own page the real 3D runtime (three.js) draws it. Inside a canvas card a thousand folders must stay cheap, so the
+    // card starts on the light software drawing and upgrades to the real runtime when the card is pointed at, focused or entered.
+    const card = window.parent !== window ? window.frameElement?.closest?.('.item-card') : null;
+    if (!card) {
+      try {
+        return await real();
+      } catch (e) {
+        console.warn('3D runtime unavailable, using the software viewer:', e.message);
+        return soft();
+      }
+    }
+    await soft();
+    let upgraded = false;
+    const upgrade = async () => {
+      if (upgraded) return;
+      upgraded = true;
+      try {
+        await real();
+      } catch (e) {
+        console.warn('3D runtime unavailable, keeping the software viewer:', e.message);
+        await soft();
+      }
+    };
+    document.addEventListener('pointermove', upgrade, { once: true });
+    document.addEventListener('pointerdown', upgrade, { once: true });
+    document.addEventListener('focusin', upgrade, { once: true });
+    if (card.dataset.focused) upgrade();
+    new MutationObserver(() => card.dataset.focused && upgrade()).observe(card, { attributes: true, attributeFilter: ['data-focused'] });
+    return;
+  }
   const d = await data();
   if (item.family === 'binary') {
     const b = d.hex.match(/.{1,2}/g) || [],
@@ -710,20 +755,31 @@ async function run() {
     return;
   }
   if (item.family === 'markdown') {
+    await loadMarkdown();
     root.innerHTML = markdown(d.text) + (d.limited ? note('Showing the first 1 MiB') : '');
+    return;
+  }
+  if (item.family === 'json' && d.large) {
+    // Over 1 MiB: the file is read in windows by the server, so nothing is cut. A list of records scrolls like a table; anything else is a tree
+    // whose branches fetch their children when opened.
+    if (d.asTable) return showTable({ offset: 0 });
+    root.innerHTML = bar(label, `Large JSON · ${fmt(d.bytes)} bytes · read in windows`) + '<div class="json-tree" role="tree"></div>' + note('This file is over 1 MiB, so it is read in windows from disk. Structure is found by scanning the file; it is not validated.');
+    largeJsonTree(root.querySelector('.json-tree'), d);
     return;
   }
   if (item.family === 'json') {
     root.innerHTML =
-      (d.asTable ? bar(label, `${fmt(d.total)} records · ${d.columns.length} columns`) + table(d) : bar(label, 'Structured values') + `<div class="json-tree">${jsonTree(d.data)}</div>`);
+      (d.asTable ? bar(label, `${fmt(d.total)} records · ${d.columns.length} columns`) + table(d) : bar(label, 'Structured values') + '<div class="json-tree"></div>');
+    if (!d.asTable) jsonTree(root.querySelector('.json-tree'), parseExact(d.text));
     return;
   }
   if (item.family === 'notebook') {
+    await loadMarkdown();
     root.innerHTML = bar(label, `${d.data.cells?.length || 0} cells`) + notebook(d.data);
     return;
   }
   if (item.family === 'chart') {
-    root.innerHTML = bar(d.data.title || label, item.kind) + chart(d.data);
+    root.innerHTML = bar(typeof d.data.title === 'object' ? d.data.title?.text || label : d.data.title || label, item.kind) + (await chartView(d.data));
     return;
   }
   if (item.family === 'graph') {
@@ -768,6 +824,17 @@ async function run() {
     iframe.srcdoc = `<style>body{margin:20px;font:16px system-ui;display:flex;gap:12px;align-items:center}button,.motion-chip{padding:16px 24px;border-radius:8px;border:1px solid #bbc8c0;background:#d8e8df;color:#183c2c}${d.text.replaceAll('</style', '<\\/style')}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style><div class="motion-chip" style="${animation ? `animation:${esc(animation)} 2s infinite` : ''}">Aa · 0123</div><button>Button</button><p>Type and color</p>`;
     root.append(iframe);
     root.insertAdjacentHTML('beforeend', source(d.text));
+    return;
+  }
+  if (item.family === 'component' && item.kind === 'html') {
+    // A page whose name does not say so (renamed.bin): the extension-based loader does not own it, so the item draws it itself, sandboxed.
+    root.innerHTML = bar(label, 'HTML page');
+    const f = document.createElement('iframe');
+    f.className = 'css-preview';
+    f.sandbox = 'allow-scripts';
+    f.title = label;
+    f.srcdoc = d.text;
+    root.append(f);
     return;
   }
   root.innerHTML =

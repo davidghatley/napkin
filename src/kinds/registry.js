@@ -2,6 +2,7 @@ import { extname } from 'node:path';
 import { sections, applyNative } from './controls.js';
 import { renderViewer, previewData } from './view.js';
 import { cardMetadata } from './metadata.js';
+import { parseColumnTypes } from './cells.js';
 const entries = [];
 export function registerKind(definition) {
   if (!/^[a-z][a-z0-9-]*$/.test(definition.id) || entries.some((d) => d.id === definition.id))
@@ -9,8 +10,22 @@ export function registerKind(definition) {
   for (const key of ['detect', 'metadata', 'viewer', 'controls', 'apply'])
     if (typeof definition[key] !== 'function')
       throw new Error(`Kind ${definition.id} needs ${key}(). Next: add it and register again.`);
-  entries.push(Object.freeze(definition));
-  return definition;
+  // Every kind's card shows the file's own content from the start: a kind whose metadata gives no preview gets the start of
+  // its text (or its first bytes in hex), so a newly registered kind never shows a name sheet instead of the file.
+  const own = definition.metadata;
+  const wrapped = {
+    ...definition,
+    metadata(ctx) {
+      const meta = own.call(definition, ctx) || {};
+      if (meta.preview === undefined && !['image', 'video', 'font', 'pdf'].includes(definition.family)) {
+        const binary = /[\x00-\x08\x0e-\x1f]/.test(ctx.text.slice(0, 512));
+        meta.preview = binary ? ctx.head.subarray(0, 128).toString('hex') : ctx.text.slice(0, 1400);
+      }
+      return meta;
+    },
+  };
+  entries.push(Object.freeze(wrapped));
+  return wrapped;
 }
 export const kinds = () => [...entries];
 export function detectKind(ctx) {
@@ -34,15 +49,17 @@ function define(id, extensions, mime, family, magic) {
     extensions,
     mime,
     family,
-    detect: (ctx) =>
-      magic?.(ctx) ? (id === 'binary' ? 0.1 : 2) : extensions.includes(ctx.ext) ? 1 : 0,
+    detect: (ctx) => {
+      const m = magic?.(ctx);
+      return m ? (id === 'binary' ? 0.1 : typeof m === 'number' ? m : 2) : extensions.includes(ctx.ext) ? 1 : 0;
+    },
     metadata: (ctx) => metadata(ctx, family),
     viewer: (ctx) => renderViewer(ctx),
     preview: (ctx, query) => previewData(ctx, query),
-    controls: (ctx) => sections(ctx),
+    controls: (ctx) => sections(ctx, entries.map((d) => d.id).sort()),
     apply: (ctx, c, v) =>
       c.target.mode === 'recipe'
-        ? { recipe: { ...ctx.recipe, [c.target.key]: v } }
+        ? { recipe: { ...ctx.recipe, [c.target.key]: c.target.key === 'columnTypes' ? parseColumnTypes(v) : v } }
         : { source: applyNative(ctx, c, v) },
   });
 }
@@ -82,7 +99,7 @@ function metadata(ctx, family) {
 }
 // Broad fallbacks first, specific magic and content detection last. Plugins have final precedence.
 define('binary', [], 'application/octet-stream', 'binary', () => true);
-define('txt', ['.txt', '.log'], textMime, 'text', (c) => c.ext === '' && !c.head.includes(0));
+define('txt', ['.txt', '.log'], textMime, 'text', (c) => c.ext === '' && !c.head.includes(0) && 1.1);
 define(
   'code',
   [
@@ -152,12 +169,45 @@ define(
   (c) => /^diff --git /m.test(c.text) || /^--- .*\n\+\+\+ /m.test(c.text),
 );
 define('patch', ['.patch'], textMime, 'diff', (c) => c.ext === '.patch' && 3);
-define('json', ['.json', '.jsonc'], 'application/json', 'json');
-define('jsonl', ['.jsonl', '.ndjson'], 'application/x-ndjson', 'table');
-define('csv', ['.csv'], 'text/csv', 'table');
-define('tsv', ['.tsv'], 'text/tab-separated-values', 'table');
+// Content sniffing: only when the name says nothing useful (no extension, or a catch-all one such as .bin).
+const vague = (c) => ['', '.bin', '.dat', '.data', '.tmp', '.txt', '.log', '.file'].includes(c.ext);
+const parsed = (c) => {
+  if (!/^\s*[\[{]/.test(c.text) || c.bytes > LIMIT_SNIFF) return null;
+  try {
+    return JSON.parse(c.text);
+  } catch {
+    return null;
+  }
+};
+const LIMIT_SNIFF = 1024 * 1024;
+define('json', ['.json', '.jsonc'], 'application/json', 'json', (c) => vague(c) && parsed(c) !== null && 1.5);
+define('jsonl', ['.jsonl', '.ndjson'], 'application/x-ndjson', 'table', (c) => {
+  if (!vague(c) || c.bytes > LIMIT_SNIFF) return false;
+  const lines = c.text.split(/\r?\n/).filter(Boolean).slice(0, 20);
+  return (
+    lines.length >= 2 &&
+    lines.every((l) => {
+      try {
+        return typeof JSON.parse(l) === 'object';
+      } catch {
+        return false;
+      }
+    }) &&
+    1.6
+  );
+});
+// A delimited table has at least three lines with the same number of separators outside quotes.
+const delimitedBy = (c, ch) => {
+  if (!vague(c) || c.head.includes(0)) return false;
+  const lines = c.text.split(/\r?\n/).filter(Boolean).slice(0, 12);
+  if (lines.length < 3) return false;
+  const n = (l) => l.replace(/"[^"]*"/g, '').split(ch).length - 1;
+  return n(lines[0]) >= 1 && lines.slice(0, -1).every((l) => n(l) === n(lines[0])) && 1.2;
+};
+define('csv', ['.csv'], 'text/csv', 'table', (c) => delimitedBy(c, ','));
+define('tsv', ['.tsv'], 'text/tab-separated-values', 'table', (c) => delimitedBy(c, '\t') && 1.3);
 define('css', ['.css'], 'text/css', 'css');
-define('html', ['.html', '.htm'], 'text/html', 'component');
+define('html', ['.html', '.htm'], 'text/html', 'component', (c) => vague(c) && /^\s*(?:<!doctype\s+html|<html[\s>])/i.test(c.text));
 // Animated pages are still components; the kind names what moves them. Higher score beats plain html.
 const page = (c) => c.ext === '.html' || c.ext === '.htm';
 define(
@@ -298,12 +348,27 @@ define(
   'parquet',
   (c) => c.head.toString('ascii', 0, 4) === 'PAR1',
 );
+// Arrow IPC: the file format starts with ARROW1; the stream format starts with a message whose header is a Schema.
+const arrowStream = (h) => {
+  try {
+    const at = h.readInt32LE(0) === -1 ? 8 : 4,
+      len = h.readInt32LE(at - 4);
+    if (len <= 0 || len > h.length - at) return false;
+    const m = h.subarray(at, at + len),
+      p = m.readUInt32LE(0),
+      vt = p - m.readInt32LE(p),
+      slot = m.readUInt16LE(vt + 6);
+    return m.readUInt16LE(vt) > 6 && slot > 0 && m[p + slot] === 1;
+  } catch {
+    return false;
+  }
+};
 define(
   'arrow',
-  ['.arrow', '.feather'],
-  'application/vnd.apache.arrow.file',
+  ['.arrow', '.arrows', '.feather', '.ipc'],
+  (c) => (c.head.toString('ascii', 0, 6) === 'ARROW1' ? 'application/vnd.apache.arrow.file' : 'application/vnd.apache.arrow.stream'),
   'arrow',
-  (c) => c.head.toString('ascii', 0, 6) === 'ARROW1',
+  (c) => c.head.toString('ascii', 0, 6) === 'ARROW1' || ((c.ext === '' || vague(c) || ['.arrow', '.arrows', '.ipc'].includes(c.ext)) && arrowStream(c.head)),
 );
 define('ipynb', ['.ipynb'], 'application/x-ipynb+json', 'notebook');
 define(

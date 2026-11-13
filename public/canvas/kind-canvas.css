@@ -341,9 +341,12 @@
 body[data-focus] .item-card:not([data-focused]) .kind-compact pre,body[data-play] .item-card .kind-compact pre{visibility:hidden}
 
 /* Zoomed out, a card says what it is in type big enough to read: the kind and its main fact. */
-.kind-headline{display:none;position:absolute;left:0;right:0;bottom:0;padding:14px 18px;background:#14231cdd;color:#f5f5ee;font:600 40px/1.1 system-ui;flex-direction:column;gap:4px;pointer-events:none}
+.kind-headline{display:none;position:absolute;left:0;right:0;bottom:0;padding:8px 14px;background:#14231cb8;color:#f5f5ee;font:600 40px/1.1 system-ui;flex-direction:column;gap:4px;pointer-events:none}
 .kind-headline i{font:500 28px/1.2 system-ui;font-style:normal;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #stage[data-zoom-band="mid"] .kind-headline{display:flex}
-#stage[data-zoom-band="far"] .kind-headline{display:flex;top:0;justify-content:center;background:#14231cf2;font-size:92px}
-#stage[data-zoom-band="far"] .kind-headline i{font-size:56px;white-space:normal}
+#stage[data-zoom-band="far"] .kind-headline{display:flex;padding:8px 14px;background:#14231cb8;font-size:56px;flex-direction:row;gap:16px;align-items:baseline}
+#stage[data-zoom-band="far"] .kind-headline i{font-size:34px;white-space:nowrap}
 #stage[data-zoom-band="mid"] .kind-compact .kind-stamp,#stage[data-zoom-band="far"] .kind-compact .kind-stamp{display:none}
+
+.kind-chart-host{padding:6px;color:#262a29;background:#faf9f6;height:340px;overflow:hidden}.kind-chart-host svg{width:100%;height:100%}.kind-pdf-page{display:block;width:480px;height:340px;object-fit:contain;background:#fff}.kind-wave{color:#35836a}
+@media (prefers-color-scheme: dark){.kind-chart-host{background:#202724;color:#e5e8e0}}

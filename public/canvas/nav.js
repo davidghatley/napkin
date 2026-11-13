@@ -19,7 +19,7 @@ export function initNav(ctx) {
     if (!focused) before = view.get();
     focused = c.component;
     document.body.dataset.focus = c.name;
-    for (const [sid, sec] of stage.sections) { if (sid === focused) sec.el.dataset.focused = '1'; else delete sec.el.dataset.focused; }
+    for (const [sid, sec] of stage.sections.all()) { if (sid === focused) sec.el.dataset.focused = '1'; else delete sec.el.dataset.focused; }
     stage.live(focused);
     const r = stage.componentRect(focused);
     if (r) view.fitRect(r, { pad: 88, max: 2, animate });
@@ -39,7 +39,7 @@ export function initNav(ctx) {
     if (!focused) return false;
     focused = null;
     delete document.body.dataset.focus;
-    for (const sec of stage.sections.values()) delete sec.el.dataset.focused;
+    for (const [, sec] of stage.sections.all()) delete sec.el.dataset.focused;
     setHash('');
     history.replaceState(null, '', location.pathname + location.search);
     if (before) view.set(before, { animate }); else view.fitAll({ animate });

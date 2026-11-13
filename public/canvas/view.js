@@ -28,8 +28,14 @@ export function createView(ctx, stageEl, worldEl) {
   // A gesture (wheel, drag, pinch) moves the world by compositor transform only: nothing that needs a layout or a re-raster of the frames
   // runs per event. The label counter-scale, the zoom band and the overlays are brought exact in settle(), 160 ms after the last event.
   let zoomedSinceRaster = false, rasterZ = v.z;
-  let labelZ = v.z, labelsStale = false, gridSize = 0, gridW = 0, gridH = 0, gridHidden = false;
-  const grid = document.createElement('div'); grid.id = 'grid'; grid.setAttribute('aria-hidden', 'true'); stageEl.prepend(grid);
+  let labelZ = v.z, labelsStale = false, dotZ = 0;
+  // The dot grid is the world's floor, in world units (a 24-unit pitch), first under every frame. It moves and scales with the world, so a gesture changes
+  // nothing but the world's transform; its dots are redrawn at 1 screen pixel when the view settles. Being one painted area under all the frames, it also
+  // lets Chromium paint every frame into the world's one layer: on a bare (sparse) world each frame was a layer of its own (839 at 2560x1440 with 1,000
+  // files), and every frame of a pan or zoom re-layerized them all. (Not a layer itself: no will-change, or the frames over it would be layers again.)
+  const FLOOR = 24 * 41667; // about a million units each way from the origin, on the pitch so a dot sits on (0, 0)
+  const grid = document.createElement('div'); grid.id = 'grid'; grid.setAttribute('aria-hidden', 'true'); worldEl.prepend(grid);
+  Object.assign(grid.style, { left: `${-FLOOR}px`, top: `${-FLOOR}px`, width: `${2 * FLOOR}px`, height: `${2 * FLOOR}px` });
   function labels() {
     const { z } = v; labelsStale = false; labelZ = z;
     const ls = Math.round(clamp(1 / z, 1, 3.2) * 20) / 20; // label scale, quantised so it changes rarely
@@ -42,34 +48,27 @@ export function createView(ctx, stageEl, worldEl) {
     if (stageEl.dataset.zoomBand !== band) stageEl.dataset.zoomBand = band;
   }
   function placeGrid() {
-    const { x, y, z } = v, gs = 24 * z;
-    if (gs !== gridSize || box.width !== gridW || box.height !== gridH) { gridSize = gs; gridW = box.width; gridH = box.height; Object.assign(grid.style, { width: `${2 * box.width + 2 * gs}px`, height: `${2 * box.height + 2 * gs}px`, backgroundSize: `${gs}px ${gs}px` }); }
-    grid.style.transform = `translate3d(${((x % gs) + gs) % gs - gs}px, ${((y % gs) + gs) % gs - gs}px, 0)`; // (it starts one tile up and left of the stage, so the dots reach every edge)
-    gridHidden = false; grid.style.transformOrigin = '';
-  }
-  // In a zoom gesture the dots are scaled by transform from the pitch they were drawn at (the element is twice the stage, so a zoom out still covers it) and redrawn at the real pitch on settle.
-  function scaleGrid() {
-    const { x, y, z } = v, gs = 24 * z, r = gs / gridSize;
-    gridHidden = true;
-    grid.style.transform = `translate3d(${((x % gs) + gs) % gs - gs}px, ${((y % gs) + gs) % gs - gs}px, 0) scale(${r})`;
-    grid.style.transformOrigin = '0 0';
+    const r = 1 / v.z;
+    if (r === dotZ) return; dotZ = r;
+    grid.style.backgroundImage = `radial-gradient(circle at ${r}px ${r}px, var(--nk-dot) ${r}px, transparent ${1.4 * r}px)`;
   }
   function apply(gesture = false) {
     const { x, y, z } = v;
     worldEl.style.transform = `translate3d(${x}px, ${y}px, 0) scale(${z})`;
     if (gesture && z !== labelZ) labelsStale = true; else labels();
     // (not custom properties: a custom property set on #stage is inherited by every element under it, and each pan event would restyle them all)
-    stageEl.style.backgroundPosition = `${x}px ${y}px`; // (kept for readers of the stage style; the dots are drawn by #grid)
-    if (gesture && 24 * z !== gridSize && gridSize) scaleGrid();
-    else placeGrid();
+    // (kept for readers of the stage style; the dots are drawn by #grid). Not during a gesture: any paint change re-layerizes every drawn frame, so a gesture changes only transforms.
+    if (!gesture) stageEl.style.backgroundPosition = `${x}px ${y}px`;
+    if (!gesture) placeGrid(); // (in a gesture the dots scale with the world, and are redrawn at their size on settle)
     ctx.state.zoom = z; if (z !== rasterZ) { rasterZ = z; zoomedSinceRaster = true; }
     if (!document.body.classList.contains('moving')) document.body.classList.add('moving'); clearTimeout(movingTimer); movingTimer = setTimeout(settle, 160);
     ctx.emit('view', gesture ? { ...v, gesture: true } : { ...v });
   }
   function settle() {
     document.body.classList.remove('moving');
+    stageEl.style.backgroundPosition = `${v.x}px ${v.y}px`;
     if (labelsStale) labels();
-    if (gridHidden) placeGrid();
+    placeGrid();
     if (zoomedSinceRaster) { zoomedSinceRaster = false; worldEl.style.willChange = 'auto'; requestAnimationFrame(() => requestAnimationFrame(() => { worldEl.style.willChange = ''; })); }
     ctx.emit('viewsettle', { ...v });
   }
