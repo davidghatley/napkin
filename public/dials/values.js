@@ -128,11 +128,8 @@ export function parse(text, c) {
   if (["text", "color", "gradient", "asset", "file"].includes(c.type))
     return text;
   let v;
-  try {
-    v = JSON.parse(text);
-  } catch {
-    throw new Error("Enter a JSON value");
-  }
+  // Rows read JSON or a JS literal (single quotes, bare keys, trailing commas, comments).
+  v = looseJson(text);
   validateValue(v, c);
   return v;
 }

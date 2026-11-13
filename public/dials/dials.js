@@ -1494,3 +1494,5 @@ export class Dials extends EventTarget {
   }
 }
 export { expression } from "./values.js";
+export { registerInstrument } from "./instruments.js";
+export { looseJson } from "./values.js";
