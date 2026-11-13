@@ -2,7 +2,8 @@
 // only the bytes the op is about change, and the surrounding formatting (quote style, spacing, comments, line endings,
 // indentation) is read from the file and mirrored in anything new. A spot that cannot be written as text is refused on
 // its own, with the reason (EditRefused); the rest of the file stays editable.
-//   planNodeEdit(s, node, edit, { jsx, eol }) -> splices          text | attr | prop | class | style | delete
+//   planNodeEdit(s, node, edit, { jsx, eol }) -> splices          text | inner | attr | prop | class | style | delete
+//     inner: an HTML element's content replaced with markup (formatted text from the canvas: text, <br>, <strong>, <em>, <u>)
 //   planInsert(s, parent, index, text, { jsx }) -> splices          insert (text is HTML, or JSX for TSX files)
 //   planMove(s, node, parent, index, { jsx }) -> splices
 //   planRule(s, sheets, edit) -> { splices, rule }                    rule (selector + prop) in one file's stylesheets
@@ -123,6 +124,20 @@ function textSplices(s, node, value, run) {
   const lead = inner.length - inner.replace(/^[ \t\r\n\f]+/, '').length, trail = inner.length - inner.replace(/[ \t\r\n\f]+$/, '').length;
   const v = toL(value);
   const text = node.jsx ? jsxText(v) : escText(v);
+  if (lead + trail >= inner.length) return [{ from: a, to: b, text }];
+  return [{ from: a + lead, to: b - trail, text }];
+}
+
+// The whole content of an HTML element, replaced with markup (the canvas's text editor sends text with inline formatting).
+// The whitespace the file had just inside the tags stays as it was.
+function innerSplices(s, node, html) {
+  if (node.jsx) refuse(`<${node.tag}> (${at(s, node.start)}) is JSX; edit its text with op text`);
+  if (node.selfClosing || node.openEnd === node.closeStart && node.end === node.openEnd) refuse(`<${node.tag}> (${at(s, node.start)}) has no content to hold text`);
+  if (['script', 'style', 'html', 'head', 'body', 'title'].includes(node.name)) refuse(`<${node.tag}> (${at(s, node.start)}) cannot hold formatted text; edit an element inside it`);
+  if (/<\s*\/?\s*(script|style|iframe|object|embed)\b/i.test(html)) refuse('inner takes text and inline formatting, not scripts, styles or embedded documents', 400);
+  const a = node.openEnd, b = node.closeStart, inner = s.slice(a, b);
+  const lead = inner.length - inner.replace(/^[ \t\r\n\f]+/, '').length, trail = inner.length - inner.replace(/[ \t\r\n\f]+$/, '').length;
+  const text = toL(html);
   if (lead + trail >= inner.length) return [{ from: a, to: b, text }];
   return [{ from: a + lead, to: b - trail, text }];
 }
@@ -325,6 +340,7 @@ export function planNodeEdit(s, node, edit) {
   const str = (v, what) => { if (typeof v !== 'string') refuse(`${edit.op} needs ${what} as a string`, 400); return v; };
   switch (edit.op) {
     case 'text': return textSplices(s, node, str(edit.value, 'value'), edit.run);
+    case 'inner': return innerSplices(s, node, str(edit.html, 'html'));
     case 'attr': case 'prop': {
       const name = str(edit.name, 'name');
       if (!/^[^\s"'>/=]+$/.test(name)) refuse(`"${name}" is not an attribute name`, 400);
