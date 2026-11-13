@@ -60,7 +60,7 @@ export function arrange(list, by) {
   return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export function createSurfaceRoutes({ items, dir, identify, permission = () => 'write', stateDir = stateRoot() }) {
+export function createSurfaceRoutes({ items, dir, openFolder, identify, permission = () => 'write', stateDir = stateRoot() }) {
   let root = dir;
   try { root = realpathSync(dir); } catch {}
   const folder = join(stateDir, digest(Buffer.from(root)));
@@ -73,9 +73,10 @@ export function createSurfaceRoutes({ items, dir, identify, permission = () => '
     views: Array.isArray(saved.views) ? saved.views : [],
     depths: saved.depths && typeof saved.depths === 'object' ? saved.depths : {},
     rebinds: saved.rebinds && typeof saved.rebinds === 'object' ? saved.rebinds : {},
+    palettes: saved.palettes && typeof saved.palettes === 'object' ? saved.palettes : {}, // colours kept in a colour studio: item -> control -> [colour]
     selection: [], compare: null, presentation: false, // what is on screen now: not kept across restarts
   };
-  const persist = () => { mkdirSync(folder, { recursive: true }); writeAtomic(file, JSON.stringify({ arrange: board.arrange, groups: board.groups, views: board.views, depths: board.depths, rebinds: board.rebinds }, null, 1)); };
+  const persist = () => { mkdirSync(folder, { recursive: true }); writeAtomic(file, JSON.stringify({ arrange: board.arrange, groups: board.groups, views: board.views, depths: board.depths, rebinds: board.rebinds, palettes: board.palettes }, null, 1)); };
   const list = () => { try { return items.items(); } catch { return []; } };
   const known = () => new Set(list().map((x) => x.id));
   function view() {
@@ -133,6 +134,14 @@ export function createSurfaceRoutes({ items, dir, identify, permission = () => '
       if (typeof item !== 'string' || typeof section !== 'string' || ![1, 2, 3].includes(depth)) throw new SurfaceError('depth is { item, section, depth: 1|2|3 }. Next: send that shape.');
       (board.depths[item] ||= {})[section] = depth; save = true;
     }
+    if (m.palette !== undefined) { // { item, control, palette: [colour] }
+      const { item, control, palette } = m.palette || {};
+      if (typeof item !== 'string' || typeof control !== 'string' || !strings(palette)) throw new SurfaceError('palette is { item, control, palette: [colours] }. Next: send that shape.');
+      const all = (board.palettes[item] ||= {});
+      if (palette.length) all[control] = palette.slice(0, 64); else delete all[control];
+      if (!Object.keys(all).length) delete board.palettes[item];
+      save = true;
+    }
     if (save) persist();
   }
 
@@ -167,6 +176,14 @@ export function createSurfaceRoutes({ items, dir, identify, permission = () => '
         }
         throw new SurfaceError('method not allowed. Next: use GET or POST.', 405);
       }
+      if (path === '/api/folder') {
+        if (req.method === 'GET') return json(res, 200, { ok: true, folder: dir }), true;
+        if (req.method !== 'POST') throw new SurfaceError('method not allowed. Next: use GET or POST.', 405);
+        const m = await body(req); who(req);
+        if (!openFolder) throw new SurfaceError('This napkin cannot switch folders. Next: run napkin open <folder>.', 501);
+        try { return json(res, 200, { ok: true, ...(await openFolder(m.folder)) }), true; }
+        catch (e) { throw Object.assign(new SurfaceError(e.message, e.status || 400), { status: e.status || 400 }); }
+      }
       if (path === '/api/board') {
         if (req.method === 'GET') { await settled(); return json(res, 200, view()), true; }
         if (req.method === 'POST') {
@@ -184,6 +201,8 @@ export function createSurfaceRoutes({ items, dir, identify, permission = () => '
         const schema = items.controls(id), depths = board.depths[id];
         // A section the person opened at a depth reports that depth for its controls; nativeDepth keeps the one they were declared with.
         if (depths) for (const s of schema.sections || []) if (depths[s.id]) { s.depth = depths[s.id]; for (const c of s.controls) { c.nativeDepth = c.depth; c.depth = depths[s.id]; } }
+        const kept = board.palettes[id];
+        if (kept) for (const sec of schema.sections || []) for (const c of sec.controls) if (kept[c.id]) c.palette = kept[c.id];
         return json(res, 200, schema), true;
       }
     } catch (e) {

@@ -72,11 +72,12 @@ export function initSurface(ctx) {
     for (let i = 0; i < 60 && !id && performance.now() < 20000; i++) { await new Promise((r) => setTimeout(r, 50)); id = lookup(); } // just after load the canvas may still be reading its files
     if (!id) { ctx.hint(`No file called “${want}” on this canvas`); return; }
     ctx.stage.live?.(id);
+    ctx.instruments?.preview(ctx.itemOf(id), id); // the panel does not wait for a frame that is still loading
     let sel = cardSelection(id);
     for (let i = 0; i < 40 && sel && sel.node === '' && ctx.state.components.get(id)?.kind === 'html'; i++) { await new Promise((r) => setTimeout(r, 50)); sel = cardSelection(id); } // a frame still loading
     ctx.select(sel);
     bringIntoView(id);
-    focusCard(id);
+    if (!document.activeElement?.closest?.('#instruments, #panel')) focusCard(id); // a frame that took a while to load must not take focus back from a control the person has reached since
   }
 
   // Spatial focus: the nearest card that way, judged by the centres of the cards on screen (straight ahead beats diagonal).
@@ -128,7 +129,7 @@ export function initSurface(ctx) {
   }
 
   // ------------------------------------------------------------------------------------------------ instruments
-  const needPanel = () => { if (!ctx.state.selection) { ctx.hint('Select something first: Select <file>'); return false; } return true; };
+  const needPanel = () => { if (!ctx.state.selection && !ctx.instruments?.panel()) { ctx.hint('Select something first: Select <file>'); return false; } return true; };
   const control = (label) => needPanel() && ctx.instruments.focusControl(label);
   const depth = (label, d) => needPanel() && ctx.instruments.depth(label, d);
   const reset = (label) => needPanel() && ctx.instruments.reset(label);
@@ -279,7 +280,8 @@ export function initSurface(ctx) {
     const folder = String(path ?? '').trim();
     if (!folder) { ctx.hint('Name the folder: Open folder <path>'); return; }
     const r = await json('/api/folder', { folder });
-    if (r.ok === false || r.status >= 400) { ctx.hint(plain(r.status === 404 ? 'This napkin cannot switch folders from the canvas yet: run napkin <folder>' : r.error)); return; }
+    if (r.ok === false || r.status >= 400) { ctx.hint(plain(r.error || 'That folder could not be opened.')); return; }
+    ctx.hint('Opening the folder…');
     location.reload();
   }
   async function rebind(text) {
@@ -306,6 +308,7 @@ export function initSurface(ctx) {
     else if (kind === 'proposal') list = [...document.querySelectorAll('[data-proposal-id]')].map((e) => ({ value: e.dataset.proposalId, label: e.dataset.proposalId }));
     else if (kind === 'rebind') list = commands.filter((c) => !c.arg).map((c) => ({ value: `${c.id} to `, label: `${c.id} to <keys>`, partial: true }));
     list = list.map((x) => ({ ...x, r: rank(x.label) })).filter((x) => x.r < 9 || !r).sort((a, b) => a.r - b.r || a.label.length - b.label.length);
+    if (kind === 'item') for (const x of list.slice(0, 2)) ctx.instruments?.prefetch(x.value); // its instruments are read while the phrase is still being typed
     if (r && !list.some((x) => x.r === 0) && (kind === 'text' || kind === 'rebind' || kind === 'proposal' || kind === 'item' || kind === 'control')) list.unshift({ value: rest.trim(), label: rest.trim(), typed: true, r: kind === 'text' ? 0 : 3 });
     return list;
   }

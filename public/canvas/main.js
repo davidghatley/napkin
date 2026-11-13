@@ -102,6 +102,7 @@ const ctx = {
   },
   fetch: (path, init) => client.fetch(path, init), // fetch with this page's session (identity "you"); use for any /api write
   async sendEdits(component, edits, opts = {}) {
+    ctx.lastEditAt = performance.now(); // an edit through the element panel is newer than any instrument change before it
     const c = ctx.state.components.get(component);
     const r = await client.sendEdits(component, ctx.clash?.base(component) ?? c.revision, edits); // clash.js: the revision you saw when you began on the field
     ctx.clash?.sent(component, r);
@@ -150,6 +151,7 @@ initQuick(ctx);
 initInstruments(ctx); // the one instrument panel (dials) for whatever is selected
 initSurface(ctx); // commands, bindings, spatial focus, board state (commands.js)
 initShortcuts(ctx);
+window.napkinEarly?.replay(); // keys pressed before this point (early.js) now reach the palette and the key map
 initReadOnly(ctx);
 const nav = initNav(ctx);
 initHandles(ctx);
@@ -222,6 +224,7 @@ client.onChange((f) => {
   else if (f.type === 'slots') { stage.render(f.component, true).catch(console.error); }
   else if (f.type === 'build') { if (f.cause && f.ok) stage.render(f.component, true).catch(console.error); } // a component this one shows was edited: draw it again
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
+  else if (f.type === 'folder') { location.reload(); } // another folder was opened in this napkin
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; ctx.emit('agents', f); }
   else if (f.type === 'presence') ctx.emit('presence', f); // presence.js
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js

@@ -5,7 +5,7 @@
 //   node src/server.js --file <one .tsx> --port <n>           (a one-file folder)
 import { explainError } from './errors.js';
 import { createServer } from 'node:http';
-import { readFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -52,15 +52,6 @@ else { // a throwaway copy of the fixtures, so playing with the canvas never edi
   console.log(`napkin: editing a temp copy of fixtures/ in ${dir}`);
 }
 if (!existsSync(dir)) { console.error(`napkin: no such folder: ${dir}. Next: choose an existing --dir or run node src/cli.js init.`); process.exit(1); }
-let lock; // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
-try { lock = acquireWorkspaceLock(dir, { writeSidecars: !args['no-sidecars'] }); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
-if (!args['no-sidecars']) process.once('exit', () => cleanPrivate(dir)); // WPC-37: after the lock is released (its exit hook ran first), tidy what napkin left
-// The document engine (decision 0014) opens the whole folder as it is: HTML, CSS and any TSX/JSX, behind the engine
-// contract (/api/files, /api/component, /view, /api/edit, /api/undo, /api/styles). The TSX-dialect workspace below
-// keeps serving the canvas's dialect components (variants, props, sidecars) as before.
-const docRoot = resolve(args.root || (only ? dirname(only) : dir));
-const docs = openFolder(docRoot);
-const ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'], progressive: args.stream });
 const clients = new Set();
 const frame = (obj) => `data: ${JSON.stringify(obj)}\n\n`;
 const broadcast = (obj) => { const f = frame(obj); for (const res of clients) res.write(f); };
@@ -69,38 +60,87 @@ const presence = createPresence({ broadcast });
 // A proposal is work in progress too: show the agent on its node while it proposes.
 const PEOPLE = new Set(['you', 'file', 'git', 'unknown']);
 const tint = (by) => (PEOPLE.has(by) || !by ? {} : presence.color(by)); // agents get their presence colour on every frame that names them
-const api = createApi(ws, { dir, colorOf: tint, inFolder: !args['no-sidecars'], broadcast: (f) => {
-  if (f.type === 'proposal') {
-    broadcast({ ...f, proposal: { ...f.proposal, ...tint(f.proposal.by) } });
-    if (!f.proposal.adoption && !f.proposal.create && !f.proposal.updated) presence.set(f.proposal.by, { component: f.component, node: nodeOfEdit(f.proposal.edits?.[0]), variant: f.proposal.edits?.[0]?.variant ?? null });
-  } else broadcast(f);
-} });
-ws.events.on('tokens', t => broadcast({ type: 'tokens', ...t }));
-ws.events.on('progress', p => broadcast({ type: 'progress', ...p }));
-ws.events.on('change', (c) => {
-  broadcast({ type: 'change', ...c, ...tint(c.by) });
-  // An agent that wrote through the API (not MCP) still shows: the change names who and where. Accepting its proposal is your act, not its work.
-  if (c.by && !PEOPLE.has(c.by) && !c.approvedBy && c.edits?.length) presence.set(c.by, { component: c.component, node: nodeOfEdit(c.edits[0]), variant: c.edits[0].variant ?? null, ttl: 700 }); // an apply ends the agent's presence on that node <= 1 s later, whatever ttl it declared before
-});
-ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
-ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
-ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
-ws.events.on('preview', (c) => broadcast({ type: 'preview', ...c }));
-ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
-ws.events.on('slots', (s) => broadcast({ type: 'slots', ...s }));
-ws.events.on('added', async ({ component, by, summary }) => {
-  const e = ws.find(component);
-  if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)), ...(by && { by, summary }) });
-});
-
-const docRoutes = createDocRoutes(docs, { identify: (t) => api.identify(t), permission: (name) => agentPermission(dir, name), broadcast, legacy: (id) => !!ws.find(id),
-  itemRecipe: path => { try { return items.recipe(path); } catch { return {}; } },
-  legacyNewest: (verb, by) => { let at = null; for (const x of ws.entries()) { const t = x.store[verb + 'Top']?.(by); if (t && (at === null || t.at > at)) at = t.at; } return at; } });
+const sessions = new Map(); // bearer tokens, shared by every folder this process opens: a token stays good when the folder changes
+let docRoot, docs, ws, api, items, docRoutes, kindRoutes, surfaceRoutes, lock, root; // the open folder; switchFolder() replaces all of them
 const json = (res, code, body) => { if (body?.error) body.error = explainError(body.error); res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
 await loadKindPlugins((process.env.NAPKIN_KIND_PLUGINS || '').split(',').filter(Boolean).map(p => resolve(p)));
-const items = openItems(docRoot, { broadcast, watchFiles: true });
-const kindRoutes = createKindRoutes(items, { identify: t => api.identify(t), permission: name => agentPermission(dir, name), hasComponent: id => docs.has(id) });
-const surfaceRoutes = createSurfaceRoutes({ items, dir: docRoot, identify: t => api.identify(t), permission: name => agentPermission(dir, name) }); // the canvas surface: dials, /api/keys, /api/board
+// The document engine (decision 0014) opens the whole folder as it is: HTML, CSS and any TSX/JSX, behind the engine
+// contract (/api/files, /api/component, /view, /api/edit, /api/undo, /api/styles). The TSX-dialect workspace below
+// keeps serving the canvas's dialect components (variants, props, sidecars) as before.
+async function openSession() {
+  // one writer per folder: a fallback MCP or another server may hold it (AGT-08)
+  lock = acquireWorkspaceLock(dir, { writeSidecars: !args['no-sidecars'] });
+  const here = dir;
+  if (!args['no-sidecars']) process.once('exit', () => cleanPrivate(here)); // WPC-37: after the lock is released (its exit hook ran first), tidy what napkin left
+  docRoot = resolve(root || (only ? dirname(only) : dir));
+  docs = openFolder(docRoot);
+  ws = await openWorkspace(dir, { only, recursive: args.recursive, writeSidecars: !args['no-sidecars'], progressive: args.stream });
+  api = createApi(ws, { dir, sessions, colorOf: tint, inFolder: !args['no-sidecars'], broadcast: (f) => {
+    if (f.type === 'proposal') {
+      broadcast({ ...f, proposal: { ...f.proposal, ...tint(f.proposal.by) } });
+      if (!f.proposal.adoption && !f.proposal.create && !f.proposal.updated) presence.set(f.proposal.by, { component: f.component, node: nodeOfEdit(f.proposal.edits?.[0]), variant: f.proposal.edits?.[0]?.variant ?? null });
+    } else broadcast(f);
+  } });
+  ws.events.on('tokens', t => broadcast({ type: 'tokens', ...t }));
+  ws.events.on('progress', p => broadcast({ type: 'progress', ...p }));
+  ws.events.on('change', (c) => {
+    broadcast({ type: 'change', ...c, ...tint(c.by) });
+    // An agent that wrote through the API (not MCP) still shows: the change names who and where. Accepting its proposal is your act, not its work.
+    if (c.by && !PEOPLE.has(c.by) && !c.approvedBy && c.edits?.length) presence.set(c.by, { component: c.component, node: nodeOfEdit(c.edits[0]), variant: c.edits[0].variant ?? null, ttl: 700 }); // an apply ends the agent's presence on that node <= 1 s later, whatever ttl it declared before
+  });
+  ws.events.on('problem', (p) => broadcast({ type: 'problem', ...p }));
+  ws.events.on('canvas', (c) => broadcast({ type: 'canvas', ...c }));
+  ws.events.on('removed', (r) => broadcast({ type: 'removed', ...r }));
+  ws.events.on('preview', (c) => broadcast({ type: 'preview', ...c }));
+  ws.events.on('build', (b) => broadcast({ type: 'build', ...b }));
+  ws.events.on('slots', (s) => broadcast({ type: 'slots', ...s }));
+  ws.events.on('added', async ({ component, by, summary }) => {
+    const e = ws.find(component);
+    if (e) broadcast({ type: 'added', ...(await ws.snapshot(e)), ...(by && { by, summary }) });
+  });
+  
+  docRoutes = createDocRoutes(docs, { identify: (t) => api.identify(t), permission: (name) => agentPermission(dir, name), broadcast, legacy: (id) => !!ws.find(id),
+    itemRecipe: path => { try { return items.recipe(path); } catch { return {}; } },
+    legacyNewest: (verb, by) => { let at = null; for (const x of ws.entries()) { const t = x.store[verb + 'Top']?.(by); if (t && (at === null || t.at > at)) at = t.at; } return at; } });
+  items = openItems(docRoot, { broadcast, watchFiles: true });
+  kindRoutes = createKindRoutes(items, { identify: t => api.identify(t), permission: name => agentPermission(dir, name), hasComponent: id => docs.has(id) });
+  surfaceRoutes = createSurfaceRoutes({ items, dir: docRoot, openFolder: (target) => switchFolder(target), identify: t => api.identify(t), permission: name => agentPermission(dir, name) }); // the canvas surface: dials, /api/keys, /api/board
+}
+root = args.root;
+try { await openSession(); } catch (e) { if (e instanceof LockError) { console.error(`napkin: ${e.message}`); process.exit(1); } throw e; }
+
+// Open another folder in this same process and port (POST /api/folder, the palette's "Open folder <path>"). The new folder is opened
+// and locked first, so a folder that cannot be opened leaves the current one as it was; then the old one is released.
+let switching = null;
+async function switchFolder(target) {
+  const want = resolve(String(target ?? '').replace(/^~(?=\/|$)/, process.env.HOME || '~'));
+  const fail = (m) => { const e = new Error(m); e.status = 400; throw e; };
+  if (!String(target ?? '').trim()) fail('Name the folder to open. Next: send { folder: "/path/to/folder" }.');
+  if (!existsSync(want)) fail(`There is no folder at ${want}. Next: check the path.`);
+  if (!statSync(want).isDirectory()) fail(`${want} is a file. Next: name a folder.`);
+  if (switching) fail('A folder is already being opened. Next: wait a moment and try again.');
+  let components = want;
+  if (existsSync(join(want, 'napkin.json'))) {
+    let config; try { config = JSON.parse(readFileSync(join(want, 'napkin.json'), 'utf8')); } catch (e) { fail(`${join(want, 'napkin.json')}: ${e.message}. Next: fix its JSON.`); }
+    if (config.components !== undefined && typeof config.components !== 'string') fail('napkin.json: components must be a folder path string. Next: set components to "components".');
+    components = resolve(want, config.components || 'components');
+    if (!existsSync(components)) fail(`${components} does not exist (napkin.json). Next: create it or correct the components path.`);
+  }
+  if (resolve(root || dir) === want && dir === components) return { folder: want, same: true };
+  switching = true;
+  const old = { dir, only, root, lock, docs, ws, api, items };
+  try {
+    dir = components; only = undefined; root = want;
+    try { await openSession(); }
+    catch (e) { ({ dir, only, root } = old); lock = old.lock; docs = old.docs; ws = old.ws; api = old.api; items = old.items; docRoot = resolve(old.root || old.dir); throw Object.assign(e instanceof LockError ? e : new Error(e.message), { status: 409 }); }
+    old.docs.close(); old.items.close();
+    await old.api.close().then(() => old.ws.close()).catch(() => {});
+    old.lock.release();
+    broadcast({ type: 'folder', folder: want });
+    return { folder: want };
+  } finally { switching = null; }
+}
+
 const STATIC = { '/': 'public/index.html', '/brand/napkin-favicon.svg': 'public/brand/napkin-favicon.svg', '/brand/napkin-glyph.svg': 'public/brand/napkin-glyph.svg', '/src/canvas-client.js': 'src/canvas-client.js', '/src/model.js': 'src/model.js', '/src/token-math.js': 'src/token-math.js', '/src/errors.js': 'src/errors.js', '/src/usage.js': 'src/usage.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js', '/src/html-import.js': 'src/html-import.js', '/src/html-entities.js': 'src/html-entities.js', '/src/css-props.js': 'src/css-props.js', '/src/layout.js': 'src/layout.js', '/src/color.js': 'src/color.js' };
 const TYPES = { html: 'text/html; charset=utf-8', js: 'text/javascript', css: 'text/css', svg: 'image/svg+xml' };
 const send = (res, file) => {

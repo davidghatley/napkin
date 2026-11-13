@@ -33,6 +33,8 @@ export function initHistory(ctx, drawer) {
   const hideToast = () => { if (toast) toast.hidden = true; };
   async function run(verb, component, skip) {
     const item = ctx.state.components.get(component || ctx.state.selection?.component);
+    const file = item && ctx.itemOf?.(component || ctx.state.selection?.component);
+    if (verb === 'undo' && file && ctx.instruments?.canUndo(file)) { const ok = await ctx.instruments.undoItem(file); return { ok }; } // an instrument change of the file is the newest edit: undo that
     if (verb === 'undo' && item?.item) {
       const response = await ctx.fetch('/api/undo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: item.id }) });
       const result = await response.json();
