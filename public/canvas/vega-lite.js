@@ -400,7 +400,7 @@ function buildScale(units, ch, size, ctx) {
       for (const p of parts) for (const r of p.u.rows) if (!agg.has(r[k])) agg.set(r[k], []), agg.get(r[k]).push(r[f]); else agg.get(r[k]).push(r[f]);
       domain.sort((a, b) => (main.sort.order === 'descending' ? -1 : 1) * cmp(OPS[op](agg.get(a) || []), OPS[op](agg.get(b) || [])));
     } else if (main.type === 'temporal' || domain.every((v) => typeof v === 'number')) domain.sort(cmp);
-    else if (!sort) domain.sort(cmp);
+    else if (!sort) domain.sort((a, b) => (typeof a === 'string' && typeof b === 'string' ? a.localeCompare(b, undefined, { numeric: true }) : cmp(a, b)));
     sc.kind = 'band';
     sc.domain = domain;
     const pad = ctx.step ? 0 : 0;
