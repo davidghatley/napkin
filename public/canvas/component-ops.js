@@ -68,7 +68,7 @@ export function initComponentOps(ctx) {
     return c;
   }
 
-  // An HTML file drawn as a frame is renamed, deleted and duplicated as a file (file-ops.js): in place on its label, into the trash.
+  // An HTML file drawn as a frame is renamed, deleted and duplicated as a file (file-ops.js): in place on its label, one undo step each.
   const isFile = (c) => c?.kind === 'html' && !c.doc;
   function rename(id, opts = {}) {
     const c = pick(id);
@@ -137,7 +137,7 @@ export function initComponentOps(ctx) {
     const d = last;
     if (!d) return false;
     last = null;
-    if (d.undo) { const ok = await d.undo(); if (!ok) last = d; return ok; } // a file's rename, delete or copy (file-ops.js)
+    if (d.undo) { const ok = await d.undo(); if (!ok) last = d; return ok; } // a frame file's delete or copy (file-ops.js): the server's undo
     if (d.kind === 'rename') {
       const c = ctx.state.components.get(d.id);
       if (!c) { showToast(`Can't put the old name back: ${d.to} is gone.`, false); return false; }
@@ -167,6 +167,13 @@ export function initComponentOps(ctx) {
 
   ctx.on('change', (f) => { if ((f.by === 'you' || f.mine) && !/^(renamed|deleted|created)\b/.test(f.summary || '')) last = null; }); // a newer edit of yours is what Cmd-Z undoes now
   ctx.on('doc-change', (f) => { if (f.by === 'you' && f.kind !== 'file' && f.kind !== 'undo' && last?.undo) last = null; }); // an edit of a file after it: Cmd-Z undoes that edit now
+  // A double-click on a TSX component's label opens its rename dialog (an HTML frame's label renames in place: create.js).
+  document.addEventListener('dblclick', (ev) => {
+    const id = ev.target.closest?.('#stage .cmp-head h3')?.closest('.cmp')?.dataset.component, c = id && ctx.state.components.get(id);
+    if (!c?.doc || c.item || c.readOnly || ctx.state.tool !== 'select') return;
+    ev.preventDefault(); ev.stopPropagation();
+    rename(id);
+  }, true);
   // file-ops.js: what Ctrl+Z (or the toast's Undo) does next, and the toast
   const remember = (d) => { last = d; };
   ctx.cmpOps = { rename, remove, undoLast, undoDelete: undoLast, nameOf, remember, toast: showToast };

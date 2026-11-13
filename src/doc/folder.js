@@ -5,7 +5,7 @@
 // document (view.js), and applies edits through one path (edit.js) as minimal splices, with revisions, undo/redo per
 // component and caller, and a watcher. The only state it keeps is outside the folder: the "ask once" stylesheets, in
 // napkin's state dir under a hash of the folder's real path. The folder only ever changes by an edit someone made.
-import { readFileSync, readdirSync, statSync, lstatSync, existsSync, realpathSync, watch, mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync, lstatSync, existsSync, realpathSync, watch, mkdirSync } from 'node:fs';
 import { join, relative, resolve, dirname, extname, basename, sep, posix } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
@@ -524,11 +524,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return done2(comp, step, 'edit');
   }
 
-  // ---------- an HTML file as a whole (a frame on the canvas): its source, duplicate, rename, trash and back ----------
-  // The trash is in the state dir (never the folder): a trashed file can be put back (undo) while napkin runs and after.
-  const htmlComp = (id) => { const comp = component(id); if (comp.kind !== 'html') throw new DocError(`${comp.path} is not an HTML file. Next: rename or duplicate a .tsx component with its own commands`, 400); return comp; };
-  const changedFiles = () => { const old = new Set((list || []).map((x) => x.path)); scan(); watchDirs(); const cur = new Set(list.map((x) => x.path)); if ([...cur].some((x) => !old.has(x)) || [...old].some((x) => !cur.has(x))) events.emit('files', {}); };
-  // The whole text of a component's file, and the lines each element spans (the code strip shows and highlights them).
+  // ---------- the whole text of a component's file, and the lines each element spans (the code strip shows and highlights them) ----------
   function source(id) {
     const comp = component(id), e = read(comp.path);
     let lines = {}, cols = {};
@@ -539,58 +535,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     } catch { /* a file that does not parse: the text alone */ }
     return { ok: true, component: comp.id, file: comp.path, kind: comp.kind, revision: e.rev, source: fromL(e.s), lines, cols };
   }
-  const NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]*$/;
-  // A copy beside the file, named with the next free number (orbit.html -> orbit-2.html); { x, y }: where its frame goes.
-  function duplicateFile(id, { x, y } = {}) {
-    const comp = htmlComp(id), dir = posix.dirname(comp.path), ext = extname(comp.path), stem = basename(comp.path, ext).replace(/-\d+$/, '');
-    let n = 2, to; do to = posix.join(dir, `${stem}-${n++}${ext}`); while (existsSync(abs(to)));
-    writeAtomic(abs(to), read(comp.path).buf);
-    if (Number.isFinite(x) && Number.isFinite(y)) { layout[to] = { x: Math.round(x), y: Math.round(y), ...(layout[comp.id]?.width && { width: layout[comp.id].width }) }; saveLayout(); }
-    changedFiles();
-    return { ok: true, component: to, file: to, from: comp.id };
-  }
-  // The file gets a new name in the same folder; its place on the canvas, its width and its undo steps go with it.
-  function renameFile(id, name) {
-    const comp = htmlComp(id), ext = extname(comp.path);
-    const want = String(name ?? '').trim().replace(new RegExp(`${ext.replace('.', '\\.')}$`, 'i'), '');
-    if (!want) throw new DocError('A file needs a name. Next: type a name', 400);
-    if (!NAME.test(want) || want.endsWith('.')) throw new DocError(`"${want}" cannot be a file name: use letters, digits, spaces, dots, - and _. Next: type another name`, 400);
-    const to = posix.join(posix.dirname(comp.path), want + ext);
-    if (to === comp.path) return { ok: true, component: comp.id, file: comp.path, from: comp.id, same: true };
-    if (existsSync(abs(to)) && to.toLowerCase() !== comp.path.toLowerCase()) throw new DocError(`${basename(to)} already exists in this folder. Next: type another name`, 409);
-    renameSync(abs(comp.path), abs(to));
-    cache.delete(comp.path);
-    if (layout[comp.id]) { layout[to] = layout[comp.id]; delete layout[comp.id]; saveLayout(); }
-    for (const m of [undo, redo, history]) if (m.has(comp.id)) { m.set(to, m.get(comp.id)); m.delete(comp.id); }
-    for (const m of [undo, redo]) for (const st of m.get(to) || []) for (const f of st.files) if (f.path === comp.path) f.path = to; // a step names the file it changed
-    changedFiles();
-    return { ok: true, component: to, file: to, from: comp.id };
-  }
-  function trashFile(id) {
-    const comp = htmlComp(id), bin = join(state, 'trash');
-    mkdirSync(bin, { recursive: true });
-    const token = `${Date.now().toString(36)}-${createHash('sha256').update(comp.path + Math.random()).digest('hex').slice(0, 8)}`;
-    writeAtomic(join(bin, token), read(comp.path).buf);
-    writeAtomic(join(bin, token + '.json'), JSON.stringify({ path: comp.path, layout: layout[comp.id] ?? null, at: Date.now() }) + '\n');
-    unlinkSync(abs(comp.path));
-    cache.delete(comp.path);
-    changedFiles();
-    return { ok: true, component: comp.id, file: comp.path, trash: token };
-  }
-  function restoreFile(token) {
-    const gone = () => new DocError('No such file in the trash. Next: send the trash token the delete returned', 404);
-    if (!/^[a-z0-9]+-[0-9a-f]{8}$/.test(String(token))) throw gone();
-    const bin = join(state, 'trash');
-    let meta; try { meta = JSON.parse(readFileSync(join(bin, token + '.json'), 'utf8')); } catch { throw gone(); }
-    if (existsSync(abs(meta.path))) throw new DocError(`${meta.path} exists again. Next: rename or move it, then retry`, 409);
-    writeAtomic(abs(meta.path), readFileSync(join(bin, token)));
-    if (meta.layout) { layout[meta.path] = meta.layout; saveLayout(); }
-    unlinkSync(join(bin, token)); unlinkSync(join(bin, token + '.json'));
-    changedFiles();
-    return { ok: true, component: meta.path, file: meta.path };
-  }
 
-  // ---------- frame files: make, remove, rename (decision 0023) ----------
+  // ---------- frame files: make, duplicate, remove, rename (decision 0023) ----------
   // Each is one step on the caller's undo stack of that file, so Ctrl+Z after drawing a frame removes the file and its card,
   // and redo brings both back. Nothing is ever overwritten: a new file is written exclusively, a rename is a hard link then an
   // unlink (refused when the name is taken), and a removal or an undo checks the file still holds what napkin wrote.
@@ -685,6 +631,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     push(undo, t, st); redo.set(t, (redo.get(t) || []).filter((s) => s.by !== by));
     return fileDone(t, by, st, 'edit');
   }
+  // POST /api/frames/duplicate: { from, x?, y? } -> a copy beside the file, named with the next free number (orbit.html ->
+  // orbit-2.html), its card at x, y with the original's width. It is a create step: one undo removes the copy and its card.
+  function duplicateFrame(from, { x, y, by = 'unknown' } = {}) {
+    const f = frameFile(from);
+    let text; try { text = read(f).s; } catch { throw new DocError(`${f} is gone. Next: check the file list`, 404); }
+    const dir = posix.dirname(f), ext = extname(f), stem = basename(f, ext).replace(/-\d+$/, '');
+    let n = 2, p; do p = posix.join(dir, `${stem}-${n++}${ext}`).replace(/^\.\//, ''); while (existsSync(abs(p)));
+    const place = placeOf(x, y, layout[f]?.width);
+    put(p, text, place);
+    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `created ${p} (a copy of ${f})` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
+    return { ...fileDone(p, by, st, 'edit'), path: p, from: f, canvas: layout[p] };
+  }
   // Undo or redo a file step. A create undone removes the file (if it still holds what napkin wrote); a delete undone writes it back.
   function fileStep(id, k, by, kind) {
     const [fromStack, toStack] = kind === 'undo' ? [undo, redo] : [redo, undo];
@@ -752,14 +711,14 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   scan(); watchDirs();
   return {
     root, state, events,
-    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout, source, duplicateFile, renameFile, trashFile, restoreFile,
+    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout, source,
     latest(verb, by) { // the newest step this caller can undo (or redo) in any component: { component, at } | null
       let best = null;
       for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };
       return best;
     },
     undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'), pendingStep,
-    createFrame, removeFrame, renameFrame, nextFrame,
+    createFrame, duplicateFrame, removeFrame, renameFrame, nextFrame,
     history: (id) => [...(history.get(has(id) ? component(id).id : id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,
     rescan: () => { scan(); watchDirs(); },

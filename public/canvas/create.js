@@ -258,7 +258,7 @@ export function initCreate(ctx) {
   // ---- rename: the label is the file name; double-click it (or the layers row) to rename the file --------------------------
   function check(id, to) {
     const name = String(to ?? '').trim().replace(/\.html?$/i, '');
-    if (!name) return { error: 'Type a name.' };
+    if (!name) return { error: 'A file needs a name.' };
     if (!/^[A-Za-z0-9_][A-Za-z0-9 ._-]{0,99}$/.test(name)) return { error: 'Use letters, digits, spaces, dots, dashes or underscores.' };
     const dir = id.includes('/') ? id.slice(0, id.lastIndexOf('/') + 1) : '';
     const path = `${dir}${name}.html`;
