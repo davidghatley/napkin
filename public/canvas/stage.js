@@ -15,13 +15,24 @@ import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
+import { createItemFrame, compactItem, glanceCard } from './kinds.js';
 
 let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 export function createStage(ctx, root, world, view) {
   world.style.visibility = 'hidden'; // until the first layout: frames are packed together once they are all measured, and nobody sees them move there
-  const sections = new Map(); // component id -> { el, frame, unmounts, token, pos, size, culled }
+  // Components' sections. File items (kinds) are in the same map for get/set/has/delete, but iteration sees components only, so
+  // the inspector, theme, styles and every other loop over the stage's document frames never meets an item card. all() is both.
+  class SectionMap extends Map {
+    items = new Map();
+    set(k, v) { if (v?.item) this.items.set(k, v); else super.set(k, v); return this; }
+    get(k) { return super.get(k) ?? this.items.get(k); }
+    has(k) { return super.has(k) || this.items.has(k); }
+    delete(k) { return this.items.delete(k) || super.delete(k); }
+    all() { return [...super.entries(), ...this.items]; }
+  }
+  const sections = new SectionMap(); // component id -> { el, frame, unmounts, token, pos, size, culled }
   const auto = new Map();     // component id -> { x, y } chosen by the stage for components that have no saved position
   const overlays = root.querySelector('#overlays');
   const mk = (id) => { const o = document.createElement('div'); o.id = id; overlays.append(o); return o; };
@@ -49,9 +60,10 @@ export function createStage(ctx, root, world, view) {
     let sec = sections.get(id);
     if (sec) return sec;
     const el = document.createElement('section');
-    el.className = 'cmp'; el.dataset.component = id;
+    el.className = ctx.state.components.get(id)?.item ? 'item-card' : 'cmp'; el.dataset.component = id; el.dataset.itemId = id;
     el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="cmp-path" hidden></span><span class="badge" hidden></span><span class="rev"></span><span class="cmp-note" hidden></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
-    sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false };
+    if (ctx.state.components.get(id)?.item) el.dataset.awaiting = '1';
+    sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false, item: !!ctx.state.components.get(id)?.item };
     sections.set(id, sec);
     world.append(el);
     const saved = ctx.state.components.get(id)?.canvas;
@@ -59,6 +71,18 @@ export function createStage(ctx, root, world, view) {
     return sec;
   }
 
+  // A file card stays out of the picture until it is placed and its picture, poster or type has arrived: it never shows as an empty box.
+  const revealCard = (sec) => { if (sec.item && sec.pos && sec.media !== false) delete sec.el.dataset.awaiting; };
+  function awaitMedia(sec) {
+    sec.media = false;
+    if (sec.culled) { sec.media = true; return; }
+    const done = () => { if (sec.media === false) { sec.media = true; revealCard(sec); } };
+    const wait = [];
+    for (const m of sec.frame.querySelectorAll('img')) if (!m.complete) wait.push(new Promise((r) => { m.addEventListener('load', r, { once: true }); m.addEventListener('error', r, { once: true }); }));
+    for (const v of sec.frame.querySelectorAll('video[poster]')) wait.push(new Promise((r) => { const i = new Image(); i.onload = i.onerror = r; i.src = v.poster; }));
+    if (!wait.length) return done();
+    Promise.all(wait).then(done); setTimeout(done, 3000);
+  }
   function header(id) {
     const c = ctx.state.components.get(id), sec = section(id);
     sec.el.querySelector('h3').textContent = ctx.title(c);
@@ -115,13 +139,13 @@ export function createStage(ctx, root, world, view) {
     const detail = document.createElement('pre'); detail.textContent = message;
     card.append(summary, detail); return card;
   }
-  const overlapsOthers = (id, sec) => sec.pos && [...sections.entries()].some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
+  const overlapsOthers = (id, sec) => sec.pos && sections.all().some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
   // WPC-23: a frame far off screen is kept at the size it had (or a placeholder's) while it is culled; when it is drawn again it can be bigger
   // than the room it was given. The ones the stage placed itself move aside to free space; nothing else moves.
   function regrown(secs) {
     let changed = false;
     for (const sec of secs) {
-      const id = [...sections].find(([, x]) => x === sec)?.[0];
+      const id = sections.all().find(([, x]) => x === sec)?.[0];
       if (!id || sec.culled) continue;
       const was = { ...sec.size }; measure(sec);
       if (was.w === sec.size.w && was.h === sec.size.h) continue;
@@ -134,6 +158,7 @@ export function createStage(ctx, root, world, view) {
     ctx.matrix?.bar(id); // WPC-15: the filter bar exists before the frame is placed, so its height is counted
     const previous = { ...sec.size }; measure(sec);
     sec.el.dataset.ready = '1'; sec.el.dataset.revision = revision;
+    if (sec.item) { if (sec.media === undefined) awaitMedia(sec); revealCard(sec); }
     const resized = previous.w !== sec.size.w || previous.h !== sec.size.h;
     const overlaps = overlapsOthers(id, sec);
     if (laidOut && (!sec.pos || auto.has(id) && resized && overlaps)) placeNew(id);
@@ -146,21 +171,31 @@ export function createStage(ctx, root, world, view) {
     const sec = section(id);
     const token = ++sec.token;
     header(id);
-    if (!force && ctx.state.components.size > CULL_AFTER) {
+    // Mixed-file cards have a fixed viewport. Build them in one pass, then pack once;
+    // no per-card layout reads or free-slot searches during a large folder's first draw.
+    if (c.item && !laidOut && !force) {
+      sec.frame.innerHTML = `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>`;
+      awaitMedia(sec);
+      sec.size = { w: 480, h: 340 }; sec.pending = true;
+      sec.el.style.setProperty('--nk-w', '480px'); sec.el.style.setProperty('--nk-h', '340px');
+      sec.el.dataset.kind = c.kind; sec.el.dataset.ready = '1';
+      return;
+    }
+    if (!force && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER) {
       if (!sec.pos) {
-        sec.frame.innerHTML = c.kind === 'html' ? `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>` : '<div class="bundle-pending">Preview loads when in view</div>';
+        sec.frame.innerHTML = c.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : c.kind === 'html' ? glanceCard(ctx, c) : '<div class="bundle-pending">Preview loads when in view</div>';
         measure(sec); placeNew(id);
       }
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
-    if (c.kind === 'html' && !sec.docFrame && ctx.state.components.size > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
+    if ((c.kind === 'html' || c.item) && !sec.docFrame && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER && sections.all().filter(([, x]) => x.docFrame).length >= DOC_BUDGET && !(!c.item && evictItem())) { // (components and file items share the budget, components first: a file card gives its frame up for a component)
       sec.pending = true; sec.el.dataset.ready = '1';
-      if (!sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
+      if (!c.item && !sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = glanceCard(ctx, c);
       return;
     }
     sec.pending = false;
-    if (c.kind === 'html') return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
+    if (c.kind === 'html' || c.item) return renderDoc(id, c, sec, token); // (an HTML or JSX frame waits to be revealed the same way: no iframe loads for a frame far off screen)
     const res = await fetch(`/bundle/${encodeURIComponent(id)}.js?rev=${c.revision}`);
     if (token !== sec.token) return; // a newer revision is already on its way
     if (!res.ok) {
@@ -207,15 +242,24 @@ export function createStage(ctx, root, world, view) {
     const w = sec.frame.offsetWidth, h = sec.frame.offsetHeight;
     sec.docFrame?.destroy(); sec.docFrame = null; sec.pending = true;
     sec.frame.style.minWidth = `${w}px`; sec.frame.style.minHeight = `${h}px`;
-    sec.frame.innerHTML = `<div class="bundle-pending">${esc(c?.name ?? id)} · ${esc(c?.path ?? '')}<br>loads when you scroll to it</div>`;
+    sec.frame.innerHTML = c?.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : `<div class="bundle-pending">${esc(c?.name ?? id)} · ${esc(c?.path ?? '')}<br>loads when you scroll to it</div>`;
+  }
+
+  // The loaded file card farthest from the view gives its live frame back to the budget. False when none is loaded.
+  function evictItem(keep = new Set(ctx.state.selections.map((s) => s.component))) {
+    const b = view.get(), cx = (-b.x + view.stageBox().width / 2) / b.z, cy = (-b.y + view.stageBox().height / 2) / b.z;
+    const loaded = [...sections.items].filter(([id, x]) => x.docFrame && x.pos && !keep.has(id)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
+    if (!loaded.length) return false;
+    unloadDoc(loaded[0][0], loaded[0][1]);
+    return true;
   }
 
   // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
   async function renderDoc(id, c, sec, token) {
     if (!sec.docFrame) {
-      sec.docFrame = createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.docFrame = c.item ? createItemFrame(ctx, id) : createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
       sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
-      sec.el.dataset.kind = 'html';
+      sec.el.dataset.kind = c.item ? c.kind : 'html';
       const path = sec.el.querySelector('.cmp-path'); path.textContent = (c.path || '').split('/').slice(-2).join('/'); path.title = c.path || ''; path.hidden = false;
     }
     let ok = false;
@@ -244,6 +288,10 @@ export function createStage(ctx, root, world, view) {
   // ---------------------------------------------------------------------------------------------- placement
   function measure(sec) {
     if (sec.culled) return;
+    if (ctx.state.components.get(sec.el.dataset.component)?.item) { // fixed viewport; no layout reads, including newly arrived files
+      if (sec.size.w !== 480 || sec.size.h !== 340) { sec.size = { w: 480, h: 340 }; sec.el.style.setProperty('--nk-w', '480px'); sec.el.style.setProperty('--nk-h', '340px'); }
+      return;
+    }
     sec.size = { w: sec.frame.offsetWidth, h: sec.frame.offsetHeight };
     sec.el.style.setProperty('--nk-w', `${sec.size.w}px`); sec.el.style.setProperty('--nk-h', `${sec.size.h}px`);
   }
@@ -271,6 +319,10 @@ export function createStage(ctx, root, world, view) {
   // so in canvas units they grow as the view zooms out) and a gap of at least CLEAR px. Packing reserves it, so frames never overlap.
   const CLEAR = 24, RESERVE_Z = 0.25;
   const headBox = (sec, z) => {
+    if (ctx.state.components.get(sec.el.dataset.component)?.item) {
+      const lf = Math.min(4, Math.max(1, 1 / z));
+      return { w: Math.max(sec.size.w, Math.ceil((sec.el.dataset.name.length * 7 + 20) * lf)), top: Math.ceil(36 * lf) + CLEAR };
+    }
     const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
     const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
     const bar = head && ctx.matrix?.natural(sec.el); // WPC-32: a filter bar too big for its frame is hidden, so it takes no room above it
@@ -329,7 +381,7 @@ export function createStage(ctx, root, world, view) {
   function rearrange(changed) {
     if (!laidOut) return;
     const z = view.get().z, gapX = MASONRY_GAP;
-    const list = [...sections].filter(([, s]) => s.pos).map(([id, s]) => { if (!home.has(id)) home.set(id, { ...s.pos }); return { id, s, h: home.get(id) }; }).sort((a, b) => a.h.x - b.h.x || a.h.y - b.h.y);
+    const list = sections.all().filter(([, s]) => s.pos).map(([id, s]) => { if (!home.has(id)) home.set(id, { ...s.pos }); return { id, s, h: home.get(id) }; }).sort((a, b) => a.h.x - b.h.x || a.h.y - b.h.y);
     const done = []; let moved = false;
     for (const { id, s, h } of list) {
       let x = id === changed || !auto.has(id) ? s.pos.x : h.x, y = id === changed || !auto.has(id) ? s.pos.y : h.y;
@@ -346,22 +398,34 @@ export function createStage(ctx, root, world, view) {
   }
   function layoutAll() {
     home.clear();
-    const ids = [...sections.keys()];
+    const ids = sections.all().map(([k]) => k);
     // Frames placed one by one while the first renders were still on their way were placed by a placeholder size; now that
     // the sizes are known, the ones without a saved position are packed once, together (WPC-23: no overlaps after a reload).
     for (const id of ids) if (!placed(id)) auto.delete(id);
     // Frames not drawn yet (far off screen on a big canvas) have no size of their own: each is given room for a large one of the sizes
     // measured so far (the 90th percentile), so drawing it later rarely needs more room than it was given and nothing has to move.
     const real = ids.filter((id) => { const x = sections.get(id); return !x.pending && x.size.w > 0 && !x.frame.querySelector('.bundle-pending'); });
-    const pend = ids.filter((id) => !placed(id) && sections.get(id).pending);
+    const pend = ids.filter((id) => !ctx.state.components.get(id)?.item && !placed(id) && sections.get(id).pending);
     if (pend.length && real.length >= 3) {
       const p90 = (vals) => vals.sort((a, b) => a - b)[Math.min(vals.length - 1, Math.floor(vals.length * 0.9))];
       const est = { w: p90(real.map((id) => sections.get(id).size.w)), h: p90(real.map((id) => sections.get(id).size.h)) };
       for (const id of pend) { const x = sections.get(id); x.size = { ...est }; x.el.style.setProperty('--nk-w', `${est.w}px`); x.el.style.setProperty('--nk-h', `${est.h}px`); }
     }
     for (const id of ids) if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); }
-    const todo = ids.filter((id) => !placed(id) && !auto.has(id)).sort(byName);
-    const taken = ids.filter(placed);
+    const isItem = (id) => !!ctx.state.components.get(id)?.item;
+    // Files that are not components are packed after them, so a component never lands somewhere different because other files exist.
+    const todo = ids.filter((id) => !placed(id) && !auto.has(id) && !isItem(id)).sort(byName);
+    // A folder of hundreds of files opens on its files: they are packed first, grouped by what they are, and the components go after them.
+    const bigFolder = ids.length > 150 && ids.filter(isItem).length > ids.length / 2;
+    const byKind = (a, b) => (ctx.state.components.get(a)?.kind ?? '').localeCompare(ctx.state.components.get(b)?.kind ?? '') || byName(a, b);
+    const todoItems = ids.filter((id) => !placed(id) && !auto.has(id) && isItem(id)).sort(bigFolder ? byKind : byName);
+    const taken = ids.filter((id) => placed(id) && !isItem(id));
+    if (bigFolder && todoItems.length) {
+      const seatedFirst = ids.filter((id) => sections.get(id).pos && !todoItems.includes(id)), first = pack(todoItems, seatedFirst, 0.3); // (room for the titles as they are drawn at the opening zoom)
+      for (const id of todoItems) { const p = first.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
+      SHELF_W = Math.max(SHELF_W, first.width);
+      taken.push(...todoItems);
+    }
     // the reserve depends on the zoom the whole layout will be viewed at, which depends on the reserve: settle it in a few steps
     const box = view.stageBox();
     const fitZoom = (res) => { // what Shift+1 will show: the frames and their 36 px title strip, 72 px padding, at most 100%
@@ -377,9 +441,15 @@ export function createStage(ctx, root, world, view) {
     }
     for (const id of todo) { const p = res.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
     SHELF_W = res.width;
+    if (todoItems.length && !bigFolder) {
+      const seated = ids.filter((id) => sections.get(id).pos && !todoItems.includes(id)), ir = pack(todoItems, seated, 1);
+      for (const id of todoItems) { const p = ir.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
+      SHELF_W = Math.max(SHELF_W, ir.width);
+    }
     const last = todo.at(-1);
     shelf = last ? { x: res.out.get(last).x + headBox(sections.get(last), z).w + GAP_X, y: res.out.get(last).y, h: sections.get(last).size.h } : { x: 0, y: 0, h: 0 };
     laidOut = true;
+    for (const [, x] of sections.all()) revealCard(x);
     world.style.visibility = '';
     ctx.emit('layout', {});
   }
@@ -397,7 +467,7 @@ export function createStage(ctx, root, world, view) {
   function placeNew(id) {
     if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); return; }
     const me = sections.get(id), z = Math.max(RESERVE_Z, Math.min(1, view.get().z)); // (the room for a title is bounded: a zoomed-out view must not make every new frame's slot huge)
-    const others = [...sections.entries()].filter(([k, s]) => k !== id && s.pos).map(([k, s]) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
+    const others = sections.all().filter(([k, s]) => k !== id && s.pos).map(([k, s]) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
     const mine = headBox(me, z), { h } = me.size, w = mine.w;
     SHELF_W = Math.max(SHELF_W, w);
     const { x, y } = freeSlot(w, h, mine.top, others);
@@ -413,7 +483,7 @@ export function createStage(ctx, root, world, view) {
   function ghostSlot(key, size) {
     const z = Math.max(RESERVE_Z, Math.min(1, view.get().z)), lf = Math.min(16, Math.max(1, 1 / z));
     const top = Math.ceil(52 * lf) + CLEAR, w = size.w, h = size.h;
-    const others = [...sections.values()].filter((s) => s.pos).map((s) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
+    const others = sections.all().map(([, s]) => s).filter((s) => s.pos).map((s) => { const b = headBox(s, z); return { x: s.pos.x, y: s.pos.y - b.top, w: b.w, h: s.size.h + b.top }; });
     for (const [k, g] of ghosts) if (k !== key && g.pos) others.push({ x: g.pos.x, y: g.pos.y - top, w: g.size.w, h: g.size.h + top });
     SHELF_W = Math.max(SHELF_W, w);
     return freeSlot(w, h, top, others);
@@ -473,10 +543,12 @@ export function createStage(ctx, root, world, view) {
     const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y));
     return { x: x0, y: y0, w: Math.max(...rs.map((r) => r.x + r.w)) - x0, h: Math.max(...rs.map((r) => r.y + r.h)) - y0 };
   };
-  const allRect = () => union([...sections.keys()].map(componentRect));
+  const allRect = () => union(sections.all().map(([k]) => k).map(componentRect));
   function nodeRect(sel) { live(sel.component); const el = selectedElement(sel); return el ? elementRect(el) : null; }
   const selectionRect = () => (ctx.state.selections.length ? union(ctx.state.selections.map(nodeRect)) : null);
-  view.setFitters({ all: allRect, selection: selectionRect });
+  // The first view of a folder frames its components (the work it was opened for); file items sit beside them and Shift+1 shows everything.
+  const workRect = () => { const own = [...sections.keys()]; return own.length ? union(own.map(componentRect)) : allRect(); };
+  view.setFitters({ all: allRect, selection: selectionRect, work: workRect });
 
   // ---------------------------------------------------------------------------------------------- overlays
   function place(box, target, label, base) {
@@ -626,7 +698,7 @@ export function createStage(ctx, root, world, view) {
     cullQueued = false;
     const mode = cullMode; cullMode = 'exact';
     const drawn = []; // frames un-culled in this pass
-    if (sections.size <= CULL_AFTER) { for (const sec of sections.values()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); } if (drawn.length) regrown(drawn); return; }
+    if (sections.size + sections.items.size <= CULL_AFTER) { for (const [, sec] of sections.all()) if (sec.culled) { sec.culled = false; delete sec.el.dataset.cull; delete sec.el.dataset.far; drawn.push(sec); } if (drawn.length) regrown(drawn); return; }
     const { x, y, z } = view.get(), b = view.stageBox();
     const box = (m) => ({ x0: (-x - b.width * m) / z, x1: (b.width * (1 + m) - x) / z, y0: (-y - b.height * m) / z, y1: (b.height * (1 + m) - y) / z });
     const out = (r, sec) => sec.pos.x > r.x1 || sec.pos.x + sec.size.w < r.x0 || sec.pos.y - 40 > r.y1 || sec.pos.y + sec.size.h < r.y0;
@@ -635,20 +707,24 @@ export function createStage(ctx, root, world, view) {
     const ahead = [];
     // A frame of the document engine is a whole page, so they load progressively and under a budget: a few per pass for the frames in view (at fit-all too), never more than
     // DOC_BUDGET at once. When the frames in view want more than the budget, the loaded ones farthest from the view are unloaded (they keep their size and their name).
-    const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html';
-    let docs = [...sections.values()].filter((x) => x.docFrame).length, started = 0, wanting = false;
-    for (const [id, sec] of sections) {
+    const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html' || ctx.state.components.get(id)?.item;
+    let loaded = sections.all().filter(([, x]) => x.docFrame).length, started = 0, wanting = false;
+    for (const [id, sec] of sections.all()) {
+      if (ctx.state.components.get(id)?.item && z < 0.35 && !keep.has(id)) continue;
+      if (z * sec.size.w < 20 && !keep.has(id)) continue; // a frame under 20 screen pixels wide cannot be read: it stays the card of its file's first lines
       if (sec.pending && visible(sec) && isDocSec(id)) {
-        if (docs < DOC_BUDGET && started < DOC_BATCH) { docs++; started++; render(id, true).catch(console.error); } else wanting = true;
+        const isItem = !!ctx.state.components.get(id)?.item;
+        if (!isItem && loaded >= DOC_BUDGET && evictItem(keep)) loaded--;
+        if (loaded < DOC_BUDGET && started < DOC_BATCH) { loaded++; started++; render(id, true).catch(console.error); } else wanting = true;
       } else if (sec.pending && visible(sec)) render(id, true).catch(console.error);
     }
     if (wanting) { // unload the farthest loaded frames to make room, then come back for the rest
       const cy = (-y + b.height / 2) / z, cx = (-x + b.width / 2) / z;
-      const away = [...sections].filter(([id, sec]) => sec.docFrame && sec.pos && !keep.has(id) && !visible(sec)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
+      const away = sections.all().filter(([id, sec]) => sec.docFrame && sec.pos && !keep.has(id) && !visible(sec)).sort((p, q) => Math.hypot(q[1].pos.x - cx, q[1].pos.y - cy) - Math.hypot(p[1].pos.x - cx, p[1].pos.y - cy));
       for (const [id, sec] of away.slice(0, DOC_BATCH)) unloadDoc(id, sec);
       setTimeout(() => queueCull(), 120);
     }
-    for (const [id, sec] of sections) {
+    for (const [id, sec] of sections.all()) {
       if (!sec.pos || !sec.size.w) continue;
       let off;
       if (mode !== 'exact') { // a gesture (pan or zoom): nothing is taken out, what comes into view is drawn within a frame
@@ -667,11 +743,19 @@ export function createStage(ctx, root, world, view) {
     } else if (mode === 'exact') trickle = false;
     if (drawn.length) regrown(drawn);
   }
+  // The first screenful of a big folder: where Shift+1 would show a map too small to read, a person starts on the first files at a size they can read.
+  function openingRect(zoom = 0.3) {
+    const cards = sections.all().filter(([, x]) => x.item && x.pos).sort((p, q) => p[1].pos.y - q[1].pos.y || p[1].pos.x - q[1].pos.x);
+    if (!cards.length) return null;
+    const box = view.stageBox(), { x, y } = cards[0][1].pos;
+    return { x, y: y - 36, w: box.width / zoom, h: box.height / zoom };
+  }
   const RANK = { zoom: 0, pan: 1, exact: 2 };
   const queueCull = (mode = 'exact') => { if (!cullQueued) cullMode = mode; else if (RANK[mode] > RANK[cullMode]) cullMode = mode; if (!cullQueued) { cullQueued = true; requestAnimationFrame(cull); } };
   ctx.on('view', (v) => {
     if (v.gesture && gesturing) moveOverlays(v); else refreshOverlays();
     const was = lastZ; lastZ = v.z; gesturing = !!v.gesture;
+    if (world.dataset.far !== (v.z < 0.1 ? '1' : '')) { if (v.z < 0.1) world.dataset.far = '1'; else delete world.dataset.far; } // far out, a title is under 3 px tall: it is not drawn
     if (v.gesture) titlesNow(v);
     queueCull(v.gesture ? (v.z !== was ? 'zoom' : 'pan') : 'exact');
   });
@@ -685,7 +769,7 @@ export function createStage(ctx, root, world, view) {
     const b = view.stageBox(), m = 0.25;
     const x0 = (-v.x - b.width * m) / v.z, x1 = (b.width * (1 + m) - v.x) / v.z, y0 = (-v.y - b.height * m) / v.z, y1 = (b.height * (1 + m) - v.y) / v.z;
     const off = (a, h) => Math.max(a / h, h / a) >= LABEL_STEP;
-    for (const sec of sections.values()) {
+    for (const [, sec] of sections.all()) {
       if (sec.culled || !sec.pos || !sec.size.w) continue;
       if (sec.pos.x > x1 || sec.pos.x + sec.size.w < x0 || sec.pos.y - 40 * lf > y1 || sec.pos.y + sec.size.h < y0) continue;
       if (off(lf, sec.headLf ?? slf)) { const head = sec.el.querySelector('.cmp-head'); if (head) { head.style.setProperty('--nk-lf', String(lf)); sec.headLf = lf; titled.add(sec); } }
@@ -697,7 +781,7 @@ export function createStage(ctx, root, world, view) {
     for (const [gid, gsec] of sections) if (gsec.docFrame) gsec.docFrame.grip.tabIndex = ctx.state.selections.some((q) => q.component === gid) ? 0 : -1; // only the selected frame's grip is a Tab stop
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
-    for (const [id, sec] of sections) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }
+    for (const [id, sec] of sections.all()) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }
     const n = ctx.state.selections.length;
     selectBox.dataset.more = String(n - 1);
     refreshOverlays();
@@ -710,11 +794,11 @@ export function createStage(ctx, root, world, view) {
     const cell = el?.closest('.cell');
     if (!el && ev && !document.body.dataset.play) { // an HTML component's frame: hit-test the document inside it
       const dc = target.closest?.('.doc-cell');
-      const id = dc?.closest('.cmp')?.dataset.component;
-      const p = id && sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY);
+      const id = dc?.closest('.cmp, .item-card')?.dataset.component;
+      const p = id && (sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY) || (ctx.state.components.get(id)?.item ? dc : null));
       return p ? { el: p, id, variant: {} } : null;
     }
-    return el && cell && { el, id: cell.closest('.cmp').dataset.component, variant: JSON.parse(cell.dataset.variant) };
+    return el && cell && { el, id: cell.closest('.cmp, .item-card').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
   root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
@@ -791,7 +875,7 @@ export function createStage(ctx, root, world, view) {
     const body = !head && ctx.state.tool === 'select' && ev.pointerType !== 'touch' && !ev.target.closest('.mount [data-n]') ? ev.target.closest?.('.frame') : null;
     if (ev.target.closest('details, summary, pre, [data-nodrag]')) return;
     if (!(head || body) || ev.button !== 0 || view.isPanning()) return;
-    const id = (head || body).closest('.cmp').dataset.component, sec = sections.get(id);
+    const id = (head || body).closest('.cmp, .item-card').dataset.component, sec = sections.get(id);
     if (!sec?.pos) return;
     ev.preventDefault();
     drag = { id, x: ev.clientX, y: ev.clientY, from: { ...sec.pos }, moved: false, title: !!head };
@@ -814,6 +898,7 @@ export function createStage(ctx, root, world, view) {
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
+      else if (d.title && c?.item) ctx.select({ component: d.id, node: 'item', variant: {} });
       else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; if (first) ctx.select({ component: d.id, node: first.node, variant: {} }); }
       else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
@@ -825,7 +910,9 @@ export function createStage(ctx, root, world, view) {
     if (c) c.canvas = { ...pos };
     auto.delete(d.id);
     try {
-      const r = c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
+      const r = c?.item
+        ? await ctx.fetch('/api/item-layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: d.id, x: pos.x, y: pos.y }) })
+        : c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
         ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, x: pos.x, y: pos.y }) })
         : await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
@@ -845,7 +932,7 @@ export function createStage(ctx, root, world, view) {
 
   return {
     rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
-    componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
+    openingRect, componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };
 }

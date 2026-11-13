@@ -32,6 +32,14 @@ export function initHistory(ctx, drawer) {
   }
   const hideToast = () => { if (toast) toast.hidden = true; };
   async function run(verb, component, skip) {
+    const item = ctx.state.components.get(component || ctx.state.selection?.component);
+    if (verb === 'undo' && item?.item) {
+      const response = await ctx.fetch('/api/undo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: item.id }) });
+      const result = await response.json();
+      if (result.ok) { await ctx.kinds.load(); ctx.stage.render(item.id, true); ctx.emit('select', ctx.state.selection); }
+      else ctx.hint(plain(result.error));
+      return result;
+    }
     const r = await ctx.fetch(component ? `/api/components/${encodeURIComponent(component)}/${verb}` : `/api/${verb}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(skip ? { skip: true } : {}) });
     const j = await r.json().catch(() => ({ ok: false, error: `${verb} failed (${r.status})` }));
     if (j.ok) { hideToast(); if (verb === 'undo') { const st = document.querySelector('#snap-toast'); if (st) st.hidden = true; } ctx.hint(`${j.skipped ? `Skipped "${j.skipped.summary}". ` : ''}${verb === 'undo' ? 'Undid' : 'Redid'}: ${(j.undone || j.redone)?.summary ?? 'your last edit'}`); }

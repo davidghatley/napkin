@@ -32,7 +32,7 @@ export function initLayers(ctx, el) {
   function draw() {
     if (renaming || dragging) { lastHtml = ''; return; } // (the rename box and the drag marks are not in lastHtml)
     const sel = selected(), prim = ctx.state.selection;
-    const comps = [...ctx.state.components.values()].sort((a, b) => a.name.localeCompare(b.name));
+    const comps = ctx.state.components.all().sort((a, b) => a.name.localeCompare(b.name));
     const rows = [];
     const anc = new Set(); // ancestors of every selected node: a quiet trail down to the selection
     for (const sl of ctx.state.selections) { const c0 = ctx.state.components.get(sl.component); if (!c0?.doc) continue; const { parentOf } = index(c0.doc); for (let q = parentOf.get(sl.node); q; q = parentOf.get(q.id)) anc.add(`${sl.component}|${q.id}`); }
@@ -97,6 +97,7 @@ export function initLayers(ctx, el) {
   // ---- selection from the tree ----
   function pick(row, ev) {
     const c = ctx.state.components.get(row.dataset.component);
+    if (c?.item) { ctx.select({ component: c.component, node: 'item', variant: {} }); return; }
     if (c?.kind === 'html') { // the document engine: a node of the file, or its first element for the component row
       const t = ctx.stage?.sections.get(c.component)?.docFrame?.tree();
       const node = row.dataset.node || (function first(l) { for (const n of l || []) { if (n.tag === 'body') return n.children[0]?.node; const f = first(n.children); if (f) return f; } return null; })(t?.tree);

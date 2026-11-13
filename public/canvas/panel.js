@@ -6,6 +6,7 @@
 // rebuild (ui.draft) until it is saved.
 import { plain, stripNext } from './words.js';
 import { renderDocPanel } from './doc-panel.js';
+import { renderKindPanel } from './kinds.js';
 import { index, axes, resolveStyle, propOf } from '/src/model.js';
 import { isFlex, isGrid, mainProp, sizeMode, sizePatch, pinPatch, pinsOf, tracks, placementOf, placePatch } from '/src/layout.js';
 import { parseColor, formatColor, fileSpace, documentColors, colorsIn } from '/src/color.js';
@@ -188,6 +189,7 @@ export function renderPanel(ctx) {
   if (ui.scrubbing) return;
   { // an HTML component of the document engine has its own panel (doc-panel.js)
     const s0 = ctx.state.selection, c0 = s0 && ctx.state.components.get(s0.component);
+    if (c0?.item) { renderKindPanel(ctx, el, c0).catch(console.error); return; }
     if (c0?.kind === 'html') { renderDocPanel(ctx, el, s0, c0).catch(console.error); return; }
   }
   const sel = ctx.state.selection;

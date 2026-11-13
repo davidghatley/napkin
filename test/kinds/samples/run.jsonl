@@ -1,0 +1,4 @@
+{"role":"user","timestamp":"09:10:00","content":"Draw the river garden."}
+{"role":"assistant","timestamp":"09:10:04","content":"Collecting observations."}
+{"type":"tool","timestamp":"09:10:05","message":"Wrote observations.csv · 60 rows"}
+{"type":"result","timestamp":"09:10:07","message":"Garden census is ready."}

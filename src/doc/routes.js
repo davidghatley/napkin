@@ -14,13 +14,14 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { DocError } from './folder.js';
+import { detectKind, context as kindContext } from '../kinds/registry.js';
 import { explainError } from '../errors.js';
 import { htmlView, createTsxViews } from './view.js';
 import { createTimeRoutes } from './time-routes.js';
 
 const TYPES = { '.html': 'text/html', '.htm': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.mjs': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp', '.avif': 'image/avif', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.otf': 'font/otf', '.txt': 'text/plain; charset=utf-8', '.md': 'text/plain; charset=utf-8', '.mp4': 'video/mp4', '.webm': 'video/webm' };
 
-export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false, legacyNewest = () => null } = {}) {
+export function createDocRoutes(engine, { identify = () => null, permission = () => 'write', broadcast = () => {}, legacy = () => false, legacyNewest = () => null, itemRecipe = () => ({}) } = {}) {
   const tsx = createTsxViews(engine);
   // Doc frames never carry a `component` key: the canvas's dialect client treats that key as one of its own components.
   // (A TSX file's frame names the file only: parsing it on every dialect save would slow the dialect canvas for nothing.)
@@ -109,6 +110,19 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         const id = decodeURIComponent(path.slice('/view/'.length));
         const comp = engine.component(id);
         const v = comp.kind === 'html' ? htmlView(engine, comp) : await tsx.view(comp);
+        // The item contract identifies the document root without changing its source file.
+        const source = Buffer.isBuffer(v.body) ? v.body : Buffer.from(v.body);
+        const at = /<html\b/i.exec(source.toString('latin1'));
+        // An animated page is still an html component; its item kind says what moves it.
+        let itemKind = comp.kind;
+        if (comp.kind === 'html') try { itemKind = detectKind(kindContext(comp.path, source.subarray(0, 65536), source.length)).id; } catch {}
+        const marker = Buffer.from(` data-napkin-kind="${itemKind}"`);
+        const doctype = /^(?:\xEF\xBB\xBF)?\s*<!doctype[^>]*>/i.exec(source.toString('latin1'));
+        v.body = at
+          ? Buffer.concat([source.subarray(0, at.index + 5), marker, source.subarray(at.index + 5)])
+          : Buffer.concat([source.subarray(0, doctype?.[0].length || 0), Buffer.from(`<html data-napkin-kind="${itemKind}">`), source.subarray(doctype?.[0].length || 0), Buffer.from('</html>')]);
+        const recipe = itemRecipe(comp.path);
+        if (Number.isFinite(recipe.zoom)) v.body = Buffer.concat([v.body, Buffer.from(`<style data-napkin>html{zoom:${recipe.zoom / 100}}</style>`)]);
         res.writeHead(v.status || 200, { 'content-type': v.type, 'cache-control': 'no-store' });
         return res.end(v.body), true;
       }
