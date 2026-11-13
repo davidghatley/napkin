@@ -37,6 +37,11 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   grip.tabIndex = -1; grip.setAttribute('role', 'slider'); grip.setAttribute('aria-label', 'Frame width'); grip.setAttribute('aria-valuemin', '120'); grip.setAttribute('aria-valuemax', '2400');
   const ruler = createRuler({ doc: () => iframe?.contentDocument || null, commitWidth: (w) => { api.setWidth(w); saveWidth(); }, get width() { return width; } });
   cell.append(cap, ruler.el, grip);
+  // Until the live page is drawn the card shows the start of the file's own text, so it is never an empty box.
+  const glance = document.createElement('pre'); glance.className = 'doc-glance';
+  const fillGlance = () => { const c = ctx.state.components.get(id); glance.textContent = (ctx.glances?.get(c?.path)?.text || (c ? `${c.name}\n${c.path}` : id)).slice(0, 700); };
+  if (ctx.state.components.total > 150) { fillGlance(); cell.prepend(glance); } // (a big folder only: smaller canvases draw their frames at once)
+  const offGlance = ctx.on?.('glances', fillGlance);
   let widthAt = 0, iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
   const proxies = new WeakMap();
   const say = (w, snapped) => { cap.textContent = ruler.say(w, snapped); grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuetext', `${w} px`); };
@@ -133,7 +138,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     next.className = 'doc-frame'; next.title = `${id} (live)`; next.tabIndex = -1;
     next.setAttribute('loading', 'eager');
     next.style.width = `${width}px`; next.style.height = iframe?.style.height || '120px';
-    if (iframe) { next.classList.add('doc-next'); cell.append(next); } else cell.prepend(next);
+    if (iframe || glance.isConnected) { next.classList.add('doc-next'); cell.append(next); } else cell.prepend(next);
     await new Promise((res) => { next.addEventListener('load', res, { once: true }); next.src = `/view/${enc(id)}?width=${width}&rev=${enc(revision ?? t.revision ?? '')}`; });
     await settle(next);
     if (my !== gen || !next.isConnected) { next.remove(); return false; }
@@ -143,6 +148,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     map = mapDom(next.contentDocument, t.tree || [], fk === 'tsx' || fk === 'jsx' ? next.contentDocument.getElementById('root') : null);
     for (const [el, node] of map.byEl) { const p = proxies.get(el); if (p) p.dataset.n = node; }
     next.classList.remove('doc-next');
+    glance.remove(); offGlance?.();
     if (old && old !== next) old.remove();
     ro?.disconnect();
     try { ro = new next.contentWindow.ResizeObserver(() => size()); ro.observe(next.contentDocument.documentElement); } catch { ro = null; }

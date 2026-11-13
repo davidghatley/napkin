@@ -53,9 +53,13 @@ function metadata(ctx, family) {
     meta.preview =
       family === 'binary' ? b.subarray(0, 128).toString('hex') : ctx.text.slice(0, 1400);
   if (ctx.kind === 'png' || ctx.kind === 'apng') {
-    if (b.length >= 24) {
-      meta.width = b.readUInt32BE(16);
-      meta.height = b.readUInt32BE(20);
+    if (b.length >= 24 && b.toString('ascii', 12, 16) === 'IHDR') {
+      const w = b.readUInt32BE(16),
+        h = b.readUInt32BE(20);
+      if (w > 0 && h > 0 && w <= 65535 && h <= 65535) {
+        meta.width = w;
+        meta.height = h;
+      }
     }
   }
   if (ctx.kind === 'gif' && b.length >= 10) {
@@ -147,12 +151,29 @@ define(
   'diff',
   (c) => /^diff --git /m.test(c.text) || /^--- .*\n\+\+\+ /m.test(c.text),
 );
+define('patch', ['.patch'], textMime, 'diff', (c) => c.ext === '.patch' && 3);
 define('json', ['.json', '.jsonc'], 'application/json', 'json');
 define('jsonl', ['.jsonl', '.ndjson'], 'application/x-ndjson', 'table');
 define('csv', ['.csv'], 'text/csv', 'table');
 define('tsv', ['.tsv'], 'text/tab-separated-values', 'table');
 define('css', ['.css'], 'text/css', 'css');
 define('html', ['.html', '.htm'], 'text/html', 'component');
+// Animated pages are still components; the kind names what moves them. Higher score beats plain html.
+const page = (c) => c.ext === '.html' || c.ext === '.htm';
+define(
+  'css-animation',
+  [],
+  'text/html',
+  'component',
+  (c) => page(c) && /@(?:-webkit-)?keyframes\b/.test(c.text) && 3,
+);
+define(
+  'waapi',
+  [],
+  'text/html',
+  'component',
+  (c) => page(c) && /\.animate\s*\(/.test(c.text) && 3,
+);
 define('tsx', ['.tsx'], 'text/plain', 'component');
 define('jsx', ['.jsx'], 'text/plain', 'component');
 define('svg', ['.svg'], 'image/svg+xml', 'image', (c) =>
@@ -217,7 +238,9 @@ define(
   'audio/mpeg',
   'audio',
   (c) =>
-    c.head.toString('ascii', 0, 3) === 'ID3' || (c.head[0] === 255 && (c.head[1] & 224) === 224),
+    c.head.toString('ascii', 0, 3) === 'ID3' ||
+    // A bare frame sync is also the UTF-16 byte order mark, so it only counts for an .mp3 name.
+    (c.ext === '.mp3' && c.head[0] === 255 && (c.head[1] & 224) === 224),
 );
 define('flac', ['.flac'], 'audio/flac', 'audio', (c) => c.head.toString('ascii', 0, 4) === 'fLaC');
 define(
@@ -284,7 +307,7 @@ define(
 );
 define('ipynb', ['.ipynb'], 'application/x-ipynb+json', 'notebook');
 define(
-  'css-animation',
+  'css-keyframes',
   [],
   'text/css',
   'css',
@@ -316,9 +339,19 @@ define('vega-lite', [], 'application/json', 'chart', (c) =>
 );
 define('chart', [], 'application/json', 'chart', (c) => {
   const j = json(c);
-  return !j?.$schema && !!((j?.series && Array.isArray(j.series)) || (j?.data && j?.encoding));
+  return (
+    !j?.$schema &&
+    !!(
+      (j?.series && Array.isArray(j.series)) ||
+      (j?.data && j?.encoding) ||
+      (Array.isArray(j?.data) &&
+        typeof j.x === 'string' &&
+        typeof j.y === 'string' &&
+        /^(bar|line|area|point|scatter|pie)$/.test(j.type))
+    )
+  );
 });
-define('waapi', ['.waapi'], 'application/json', 'animation', (c) => {
+define('waapi-json', ['.waapi'], 'application/json', 'animation', (c) => {
   const j = json(c);
   return !!(j?.keyframes && (j.options || j.timing));
 });
@@ -330,13 +363,23 @@ define('comfyui', [], 'application/json', 'graph', (c) => {
       Object.values(j).some((n) => n?.class_type && n?.inputs))
   );
 });
-define('agent-log', [], 'application/x-ndjson', 'timeline', (c) => {
+define('agent-run', [], 'application/x-ndjson', 'timeline', (c) => {
   if (!['.jsonl', '.ndjson', '.log', '.json'].includes(c.ext)) return false;
   return (
     /"(?:role|tool_call|tool_use|run_id|step_id)"\s*:/.test(c.text) ||
     /"(?:type|event)"\s*:\s*"(?:step|message|tool|run|assistant|user|result)/.test(c.text)
   );
 });
+// Text files arrive as UTF-8, UTF-16 with a byte order mark, or an older single-byte encoding.
+export function decodeText(buf) {
+  if (buf[0] === 0xff && buf[1] === 0xfe) return buf.subarray(2).toString('utf16le');
+  if (buf[0] === 0xfe && buf[1] === 0xff) return Buffer.from(buf.subarray(2)).swap16().toString('utf16le');
+  if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) return buf.subarray(3).toString('utf8');
+  const text = buf.toString('utf8');
+  // A cut-off multi-byte character at the end of a window is not a sign of another encoding.
+  if (text.slice(0, -1).includes('\ufffd') && !buf.includes(0)) return buf.toString('latin1');
+  return text;
+}
 export function context(path, head, bytes) {
   return {
     id: path,
@@ -345,6 +388,6 @@ export function context(path, head, bytes) {
     ext: extname(path).toLowerCase(),
     head,
     bytes,
-    text: head.toString('utf8'),
+    text: decodeText(head),
   };
 }

@@ -41,20 +41,20 @@ flowchart LR
 readers are reusable helpers rather than a second extension dispatch table in the server.
 Magic and content matches outrank extension matches. Later registrations win ties.
 
-There are 54 built-in definitions:
+There are 59 built-in definitions:
 
 | Surface | Kinds |
 | --- | --- |
-| Components and styles | html, tsx, jsx, css, css-animation |
+| Components and styles | html, tsx, jsx, css, css-keyframes, css-animation (an html page with `@keyframes`), waapi (an html page that calls `.animate()`) |
 | Images | svg, png, jpg (also jpeg), gif, apng, webp, avif, bmp, ico |
 | Video | mp4, webm, mov |
 | Audio | wav, mp3, flac, ogg (also opus), m4a |
 | Structured data | csv, tsv, json, jsonl, parquet, sqlite, arrow |
-| Charts and animation | vega-lite, chart, lottie, waapi |
-| Reading and source | md, txt, code, diff, ipynb, pdf, yaml, toml, xml, shader |
+| Charts and animation | vega-lite, chart (plain `{type, x, y, data}` or `series`), lottie, waapi-json |
+| Reading and source | md, txt, code, diff, patch, ipynb, pdf (drawn page by page with poppler), yaml, toml, xml, shader |
 | Models | obj, gltf, glb |
 | Type | ttf, otf, woff, woff2 |
-| Work and containers | comfyui, agent-log, zip, binary |
+| Work and containers | comfyui, agent-run, zip, binary |
 
 Image and media codecs use the browser's native decoder. A recognized container whose
 codec the browser cannot decode still has its identity and instruments; recognition
@@ -214,3 +214,13 @@ its open-time assertion does not establish the separate frame-time target.
 ![Workflow graph](../test/kinds/evidence/garden.png)
 
 ![Mixed files on the canvas](../test/kinds/evidence/canvas.png)
+
+## Round 2 notes
+
+- Text is decoded as UTF-8, UTF-16 (with a byte order mark) or, when UTF-8 fails, Latin-1. A bare MPEG frame sync only counts as mp3 when the file is named .mp3, because it is also the UTF-16 byte order mark.
+- A JSON file that is a list of records is shown as a typed table with distributions, above its tree.
+- Long tables (a Parquet file with millions of rows, a SQLite table, an Arrow file) scroll like a document: the scrollbar spans every row and the rows drawn follow where it stops. Parquet jumps by row group; the first pages of a column chunk are read from a 96 KiB window.
+- Fonts show their glyph count, read from their own tables (ttf, otf, woff, woff2 through Brotli).
+- Video cards show a poster (`/api/poster/<id>`, one ffmpeg frame, two at a time) and load the clip when the pointer reaches for it.
+- A folder of more than 150 files opens on its first files at 30%, grouped by kind, with room for each title. Shift+1 still fits everything. File cards stay out of the picture until they are placed and their picture has arrived; a component that is not drawn live shows the first lines of its file.
+- Under 20 screen pixels wide a frame is not loaded live.

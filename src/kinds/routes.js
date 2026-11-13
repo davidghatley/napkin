@@ -4,6 +4,35 @@ import { pathToFileURL } from 'node:url';
 import { kinds, registerKind } from './registry.js';
 import { ItemError } from './items.js';
 import { explainError } from '../errors.js';
+import { execFile } from 'node:child_process';
+const posters = new Map(),
+  waiting = [];
+let encoding = 0;
+// A small still of a video for its canvas card. At most two run at once; the last 400 are kept.
+function poster(file, key, at = 0.1) {
+  if (posters.has(key)) return Promise.resolve(posters.get(key));
+  return new Promise((resolve) => {
+    const run = () => {
+      encoding++;
+      execFile(
+        'ffmpeg',
+        ['-v', 'error', '-ss', String(at), '-i', file, '-frames:v', '1', '-vf', 'scale=480:-2', '-q:v', '5', '-f', 'mjpeg', 'pipe:1'],
+        { encoding: 'buffer', maxBuffer: 4 * 1024 * 1024, timeout: 8000 },
+        (error, out) => {
+          encoding--;
+          const next = waiting.shift();
+          if (next) next();
+          if (error || !out.length) return resolve(null);
+          posters.set(key, out);
+          while (posters.size > 400) posters.delete(posters.keys().next().value);
+          resolve(out);
+        },
+      );
+    };
+    if (encoding < 2) run();
+    else waiting.push(run);
+  });
+}
 export async function loadKindPlugins(paths) {
   for (const file of paths) {
     const plugin = await import(pathToFileURL(file).href);
@@ -92,6 +121,15 @@ export function createKindRoutes(
           return true;
         }
         return false;
+      }
+      if (req.method === 'GET' && path.startsWith('/api/poster/')) {
+        const x = items.get(decodeURIComponent(path.slice(12)));
+        if (x.definition.family !== 'video') throw new ItemError('Posters exist for video items. Next: request a video item.', 404);
+        const img = await poster(x.file, x.id + x.key);
+        if (!img) throw new ItemError('This video could not be decoded for a poster. Next: open it in a player.', 422);
+        res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=300' });
+        res.end(img);
+        return true;
       }
       if (req.method === 'GET' && path.startsWith('/api/item-data/')) {
         const ctx = items.context(decodeURIComponent(path.slice(15)));

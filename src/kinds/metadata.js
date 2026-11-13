@@ -1,3 +1,4 @@
+import { fontInfo } from './fontinfo.js';
 import { delimited, table, zipDirectory, parquetMeta } from './readers.js';
 import { DatabaseSync } from 'node:sqlite';
 import { arrowTable } from './arrow.js';
@@ -140,9 +141,9 @@ export function cardMetadata(ctx, family) {
       });
   if (family === 'chart' && j) {
     const rows =
-      j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [];
-    const x = j.encoding?.x?.field,
-      y = j.encoding?.y?.field;
+      (Array.isArray(j.data) ? j.data : null) || j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [];
+    const x = j.encoding?.x?.field || (typeof j.x === 'string' ? j.x : undefined),
+      y = j.encoding?.y?.field || (typeof j.y === 'string' ? j.y : undefined);
     result.chart = {
       title: j.title,
       mark: typeof j.mark === 'object' ? j.mark.type : j.mark || j.type || 'bar',
@@ -277,6 +278,10 @@ export function cardMetadata(ctx, family) {
     result.strings = [...b.toString('latin1').matchAll(/[\x20-\x7e]{5,}/g)]
       .slice(0, 5)
       .map((m) => m[0].slice(0, 60));
+  if (family === 'font' && ctx.file) {
+    const info = fontInfo(ctx.file);
+    if (info) Object.assign(result, { glyphs: info.glyphs, tables: info.tables });
+  }
   if (family === 'pdf') {
     result.documentText = [...text.matchAll(/\(([^()]{3,160})\)\s*Tj/g)]
       .slice(0, 8)

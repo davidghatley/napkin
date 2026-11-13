@@ -14,6 +14,7 @@
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
 import { DocError } from './folder.js';
+import { detectKind, context as kindContext } from '../kinds/registry.js';
 import { explainError } from '../errors.js';
 import { htmlView, createTsxViews } from './view.js';
 import { createTimeRoutes } from './time-routes.js';
@@ -112,11 +113,14 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         // The item contract identifies the document root without changing its source file.
         const source = Buffer.isBuffer(v.body) ? v.body : Buffer.from(v.body);
         const at = /<html\b/i.exec(source.toString('latin1'));
-        const marker = Buffer.from(` data-napkin-kind="${comp.kind}"`);
+        // An animated page is still an html component; its item kind says what moves it.
+        let itemKind = comp.kind;
+        if (comp.kind === 'html') try { itemKind = detectKind(kindContext(comp.path, source.subarray(0, 65536), source.length)).id; } catch {}
+        const marker = Buffer.from(` data-napkin-kind="${itemKind}"`);
         const doctype = /^(?:\xEF\xBB\xBF)?\s*<!doctype[^>]*>/i.exec(source.toString('latin1'));
         v.body = at
           ? Buffer.concat([source.subarray(0, at.index + 5), marker, source.subarray(at.index + 5)])
-          : Buffer.concat([source.subarray(0, doctype?.[0].length || 0), Buffer.from(`<html data-napkin-kind="${comp.kind}">`), source.subarray(doctype?.[0].length || 0), Buffer.from('</html>')]);
+          : Buffer.concat([source.subarray(0, doctype?.[0].length || 0), Buffer.from(`<html data-napkin-kind="${itemKind}">`), source.subarray(doctype?.[0].length || 0), Buffer.from('</html>')]);
         const recipe = itemRecipe(comp.path);
         if (Number.isFinite(recipe.zoom)) v.body = Buffer.concat([v.body, Buffer.from(`<style data-napkin>html{zoom:${recipe.zoom / 100}}</style>`)]);
         res.writeHead(v.status || 200, { 'content-type': v.type, 'cache-control': 'no-store' });

@@ -67,4 +67,8 @@ test('1,000 mixed canvas items have bounded live contexts and useful settled car
     }),
   );
   assert.ok(openMs < 2000, `1,000 mixed items opened in ${openMs.toFixed(0)} ms`);
+  assert.ok(frameMs < 17.2, `panning 1,000 items took ${frameMs.toFixed(1)} ms at p95 (budget 16.7 ms)`);
+  // the folder opens on readable cards, not a map too small to read
+  const z = await browser.eval('napkin.view.get().z');
+  assert.ok(z >= 0.25, `opening zoom ${z}`);
 });

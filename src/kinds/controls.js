@@ -78,7 +78,7 @@ export function nativeControls(ctx) {
   const splice = (id, label, value, start, end, extra = {}) =>
     out.push(control(id, label, value, { mode: 'splice', start, end }, extra));
   if (
-    ['json', 'lottie', 'waapi', 'vega-lite', 'chart', 'gltf', 'ipynb', 'comfyui'].includes(kind)
+    ['json', 'lottie', 'waapi-json', 'vega-lite', 'chart', 'gltf', 'ipynb', 'comfyui'].includes(kind)
   ) {
     try {
       for (const leaf of jsonLeaves(text).slice(0, 160)) {
@@ -92,7 +92,7 @@ export function nativeControls(ctx) {
       /* invalid source: recipe controls remain available */
     }
   }
-  if (['css', 'css-animation', 'html', 'svg', 'tsx', 'jsx'].includes(kind)) {
+  if (['css', 'css-keyframes', 'css-animation', 'waapi', 'html', 'svg', 'tsx', 'jsx'].includes(kind)) {
     for (const m of text.matchAll(/(--[\w-]+)\s*:\s*([^;}\n]+)/g)) {
       const start = m.index + m[0].indexOf(m[2], m[0].indexOf(':') + 1);
       splice(`css:${m.index}`, m[1], m[2].trim(), start, start + m[2].trimEnd().length);

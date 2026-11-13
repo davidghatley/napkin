@@ -47,7 +47,7 @@ test('live viewers draw their contents and mixed items join the canvas and panel
     ['leaf.lottie.json', '!!document.querySelector(".motion-stage ellipse")'],
     ['motion.css', '!!document.querySelector(".css-preview")'],
     ['turn.mp4', 'document.querySelector("video")?.videoWidth>0'],
-    ['guide.pdf', '!!document.querySelector(".pdf")'],
+    ['guide.pdf', '!!document.querySelector(".pdf-page canvas")'],
   ];
   for (const [name, condition] of checks) {
     await browser.goto(server.url + 'view/' + encodeURIComponent(name));

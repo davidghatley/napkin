@@ -224,7 +224,7 @@ export function generateSamples(dir = here, { media = true } = {}) {
   );
   put(
     'motion.css',
-    'css-animation',
+    'css-keyframes',
     '@keyframes drift { 0%,100% { transform: translateX(-50px) rotate(-10deg); } 50% { transform: translateX(50px) rotate(10deg); } }',
   );
   put(
@@ -249,7 +249,7 @@ export function generateSamples(dir = here, { media = true } = {}) {
   );
   put(
     'change.patch',
-    'diff',
+    'patch',
     'diff --git a/notes b/notes\n--- a/notes\n+++ b/notes\n@@ -1,2 +1,2 @@\n-Keep it still.\n+Let it grow.\n Look closely.\n',
   );
   put('config.yaml', 'yaml', 'garden:\n  name: River garden\n  shade: partial\n  plants: 14\n');
@@ -316,7 +316,7 @@ export function generateSamples(dir = here, { media = true } = {}) {
   );
   put(
     'run.jsonl',
-    'agent-log',
+    'agent-run',
     [
       { role: 'user', timestamp: '09:10:00', content: 'Draw the river garden.' },
       { role: 'assistant', timestamp: '09:10:04', content: 'Collecting observations.' },
@@ -353,7 +353,7 @@ export function generateSamples(dir = here, { media = true } = {}) {
   );
   put(
     'pulse.waapi',
-    'waapi',
+    'waapi-json',
     JSON.stringify({
       text: 'Breathe',
       keyframes: [

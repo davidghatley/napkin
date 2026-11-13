@@ -107,12 +107,12 @@ async function audio(ctx) {
           '-ac',
           '1',
           '-ar',
-          '800',
+          '8000',
           '-f',
           'f32le',
           'pipe:1',
         ],
-        { encoding: 'buffer', maxBuffer: 512 * 1024, timeout: 5000 },
+        { encoding: 'buffer', maxBuffer: 4 * 1024 * 1024, timeout: 5000 },
       );
       const peaks = Array(240).fill(0),
         n = stdout.length / 4;
@@ -120,7 +120,7 @@ async function audio(ctx) {
         const j = Math.min(239, Math.floor((i / n) * 240));
         peaks[j] = Math.max(peaks[j], Math.abs(stdout.readFloatLE(i * 4)));
       }
-      result = { peaks, sampledSeconds: n / 800 };
+      result = { peaks, sampledSeconds: n / 8000 };
     } catch {
       result = {
         peaks: [],
@@ -197,11 +197,36 @@ function model(ctx) {
     }
   return { vertices, faces };
 }
+// A PDF page is drawn by poppler into a PNG; headless and embedded browsers have no PDF plugin.
+const pdfCache = new Map();
+async function pdfPage(ctx, query) {
+  const key = ctx.file + ctx.key;
+  let pages = pdfCache.get(key);
+  try {
+    if (!pages) {
+      const { stdout } = await exec('pdfinfo', [ctx.file], { timeout: 5000 });
+      pages = Number(/^Pages:\s+(\d+)/m.exec(stdout)?.[1]) || 1;
+      pdfCache.set(key, pages);
+      while (pdfCache.size > 50) pdfCache.delete(pdfCache.keys().next().value);
+    }
+    const page = Math.min(pages, Math.max(1, Math.trunc(Number(query.get('page') ?? ctx.recipe.page ?? 1)) || 1)),
+      dpi = Math.min(200, Math.max(40, Number(query.get('dpi')) || 110));
+    const { stdout } = await exec(
+      'pdftocairo',
+      ['-png', '-r', String(dpi), '-f', String(page), '-l', String(page), '-singlefile', ctx.file, '-'],
+      { encoding: 'buffer', maxBuffer: 24 * 1024 * 1024, timeout: 10000 },
+    );
+    return { pages, page, image: 'data:image/png;base64,' + stdout.toString('base64') };
+  } catch (e) {
+    return { pages: pages ?? null, page: 1, note: 'This PDF could not be drawn here. Open it in a PDF reader.' };
+  }
+}
 export async function previewData(ctx, query = new URLSearchParams()) {
   const family = ctx.definition.family,
     offset = Math.max(0, Math.trunc(Number(query.get('offset') ?? ctx.recipe.rowOffset ?? 0) || 0)),
     count = Math.min(120, Math.max(1, Number(ctx.recipe.pageSize) || 80));
   if (family === 'audio') return audio(ctx);
+  if (family === 'pdf') return pdfPage(ctx, query);
   if (family === 'model') return model(ctx);
   if (family === 'zip') {
     const entries = zipDirectory(ctx.file);
@@ -261,26 +286,29 @@ export async function previewData(ctx, query = new URLSearchParams()) {
       const quoted = '"' + name.replaceAll('"', '""') + '"',
         rows = sqliteRows(db, name, count, offset);
       const total = db.prepare(`SELECT count(*) AS n FROM ${quoted}`).get().n;
-      return {
-        tables,
-        name,
-        offset,
-        total,
-        ...table(
-          rows.map((r) =>
-            Object.fromEntries(
-              Object.entries(r).map(([k, v]) => [
-                k,
-                typeof v === 'bigint'
-                  ? String(v)
-                  : v instanceof Uint8Array
-                    ? Buffer.from(v).toString('hex')
-                    : v,
-              ]),
-            ),
+      const shaped = table(
+        rows.map((r) =>
+          Object.fromEntries(
+            Object.entries(r).map(([k, v]) => [
+              k,
+              typeof v === 'bigint' ? String(v) : v instanceof Uint8Array ? Buffer.from(v).toString('hex') : v,
+            ]),
           ),
         ),
-      };
+      );
+      // SQLite has no boolean type: an integer column that only holds 0 and 1 is shown as one.
+      const declared = new Map(
+        db.prepare('PRAGMA table_info(' + quoted + ')').all().map((c) => [c.name, String(c.type).toUpperCase()]),
+      );
+      shaped.columns.forEach((c, i) => {
+        const vals = shaped.rows.map((r) => r[i]).filter((v) => v !== null);
+        if (/INT|BOOL/.test(declared.get(c.name) || '') && vals.length >= 4 && vals.every((v) => v === 0 || v === 1)) {
+          c.type = 'boolean';
+          c.bins = [vals.filter((v) => v === 0).length, vals.filter((v) => v === 1).length];
+          c.min = c.max = null;
+        }
+      });
+      return { tables, name, offset, total, ...shaped };
     } finally {
       db.close();
     }
@@ -325,8 +353,15 @@ export async function previewData(ctx, query = new URLSearchParams()) {
         .slice(0, 100),
     };
   }
-  if (['json', 'chart', 'animation', 'notebook', 'graph'].includes(family))
-    return { data: jsonData(ctx) };
+  if (family === 'json') {
+    const data = jsonData(ctx),
+      list = Array.isArray(data) ? data : null;
+    // A list of records is also a table, with the same typed columns and distributions as a CSV.
+    if (list && list.length > 1 && list.slice(0, 200).every((r) => r && typeof r === 'object' && !Array.isArray(r)))
+      return { data, ...table(list.slice(offset, offset + count)), total: list.length, offset, asTable: true };
+    return { data };
+  }
+  if (['chart', 'animation', 'notebook', 'graph'].includes(family)) return { data: jsonData(ctx) };
   if (family === 'timeline') {
     const lines = ctx.text.split(/\r?\n/).filter(Boolean);
     let data;

@@ -120,30 +120,39 @@ function markdown(t) {
 }
 function hist(bins) {
   const max = Math.max(1, ...bins);
-  return `<svg class="hist" viewBox="0 0 100 27" aria-label="Column distribution">${bins.map((v, i) => `<rect x="${(i * 100) / bins.length}" y="${27 - (v / max) * 25}" width="${Math.max(1, 100 / bins.length - 1)}" height="${(v / max) * 25}"/>`).join('')}</svg>`;
+  return `<svg class="hist" data-distribution viewBox="0 0 100 27" aria-label="Column distribution">${bins.map((v, i) => `<rect x="${(i * 100) / bins.length}" y="${27 - (v / max) * 25}" width="${Math.max(1, 100 / bins.length - 1)}" height="${(v / max) * 25}"/>`).join('')}</svg>`;
 }
-function table(d) {
-  return `<div class="table-scroll"><table><thead><tr>${(d.columns || []).map((c) => `<th scope="col">${esc(c.name)}<small>${esc(c.type)}${c.distinct !== undefined ? ` · ${c.distinct} distinct` : ''}${c.missing ? ` · ${c.missing} missing` : ''}</small>${hist(c.bins || [])}${c.min !== null && c.min !== undefined ? `<small>${esc(c.min)} — ${esc(c.max)}</small>` : ''}</th>`).join('')}</tr></thead><tbody>${(d.rows || []).map((row) => `<tr>${row.map((v) => `<td class="${typeof v === 'number' ? 'num' : v === null ? 'null' : ''}">${v === null ? '∅' : esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+function table(d, numbered = false) {
+  const first = d.rowStart ?? d.offset ?? 0;
+  return `<div class="table-scroll"><table><thead><tr>${numbered ? '<th scope="col" data-type="number" class="rownum">row<small>number</small></th>' : ''}${(d.columns || []).map((c) => `<th scope="col" data-type="${esc(c.type)}">${esc(c.name)}<small>${esc(c.type)}${c.distinct !== undefined ? ` · ${c.distinct} distinct` : ''}${c.missing ? ` · ${c.missing} missing` : ''}</small>${hist(c.bins || [])}${c.min !== null && c.min !== undefined ? `<small>${esc(c.min)} — ${esc(c.max)}</small>` : ''}</th>`).join('')}</tr></thead><tbody>${(d.rows || []).map((row, n) => `<tr>${numbered ? `<td class="num rownum">${fmt(first + n + 1)}</td>` : ''}${row.map((v) => `<td class="${typeof v === 'number' ? 'num' : v === null ? 'null' : ''}">${v === null ? '∅' : esc(typeof v === 'object' ? JSON.stringify(v) : v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
 }
+const ROW_H = 26, WINDOW_H = 380;
 async function showTable(params = {}) {
   const d = await data(params);
+  // A long table scrolls like a document: the scrollbar spans every row, and where it stops decides which rows are drawn.
+  const long = d.total > 400 && (d.starts || d.tables || item.kind === 'arrow' || item.kind === 'sqlite');
+  const numbered = d.rowStart !== undefined || (long && d.offset !== undefined);
   root.innerHTML =
     bar(
       label,
       `${d.total === null ? 'Window of' : fmt(d.total ?? d.rows?.length ?? 0)} rows · ${d.columns?.length || 0} columns`,
     ) +
-    `<div class="toolbar"><button id="prev" aria-label="Previous rows">←</button><span class="meta">${fmt(d.offset ?? 0)}–${fmt((d.offset ?? 0) + (d.rows?.length ?? 0))}</span><button id="next" aria-label="Next rows">→</button>${d.tables ? `<select id="tables" aria-label="Table">${d.tables.map((t) => `<option${t === d.name ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>` : ''}${d.groups > 1 ? `<select id="groups" aria-label="Row group">${Array.from({ length: Math.min(1000, d.groups) }, (_, i) => `<option value="${i}"${i === d.group ? ' selected' : ''}>Group ${i + 1}</option>`).join('')}</select>` : ''}</div>` +
-    table(d) +
+    `<div class="toolbar">${long ? '' : `<button id="prev" aria-label="Previous rows">←</button>`}<span class="meta" id="range">${fmt(d.rowStart ?? d.offset ?? 0)}–${fmt((d.rowStart ?? d.offset ?? 0) + (d.rows?.length ?? 0))}</span>${long ? '' : `<button id="next" aria-label="Next rows">→</button>`}${d.tables ? `<select id="tables" aria-label="Table">${d.tables.map((t) => `<option${t === d.name ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>` : ''}${!long && d.groups > 1 ? `<select id="groups" aria-label="Row group">${Array.from({ length: Math.min(1000, d.groups) }, (_, i) => `<option value="${i}"${i === d.group ? ' selected' : ''}>Group ${i + 1}</option>`).join('')}</select>` : ''}</div>` +
+    (long
+      ? `<div class="vscroll" id="vs" tabindex="0" aria-label="Rows of ${esc(label)}" style="height:${WINDOW_H}px"><div class="vspace" style="height:${Math.min(3e7, d.total * ROW_H)}px"><div class="vwin">${table(d, numbered)}</div></div></div>`
+      : table(d, numbered)) +
     note(
       d.note ||
         `${d.rows?.length || 0} sampled rows. Distributions describe this window.${d.truncated ? ' Text scan stops at 8 MiB.' : ''}`,
     );
   const offset = Number(params.offset ?? r.rowOffset ?? 0),
     size = Number(r.pageSize) || 80;
-  root.querySelector('#prev').onclick = () =>
-    showTable({ ...params, offset: Math.max(0, offset - size) }).catch(error);
-  root.querySelector('#next').onclick = () =>
-    showTable({ ...params, offset: offset + size }).catch(error);
+  root.querySelector('#prev')?.addEventListener('click', () =>
+    showTable({ ...params, offset: Math.max(0, offset - size) }).catch(error),
+  );
+  root.querySelector('#next')?.addEventListener('click', () =>
+    showTable({ ...params, offset: offset + size }).catch(error),
+  );
   root
     .querySelector('#tables')
     ?.addEventListener('change', (e) =>
@@ -152,6 +161,46 @@ async function showTable(params = {}) {
   root
     .querySelector('#groups')
     ?.addEventListener('change', (e) => showTable({ group: e.target.value }).catch(error));
+  if (long) virtualRows(d, params);
+}
+function virtualRows(d, params) {
+  const box = root.querySelector('#vs'),
+    win = root.querySelector('.vwin'),
+    range = root.querySelector('#range');
+  let timer = 0,
+    seq = 0,
+    at = null;
+  const rowAt = () => {
+    const span = box.scrollHeight - box.clientHeight;
+    return span > 0 ? Math.floor((box.scrollTop / span) * Math.max(0, d.total - 1)) : 0;
+  };
+  box.addEventListener('scroll', () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const row = rowAt(),
+        mine = ++seq;
+      let q;
+      if (d.starts) {
+        let g = 0;
+        for (let lo = 0, hi = d.starts.length - 1; lo <= hi; ) {
+          const mid = (lo + hi) >> 1;
+          if (d.starts[mid] <= row) (g = mid), (lo = mid + 1);
+          else hi = mid - 1;
+        }
+        if (g === at) return;
+        q = { ...params, group: g };
+        at = g;
+      } else q = { ...params, offset: Math.max(0, Math.min(d.total - 1, row)) };
+      try {
+        const n = await data(q);
+        if (mine !== seq) return;
+        win.innerHTML = table(n, true);
+        range.textContent = `${fmt(n.rowStart ?? n.offset ?? 0)}–${fmt((n.rowStart ?? n.offset ?? 0) + (n.rows?.length ?? 0))}`;
+      } catch (e) {
+        error(e);
+      }
+    }, 60);
+  });
 }
 function jsonTree(v, key = 'root', depth = 0) {
   if (v === null || typeof v !== 'object')
@@ -168,10 +217,10 @@ function jsonTree(v, key = 'root', depth = 0) {
 }
 function chart(j) {
   let rows =
-      j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [],
+      (Array.isArray(j.data) ? j.data : null) || j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [],
     encs = j.encoding || {},
-    xkey = encs.x?.field,
-    ykey = encs.y?.field;
+    xkey = encs.x?.field || (typeof j.x === 'string' ? j.x : undefined),
+    ykey = encs.y?.field || (typeof j.y === 'string' ? j.y : undefined);
   if (!Array.isArray(rows)) rows = [];
   if (!xkey && rows[0] && typeof rows[0] === 'object') xkey = Object.keys(rows[0])[0];
   if (!ykey && rows[0] && typeof rows[0] === 'object')
@@ -279,15 +328,15 @@ async function archive() {
   const d = await data();
   root.innerHTML =
     bar(label, `${d.entries.length} entries`) +
-    `<div class="archive"><nav aria-label="Archive contents"><input aria-label="Filter archive" placeholder="Filter paths" value="${esc(r.filter || '')}"><div></div></nav><section><p class="note">Choose a file to read it without extracting the archive.</p></section></div>`;
-  const nav = root.querySelector('nav div'),
+    `<div class="archive"><nav aria-label="Archive contents"><input aria-label="Filter archive" placeholder="Filter paths" value="${esc(r.filter || '')}"><ul role="tree" aria-label="Archive entries"></ul></nav><section><p class="note">Choose a file to read it without extracting the archive.</p></section></div>`;
+  const nav = root.querySelector('nav ul'),
     preview = root.querySelector('.archive section');
   function draw(filter) {
     nav.innerHTML = d.entries
       .filter((e) => e.name.includes(filter))
       .map(
         (e, i) =>
-          `<button data-index="${d.entries.indexOf(e)}" style="padding-left:${8 + Math.min(8, e.name.split('/').length - 1) * 10}px">${esc(e.name)}<br><span class="meta">${fmt(e.bytes)} bytes</span></button>`,
+          `<li role="treeitem" class="entry"><button data-index="${d.entries.indexOf(e)}" style="padding-left:${8 + Math.min(8, e.name.split('/').length - 1) * 10}px"><span class="entry-name">${esc(e.name)}</span><br><span class="meta">${fmt(e.bytes)} bytes</span></button></li>`,
       )
       .join('');
   }
@@ -307,6 +356,29 @@ async function archive() {
       preview.innerHTML = note(e.message);
     }
   };
+}
+async function pdfViewer(page = Number(r.page) || 1) {
+  const d = await data({ page });
+  if (!d.image) {
+    root.innerHTML = bar(label, 'PDF') + note(d.note || 'This PDF could not be drawn.') + `<iframe class="pdf" title="${esc(label)}" src="${raw}"></iframe>`;
+    return;
+  }
+  root.innerHTML =
+    bar(label, `Page ${d.page} of ${d.pages}`) +
+    `<div class="toolbar"><button id="prev" aria-label="Previous page"${d.page <= 1 ? ' disabled' : ''}>←</button><span class="meta">${d.page} / ${d.pages}</span><button id="next" aria-label="Next page"${d.page >= d.pages ? ' disabled' : ''}>→</button></div><div class="pdf-page"><canvas aria-label="PDF page ${d.page}"></canvas></div>`;
+  const img = new Image();
+  img.onload = () => {
+    const c = root.querySelector('canvas');
+    c.width = img.naturalWidth;
+    c.height = img.naturalHeight;
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff';
+    g.fillRect(0, 0, c.width, c.height);
+    g.drawImage(img, 0, 0);
+  };
+  img.src = d.image;
+  root.querySelector('#prev').onclick = () => pdfViewer(d.page - 1).catch(error);
+  root.querySelector('#next').onclick = () => pdfViewer(d.page + 1).catch(error);
 }
 function notebook(j) {
   return `<div class="notebook">${(j.cells || [])
@@ -596,14 +668,11 @@ async function run() {
     style.textContent = `@font-face{font-family:specimen;src:url(${JSON.stringify(raw)})}`;
     document.head.append(style);
     root.innerHTML =
-      bar(label, item.kind.toUpperCase()) +
-      `<div class="font-specimen" style="--specimen-size:${Number(r.size) || 56}px;--weight:${Number(r.weight) || 400}"><div class="hero">${esc(r.specimen || 'Sphinx of black quartz, judge my vow.')}</div><div class="glyphs">ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>abcdefghijklmnopqrstuvwxyz<br>0123456789 &amp; @ ! ?</div>${[12, 18, 24].map((size) => `<div class="font-line" style="font-size:${size}px"><small>${size}</small>The quick brown fox jumps over the lazy dog.</div>`).join('')}</div>`;
+      bar(label, `${item.kind.toUpperCase()}${item.meta?.glyphs ? ` · ${item.meta.glyphs} glyphs` : ''}`) +
+      `<div class="font-specimen" aria-label="Type specimen" style="--specimen-size:${Number(r.size) || 56}px;--weight:${Number(r.weight) || 400}"><div class="hero" contenteditable="true" spellcheck="false" aria-label="Editable specimen text">${esc(r.specimen || 'Sphinx of black quartz, judge my vow.')}</div><div class="glyphs">ABCDEFGHIJKLMNOPQRSTUVWXYZ<br>abcdefghijklmnopqrstuvwxyz<br>0123456789 &amp; @ ! ?</div>${[12, 18, 24].map((size) => `<div class="font-line" style="font-size:${size}px"><small>${size}</small>The quick brown fox jumps over the lazy dog.</div>`).join('')}</div>`;
     return;
   }
-  if (item.family === 'pdf') {
-    root.innerHTML = `<iframe class="pdf" title="${esc(label)}" src="${raw}#page=${Number(r.page) || 1}&zoom=${Number(r.zoom) || 100}"></iframe>`;
-    return;
-  }
+  if (item.family === 'pdf') return pdfViewer();
   if (item.family === 'zip') return archive();
   if (item.family === 'model') return turningModel(await data());
   const d = await data();
@@ -612,7 +681,7 @@ async function run() {
       cols = Number(r.columns) || 16;
     root.innerHTML =
       bar(label, `${fmt(item.bytes)} bytes`) +
-      `<div class="binary-grid"><div class="hex">${Array.from(
+      `<div class="binary-grid"><pre class="hex">${Array.from(
         { length: Math.ceil(b.length / cols) },
         (_, i) => {
           const bytes = b.slice(i * cols, (i + 1) * cols),
@@ -628,7 +697,7 @@ async function run() {
         .map(esc)
         .join(
           '\n',
-        )}</div><div class="strings"><b>Strings</b>${d.strings.map((s) => `<div><small>${s.offset.toString(16)}</small>${esc(s.text)}</div>`).join('') || note('No printable strings in this window')}</div></div>`;
+        )}</pre><div class="strings"><b>Strings</b>${d.strings.map((s) => `<div><small>${s.offset.toString(16)}</small>${esc(s.text)}</div>`).join('') || note('No printable strings in this window')}</div></div>`;
     return;
   }
   if (item.family === 'markdown') {
@@ -637,7 +706,7 @@ async function run() {
   }
   if (item.family === 'json') {
     root.innerHTML =
-      bar(label, 'Structured values') + `<div class="json-tree">${jsonTree(d.data)}</div>`;
+      (d.asTable ? bar(label, `${fmt(d.total)} records · ${d.columns.length} columns`) + table(d) : bar(label, 'Structured values') + `<div class="json-tree">${jsonTree(d.data)}</div>`);
     return;
   }
   if (item.family === 'notebook') {
@@ -655,7 +724,7 @@ async function run() {
   if (item.family === 'timeline') {
     root.innerHTML =
       bar(label, `${d.events.length} events`) +
-      `<div class="timeline">${d.events.map((e, i) => `<article class="event"><header><span>${String(i + 1).padStart(2, '0')} · ${esc(e.role || e.type || e.event || 'Step')}</span><time>${esc(e.timestamp || e.time || e.at || '')}</time></header><pre>${esc(typeof e.content === 'string' ? e.content : e.message || e.text || JSON.stringify(e.content ?? e, null, 2))}</pre></article>`).join('')}</div>` +
+      `<ol class="timeline" role="log" aria-label="Run log">${d.events.map((e, i) => `<li class="event"><header><span>${String(i + 1).padStart(2, '0')} · ${esc(e.role || e.type || e.event || 'Step')}</span><time>${esc(e.timestamp || e.time || e.at || '')}</time></header><pre>${esc(typeof e.content === 'string' ? e.content : e.message || e.text || JSON.stringify(e.content ?? e, null, 2))}</pre></li>`).join('')}</ol>` +
       (d.limited ? note('Showing the source window') : '');
     return;
   }
@@ -674,7 +743,7 @@ async function run() {
   if (item.family === 'css') {
     const vars = [...d.text.matchAll(/(--[\w-]+)\s*:\s*([^;}\n]+)/g)];
     root.innerHTML =
-      bar(label, item.kind === 'css-animation' ? 'Keyframes' : 'CSS variables') +
+      bar(label, item.kind === 'css-keyframes' ? 'Keyframes' : 'CSS variables') +
       `<div class="swatches">${vars
         .slice(0, 20)
         .map(

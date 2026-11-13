@@ -69,6 +69,7 @@ export function initNav(ctx) {
       return;
     }
     if (saved?.view && !saved.focus) view.set(saved.view);
+    else if (ctx.state.components.total > 150 && stage.openingRect?.()) view.fitRect(stage.openingRect(), { pad: 0, max: 1, animate: false });
     else view.fitAll({ animate: false, work: true });
   }
   addEventListener('hashchange', () => {

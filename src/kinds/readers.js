@@ -220,7 +220,18 @@ export function compact(b, start = 0) {
   const result = value(12);
   return { value: result, bytes: at - start };
 }
+const footers = new Map();
+// The footer of a file with thousands of row groups is parsed once; scrolling asks for it on every page.
 export function parquetMeta(file) {
+  const st = statSync(file),
+    key = `${file}:${st.size}:${st.mtimeMs}`;
+  if (footers.has(key)) return footers.get(key);
+  const meta = readParquetMeta(file);
+  footers.set(key, meta);
+  while (footers.size > 8) footers.delete(footers.keys().next().value);
+  return meta;
+}
+function readParquetMeta(file) {
   const size = statSync(file).size,
     tail = window(file, Math.max(0, size - 8), 8);
   if (tail.length !== 8 || tail.toString('ascii', 4) !== 'PAR1')
@@ -373,8 +384,11 @@ export function parquetTable(file, groupIndex = 0) {
     const schema = m.schema.find((s) => s[4]?.toString() === name);
     if (c[3]?.length !== 1 || schema?.[3] === 2)
       throw new Error('Nested Parquet columns need an adapter. Next: open the file in its own application; napkin still shows its metadata and bytes.');
-    const offset = Math.min(c[9] ?? Infinity, c[11] ?? Infinity),
-      length = Math.min(c[7] || LIMIT, 8 * LIMIT);
+    const offset = Math.min(c[9] ?? Infinity, c[11] ?? Infinity);
+    // The first pages are enough for a preview: read a small window and widen it only when a page is larger.
+    for (const cap of [96 * 1024, 8 * LIMIT]) {
+    try {
+    const length = Math.min(c[7] || LIMIT, cap);
     const b = window(file, offset, length);
     let at = 0,
       dict = null,
@@ -441,9 +455,22 @@ export function parquetTable(file, groupIndex = 0) {
       for (let i = 0; i < take; i++) values.push(defs && !defs[i] ? null : (decoded[j++] ?? null));
     }
     arrays.push(values);
+    } catch (e) {
+      if (cap === 8 * LIMIT || !/preview window|Snappy|Invalid|range|Buffer|offset/i.test(e.message)) throw e;
+      continue;
+    }
+    break;
+    }
   }
   const rows = Array.from({ length: Math.max(0, ...arrays.map((a) => a.length)) }, (_, i) =>
     Object.fromEntries(cols.map((k, j) => [k, arrays[j][i]])),
   );
-  return { ...table(rows, cols), total: m.rows, groups: m.groups.length, group: groupIndex };
+  // Row groups are the unit of random access: where each begins lets a viewer jump to any part of the file.
+  const starts = [];
+  let sum = 0;
+  for (const x of m.groups.slice(0, 20000)) {
+    starts.push(sum);
+    sum += Number(x[3]) || 0;
+  }
+  return { ...table(rows, cols), total: m.rows, groups: m.groups.length, group: groupIndex, rowStart: starts[groupIndex] ?? 0, starts };
 }

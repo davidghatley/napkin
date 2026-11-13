@@ -15,7 +15,7 @@ import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
-import { createItemFrame, compactItem } from './kinds.js';
+import { createItemFrame, compactItem, glanceCard } from './kinds.js';
 
 let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -60,8 +60,9 @@ export function createStage(ctx, root, world, view) {
     let sec = sections.get(id);
     if (sec) return sec;
     const el = document.createElement('section');
-    el.className = ctx.state.components.get(id)?.item ? 'item-card' : 'cmp'; el.dataset.component = id;
+    el.className = ctx.state.components.get(id)?.item ? 'item-card' : 'cmp'; el.dataset.component = id; el.dataset.itemId = id;
     el.innerHTML = '<div class="cmp-head"><span class="cmp-title"><h3></h3><span class="cmp-path" hidden></span><span class="badge" hidden></span><span class="rev"></span><span class="cmp-note" hidden></span></span><span class="axes-strip"></span><p class="problem" role="status"></p></div><div class="frame"></div>';
+    if (ctx.state.components.get(id)?.item) el.dataset.awaiting = '1';
     sec = { el, frame: el.querySelector('.frame'), unmounts: [], token: 0, pos: null, size: { w: 0, h: 0 }, culled: false, item: !!ctx.state.components.get(id)?.item };
     sections.set(id, sec);
     world.append(el);
@@ -70,6 +71,18 @@ export function createStage(ctx, root, world, view) {
     return sec;
   }
 
+  // A file card stays out of the picture until it is placed and its picture, poster or type has arrived: it never shows as an empty box.
+  const revealCard = (sec) => { if (sec.item && sec.pos && sec.media !== false) delete sec.el.dataset.awaiting; };
+  function awaitMedia(sec) {
+    sec.media = false;
+    if (sec.culled) { sec.media = true; return; }
+    const done = () => { if (sec.media === false) { sec.media = true; revealCard(sec); } };
+    const wait = [];
+    for (const m of sec.frame.querySelectorAll('img')) if (!m.complete) wait.push(new Promise((r) => { m.addEventListener('load', r, { once: true }); m.addEventListener('error', r, { once: true }); }));
+    for (const v of sec.frame.querySelectorAll('video[poster]')) wait.push(new Promise((r) => { const i = new Image(); i.onload = i.onerror = r; i.src = v.poster; }));
+    if (!wait.length) return done();
+    Promise.all(wait).then(done); setTimeout(done, 3000);
+  }
   function header(id) {
     const c = ctx.state.components.get(id), sec = section(id);
     sec.el.querySelector('h3').textContent = ctx.title(c);
@@ -145,6 +158,7 @@ export function createStage(ctx, root, world, view) {
     ctx.matrix?.bar(id); // WPC-15: the filter bar exists before the frame is placed, so its height is counted
     const previous = { ...sec.size }; measure(sec);
     sec.el.dataset.ready = '1'; sec.el.dataset.revision = revision;
+    if (sec.item) { if (sec.media === undefined) awaitMedia(sec); revealCard(sec); }
     const resized = previous.w !== sec.size.w || previous.h !== sec.size.h;
     const overlaps = overlapsOthers(id, sec);
     if (laidOut && (!sec.pos || auto.has(id) && resized && overlaps)) placeNew(id);
@@ -161,6 +175,7 @@ export function createStage(ctx, root, world, view) {
     // no per-card layout reads or free-slot searches during a large folder's first draw.
     if (c.item && !laidOut && !force) {
       sec.frame.innerHTML = `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>`;
+      awaitMedia(sec);
       sec.size = { w: 480, h: 340 }; sec.pending = true;
       sec.el.style.setProperty('--nk-w', '480px'); sec.el.style.setProperty('--nk-h', '340px');
       sec.el.dataset.kind = c.kind; sec.el.dataset.ready = '1';
@@ -168,7 +183,7 @@ export function createStage(ctx, root, world, view) {
     }
     if (!force && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER) {
       if (!sec.pos) {
-        sec.frame.innerHTML = c.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : c.kind === 'html' ? `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>` : '<div class="bundle-pending">Preview loads when in view</div>';
+        sec.frame.innerHTML = c.item ? `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>` : c.kind === 'html' ? glanceCard(ctx, c) : '<div class="bundle-pending">Preview loads when in view</div>';
         measure(sec); placeNew(id);
       }
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
@@ -176,7 +191,7 @@ export function createStage(ctx, root, world, view) {
     // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
     if ((c.kind === 'html' || c.item) && !sec.docFrame && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER && sections.all().filter(([, x]) => x.docFrame).length >= DOC_BUDGET && !(!c.item && evictItem())) { // (components and file items share the budget, components first: a file card gives its frame up for a component)
       sec.pending = true; sec.el.dataset.ready = '1';
-      if (!c.item && !sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
+      if (!c.item && !sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = glanceCard(ctx, c);
       return;
     }
     sec.pending = false;
@@ -400,8 +415,17 @@ export function createStage(ctx, root, world, view) {
     const isItem = (id) => !!ctx.state.components.get(id)?.item;
     // Files that are not components are packed after them, so a component never lands somewhere different because other files exist.
     const todo = ids.filter((id) => !placed(id) && !auto.has(id) && !isItem(id)).sort(byName);
-    const todoItems = ids.filter((id) => !placed(id) && !auto.has(id) && isItem(id)).sort(byName);
+    // A folder of hundreds of files opens on its files: they are packed first, grouped by what they are, and the components go after them.
+    const bigFolder = ids.length > 150 && ids.filter(isItem).length > ids.length / 2;
+    const byKind = (a, b) => (ctx.state.components.get(a)?.kind ?? '').localeCompare(ctx.state.components.get(b)?.kind ?? '') || byName(a, b);
+    const todoItems = ids.filter((id) => !placed(id) && !auto.has(id) && isItem(id)).sort(bigFolder ? byKind : byName);
     const taken = ids.filter((id) => placed(id) && !isItem(id));
+    if (bigFolder && todoItems.length) {
+      const seatedFirst = ids.filter((id) => sections.get(id).pos && !todoItems.includes(id)), first = pack(todoItems, seatedFirst, 0.3); // (room for the titles as they are drawn at the opening zoom)
+      for (const id of todoItems) { const p = first.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
+      SHELF_W = Math.max(SHELF_W, first.width);
+      taken.push(...todoItems);
+    }
     // the reserve depends on the zoom the whole layout will be viewed at, which depends on the reserve: settle it in a few steps
     const box = view.stageBox();
     const fitZoom = (res) => { // what Shift+1 will show: the frames and their 36 px title strip, 72 px padding, at most 100%
@@ -417,7 +441,7 @@ export function createStage(ctx, root, world, view) {
     }
     for (const id of todo) { const p = res.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
     SHELF_W = res.width;
-    if (todoItems.length) {
+    if (todoItems.length && !bigFolder) {
       const seated = ids.filter((id) => sections.get(id).pos && !todoItems.includes(id)), ir = pack(todoItems, seated, 1);
       for (const id of todoItems) { const p = ir.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
       SHELF_W = Math.max(SHELF_W, ir.width);
@@ -425,6 +449,7 @@ export function createStage(ctx, root, world, view) {
     const last = todo.at(-1);
     shelf = last ? { x: res.out.get(last).x + headBox(sections.get(last), z).w + GAP_X, y: res.out.get(last).y, h: sections.get(last).size.h } : { x: 0, y: 0, h: 0 };
     laidOut = true;
+    for (const [, x] of sections.all()) revealCard(x);
     world.style.visibility = '';
     ctx.emit('layout', {});
   }
@@ -686,6 +711,7 @@ export function createStage(ctx, root, world, view) {
     let loaded = sections.all().filter(([, x]) => x.docFrame).length, started = 0, wanting = false;
     for (const [id, sec] of sections.all()) {
       if (ctx.state.components.get(id)?.item && z < 0.35 && !keep.has(id)) continue;
+      if (z * sec.size.w < 20 && !keep.has(id)) continue; // a frame under 20 screen pixels wide cannot be read: it stays the card of its file's first lines
       if (sec.pending && visible(sec) && isDocSec(id)) {
         const isItem = !!ctx.state.components.get(id)?.item;
         if (!isItem && loaded >= DOC_BUDGET && evictItem(keep)) loaded--;
@@ -717,11 +743,19 @@ export function createStage(ctx, root, world, view) {
     } else if (mode === 'exact') trickle = false;
     if (drawn.length) regrown(drawn);
   }
+  // The first screenful of a big folder: where Shift+1 would show a map too small to read, a person starts on the first files at a size they can read.
+  function openingRect(zoom = 0.3) {
+    const cards = sections.all().filter(([, x]) => x.item && x.pos).sort((p, q) => p[1].pos.y - q[1].pos.y || p[1].pos.x - q[1].pos.x);
+    if (!cards.length) return null;
+    const box = view.stageBox(), { x, y } = cards[0][1].pos;
+    return { x, y: y - 36, w: box.width / zoom, h: box.height / zoom };
+  }
   const RANK = { zoom: 0, pan: 1, exact: 2 };
   const queueCull = (mode = 'exact') => { if (!cullQueued) cullMode = mode; else if (RANK[mode] > RANK[cullMode]) cullMode = mode; if (!cullQueued) { cullQueued = true; requestAnimationFrame(cull); } };
   ctx.on('view', (v) => {
     if (v.gesture && gesturing) moveOverlays(v); else refreshOverlays();
     const was = lastZ; lastZ = v.z; gesturing = !!v.gesture;
+    if (world.dataset.far !== (v.z < 0.1 ? '1' : '')) { if (v.z < 0.1) world.dataset.far = '1'; else delete world.dataset.far; } // far out, a title is under 3 px tall: it is not drawn
     if (v.gesture) titlesNow(v);
     queueCull(v.gesture ? (v.z !== was ? 'zoom' : 'pan') : 'exact');
   });
@@ -898,7 +932,7 @@ export function createStage(ctx, root, world, view) {
 
   return {
     rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
-    componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
+    openingRect, componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };
 }

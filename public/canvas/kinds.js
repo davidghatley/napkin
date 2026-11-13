@@ -6,7 +6,13 @@ const enc = encodeURIComponent,
       /[&<>"']/g,
       (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
     );
+// A component card that is not drawn live yet: its name and the start of its file, so it is never an empty box.
+export function glanceCard(ctx, c) {
+  const text = ctx.glances?.get(c.path)?.text || '';
+  return `<div class="bundle-pending"><b>${esc(c.name)}</b> · ${esc(c.path)}<br><small>loads when you scroll to it</small><pre class="doc-glance">${esc(text.slice(0, 700))}</pre></div>`;
+}
 export function initKinds(ctx) {
+  ctx.glances = new Map();
   const style = document.createElement('link');
   style.rel = 'stylesheet';
   style.href = '/canvas/kind-canvas.css';
@@ -16,6 +22,7 @@ export function initKinds(ctx) {
     scrubAt = 0;
   document.querySelector('#world').addEventListener('pointermove', (e) => {
     const video = e.target.closest('.kind-compact video');
+    if (video && video.preload === 'none') { video.preload = 'metadata'; video.load(); } // the poster is shown until you reach for the clip
     if (!video || !video.paused || !Number.isFinite(video.duration)) return;
     const b = video.getBoundingClientRect();
     scrubVideo = video;
@@ -43,9 +50,10 @@ export function initKinds(ctx) {
         owned = [...ctx.state.components.values()].filter((c) => c.path).map((c) => c.path),
         paths = new Set(owned);
       for (const item of items) {
+        if (item.meta?.family === 'component') ctx.glances.set(item.path, { kind: item.kind, text: item.meta.preview || '' });
         // HTML, TSX and JSX files are always drawn as components (the TSX dialect or the document engine), never twice.
         // They stay items for the API; the canvas draws each of them once, as a component.
-        if (['html', 'tsx', 'jsx'].includes(item.kind) || paths.has(item.path) || item.path.endsWith('.napkin.json')) continue; // (a component's own sidecar is part of that component)
+        if (item.meta?.family === 'component' || paths.has(item.path) || item.path.endsWith('.napkin.json')) continue; // (a component's own sidecar is part of that component)
         seen.add(item.id);
         const old = ctx.state.components.get(item.id);
         const revision = String(item.meta.modifiedAt) + ':' + item.bytes;
@@ -72,6 +80,7 @@ export function initKinds(ctx) {
           ctx.emit('removed', { component: id });
         }
       ctx.kindsLoaded = true;
+      ctx.emit('glances', {});
       ctx.docs.skipped = ctx.docs.skipped.filter((k) => !seen.has(k.path));
     })();
     try {
@@ -107,11 +116,12 @@ export function compactItem(c) {
     text = c.meta.preview || '';
   let content = '';
   if (family === 'image')
-    content = `<img loading="lazy" decoding="async" alt="${esc(c.name)}" src="${raw}">`;
+    content = `<img decoding="async" alt="${esc(c.name)}" src="${raw}">`;
   else if (family === 'video')
-    content = `<video preload="metadata" muted playsinline src="${raw}#t=0.1"></video><span class="kind-stamp">Move across to scrub</span>`;
+    content = `<video preload="none" muted playsinline poster="/api/poster/${enc(c.id)}" src="${raw}#t=0.1"></video><span class="kind-stamp">Move across to scrub</span>`;
   else if (family === 'font')
-    content = `<style>@font-face{font-family:'k${enc(c.id).replaceAll('%', '')}';src:url('${raw}')}</style><div class="kind-type" style="font-family:'k${enc(c.id).replaceAll('%', '')}'">Aa Bb<br>012345</div>`;
+    content = `<style>@font-face{font-family:'k${enc(c.id).replaceAll('%', '')}';src:url('${raw}')}</style><pre class="kind-type" style="font-family:'k${enc(c.id).replaceAll('%', '')}'">Aa Bb
+012345</pre>`;
   else if (c.meta.table)
     content = `<div class="kind-mini-table"><div>${c.meta.table.columns
       .slice(0, 5)
@@ -170,7 +180,9 @@ export function compactItem(c) {
     content = `<pre class="kind-code">${esc(text.slice(0, 1000) || `${c.kind.toUpperCase()}\n${c.bytes.toLocaleString()} bytes\nOpen the live viewer`)}</pre>`;
   // Source-derived overview surfaces are cached SVG images. Thousands of table cells and graph
   // paths need not enter the canvas DOM; focusing still opens the fully interactive viewer.
-  if (!['image', 'video', 'font', 'audio'].includes(family)) content = cachedSurface(content);
+  // Text-like files keep real text in the card (it is what you read, search and select); heavier surfaces are cached images.
+  const plain = ['md', 'txt', 'csv', 'tsv', 'json', 'jsonl', 'code', 'diff', 'patch', 'css', 'css-keyframes', 'yaml', 'toml', 'xml', 'shader'].includes(c.kind);
+  if (!plain && !['image', 'video', 'font', 'audio'].includes(family)) content = cachedSurface(content);
   else if (family === 'audio')
     content = content.replace(/<svg[\s\S]*?<\/svg>/, (svg) => cachedSurface(svg));
   return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}">${content}<span class="kind-stamp">${esc(c.kind)} · ${c.bytes.toLocaleString()} bytes</span></div>`;

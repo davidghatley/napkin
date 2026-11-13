@@ -227,7 +227,9 @@ const docs = initDocs(ctx);
 initInspector(ctx); // the inspector's scope keys, measuring and checks (doc-panel.js)
 await docs.load(); // the folder's HTML components (decision 0014), drawn with the rest
 await initKinds(ctx).load();
-await Promise.all(ctx.state.components.all().map((c) => c.component).map((id) => stage.render(id).catch(console.error)));
+const drawn = Promise.all(ctx.state.components.all().map((c) => c.component).map((id) => stage.render(id).catch(console.error)));
+// A big folder is laid out as soon as the cards exist; frames still loading are given room by their estimate and settle into it.
+if (ctx.state.components.total > 150) await Promise.race([drawn, new Promise((r) => setTimeout(r, 100))]); else await drawn;
 stage.layoutAll();
 nav.restore();
 renderPanel(ctx);

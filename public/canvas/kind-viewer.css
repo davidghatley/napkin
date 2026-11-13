@@ -385,6 +385,8 @@ th small {
   fill: var(--accent);
 }
 .timeline {
+  list-style: none;
+  margin: 0;
   padding: 15px 22px;
   max-height: 450px;
   overflow: auto;
@@ -467,6 +469,7 @@ th small {
   grid-template-columns: 1fr 220px;
 }
 .hex {
+  margin: 0;
   font:
     11px/1.9 ui-monospace,
     monospace;
@@ -654,3 +657,8 @@ th small {
   white-space: pre;
   overflow: auto;
 }
+.pdf-page{display:grid;place-items:start center;padding:12px;background:var(--panel-2,#e9ece8)}.pdf-page canvas{max-width:100%;height:auto;background:#fff;box-shadow:0 1px 8px #0003}
+.archive nav ul{list-style:none;margin:0;padding:0}.archive nav li{margin:0}
+.vscroll{overflow:auto;position:relative;border-top:1px solid var(--line)}
+.vwin{position:sticky;top:0}
+.rownum{color:var(--muted,#74857b);font-variant-numeric:tabular-nums}
