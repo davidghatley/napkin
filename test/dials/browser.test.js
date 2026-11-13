@@ -363,7 +363,7 @@ test(
           ]);
           assert.equal(
             await q(
-              `(()=>{try{dialsDemo.panels[0].render({sections:[{id:'x',controls:[{id:'x',type:'number',value:'bad'}]}]});}catch{}return dialsDemo.panels[0].sections.has('pigment');})()`,
+              `(()=>{try{dialsDemo.panels[0].render({sections:'nope'});}catch{}const h=document.createElement('div'),p=new dialsDemo.Dials(h).render({sections:[{id:'x',controls:[{id:'x',type:'number',value:'bad',min:0,max:10}]}]}),ok=p.get('x')===0&&p.problems.length===1;p.destroy();return ok&&dialsDemo.panels[0].sections.has('pigment');})()`,
             ),
             true,
           );

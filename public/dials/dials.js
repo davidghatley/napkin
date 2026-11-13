@@ -10,6 +10,7 @@ import {
   quantize,
   validateSchema,
   validateValue,
+  repairSchema,
 } from "./values.js";
 import { parseColor, cssLch } from "./color.js";
 import { motionCode, readMotionCode } from "./motion.js";
@@ -23,6 +24,7 @@ export const withTranslate = (transform = "", x) => {
 };
 import { el, button, pointerSurface, choiceBox } from "./dom.js";
 import { createStudio } from "./studios.js";
+import { builtinTypes, shapeOf, shapeSummary } from "./shapes.js";
 const controls = new Map(),
   figures = new Map();
 let serial = 0;
@@ -150,14 +152,21 @@ export class Dials extends EventTarget {
     this.status.textContent = message;
   }
   render(schema) {
-    validateSchema(schema);
-    const next = clone(schema);
+    // Read tolerantly: a value or field that does not fit is repaired and its row says so.
+    const { schema: next, problems } = repairSchema(schema);
     for (const s of next.sections)
       for (const c of s.controls)
-        if (c.type === "color") {
-          parseColor(c.value, this.root);
-          if (c.default !== undefined) parseColor(c.default, this.root);
-        }
+        if (c.type === "color")
+          for (const key of ["value", "default"]) {
+            if (c[key] === undefined) continue;
+            try {
+              parseColor(c[key], this.root);
+            } catch {
+              c.invalid = `${c.invalid ? c.invalid + "; " : ""}its ${key} (${String(c[key]).slice(0, 40)}) is not a colour this browser reads; showing grey`;
+              c[key] = "#808080";
+            }
+          }
+    this.problems = problems;
     this.gestures.forEach((dispose) => dispose());
     this.gestures = [];
     for (const id of [...this.active.keys()]) this.cancel(id);
@@ -235,11 +244,11 @@ export class Dials extends EventTarget {
         "aria-label": section.label + " studio instrument",
       });
       tabs.append(
-        ...section.controls.map((c) =>
-          button(c.label || c.id, "Open " + (c.label || c.id) + " studio", () =>
-            this.open(c.id),
-          ),
-        ),
+        ...section.controls.map((c) => {
+          const b = button(c.label || c.id, "Open " + (c.label || c.id) + " studio", () => this.open(c.id));
+          if ((c.label || c.id).length > 18) b.title = c.label || c.id;
+          return b;
+        }),
       );
       body.append(content);
       const railHost = el("div", { class: "d-rail" });
@@ -457,6 +466,11 @@ export class Dials extends EventTarget {
     });
     if (c.type === "boolean")
       fig.addEventListener("click", () => this.transact(c.id, !c.value));
+    // A value the schema got wrong was repaired; the row says what happened, in words.
+    if (c.invalid) {
+      node.dataset.invalid = "";
+      label.title = `${c.label || c.id}: ${c.invalid}`;
+    } else if ((c.label || "").length > 24) label.title = c.label;
     if (c.disabled) {
       node.inert = true;
       node.setAttribute("aria-disabled", "true");
@@ -569,7 +583,7 @@ export class Dials extends EventTarget {
       rot = s.schema.controls.find((c) => c.type === "angle");
     const mv = m ? this.get(m.id) : {};
     return motionCode({
-      motion: m?.type === "bezier" ? { mode: "bezier", bezier: mv, duration: 1000 } : m?.type === "spring" ? { mode: "spring", ...mv } : mv,
+      motion: Array.isArray(mv) ? { mode: "bezier", bezier: mv, duration: 1000 } : mv,
       frames: k ? this.get(k.id) : undefined,
       loop: loop ? !!this.get(loop.id) : false,
       rotate: rot ? this.get(rot.id) : undefined,
@@ -659,7 +673,7 @@ export class Dials extends EventTarget {
     r.node.classList.toggle("is-editing", this.active.has(id));
     r.label.setAttribute(
       "aria-description",
-      `${format(c.value, c)}. ${c.description || "Drag to adjust. Shift fine; Alt coarse."}`,
+      `${format(c.value, c)}. ${c.invalid ? `Repaired: ${c.invalid}. ` : ""}${c.description || "Drag to adjust. Shift fine; Alt coarse."}`,
     );
     r.label.setAttribute("aria-disabled", String(!!c.disabled));
     r.node.querySelector(".d-reset").title =
@@ -674,7 +688,7 @@ export class Dials extends EventTarget {
             : input !== document.activeElement &&
                 c.value &&
           typeof c.value === "object" &&
-          (!Array.isArray(c.value) || c.type === "keyframes")
+          (!Array.isArray(c.value) || c.type === "keyframes" || !builtinTypes.has(c.type))
             ? this.summary(c)
             : format(c.value, c);
       else if (input.classList.contains("d-choice"))
@@ -747,6 +761,10 @@ export class Dials extends EventTarget {
     }
     if (typeof v === "string" && ["asset", "file"].includes(c.type))
       return v.split(/[\\/]/).pop() || v;
+    if (!builtinTypes.has(c.type)) {
+      const words = shapeSummary(shapeOf(c, v), c, v);
+      if (words) return words;
+    }
     return format(v, c).slice(0, 38);
   }
   buildStudio(s, id, update = true) {
@@ -762,6 +780,12 @@ export class Dials extends EventTarget {
     [...s.tabs.children].forEach((b, i) =>
       b.setAttribute("aria-pressed", String(s.schema.controls[i].id === id)),
     );
+    // Keep the current tab in view when the tabs scroll (narrow studios), without moving the page.
+    const tab = s.tabs.querySelector('[aria-pressed="true"]');
+    if (tab && s.tabs.scrollWidth > s.tabs.clientWidth) {
+      const l = tab.offsetLeft - s.tabs.offsetLeft;
+      if (l < s.tabs.scrollLeft || l + tab.offsetWidth > s.tabs.scrollLeft + s.tabs.clientWidth) s.tabs.scrollLeft = l - 24;
+    }
     // A studio is drawn when it is opened, so swapping a whole panel stays cheap.
     s.lab = null;
     s.labStale = s.depth !== 3;

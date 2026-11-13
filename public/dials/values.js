@@ -12,8 +12,14 @@ const units = {
   turn: ["angle", 360],
   "%": ["percent", 1],
 };
+/** Magnitude words people type after a number: 2k, 1.5M, 3B, 1.2T. */
+const magnitudes = { k: 1e3, m: 1e6, b: 1e9, g: 1e9, t: 1e12 };
+export const symbolUnit = (u) => typeof u === "string" && !!u && !/^[a-z%]+$/i.test(u);
 export function expression(text, control = {}) {
   text = String(text).trim();
+  // A symbol unit ($, €, °, ×) may be typed before or after the number; thousands commas are read.
+  if (symbolUnit(control.unit)) text = text.split(control.unit).join("").trim();
+  text = text.replace(/(\d),(?=\d{3}(?!\d))/g, "$1");
   if (!text || text.length > 200)
     throw new Error("Enter a number or arithmetic expression");
   const tokens =
@@ -53,8 +59,12 @@ export function expression(text, control = {}) {
     const m = /^(\d*\.?\d+(?:e[+-]?\d+)?)([a-z]+|%)?$/i.exec(token || "");
     if (!m) throw new Error("Expected a number");
     let n = Number(m[1]);
-    const from = m[2]?.toLowerCase(),
-      to = control.unit;
+    let from = m[2]?.toLowerCase();
+    const to = control.unit;
+    if (from && magnitudes[from] && from !== to?.toLowerCase()) {
+      n *= magnitudes[from];
+      from = undefined;
+    }
     if (from && from !== to) {
       // A percentage means a share of the range when there is one, otherwise a share of the current value.
       if (from === "%" && to !== "%") {
@@ -118,9 +128,31 @@ function validateJSON(value, depth = 0) {
     throw new Error("Values must be finite JSON");
   for (const v of Object.values(value)) validateJSON(v, depth + 1);
 }
+const compactWords = [
+  [1e12, "T"],
+  [1e9, "B"],
+  [1e6, "M"],
+];
+/** A number as a person reads it: 12,500 · 1.5M · 2.25T. Always reads back exactly. */
+export function humane(n, c = {}) {
+  if (!Number.isFinite(n)) return String(n);
+  const a = Math.abs(n);
+  if (c.type === "seed" || c.plain || a < 10000) return String(Number(n.toFixed(5)));
+  for (const [k, w] of compactWords)
+    if (a >= k) {
+      const short = Number((n / k).toFixed(3));
+      if (Math.abs(short * k - n) <= 1e-9 * a) return `${short}${w}`;
+    }
+  return a < 1e21 ? n.toLocaleString("en-US", { maximumFractionDigits: 5 }) : String(n);
+}
+const currency = /^[$€£¥₹]$/;
 export function format(value, c = {}) {
-  if (typeof value === "number")
-    return `${Number(value.toFixed(5))}${c.unit || ""}`;
+  if (typeof value === "number") {
+    const u = c.unit || "",
+      text = humane(value, c);
+    if (currency.test(u)) return value < 0 ? `-${u}${text.slice(1)}` : `${u}${text}`;
+    return `${text}${u && /[A-Z]$/.test(text) && !symbolUnit(u) ? " " : ""}${u}`;
+  }
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 export function parse(text, c) {
@@ -358,3 +390,161 @@ function located(src, index, what) {
   const before = src.slice(0, index).split("\n");
   return new Error(`Line ${before.length}, column ${before.at(-1).length + 1}: ${what}.`);
 }
+
+/* ---------- tolerant reading of schemas nobody here wrote ---------- */
+const objectDefaults = {
+  motion: { mode: "bezier", bezier: [0.25, 0.1, 0.25, 1], duration: 400, delay: 0, stiffness: 170, damping: 20, mass: 1, velocity: 0 },
+  shadow: { x: 0, y: 8, blur: 24, spread: 0, color: "#00000040" },
+  typography: { text: "Ag", family: "system-ui", size: 32, weight: 500, tracking: 0, lineHeight: 1.2 },
+  image: { black: 0, white: 1, gamma: 1, exposure: 0, saturation: 1, curve: [0, 0.25, 0.5, 0.75, 1] },
+  encoding: { x: "", y: "", color: "", size: "", mark: "point" },
+  sampler: { steps: 28, cfg: 7, scheduler: "karras", shift: 1, seed: 0, locked: false, denoise: 1 },
+};
+objectDefaults.spring = { ...objectDefaults.motion, mode: "spring" };
+objectDefaults.bezier = objectDefaults.motion;
+const finiteOr = (n, d) => (typeof n === "number" && Number.isFinite(n) ? n : typeof n === "string" && n.trim() !== "" && Number.isFinite(Number(n)) ? Number(n) : d);
+/** Replace what JSON cannot hold (NaN, Infinity, functions, undefined) with null, deeply. */
+function jsonSafe(v, depth = 0) {
+  if (depth > 30) return null;
+  if (v === null || typeof v === "string" || typeof v === "boolean") return v;
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (Array.isArray(v)) return v.map((x) => jsonSafe(x, depth + 1));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, jsonSafe(x, depth + 1)]).filter(([, x]) => x !== undefined));
+  return null;
+}
+/** Make one value fit its control, as closely to what was declared as possible. */
+function fit(c, v) {
+  const t = c.type;
+  v = jsonSafe(v);
+  if (numeric(c)) {
+    let n = finiteOr(v, NaN);
+    if (!Number.isFinite(n)) n = finiteOr(c.min, 0) > 0 ? c.min : finiteOr(c.max, 0) < 0 ? c.max : 0;
+    return clamp(n, c.min ?? -Infinity, c.max ?? Infinity);
+  }
+  if (t === "boolean") return v === "false" || v === "0" ? false : !!v;
+  if (["text", "color", "gradient", "asset", "file"].includes(t)) {
+    if (typeof v === "string") return v;
+    if (v === null || v === undefined) return t === "color" ? "#808080" : t === "gradient" ? "linear-gradient(90deg, #808080, #ffffff)" : "";
+    return typeof v === "object" ? JSON.stringify(v) : String(v);
+  }
+  if (["select", "segmented"].includes(t)) {
+    const opts = (c.options || []).map((o) => (o && typeof o === "object" ? o.value : o));
+    return opts.find((o) => same(o, v)) ?? opts.find((o) => String(o) === String(v)) ?? opts[0] ?? null;
+  }
+  if (t === "vector" || t === "spacing") {
+    const k = t === "vector" ? 2 : 4,
+      arr = Array.isArray(v) ? v : typeof v === "number" ? [v] : v && typeof v === "object" ? Object.values(v) : [];
+    const out = Array.from({ length: k }, (_, i) => finiteOr(arr[i], t === "spacing" && arr.length === 1 ? finiteOr(arr[0], 0) : 0));
+    return t === "spacing" ? out.map((n) => Math.max(0, n)) : out.map((n) => clamp(n, c.min ?? -Infinity, c.max ?? Infinity));
+  }
+  if (objectDefaults[t]) {
+    const base = structuredClone(objectDefaults[t]);
+    if (["motion", "bezier", "spring"].includes(t)) {
+      // A bare bezier array, a CSS keyword or a partial object all read as a response.
+      if (Array.isArray(v)) v = { bezier: v };
+      if (typeof v === "string") v = { bezier: { linear: [0, 0, 1, 1], ease: [0.25, 0.1, 0.25, 1], "ease-in": [0.42, 0, 1, 1], "ease-out": [0, 0, 0.58, 1], "ease-in-out": [0.42, 0, 0.58, 1] }[v.trim()] };
+      const o = v && typeof v === "object" ? { ...base, ...v } : base;
+      if (!Array.isArray(o.bezier) || o.bezier.length !== 4 || o.bezier.some((n) => !Number.isFinite(n))) o.bezier = base.bezier;
+      o.bezier = o.bezier.map((n, i) => (i % 2 ? n : clamp(n, 0, 1)));
+      if (!["bezier", "spring"].includes(o.mode)) o.mode = t === "spring" ? "spring" : "bezier";
+      for (const k of ["mass", "stiffness", "damping", "duration"]) if (!(finiteOr(o[k], 0) > 0)) o[k] = base[k];
+      for (const k of ["delay", "velocity"]) o[k] = finiteOr(o[k], 0);
+      if (o.delay < 0) o.delay = 0;
+      if (o.loopRange !== undefined && !(Array.isArray(o.loopRange) && o.loopRange.length === 2 && o.loopRange.every((n) => Number.isFinite(n) && n >= 0 && n <= 1) && o.loopRange[0] < o.loopRange[1])) delete o.loopRange;
+      if (o.keyframes !== undefined && !(Array.isArray(o.keyframes) && o.keyframes.every((f) => f && Number.isFinite(f.time) && f.time >= 0 && f.time <= 1 && Number.isFinite(f.value)))) delete o.keyframes;
+      return o;
+    }
+    const o = v && typeof v === "object" && !Array.isArray(v) ? { ...base, ...v } : base;
+    for (const [k, d] of Object.entries(base)) if (typeof d === "number") o[k] = finiteOr(o[k], d);
+    if (t === "image" && !(Array.isArray(o.curve) && o.curve.length === 5 && o.curve.every((n) => Number.isFinite(n) && n >= 0 && n <= 1))) o.curve = base.curve;
+    return o;
+  }
+  if (t === "keyframes") {
+    const list = Array.isArray(v) ? v.filter((f) => f && typeof f === "object" && !Array.isArray(f)).map((f) => (f.offset !== undefined && !(Number.isFinite(f.offset) && f.offset >= 0 && f.offset <= 1) ? { ...f, offset: clamp(finiteOr(f.offset, 0), 0, 1) } : f)) : [];
+    return list.length >= 2 ? list : [{ offset: 0, transform: "translateX(0px)", opacity: 1 }, { offset: 1, transform: "translateX(120px)", opacity: 1 }];
+  }
+  // Any other type keeps any JSON it was given; nothing is left undefined.
+  return v === undefined ? null : v;
+}
+/**
+ * Read a schema the way it was meant: never throw for a value or a field a person or an
+ * agent got slightly wrong. Each repaired control keeps a plain note in `invalid`, and the
+ * row shows it. Only a document without a sections array is refused.
+ */
+export function repairSchema(schema) {
+  if (!schema || typeof schema !== "object" || !Array.isArray(schema.sections)) throw new Error("Schema needs sections");
+  const out = { ...jsonSafe(schema), sections: [] },
+    ids = new Set(),
+    sids = new Set(),
+    problems = [];
+  const unique = (set, id, fallback) => {
+    let base = typeof id === "string" && id ? id : typeof id === "number" ? String(id) : fallback,
+      next = base,
+      i = 2;
+    while (set.has(next)) next = `${base}-${i++}`;
+    set.add(next);
+    return next;
+  };
+  schema.sections.forEach((s0, si) => {
+    if (!s0 || typeof s0 !== "object") return;
+    const s = { ...s0, id: unique(sids, s0.id, `section-${si + 1}`), controls: [] };
+    if (s.id !== s0.id) problems.push({ section: s.id, problem: "section id was missing or repeated" });
+    if (s.depth !== undefined && ![1, 2, 3].includes(s.depth)) delete s.depth;
+    (Array.isArray(s0.controls) ? s0.controls : []).forEach((c0, ci) => {
+      if (!c0 || typeof c0 !== "object" || Array.isArray(c0)) return;
+      const c = jsonSafe(c0),
+        notes = [];
+      c.id = unique(ids, c0.id, `${s.id}-${ci + 1}`);
+      if (c.id !== c0.id) notes.push(c0.id ? `the id ${c0.id} was already used` : "it had no id");
+      if (typeof c.type !== "string" || !c.type) {
+        const v = c.value;
+        c.type = typeof v === "number" ? "number" : typeof v === "boolean" ? "boolean" : Array.isArray(c.options) ? "select" : "text";
+        if (typeof v !== "string" && c.type === "text" && v !== null && v !== undefined) c.type = "data";
+        notes.push(`it had no type; read as ${c.type}`);
+      }
+      if (typeof c.label !== "string") c.label = c.label === undefined || c.label === null ? c.id : String(c.label);
+      for (const k of ["min", "max", "step"]) {
+        if (c[k] === undefined || c[k] === null) delete c[k];
+        else if (!Number.isFinite(Number(c[k]))) {
+          notes.push(`${k} was not a number`);
+          delete c[k];
+        } else c[k] = Number(c[k]);
+      }
+      if (c.step !== undefined && c.step <= 0) delete c.step;
+      if (c.min !== undefined && c.max !== undefined && c.min > c.max) [c.min, c.max] = [c.max, c.min];
+      if (c.depth !== undefined && ![1, 2, 3].includes(c.depth)) delete c.depth;
+      if (c.options !== undefined && !Array.isArray(c.options)) delete c.options;
+      if (c.options) c.options = c.options.filter((o) => o !== null && o !== undefined && (typeof o !== "object" || "value" in o));
+      if (c.unit !== undefined && typeof c.unit !== "string") delete c.unit;
+      for (const key of ["value", "default"]) {
+        if (key === "default" && c0.default === undefined) continue;
+        try {
+          validateValue(c[key], c);
+          if (key === "value" && c0.value !== c[key] && Number.isNaN(c0.value)) throw new Error();
+        } catch (e) {
+          const before = c0[key];
+          c[key] = fit(c, before);
+          try {
+            validateValue(c[key], c);
+          } catch {
+            c[key] = null;
+          }
+          notes.push(`its ${key} ${before === undefined ? "was missing" : `(${short(before)}) did not fit a ${c.type}`}; showing ${short(c[key])}`);
+        }
+      }
+      // Motion values are completed silently so every studio can read them whole.
+      if (["motion", "bezier", "spring"].includes(c.type)) for (const key of ["value", "default"]) if (c[key] !== undefined) c[key] = fit(c, c[key]);
+      if (notes.length) {
+        c.invalid = notes.join("; ");
+        problems.push({ control: c.id, problem: c.invalid });
+      }
+      s.controls.push(c);
+    });
+    out.sections.push(s);
+  });
+  return { schema: out, problems };
+}
+const short = (v) => {
+  const t = v === undefined ? "nothing" : typeof v === "number" && !Number.isFinite(v) ? String(v) : JSON.stringify(v);
+  return t.length > 40 ? `${t.slice(0, 37)}…` : t;
+};
