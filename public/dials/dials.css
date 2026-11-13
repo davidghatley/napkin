@@ -4753,6 +4753,8 @@ ul.ki-tags {
 /* Caption: the text as the section sets it, in three real column widths. */
 .ki-measure {
   display: grid;
+  /* One track no wider than the pane, so a fixed column width cannot widen it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 4px;
   padding: 10px 0;
   border-top: 1px solid var(--d-line);
