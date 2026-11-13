@@ -24,8 +24,38 @@ import {
   observe,
   decodePng,
 } from "./lib3/runtime.mjs";
+import { launchChromium } from "../test/helpers/cdp.js";
+// The person's undo: the canvas routes Ctrl/Cmd Z to the selected item's history, and shows an
+// item Undo button. An edit made through the panel belongs to the person's session, so the bench
+// undoes it the way the person would, never through its own API session (the product refuses a
+// different caller's undo by design).
+async function personUndo(b, restored) {
+  await b.eval("void(document.activeElement&&document.activeElement!==document.body&&document.activeElement.blur())");
+  await key(b, "z", 2);
+  for (let n = 0; n < 40; n++) {
+    if (restored()) return "Ctrl+Z";
+    await sleep(50);
+  }
+  const at = await b.eval(
+    `(()=>{const e=[...document.querySelectorAll('button,[role=button]')].find(e=>/^undo\\b/i.test((e.getAttribute('aria-label')||e.textContent||'').trim())&&e.getBoundingClientRect().width>0&&!e.disabled);if(!e)return null;const r=e.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2}})()`,
+  );
+  if (at) {
+    for (const type of ["mousePressed", "mouseReleased"])
+      await b.send("Input.dispatchMouseEvent", { type, x: at.x, y: at.y, button: "left", clickCount: 1 });
+    for (let n = 0; n < 40; n++) {
+      if (restored()) return "Undo button";
+      await sleep(50);
+    }
+  }
+  return null;
+}
+// A control id inside a double-quoted CSS attribute value (ids such as json:["v"] hold quotes).
+const attr = (v) => String(v).replace(/[\\"]/g, "\\$&").replace(/\n/g, "\\a ");
 export async function measure() {
-  return run("D2", async ({ book, f, s: s0, browser, restart }) => {
+  // Rendered-effect checks load /view/<item> in their own browser so the canvas tab keeps its
+  // selection and focus for the keyboard steps that follow.
+  let viewBrowser;
+  const result = await run("D2", async ({ book, f, s: s0, browser, restart }) => {
     let s = s0;
     let listed = [],
       error;
@@ -135,7 +165,7 @@ export async function measure() {
               !/^(txt|md|code|diff|patch|binary|zip)$/.test(file.kind)
             ) {
               // The rendered item must change with the value: a recipe that nothing reads is not an instrument.
-              const vb = await browser();
+              const vb = (viewBrowser ??= await launchChromium());
               const afterView = await observe(
                 vb,
                 s.base + "/view/" + encodeURIComponent(item.id),
@@ -179,7 +209,8 @@ export async function measure() {
             // Reach the actual control by palette and commit through key events only.
             await palette(b, "Control " + c.label);
             assert(await focusVisible(b), "control focus not visible");
-            const figureSel = `[data-control-id="${c.id}"] svg, [data-control-id="${c.id}"] canvas, [data-control-id="${c.id}"] [data-figure], [data-control-id="${c.id}"] img`;
+            const cid = attr(c.id);
+            const figureSel = `[data-control-id="${cid}"] svg, [data-control-id="${cid}"] canvas, [data-control-id="${cid}"] [data-figure], [data-control-id="${cid}"] img`;
             const figureRect = await rectOf(b, figureSel);
             assert(
               figureRect && figureRect.w >= 12 && figureRect.h >= 8,
@@ -219,10 +250,13 @@ export async function measure() {
             );
             types.add(c.type);
             keyboardTotal++;
-            await request(s, "/api/undo", { item: item.id });
+            const undoRoute = await personUndo(
+              b,
+              () => canonical(snapshot(f.folder)) === canonical(before),
+            );
             assert(
-              canonical(snapshot(f.folder)) === canonical(before),
-              "keyboard undo differs",
+              undoRoute && canonical(snapshot(f.folder)) === canonical(before),
+              "the person's undo (Ctrl+Z, then the Undo button) did not restore the folder byte for byte after a keyboard edit",
             );
             if (
               typeof c.value === "number" &&
@@ -230,7 +264,7 @@ export async function measure() {
               latencies.length < 30
             ) {
               await palette(b, "Control " + c.label);
-              latencies.push(...(await scrubWalk(b, { steps: 30 })));
+              latencies.push(...(await scrubWalk(b, { steps: 30, item: item.id })));
               await key(b, "Escape");
             }
             for (const depth of ["Dial", "Bench", "Studio"]) {
@@ -321,7 +355,12 @@ export async function measure() {
     );
     await book.check("panel.swap", "selection → panel < 50 ms", () => ({
       ok: swaps.length === f.files.length && Math.max(...swaps) < 50,
-      value: { samples: swaps.length, max: Math.max(...swaps) },
+      value: {
+        samples: swaps.length,
+        max: Math.max(...swaps),
+        median: [...swaps].sort((x, y) => x - y)[swaps.length >> 1],
+        timedOut: swaps.filter((x) => x === Infinity).length,
+      },
     }));
     await book.check(
       "scrub.pixel",
@@ -370,6 +409,11 @@ export async function measure() {
             s,
             "/api/controls/" + encodeURIComponent(p.item),
           );
+          // A later step may have left this value in place; setting it again is refused (400).
+          const current = schema.sections
+            .flatMap((x) => x.controls)
+            .find((x) => x.id === p.control);
+          if (canonical(current?.value) === canonical(p.value)) continue;
           await request(s, "/api/control", {
             item: p.item,
             control: p.control,
@@ -436,7 +480,7 @@ export async function measure() {
           (await read()).value === target,
           "typed math did not evaluate to " + target,
         );
-        const sel = `[data-control-id="${num.id}"]`;
+        const sel = `[data-control-id="${attr(num.id)}"]`;
         assert(
           await b.eval(
             `!!document.querySelector(${JSON.stringify(sel)}+' [data-modified],'+${JSON.stringify(sel)}+'[data-modified],'+${JSON.stringify(sel)}+' [aria-label*="modified" i]')`,
@@ -498,5 +542,7 @@ export async function measure() {
         ["Tweakpane", "Leva", "DialKit"].every((k) => e.comparisons?.[k] >= 8),
     );
   });
+  await viewBrowser?.close();
+  return result;
 }
 if (entry(import.meta.url)) output(await measure());

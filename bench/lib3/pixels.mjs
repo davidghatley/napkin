@@ -7,10 +7,9 @@ export async function scrubPixel(
   modifiers = 0,
   selector = null,
   skipQuiet = false,
+  item = null,
 ) {
-  const rect = await b.eval(
-    `(()=>{const es=[...document.querySelectorAll('iframe,video,canvas,svg,img')];const selector=${JSON.stringify(selector)};const e=selector?document.querySelector(selector):es.find(e=>e.closest('[data-item-id]')&&!e.closest('[data-controls-for]'));if(!e)return null;const r=e.getBoundingClientRect();return{x:Math.max(0,Math.ceil(r.x)),y:Math.max(0,Math.ceil(r.y)),w:Math.floor(Math.min(r.right,innerWidth)-Math.max(0,r.x)),h:Math.floor(Math.min(r.bottom,innerHeight)-Math.max(0,r.y))}})()`,
-  );
+  const rect = await previewRect(b, selector, item);
   assert(
     rect?.w > 8 && rect.h > 8,
     "visible item preview required for scrub-to-pixel measurement",
@@ -93,9 +92,11 @@ export async function scrubPixel(
     await b.send("Page.stopScreencast");
   }
 }
-async function previewRect(b, selector) {
+// The preview of the item being scrubbed: the selected item's card (the item named by the
+// panel, or the one passed in), never simply the first preview in the DOM.
+async function previewRect(b, selector, item = null) {
   return b.eval(
-    `(()=>{const es=[...document.querySelectorAll('iframe,video,canvas,svg,img')];const selector=${JSON.stringify(selector)};const e=selector?document.querySelector(selector):es.find(e=>e.closest('[data-item-id]')&&!e.closest('[data-controls-for]'));if(!e)return null;const r=e.getBoundingClientRect();return{x:Math.max(0,Math.ceil(r.x)),y:Math.max(0,Math.ceil(r.y)),w:Math.floor(Math.min(r.right,innerWidth)-Math.max(0,r.x)),h:Math.floor(Math.min(r.bottom,innerHeight)-Math.max(0,r.y))}})()`,
+    `(()=>{const selector=${JSON.stringify(selector)};const wanted=${JSON.stringify(item)}||[...document.querySelectorAll('[data-controls-for]')].find(e=>e.getBoundingClientRect().width>0)?.dataset.controlsFor;const card=wanted?[...document.querySelectorAll('[data-item-id]')].find(e=>e.dataset.itemId===wanted&&!e.closest('[data-controls-for]')):null;const es=[...(card||document).querySelectorAll('iframe,video,canvas,svg,img')].filter(e=>{const r=e.getBoundingClientRect();return r.width>8&&r.height>8});const e=selector?document.querySelector(selector):es.find(e=>e.closest('[data-item-id]')&&!e.closest('[data-controls-for]'));if(!e)return null;const r=e.getBoundingClientRect();return{x:Math.max(0,Math.ceil(r.x)),y:Math.max(0,Math.ceil(r.y)),w:Math.floor(Math.min(r.right,innerWidth)-Math.max(0,r.x)),h:Math.floor(Math.min(r.bottom,innerHeight)-Math.max(0,r.y))}})()`,
   );
 }
 function regionDiff(a, z, rect) {
@@ -120,9 +121,9 @@ function regionDiff(a, z, rect) {
 // satisfy all three; neither can a preview that changes for any key.
 export async function scrubWalk(
   b,
-  { selector = null, steps = 30, up = "ArrowRight", down = "ArrowLeft" } = {},
+  { selector = null, steps = 30, up = "ArrowRight", down = "ArrowLeft", item = null } = {},
 ) {
-  const rect = await previewRect(b, selector);
+  const rect = await previewRect(b, selector, item);
   assert(
     rect?.w > 8 && rect.h > 8,
     "visible item preview required for scrub measurement",
@@ -158,7 +159,7 @@ export async function scrubWalk(
   let pos = 1;
   for (let n = 0; n < steps; n++) {
     const dir = pos === 1 ? 1 : pos === 3 ? -1 : Math.random() < 0.5 ? 1 : -1;
-    const ms = await scrubPixel(b, dir > 0 ? up : down, 0, selector, true);
+    const ms = await scrubPixel(b, dir > 0 ? up : down, 0, selector, true, item);
     pos += dir;
     times.push(ms);
     await sleep(180);
@@ -174,8 +175,13 @@ export async function scrubWalk(
 }
 export async function selectionTime(b, commit, expectedItem) {
   await b.eval(
-    `void(window.__panelTime=new Promise(resolve=>{let t;const wanted=${JSON.stringify(expectedItem)};const ready=()=>{const e=document.querySelector('[data-controls-for="'+CSS.escape(wanted)+'"]');if(e&&e.getBoundingClientRect().width>0&&e.querySelector('[data-control-id]')){observer.disconnect();resolve(performance.now()-t)}};const observer=new MutationObserver(ready);document.addEventListener('keydown',()=>{t=performance.now();observer.observe(document.body,{attributes:true,childList:true,subtree:true});queueMicrotask(ready);},{once:true,capture:true});setTimeout(()=>{observer.disconnect();resolve(Infinity)},1000)}))`,
+    `void(window.__panelTime=new Promise(resolve=>{const t0=performance.now();let t;const wanted=${JSON.stringify(expectedItem)};const ready=()=>{const e=document.querySelector('[data-controls-for="'+CSS.escape(wanted)+'"]');if(e&&e.getBoundingClientRect().width>0&&e.querySelector('[data-control-id]')){observer.disconnect();resolve(performance.now()-(t??t0))}};const observer=new MutationObserver(ready);observer.observe(document.body,{attributes:true,childList:true,subtree:true});window.addEventListener('keydown',()=>{t=performance.now();queueMicrotask(ready);},{once:true,capture:true});setTimeout(()=>{observer.disconnect();resolve(-1)},2000)}))`,
   );
   await commit();
-  return b.eval("window.__panelTime");
+  // The key is heard on window in the capture phase (the first listener to run), so a product
+  // that stops the event early cannot hide it; if it is never heard, time runs from install,
+  // which can only overstate the swap. -1 = no panel for the item within 2 s. (Infinity cannot cross CDP's returnByValue: it
+  // arrived as undefined and made panel.swap report NaN.)
+  const ms = await b.eval("window.__panelTime");
+  return typeof ms === "number" && ms >= 0 ? ms : Infinity;
 }

@@ -480,11 +480,16 @@ side; it does not prove an allocator-independent upper bound or measure OS page 
 D2 discovers every declared section and control, chooses another value, writes it,
 checks real item bytes or an adjacent recipe, checks API readback, and verifies exact
 whole-folder undo. It also edits each control through the keyboard and opens all
-three depths, taking screenshots when requested. Dial rows must be 32 px high.
+three depths, taking screenshots when requested. A keyboard edit is the person's edit, so it
+is undone the way the person would undo it: Ctrl+Z on the canvas (routed to the selected
+item's history), then the item's Undo button; never the bench's own API session, which the
+product rightly refuses as another caller's undo (409). The rendered-effect step loads
+`/view/<id>` in a second browser, so the canvas tab keeps its selection and focus. Dial rows must be 32 px high.
 Selection-to-panel timing starts at the final selection key, inside Chromium, and
 ends on the correct instrument region's DOM mutation; search typing is excluded.
-Scrub timing is `scrubWalk` (see Anti-gaming) on compositor frames cropped to the item
-preview. Further D2 checks: each control's live figure must change its pixels when the
+Scrub timing is `scrubWalk` (see Anti-gaming) on compositor frames cropped to the selected
+item's own preview (the card named by the panel, not the first preview in the DOM). A
+selection that shows no panel within 2 s counts as Infinity in `panel.swap`. Further D2 checks: each control's live figure must change its pixels when the
 value changes; changing a control must change the rendered `/view` (at least 70% of
 sampled controls on visual kinds, and undo must restore it); committed values must be
 re-read from files by a fresh server process; the control types must be at least eight
