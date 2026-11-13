@@ -2,8 +2,9 @@ import { fontInfo } from './fontinfo.js';
 import { parseGltf, parseObj } from './gltf.js';
 import { flattenScene } from '../../public/canvas/model-view.js';
 import { decodeText } from './registry.js';
-import { delimited, table, zipDirectory, parquetMeta, window } from './readers.js';
+import { delimited, table, zipDirectory, window } from './readers.js';
 import { DatabaseSync } from 'node:sqlite';
+import { parquetInfo } from './parquet.js';
 import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
 // Small, source-derived previews let a zoomed-out folder remain useful without 1,000 browsing contexts.
@@ -43,18 +44,12 @@ export function cardMetadata(ctx, family) {
     };
   }
   if (family === 'parquet') {
-    const p = parquetMeta(ctx.file);
+    const p = parquetInfo(ctx.file);
     result.table = {
-      columns: p.schema
-        .filter((s) => s[1] !== undefined)
-        .map((s) => ({
-          name: s[4]?.toString(),
-          type: ['boolean', 'int32', 'int64', 'int96', 'float', 'double', 'bytes', 'fixed'][s[1]],
-          bins: [],
-        })),
+      columns: p.leaves.map((s) => ({ name: s.name, type: String(s.type || s.converted_type || '').toLowerCase(), bins: [] })),
       rows: [],
     };
-    result.summary = `${p.rows.toLocaleString()} rows · ${p.groups.length} row groups`;
+    result.summary = `${p.rows.toLocaleString()} rows · ${p.metadata.row_groups.length} row groups`;
   }
   if (family === 'arrow') {
     const t = arrowTable(ctx.file, 0, 8);

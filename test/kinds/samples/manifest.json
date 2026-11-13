@@ -23,6 +23,7 @@
   "garden.workflow.json": "comfyui",
   "pulse.waapi": "waapi-json",
   "leaf.lottie.json": "lottie",
+  "nested.lottie.json": "lottie",
   "study.ipynb": "ipynb",
   "garden.zip": "zip",
   "bytes.bin": "binary",
@@ -32,6 +33,7 @@
   "garden.sqlite": "sqlite",
   "pyramid.obj": "obj",
   "triangle.gltf": "gltf",
+  "scene.gltf": "gltf",
   "triangle.glb": "glb",
   "inter.woff2": "woff2",
   "LICENSE-inter-OFL.txt": "txt",
@@ -50,6 +52,5 @@
   "tone.mp3": "mp3",
   "tone.flac": "flac",
   "tone.ogg": "ogg",
-  "tone.m4a": "m4a",
-  "scene.gltf": "gltf"
+  "tone.m4a": "m4a"
 }

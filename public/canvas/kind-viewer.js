@@ -133,7 +133,7 @@ const ROW_H = 26, WINDOW_H = 380;
 async function showTable(params = {}) {
   const d = await data(params);
   // A long table scrolls like a document: the scrollbar spans every row, and where it stops decides which rows are drawn.
-  const long = d.total > 400 && (d.starts || d.tables || ['arrow', 'sqlite', 'csv', 'tsv', 'jsonl'].includes(item.kind));
+  const long = d.total > 400 && (d.starts || d.tables || ['arrow', 'sqlite', 'csv', 'tsv', 'jsonl', 'parquet'].includes(item.kind));
   const numbered = d.rowStart !== undefined || (long && d.offset !== undefined);
   root.innerHTML =
     bar(
@@ -193,7 +193,7 @@ function virtualRows(d, params) {
         if (g === at) return;
         q = { ...params, group: g };
         at = g;
-      } else q = { ...params, offset: Math.max(0, Math.min(d.total - 1, row)) };
+      } else q = { ...params, offset: Math.max(0, Math.min(d.total - Math.min(d.rows?.length || 80, d.total), row)) };
       try {
         const n = await data(q);
         if (mine !== seq) return;
@@ -381,116 +381,51 @@ function notebook(j) {
     )
     .join('')}</div>`;
 }
-// A small Lottie vector player: shape layers, transforms, paths, fills, strokes and animated properties.
-function lottie(j) {
+// Lottie runs on lottie-web (public/canvas/lottie-runtime.js, MIT): the format's own player, so precompositions, masks, mattes,
+// gradients, trim paths, repeaters, text and expressions are drawn by the code that defines them.
+let lottieLoad = null;
+const loadLottie = () =>
+  (lottieLoad ||= new Promise((ok, no) => {
+    if (window.lottie) return ok(window.lottie);
+    const s = document.createElement('script');
+    s.src = '/canvas/lottie-runtime.js';
+    s.onload = () => ok(window.lottie);
+    s.onerror = () => no(new Error('The Lottie player could not be loaded. Next: reload the page; the file is unchanged.'));
+    document.head.append(s);
+  }));
+async function lottie(j) {
+  const lib = await loadLottie();
   root.innerHTML =
     bar(label, `${j.w} × ${j.h} · ${j.fr} fps`) +
-    `<div class="motion-stage"><svg viewBox="0 0 ${Number(j.w) || 512} ${Number(j.h) || 512}" role="img" aria-label="Vector animation"></svg></div>`;
-  const svg = root.querySelector('svg');
-  function prop(p, frame, fallback) {
-    if (p === undefined) return fallback;
-    let k = p.k ?? p;
-    if (!p.a) return k;
-    if (!Array.isArray(k)) return fallback;
-    let a = k[0],
-      b;
-    for (let i = 0; i < k.length; i++) {
-      if (k[i].t <= frame) {
-        a = k[i];
-        b = k[i + 1];
-      }
-    }
-    if (!a) return fallback;
-    const s = a.s ?? fallback,
-      e = a.e ?? b?.s ?? s;
-    if (!b || a.h) return s;
-    const t = Math.max(0, Math.min(1, (frame - a.t) / (b.t - a.t)));
-    return Array.isArray(s)
-      ? s.map((v, i) => (typeof v === 'number' ? v + (Number(e[i] ?? v) - v) * t : v))
-      : s;
+    '<div class="motion-stage"><div class="lottie-host" tabindex="0" role="img" aria-label="Vector animation. Space plays or pauses, arrow keys step."></div></div>';
+  const host = root.querySelector('.lottie-host'),
+    notes = [];
+  let anim;
+  try {
+    anim = lib.loadAnimation({
+      container: host,
+      renderer: 'svg',
+      loop: true,
+      autoplay: !(isReduced || r.paused),
+      animationData: JSON.parse(JSON.stringify(j)),
+      rendererSettings: { preserveAspectRatio: 'xMidYMid meet', progressiveLoad: false },
+    });
+  } catch (e) {
+    return void root.insertAdjacentHTML('beforeend', note('This animation could not be played: ' + e.message + '. Next: check the file against the Lottie schema.'));
   }
-  function transform(t, frame) {
-    const p = prop(t?.p, frame, [0, 0]),
-      a = prop(t?.a, frame, [0, 0]),
-      s = prop(t?.s, frame, [100, 100]),
-      rot = prop(t?.r, frame, 0);
-    return `translate(${p[0] || 0} ${p[1] || 0}) rotate(${Array.isArray(rot) ? rot[0] : rot}) scale(${(s[0] ?? 100) / 100} ${(s[1] ?? 100) / 100}) translate(${-a[0] || 0} ${-a[1] || 0})`;
-  }
-  function shapes(list, frame) {
-    let fill = 'none',
-      stroke = 'none',
-      sw = 1,
-      html = '';
-    for (const s of list) {
-      if (s.ty === 'fl') {
-        const c = prop(s.c, frame, [0, 0, 0]);
-        fill = `rgb(${c
-          .slice(0, 3)
-          .map((v) => Math.round(v * 255))
-          .join(',')})`;
-      }
-      if (s.ty === 'st') {
-        const c = prop(s.c, frame, [0, 0, 0]);
-        stroke = `rgb(${c
-          .slice(0, 3)
-          .map((v) => Math.round(v * 255))
-          .join(',')})`;
-        sw = Number(prop(s.w, frame, 1));
-      }
-    }
-    for (const s of list) {
-      if (s.ty === 'gr') {
-        const tr = s.it.find((x) => x.ty === 'tr');
-        html += `<g transform="${transform(tr, frame)}">${shapes(s.it, frame)}</g>`;
-      }
-      if (s.ty === 'rc' || s.ty === 'el') {
-        const p = prop(s.p, frame, [0, 0]),
-          size = prop(s.s, frame, [50, 50]),
-          style = `fill="${fill}" stroke="${stroke}" stroke-width="${sw}"`;
-        html +=
-          s.ty === 'el'
-            ? `<ellipse cx="${p[0]}" cy="${p[1]}" rx="${size[0] / 2}" ry="${size[1] / 2}" ${style}/>`
-            : `<rect x="${p[0] - size[0] / 2}" y="${p[1] - size[1] / 2}" width="${size[0]}" height="${size[1]}" rx="${Number(prop(s.r, frame, 0))}" ${style}/>`;
-      }
-      if (s.ty === 'sh') {
-        let path = prop(s.ks, frame, null);
-        if (Array.isArray(path)) path = path[0];
-        if (path?.v?.length) {
-          const v = path.v;
-          let d = `M${v[0].join(',')}`;
-          for (let k = 1; k < v.length + (path.c ? 1 : 0); k++) {
-            const prev = (k - 1) % v.length,
-              n = k % v.length,
-              o = path.o?.[prev] || [0, 0],
-              i = path.i?.[n] || [0, 0];
-            d += ` C${v[prev][0] + o[0]},${v[prev][1] + o[1]} ${v[n][0] + i[0]},${v[n][1] + i[1]} ${v[n].join(',')}`;
-          }
-          html += `<path d="${d}${path.c ? 'Z' : ''}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
-        }
-      }
-    }
-    return html;
-  }
-  const start = performance.now();
-  function tick(now) {
-    const frame =
-      isReduced || r.paused
-        ? Number(j.ip) || 0
-        : (Number(j.ip) || 0) +
-          ((((now - start) / 1000) * (j.fr || 30) * (r.speed || 1)) %
-            Math.max(1, (j.op || 60) - (j.ip || 0)));
-    svg.innerHTML = (j.layers || [])
-      .slice()
-      .reverse()
-      .filter((l) => frame >= (l.ip ?? 0) && frame < (l.op ?? Infinity))
-      .map(
-        (l) =>
-          `<g transform="${transform(l.ks, frame)}" opacity="${Number(prop(l.ks?.o, frame, 100)) / 100}">${l.ty === 4 ? shapes(l.shapes || [], frame) : l.ty === 1 ? `<rect width="${l.sw || j.w}" height="${l.sh || j.h}" fill="${esc(l.sc || '#158474')}"/>` : l.ty === 5 ? `<text font-size="32">${esc(l.t?.d?.k?.[0]?.s?.t || '')}</text>` : ''}</g>`,
-      )
-      .join('');
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
+  anim.setSpeed(Number(r.speed) || 1);
+  if (isReduced || r.paused) anim.goToAndStop(Number(j.ip) || 0, true);
+  anim.addEventListener('data_failed', () => root.insertAdjacentHTML('beforeend', note('Some of this animation could not be loaded.')));
+  if ((j.layers || []).some((l) => l.ddd === 1 || l.ty === 13)) notes.push('3D layers and cameras are drawn flat');
+  if (notes.length) root.insertAdjacentHTML('beforeend', note('Partly drawn: ' + notes.join('. ') + '.'));
+  host.addEventListener('keydown', (e) => {
+    if (e.key === ' ') anim.isPaused ? anim.play() : anim.pause();
+    else if (e.key === 'ArrowRight') anim.goToAndStop(Math.min(anim.totalFrames, anim.currentFrame + 1), true);
+    else if (e.key === 'ArrowLeft') anim.goToAndStop(Math.max(0, anim.currentFrame - 1), true);
+    else if (e.key === 'Home') anim.goToAndStop(0, true);
+    else return;
+    e.preventDefault();
+  });
 }
 async function run() {
   if (item.family === 'image') {
@@ -687,6 +622,17 @@ async function run() {
     iframe.srcdoc = `<style>body{margin:20px;font:16px system-ui;display:flex;gap:12px;align-items:center}button,.motion-chip{padding:16px 24px;border-radius:8px;border:1px solid #bbc8c0;background:#d8e8df;color:#183c2c}${d.text.replaceAll('</style', '<\\/style')}@media(prefers-reduced-motion:reduce){*{animation:none!important}}</style><div class="motion-chip" style="${animation ? `animation:${esc(animation)} 2s infinite` : ''}">Aa · 0123</div><button>Button</button><p>Type and color</p>`;
     root.append(iframe);
     root.insertAdjacentHTML('beforeend', source(d.text));
+    return;
+  }
+  if (item.family === 'component' && item.kind === 'html') {
+    // A page whose name does not say so (renamed.bin): the extension-based loader does not own it, so the item draws it itself, sandboxed.
+    root.innerHTML = bar(label, 'HTML page');
+    const f = document.createElement('iframe');
+    f.className = 'css-preview';
+    f.sandbox = 'allow-scripts';
+    f.title = label;
+    f.srcdoc = d.text;
+    root.append(f);
     return;
   }
   root.innerHTML =

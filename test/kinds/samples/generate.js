@@ -387,17 +387,49 @@ export function generateSamples(dir = here, { media = true } = {}) {
             r: {
               a: 1,
               k: [
-                { t: 0, s: [-30], e: [30] },
-                { t: 45, s: [30], e: [-30] },
+                { t: 0, s: [-30], e: [30], i: { x: [0.5], y: [1] }, o: { x: [0.5], y: [0] } },
+                { t: 45, s: [30], e: [-30], i: { x: [0.5], y: [1] }, o: { x: [0.5], y: [0] } },
                 { t: 90, s: [-30] },
               ],
             },
             o: { k: 100 },
           },
           shapes: [
-            { ty: 'el', p: { k: [0, 0] }, s: { k: [140, 90] } },
-            { ty: 'fl', c: { k: [0.18, 0.5, 0.36, 1] } },
+            { ty: 'gr', it: [{ ty: 'el', p: { a: 0, k: [0, 0] }, s: { a: 0, k: [140, 90] } }, { ty: 'fl', c: { a: 0, k: [0.18, 0.5, 0.36, 1] }, o: { a: 0, k: 100 } }, { ty: 'tr', p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } }] },
           ],
+        },
+      ],
+    }),
+  );
+  // A precomposition: the ellipse lives in an asset, and the root layer only points at it (refId).
+  put(
+    'nested.lottie.json',
+    'lottie',
+    JSON.stringify({
+      v: '5.7.0',
+      fr: 30,
+      ip: 0,
+      op: 60,
+      w: 200,
+      h: 200,
+      assets: [
+        {
+          id: 'comp_0',
+          layers: [
+            {
+              ty: 4, ip: 0, op: 60, st: 0,
+              ks: { p: { a: 0, k: [100, 100] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } },
+              shapes: [
+                { ty: 'gr', it: [{ ty: 'el', p: { a: 0, k: [0, 0] }, s: { a: 0, k: [120, 80] } }, { ty: 'fl', c: { a: 0, k: [0.1, 0.5, 0.4, 1] }, o: { a: 0, k: 100 } }, { ty: 'tr', p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } }] },
+              ],
+            },
+          ],
+        },
+      ],
+      layers: [
+        {
+          ty: 0, refId: 'comp_0', ip: 0, op: 60, st: 0, w: 200, h: 200,
+          ks: { p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } },
         },
       ],
     }),

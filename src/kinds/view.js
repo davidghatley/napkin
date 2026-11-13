@@ -1,3 +1,4 @@
+import { parquetInfo, parquetRows } from './parquet.js';
 import { statSync } from 'node:fs';
 import { dirname, posix } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -6,8 +7,6 @@ import {
   window,
   delimited,
   table,
-  parquetMeta,
-  parquetTable,
   zipDirectory,
   zipEntry,
   LIMIT,
@@ -16,7 +15,7 @@ import { decodeText } from './registry.js';
 import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
 import { parseGltf, parseObj } from './gltf.js';
-import { indexable, buildIndex, readRecords } from './rowindex.js';
+import { indexable, utf16, buildIndex, readRecords } from './rowindex.js';
 const exec = promisify(execFile),
   esc = (s) =>
     String(s).replace(
@@ -216,27 +215,15 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     return { entries };
   }
   if (family === 'parquet') {
-    const meta = parquetMeta(ctx.file);
+    // `group` (older callers) names a row group; `offset` is any row of the file.
+    let info;
     try {
-      return {
-        ...parquetTable(ctx.file, Math.max(0, Number(query.get('group')) || 0)),
-        createdBy: meta.createdBy,
-      };
+      info = parquetInfo(ctx.file);
     } catch (e) {
-      return {
-        columns: meta.schema
-          .filter((s) => s[1] !== undefined)
-          .map((s) => ({
-            name: s[4]?.toString(),
-            type: ['boolean', 'int32', 'int64', 'int96', 'float', 'double', 'bytes', 'fixed'][s[1]],
-            bins: [],
-          })),
-        rows: [],
-        total: meta.rows,
-        groups: meta.groups.length,
-        note: e.message,
-      };
+      throw new Error(`${e.message}. Next: open the file in its own application; napkin still shows its bytes.`);
     }
+    const at = query.get('group') !== null ? info.starts[Math.max(0, Number(query.get('group')) || 0)] ?? 0 : offset;
+    return parquetRows(ctx.file, at, count);
   }
   if (family === 'arrow') return arrowTable(ctx.file, offset, count);
   if (family === 'sqlite') {
@@ -289,7 +276,7 @@ export async function previewData(ctx, query = new URLSearchParams()) {
       // Every row of the file is reachable: a one-pass index of record offsets, then bounded reads.
       const csv = ctx.kind === 'csv' || ctx.kind === 'tsv',
         delimiter = ctx.kind === 'tsv' ? '\t' : ',',
-        index = buildIndex(ctx.file, ctx.key, { quotes: csv, bytes: ctx.bytes, skipBlank: !csv });
+        index = buildIndex(ctx.file, ctx.key, { quotes: csv, bytes: ctx.bytes, skipBlank: !csv, enc: utf16(ctx.head) });
       if (csv) {
         const headers = readRecords(ctx.file, index, 0, 1, { delimiter, quotes: true })[0] || [],
           total = Math.max(0, index.total - 1),

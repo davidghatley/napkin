@@ -7,45 +7,50 @@ import { delimited, LIMIT } from './readers.js';
 const STEP = 500,
   CHUNK = 1 << 20,
   cache = new Map();
-function isUtf16(head) {
-  if ((head[0] === 0xff && head[1] === 0xfe) || (head[0] === 0xfe && head[1] === 0xff)) return true;
-  const n = Math.min(head.length, 400);
-  let zero = 0;
-  for (let i = 0; i < n; i++) if (head[i] === 0) zero++;
-  return n >= 4 && zero > n / 4;
+// UTF-16 files are indexed by 16-bit unit: a unit index times two is the byte offset, whatever surrogate pairs do.
+export function utf16(head) {
+  if (head[0] === 0xff && head[1] === 0xfe) return { be: false, bom: 2 };
+  if (head[0] === 0xfe && head[1] === 0xff) return { be: true, bom: 2 };
+  const n = Math.min(head.length, 400) & ~1;
+  let odd = 0, even = 0;
+  for (let i = 0; i < n; i++) if (head[i] === 0) (i & 1 ? odd++ : even++);
+  if (n >= 4 && odd > n / 4 && odd > even * 3) return { be: false, bom: 0 };
+  if (n >= 4 && even > n / 4 && even > odd * 3) return { be: true, bom: 0 };
+  return null;
 }
 export function indexable(head) {
-  return !isUtf16(head);
+  return true;
 }
-export function buildIndex(file, key, { quotes, bytes, skipBlank }) {
-  const id = file + key + quotes;
+export function buildIndex(file, key, { quotes, bytes, skipBlank, enc = null }) {
+  const W = enc ? 2 : 1,
+    id = file + key + quotes + W;
   if (cache.has(id)) return cache.get(id);
-  const starts = [0],
+  const starts = [enc ? enc.bom : 0],
     buf = Buffer.alloc(CHUNK),
     fd = openSync(file, 'r');
   let count = 0,
-    pos = 0,
+    pos = enc ? enc.bom : 0,
     quote = false,
     lineBytes = 0,
     prevCR = false;
   const end = () => {
     if (skipBlank && lineBytes === 0) return;
     count++;
-    if (count % STEP === 0) starts.push(pos + 1);
+    if (count % STEP === 0) starts.push(pos + W);
     lineBytes = 0;
   };
   try {
     for (;;) {
       const n = readSync(fd, buf, 0, CHUNK, pos);
-      if (n <= 0) break;
-      for (let i = 0; i < n; i++, pos++) {
-        const b = buf[i];
+      if (n < W) break;
+      for (let i = 0; i + W <= n; i += W, pos += W) {
+        const b = enc ? (enc.be ? (buf[i] << 8) | buf[i + 1] : buf[i] | (buf[i + 1] << 8)) : buf[i];
         if (quotes && b === 0x22) quote = !quote;
         if (!quote && b === 0x0a) {
           if (prevCR) {
             // the pair CR LF is one break; the record already ended at the CR
             prevCR = false;
-            if (count % STEP === 0 && count > 0 && starts.at(-1) === pos) starts[starts.length - 1] = pos + 1;
+            if (count % STEP === 0 && count > 0 && starts.at(-1) === pos) starts[starts.length - 1] = pos + W;
             continue;
           }
           end();
@@ -61,7 +66,7 @@ export function buildIndex(file, key, { quotes, bytes, skipBlank }) {
   } finally {
     closeSync(fd);
   }
-  const result = { starts, total: count, bytes };
+  const result = { starts, total: count, bytes, enc };
   cache.set(id, result);
   while (cache.size > 24) cache.delete(cache.keys().next().value);
   return result;
@@ -81,9 +86,18 @@ export function readRecords(file, index, first, count, { delimiter, quotes }) {
       if (!n) break;
       const piece = n === b.length ? b : b.subarray(0, n);
       // Cut at the last line end so a multi-byte character is never split.
-      const cut = Math.max(piece.lastIndexOf(0x0a), piece.lastIndexOf(0x0d));
+      const enc = index.enc;
+      let cut = -1;
+      if (enc) {
+        for (let k = (piece.length & ~1) - 2; k >= 0; k -= 2) {
+          const u = enc.be ? (piece[k] << 8) | piece[k + 1] : piece[k] | (piece[k + 1] << 8);
+          if (u === 0x0a || u === 0x0d) { cut = k + 1; break; }
+        }
+      } else cut = Math.max(piece.lastIndexOf(0x0a), piece.lastIndexOf(0x0d));
       const whole = at + n >= index.bytes;
-      text += decodeText(whole || cut < 0 ? piece : piece.subarray(0, cut + 1));
+      text += enc
+        ? new TextDecoder(enc.be ? 'utf-16be' : 'utf-16le').decode(whole || cut < 0 ? piece.subarray(0, piece.length & ~1) : piece.subarray(0, cut + 1))
+        : decodeText(whole || cut < 0 ? piece : piece.subarray(0, cut + 1));
       at += whole || cut < 0 ? n : cut + 1;
       const seen = quotes ? delimited(text, delimiter, { offset: 0, limit: 0 }).total : (text.match(/[^\r\n]+/g) || []).length;
       if (seen >= skip + count + 1 || whole) break;
