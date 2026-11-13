@@ -1574,3 +1574,22 @@
 .d-plate small:empty {
   display: none;
 }
+.dials button.d-crop-h {
+  width: 14px;
+  height: 14px;
+  min-height: 0;
+  padding: 0;
+  background: #fff;
+  border: 2px solid #111;
+  border-radius: 0;
+  box-shadow: 0 0 0 1px #fff;
+}
+.dials button.d-mask-h {
+  border-radius: 50%;
+}
+.d-crop-box {
+  z-index: 1;
+}
+.d-mask-ring {
+  z-index: 1;
+}

@@ -22,6 +22,8 @@ test("arithmetic respects precedence, units, precision and bounds; rejects execu
   assert.equal(expression("0.5turn", { unit: "deg" }), 180);
   assert.equal(expression("50%", { unit: "%" }), 50);
   assert.equal(expression("50%", { min: 0, max: 1 }), 0.5);
+  assert.equal(expression("50%", { unit: "px", min: 0, max: 200, step: 1 }), 100);
+  assert.equal(expression("150%", { unit: "px", value: 12 }), 18);
   assert.equal(expression("-2 * -3"), 6);
   assert.equal(expression("999", { max: 100 }), 100);
   assert.equal(expression(".26", { step: 0.1 }), 0.3);

@@ -56,10 +56,14 @@ export function expression(text, control = {}) {
     const from = m[2]?.toLowerCase(),
       to = control.unit;
     if (from && from !== to) {
-      if (from === "%" && !to && Number.isFinite(control.max))
-        return (
-          (control.min || 0) + (n / 100) * (control.max - (control.min || 0))
-        );
+      // A percentage means a share of the range when there is one, otherwise a share of the current value.
+      if (from === "%" && to !== "%") {
+        if (Number.isFinite(control.max))
+          return (
+            (control.min || 0) + (n / 100) * (control.max - (control.min || 0))
+          );
+        if (Number.isFinite(control.value)) return (n / 100) * control.value;
+      }
       if (!units[from] || !units[to] || units[from][0] !== units[to][0])
         throw new Error(`Expected ${to || "a unitless value"}`);
       n *= units[from][1] / units[to][1];

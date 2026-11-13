@@ -288,6 +288,46 @@ test(
           );
         },
       );
+      await t.test(
+        "gradient and encoding controls change from the keyboard; drawn choice controls open and pick",
+        async () => {
+          await q('document.querySelector("#sample-color [data-control=gradient] .d-label").focus()');
+          await key("ArrowRight");
+          assert.match(await q('dialsDemo.panels[0].get("gradient")'), /125deg/);
+          await q('document.querySelector("#sample-data [data-control=channels] .d-label").focus()');
+          await key("ArrowRight");
+          assert.equal(await q('dialsDemo.panels[4].get("channels").x'), "energy");
+          // The studio's field picker is a drawn listbox, not a browser select.
+          await open(4);
+          await sleep(200);
+          assert.equal(await q('document.querySelectorAll(".d-section[data-depth=\\"3\\"] select").length'), 0);
+          await q('document.querySelector(".d-section[data-depth=\\"3\\"] [aria-label=\\"color field\\"] button").click()');
+          await sleep(50);
+          assert.equal(await q('document.querySelectorAll("[role=listbox] [role=option]").length'), 5);
+          await key("ArrowDown");
+          await key("Enter");
+          await sleep(50);
+          assert.notEqual(await q('dialsDemo.panels[4].get("channels").color'), "group");
+          await open(4, 2);
+        },
+      );
+      await t.test(
+        "crop handles are drawn on the image and move the crop",
+        async () => {
+          await open(3);
+          await sleep(300);
+          const box = JSON.parse(
+            await q(`(()=>{const r=document.querySelector('.d-section[data-depth="3"] .d-crop-nw').getBoundingClientRect();return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2})})()`),
+          );
+          await browser.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x, y: box.y });
+          await browser.send("Input.dispatchMouseEvent", { type: "mousePressed", x: box.x, y: box.y, button: "left", buttons: 1, clickCount: 1 });
+          await browser.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: box.x + 60, y: box.y + 30, buttons: 1 });
+          await browser.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: box.x + 60, y: box.y + 30, button: "left", clickCount: 1 });
+          const v = await q('dialsDemo.panels[3].get("levels")');
+          assert.ok(v.cropLeft > 0.05 && v.cropTop > 0.05, JSON.stringify(v));
+          await open(3, 2);
+        },
+      );
       assert.deepEqual(errors, []);
     } finally {
       await browser.close();

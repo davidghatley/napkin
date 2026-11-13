@@ -28,7 +28,7 @@ The [evidence folder](../public/dials/evidence/) also contains every studio in b
 
 ## Motion studio
 
-- Response plot (spring or cubic-bezier) with a dashed earlier response. **Pin as before** keeps the current response as the comparison; the trail below the plot shows the current and pinned responses side by side.
+- Response plot (spring or cubic-bezier) with a dashed earlier response. The dashed line starts as the standard CSS `ease` (or linear when the response is already ease), then follows the response as it was before your last committed edit. The plot's time axis includes the delay, so a delay shows as a flat run before the curve starts. A velocity plot sits beside the trail. **Pin as before** keeps the current response as the comparison; the trail below the plot shows the current and pinned responses side by side.
 - Measured: settle time (within 2 percent of the end), overshoot, peak time, and whether the response fits the duration. The same measures are shown for the pinned response.
 - Timeline: a ruler in milliseconds, a **loop range** (drag the markers, or `[` and `]` at the playhead, `\` to clear; Loop in and Loop out fields as well), a lane for the response keys and one lane per other number or angle instrument in the section. Drag a key to change its time and value, double-click to add or remove, `K` adds a response key at the playhead. Playback repeats inside the range. **Apply at playhead** sets the other instruments to their values at the playhead.
 - Output you can paste: a CSS easing (`cubic-bezier()`, or a thinned `linear()` for springs), a `transition` line, and a Web Animations call (key values drive the custom property `--progress`; lane keys drive `--<id>`).
@@ -151,6 +151,15 @@ DIALS_EVIDENCE=public/dials/evidence node --test test/dials/browser.test.js
 The Node suite checks arithmetic and rejection paths, reference OKLab coordinates, RGB round trips, gamut boundaries, black/white WCAG and APCA values, spring damping regimes, bezier endpoints and sampler schedules. The Chromium suite uses the repository's `src/chromium.js` lifecycle through its CDP helper, software rendering with GPU disabled, random-port static server, real key/pointer events, and cleanup in `finally`.
 
 The browser suite checks both themes, 32 px dials, node identity across depth changes, expression entry and invalid drafts, local undo/redo, numeric counts, modifier scrubbing, queued updates/conflicts, all basic control edit paths, CSS color syntax, plugins, focus indication, reduced motion, narrow layout, and axe. Performance evidence contains 15 swaps of a 200-control document, 100 update/layout samples and 50 real pointer moves per number, color, motion and image control traced from a capture-phase mark to the end of Chromium's next software `Paint`. That last measurement includes the rendering path; it does not measure physical display scanout. Hardware and browser differences still matter.
+
+## Studio details added in round 3
+
+- Choice controls (plane, gamut, scheduler, encoding fields, bench select rows) are drawn: a segmented control for a few short options, otherwise a button that opens a listbox (arrows, Home, End, Enter, Escape). The library no longer uses the browser select. File picking is a drawn button plus a drop target that wraps a hidden file input.
+- Color: ramp and harmony are plated swatches carrying lightness, hue or chroma and the contrast ratio against the chosen background. An image sample is drawn in the studio and any pixel can be clicked to take its color.
+- Image: crop corners and edges and the mask radius are handles drawn on the image, with arrow-key and Shift/Alt steps.
+- Typography: size, tracking, leading and each axis have a slider beside the typed field; each axis is also shown stepped across its range, with the current stop marked, next to a size ladder and the character set.
+- Sampler: the other two schedulers are drawn dashed behind the current one, with a table of sigma per step. Data: axis end values, a legend for color and size, and the first rows of the source with the encoded columns marked.
+- Arrow keys now also work on gradient controls (turn the angle by 5 degrees) and encoding controls (walk the x field through the declared fields; `scrub` names another channel). A `%` entry on a control with a range is that share of the range, otherwise that share of the current value.
 
 ## Integration boundary and remaining gaps
 

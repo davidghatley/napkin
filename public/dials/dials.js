@@ -706,7 +706,21 @@ export class Dials extends EventTarget {
             )
           : n,
       );
-    else if (v && typeof v === "object") {
+    else if (c.type === "gradient" && typeof v === "string") {
+      // Arrows turn the gradient's angle; the stops stay where the typed value put them.
+      const angle = /(-?\d+(?:\.\d+)?)deg/.exec(v);
+      if (!angle) return;
+      const turned = (((Number(angle[1]) + dir * 5 * factor) % 360) + 360) % 360;
+      result = v.replace(angle[0], `${Number(turned.toFixed(2))}deg`);
+    } else if (c.type === "encoding" && v && typeof v === "object") {
+      // Arrows walk the channel's field through the declared fields; the first press from "none" picks the first.
+      const names = (c.fields || []).map((f) => (typeof f === "object" ? f.name : f)),
+        key = c.scrub || "x",
+        at = names.indexOf(v[key]);
+      if (!names.length) return;
+      const next = clamp(at + dir * count, -1, names.length - 1);
+      result = { ...v, [key]: next < 0 ? "" : names[next] };
+    } else if (v && typeof v === "object") {
       const key =
         c.scrub || Object.keys(v).find((k) => typeof v[k] === "number");
       if (key) {
