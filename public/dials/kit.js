@@ -378,41 +378,6 @@ export function fitSvg(svg, onSize) {
   };
 }
 /* ---------- Image ---------- */
-/** The default source: a small still life drawn locally (no network, no bundled photo). */
-export function stillLife(w = 320, h = 180) {
-  const c = Object.assign(document.createElement("canvas"), { width: w, height: h }),
-    g = c.getContext("2d", { willReadFrequently: true }),
-    k = w / 320;
-  g.scale(k, h / 180);
-  const back = g.createLinearGradient(0, 0, 320, 180);
-  back.addColorStop(0, "#17266c");
-  back.addColorStop(1, "#526bca");
-  g.fillStyle = back;
-  g.fillRect(0, 0, 320, 180);
-  g.fillStyle = "#e5ddbf";
-  g.fillRect(0, 135, 320, 45);
-  g.fillStyle = "#11214f";
-  g.beginPath();
-  g.ellipse(180, 142, 88, 12, 0, 0, Math.PI * 2);
-  g.fill();
-  const orange = g.createRadialGradient(145, 76, 1, 179, 100, 65);
-  orange.addColorStop(0, "#ffcc56");
-  orange.addColorStop(0.6, "#ed7d21");
-  orange.addColorStop(1, "#792e16");
-  g.fillStyle = orange;
-  g.beginPath();
-  g.arc(177, 95, 53, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = "#749b42";
-  g.beginPath();
-  g.ellipse(181, 39, 22, 7, -0.4, 0, Math.PI * 2);
-  g.fill();
-  g.fillStyle = "#f2eee0";
-  g.fillRect(34, 70, 45, 65);
-  g.fillStyle = "#c9c5b6";
-  g.fillRect(73, 70, 8, 65);
-  return c;
-}
 /** Levels, gamma and the five-point tone curve as one function from input to output, 0 to 1. */
 export function toneOf(v = {}) {
   const black = v.black || 0,
