@@ -22,6 +22,10 @@ export const swapProbe = (reps = 40) => `(async()=>{
   const p=new dialsDemo.Dials(mount);
   p.render(make(0));
   await new Promise(r=>requestAnimationFrame(()=>setTimeout(r)));
+  // Proof the panel is really on screen: its box, the element at its middle, and the types it holds.
+  const box=mount.getBoundingClientRect(),onTop=mount.contains(document.elementFromPoint(450,300)),
+    shown=new Set([...mount.querySelectorAll(".d-row[data-type]")].map(r=>r.dataset.type)).size,
+    rows=mount.querySelectorAll(".d-row").length;
   const times=[];
   for(let k=0;k<${reps};k++){
     const schema=make(k%2+1);
@@ -32,7 +36,7 @@ export const swapProbe = (reps = 40) => `(async()=>{
   }
   p.destroy();mount.remove();
   const s=[...times].sort((a,b)=>a-b),pick=(q)=>s[Math.min(s.length-1,Math.ceil(q*s.length)-1)];
-  return JSON.stringify({reps:s.length,controls:200,types:8,median:+pick(.5).toFixed(1),p95:+pick(.95).toFixed(1),max:+s.at(-1).toFixed(1)});
+  return JSON.stringify({reps:s.length,controls:rows,types:shown,width:box.width,height:box.height,onTop,median:+pick(.5).toFixed(1),p95:+pick(.95).toFixed(1),max:+s.at(-1).toFixed(1)});
 })()`;
 
 if (import.meta.url === `file://${process.argv[1]}`) {

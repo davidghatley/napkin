@@ -1,10 +1,12 @@
 // The motion studio. The response is a drawing you drag: bezier handles on the curve, a
 // spring's peak and its settle point, the delay and the end. Keyframes are diamonds on a
 // timed track. A spacing chart shows how the element travels, and the code it writes
-// (transition, @keyframes, WAAPI) is editable and reads back into the panel.
-import { el } from "./dom.js";
+// (transition, @keyframes, WAAPI) is editable and reads back into the panel. The ghost, the lanes'
+// readouts and the code all come from one model (panel.motionModel / panel.motionAt), so what
+// plays here is what the written code does. A playhead scrubs time by pointer or keys.
+import { el, pointerSurface } from "./dom.js";
 import { clamp, same } from "./values.js";
-import { analyze, motionAt, framesAt, sortFrames, toEasing } from "./motion.js";
+import { analyze, motionAt, framesAt, sortFrames, toEasing, keyName } from "./motion.js";
 import { translateOf } from "./figures.js";
 import { s, fx, block, hero, field, chips, handle, fitSvg, keyHint } from "./kit.js";
 
@@ -253,14 +255,26 @@ export function motionStudio(ctx, host) {
       return h;
     });
   };
+  /** A new keyframe at u holding everything as it is there now, so adding one changes no motion. */
+  const addKeyAt = (o) => {
+    const f = frames();
+    if (!K) return false;
+    if (f.some((x) => Math.abs(x.offset - o) < 0.02)) {
+      panel.announce?.(`A keyframe is already at ${fx(o * 100, 0)}%`);
+      return false;
+    }
+    const here = panel.motionAt(section.id, mv().delay + o * mv().duration),
+      frame = { offset: r3(o), transform: here.style.transform.replace(/(-?\d+\.\d+)/g, (n) => String(Number(Number(n).toFixed(2)))), opacity: Number(here.opacity.toFixed(2)) };
+    if (frame.transform === "none") delete frame.transform;
+    for (const [k, x] of Object.entries(here.vars)) frame[k] = Number(x.toFixed(2));
+    K.set(sortFrames([...f, frame]));
+    panel.announce?.(`Keyframe added at ${Math.round(mv().delay + o * mv().duration)} ms`);
+    return true;
+  };
   ksvg.addEventListener("dblclick", (e) => {
     if (!K || e.target.closest(".k-handle")) return;
-    const r = ksvg.getBoundingClientRect(),
-      o = iKX(e.clientX - r.left),
-      f = frames();
-    if (f.some((x) => Math.abs(x.offset - o) < 0.02)) return;
-    const here = framesAt(f, o, mv());
-    K.set(sortFrames([...f, { offset: r3(o), transform: `translateX(${Math.round(here.x)}px)`, opacity: Number(here.opacity.toFixed(2)) }]));
+    const r = ksvg.getBoundingClientRect();
+    addKeyAt(iKX(e.clientX - r.left));
   });
 
   /* ---------- loop range: two handles under the response; preview plays only that part ---------- */
@@ -302,7 +316,7 @@ export function motionStudio(ctx, host) {
         setRange(which ? a : a + dx * 0.01, which ? b + dx * 0.01 : b);
       },
     });
-    h.node.append(s("path", { class: "km-loop-flag", d: which ? "M0 -9V9M0 -9H-7L0 -3" : "M0 -9V9M0 -9H7L0 -3" }));
+    h.node.append(s("path", { class: "km-loop-flag", d: which ? "M0 -18V0M0 -18H-7L0 -12" : "M0 -18V0M0 -18H7L0 -12" }));
     return h;
   };
   const loopA = loopEdge(0),
@@ -359,7 +373,7 @@ export function motionStudio(ctx, host) {
   // Any number in this section can be keyed on the timeline: its value is stored in each keyframe
   // under the control's id, drawn as a lane with the control's own range, and read out as it plays.
   // Stored as a custom property (--rotation), valid in CSS @keyframes and in WAAPI keyframes.
-  const cssKey = (c) => "--" + String(c.id).replace(/[^\w-]/g, "-");
+  const cssKey = (c) => keyName(c.id);
   const keyable = () => section.controls.filter((c) => c !== kc && ["number", "range", "angle"].includes(c.type));
   const keyRow = el("div", { class: "km-key-row" });
   const paintKeyRow = () => {
@@ -439,13 +453,15 @@ export function motionStudio(ctx, host) {
     gStart = s("rect", { class: "km-ghost-start", width: 26, height: 26, rx: 4 }),
     gEnd = s("rect", { class: "km-ghost-end", width: 26, height: 26, rx: 4 }),
     gNow = s("rect", { class: "km-block", width: 26, height: 26, rx: 4 }),
-    gText = s("g", {});
-  gsvg.append(gLane, gTicks, gStart, gEnd, gNow, gText);
+    gText = s("g", {}),
+    gTrail = s("g", { class: "km-trail" });
+  gsvg.append(gLane, gTicks, gTrail, gStart, gEnd, gNow, gText);
   let gs = { w: 1, h: 1 };
   cleanup.push(fitSvg(gsvg, (w, h) => ((gs = { w, h }), draw())).destroy);
   const GX = (px) => P.l + 13 + ((px - lo) / (hi - lo || 1)) * (gs.w - P.l - P.r - 26);
   const clock = el("output", { class: "km-clock" }),
     play = el("button", { type: "button", class: "km-play", "aria-pressed": "true", text: "Pause" });
+  let fitRuler = () => {};
   let playing = !matchMedia("(prefers-reduced-motion: reduce)").matches,
     t0 = performance.now(),
     tNow = 1,
@@ -478,19 +494,83 @@ export function motionStudio(ctx, host) {
     };
     raf = requestAnimationFrame(tick);
   };
+  /* ---------- playhead: scrub time on the track, by pointer or keys ---------- */
+  const setTime = (ms) => {
+    const v = mv();
+    playing = false;
+    cancelAnimationFrame(raf);
+    tNow = clamp(ms, 0, v.delay + v.duration) / total();
+    play.textContent = "Play";
+    play.setAttribute("aria-pressed", "false");
+    placeNow();
+  };
+  const nowMs = () => tNow * total();
+  const nowU = () => clamp((nowMs() - mv().delay) / mv().duration, 0, 1);
+  const headH = K
+    ? handle(ksvg, {
+        label: "Playhead: arrows scrub time, Home and End jump, Enter or Insert adds a keyframe here; type a time in ms and Enter",
+        r: 6,
+        cls: "km-playhead",
+        start: () => setTime(nowMs()),
+        move: (x) => setTime(mv().delay + iKX(x) * mv().duration),
+        keys: (dx) => setTime(mv().delay + clamp(nowU() + dx * 0.01, 0, 1) * mv().duration),
+        typed: (n) => setTime(n),
+      })
+    : null;
+  if (headH) {
+    headH.node.prepend(s("path", { class: "km-playhead-cap", d: "M-6 -8H6V0L0 6L-6 0Z" }));
+    headH.node.setAttribute("aria-valuemin", "0");
+    headH.node.addEventListener("keydown", (e) => {
+      if (e.key === "Home" || e.key === "End") {
+        e.preventDefault();
+        e.stopPropagation();
+        setTime(e.key === "Home" ? 0 : mv().delay + mv().duration);
+      } else if (e.key === "Insert" || e.key === "+" || (e.key === "Enter" && !e.defaultPrevented)) {
+        e.preventDefault();
+        e.stopPropagation();
+        addKeyAt(nowU());
+      }
+    });
+    cleanup.push(headH.destroy);
+    // The time ruler under the track scrubs too.
+    const ruler = s("rect", { class: "km-ruler", "aria-hidden": "true" });
+    ksvg.insertBefore(ruler, kNow);
+    cleanup.push(
+      pointerSurface(ruler, {
+        start: (e) => setTime(mv().delay + iKX(e.clientX - ksvg.getBoundingClientRect().left) * mv().duration),
+        move: (e) => setTime(mv().delay + iKX(e.clientX - ksvg.getBoundingClientRect().left) * mv().duration),
+      }),
+    );
+    fitRuler = () => {
+      ruler.setAttribute("x", P.l);
+      ruler.setAttribute("y", ks.h - 26);
+      ruler.setAttribute("width", Math.max(0, ks.w - P.l - P.r));
+      ruler.setAttribute("height", 26);
+    };
+  }
+  const addHere = K ? el("button", { type: "button", class: "kx-btn km-add-key", text: "+ Key at playhead", "aria-label": "Add a keyframe at the playhead" }) : null;
+  addHere?.addEventListener("click", () => addKeyAt(nowU()));
   function placeNow() {
     const v = mv(),
       ms = tNow * total(),
       u = clamp((ms - v.delay) / v.duration, 0, 1),
-      at = framesAt(frames(), u, v);
+      f = frames(),
+      // The same model as the written code: x, rotation (rotate() plus the rotate property), scale, opacity.
+      at = panel.motionAt(section.id, ms);
     gNow.setAttribute("x", GX(at.x) - 13);
     gNow.setAttribute("y", gs.h / 2 - 13);
     gNow.style.opacity = String(0.25 + 0.75 * at.opacity);
-    const f = frames(),
-      rot = f.some((k) => /rotate\(/.test(k.transform || "")) ? laneAt({ get: fnOf("rotate") }, f, u, v) : 0;
     // Every lane reads out its value at the playhead: keyed controls show what they would be now.
     for (const l of lanes) if (l.readout) l.readout.textContent = `${l.def.fmt(laneAt(l.def, f, u, v))} at ${Math.round(ms)} ms`;
-    gNow.setAttribute("transform", rot ? `rotate(${fx(rot, 1)} ${fx(GX(at.x))} ${fx(gs.h / 2)})` : "");
+    gNow.setAttribute("transform", at.rotate || at.scale !== 1 ? `rotate(${fx(at.rotate, 1)} ${fx(GX(at.x))} ${fx(gs.h / 2)}) translate(${fx(GX(at.x))} ${fx(gs.h / 2)}) scale(${fx(at.scale, 3)}) translate(${fx(-GX(at.x))} ${fx(-gs.h / 2)})` : "");
+    gNow.dataset.rotate = fx(at.rotate, 2);
+    if (headH) {
+      headH.at(KX(u), 8);
+      headH.node.setAttribute("aria-valuemax", String(Math.round(v.delay + v.duration)));
+      headH.node.setAttribute("aria-valuenow", String(Math.round(ms)));
+      headH.text(`${Math.round(ms)} ms: x ${fx(at.x, 0)} px, opacity ${fx(at.opacity, 2)}${at.rotate ? `, turned ${fx(at.rotate, 0)}°` : ""}`);
+      if (addHere) addHere.textContent = `+ Key at ${Math.round(ms)} ms`;
+    }
     const nx = X(Math.min(ms, span));
     rNow.setAttribute("x1", nx);
     rNow.setAttribute("x2", nx);
@@ -581,7 +661,7 @@ export function motionStudio(ctx, host) {
   const table = el("table", { class: "km-table" });
   ctx.rail.append(
     block("Keyframes", table),
-    keyHint(["Arrows", "move the focused handle or diamond"], ["Shift", "fine · Alt coarse"], ["Delete", "removes a middle keyframe"], ["Dbl-click", "the track adds one"]),
+    keyHint(["Arrows", "move the focused handle or diamond"], ["Shift", "fine · Alt coarse"], ["Delete", "removes a middle keyframe"], ["Playhead", "arrows scrub · Enter or Insert adds a key"], ["Dbl-click", "the track adds one"]),
   );
 
   host.append(
@@ -589,7 +669,7 @@ export function motionStudio(ctx, host) {
       "div",
       { class: "k-main" },
       el("section", { class: "k-block" }, el("div", { class: "km-head" }, el("h3", { class: "k-title", text: "Response" }), el("div", { class: "km-playbar" }, loopNote, mode.node)), rsvg),
-      kc ? el("section", { class: "k-block" }, el("h3", { class: "k-title" }, `${kc.label}`, el("small", { text: "offset across, translateX up" })), ksvg, lanesBox) : null,
+      kc ? el("section", { class: "k-block" }, el("div", { class: "km-head" }, el("h3", { class: "k-title" }, `${kc.label}`, el("small", { text: "time across, translateX up; drag the playhead or the ruler" })), el("div", { class: "km-playbar" }, addHere)), ksvg, lanesBox) : null,
       el("section", { class: "k-block" }, el("div", { class: "km-head" }, el("h3", { class: "k-title" }, "Spacing", el("small", { text: "one tick per 50 ms" })), el("div", { class: "km-playbar" }, clock, play)), gsvg),
     ),
     el(
@@ -661,7 +741,7 @@ export function motionStudio(ctx, host) {
       rDelay.setAttribute("y", P.t);
       rDelay.setAttribute("width", Math.max(0, X(v.delay) - X(0)));
       rDelay.setAttribute("height", rs.h - P.t - P.b);
-      if (v.delay > 0) rLabels.append(s("text", { x: X(0) + 4, y: Y(0) + 14, text: `delay ${v.delay}` }));
+      if (v.delay > 0) rLabels.append(s("text", { x: X(0) + 4, y: P.t + 12, text: `delay ${v.delay}` }));
       const cutOn = spring && !a.fits;
       rCut.style.display = cutOn ? "" : "none";
       rCut.setAttribute("x", X(v.delay + v.duration));
@@ -762,6 +842,7 @@ export function motionStudio(ctx, host) {
     }
     // Keyframe track.
     if (K && ks.w > 10) {
+      fitRuler();
       let g = "";
       kLabels.replaceChildren();
       for (let i = 0; i <= 10; i++) {
@@ -803,6 +884,14 @@ export function motionStudio(ctx, host) {
         t += `M${fx(x, 1)} ${mid + 18}v12`;
       }
       gTicks.setAttribute("d", t);
+      // The ghost trail: the element every tenth of the way, turned, scaled and faded as the code plays it.
+      gTrail.replaceChildren(
+        ...Array.from({ length: 11 }, (_, i) => {
+          const at = panel.motionAt(section.id, v.delay + (i / 10) * v.duration),
+            cx = GX(at.x);
+          return s("rect", { x: fx(cx - 13), y: fx(mid - 13), width: 26, height: 26, rx: 4, class: "km-trail-box", "stroke-opacity": fx(0.18 + 0.5 * at.opacity, 2), transform: `rotate(${fx(at.rotate, 1)} ${fx(cx)} ${fx(mid)}) translate(${fx(cx)} ${fx(mid)}) scale(${fx(at.scale, 3)}) translate(${fx(-cx)} ${fx(-mid)})` });
+        }),
+      );
       const x0 = framesAt(f, 0, v).x,
         x1 = framesAt(f, 1, v).x;
       gStart.setAttribute("x", GX(x0) - 13);

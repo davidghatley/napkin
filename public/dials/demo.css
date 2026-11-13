@@ -167,6 +167,15 @@ main {
   overflow: hidden;
   background: color-mix(in srgb, var(--text) 4%, var(--surface));
 }
+/* In the studio the result sits at the top of the rail, so the thing being edited stays in view. */
+.subject.is-anchored {
+  height: 150px;
+  margin: 0 0 12px;
+  box-shadow: inset 0 0 0 1px var(--d-line, var(--line));
+}
+.subject.is-anchored.subject-color .card {
+  width: 90%;
+}
 /* With the instrument folded to its dial, the result gets the room. */
 .study:has(.d-section[data-depth="1"]) .subject {
   height: 292px;
@@ -282,20 +291,32 @@ main {
   gap: 4px;
   min-height: 0;
 }
+.subject-gen figure {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 4px;
+  margin: 0;
+  min-height: 0;
+}
 .subject-gen canvas {
   width: 100%;
   height: 100%;
   min-height: 0;
   border-radius: 2px;
-  object-fit: cover;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+.subject-gen figcaption {
+  font: 11px/1.2 var(--mono, ui-monospace, monospace);
+  color: var(--muted);
+  text-align: center;
 }
 .subject-gen p {
   margin: 0;
   font-size: 11px;
+  line-height: 1.35;
   color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 .subject-gen p b {
   color: var(--text);
@@ -443,4 +464,53 @@ footer output {
   * {
     scroll-behavior: auto !important;
   }
+}
+/* The motion subject: a real element running the panel's written CSS, over its model's trail. */
+.subject-motion .motion-stage {
+  position: absolute;
+  inset: 0;
+}
+.subject-motion .motion-rail {
+  position: absolute;
+  left: 34px;
+  right: 24px;
+  top: calc(50% + 24px);
+  border-top: 1px dashed var(--frame);
+}
+.subject-motion .motion-box,
+.subject-motion .motion-trail i {
+  position: absolute;
+  left: 34px;
+  top: calc(50% - 14px);
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+}
+.subject-motion .motion-box {
+  background: var(--accent);
+}
+.subject-motion .motion-trail i {
+  border: 1px dashed var(--accent);
+}
+.subject-motion .motion-clock {
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.subject-note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 16px 24px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.subject-note[hidden] {
+  display: none;
 }

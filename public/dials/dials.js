@@ -14,7 +14,7 @@ import {
   convert,
 } from "./values.js";
 import { parseColor, cssLch } from "./color.js";
-import { motionCode, readMotionCode } from "./motion.js";
+import { motionCode, readMotionCode, evaluate, keyedOf, keyName } from "./motion.js";
 import { drawFigure, translateOf } from "./figures.js";
 /** Replace (or add) translateX in a CSS transform list. */
 export const withTranslate = (transform = "", x) => {
@@ -208,8 +208,11 @@ export class Dials extends EventTarget {
         if (c.type === "color")
           for (const key of ["value", "default"]) {
             if (c[key] === undefined) continue;
+            // CSS.supports checks the syntax without a style pass; only a value it accepts but that
+            // still needs the page to resolve (var(), currentColor) is resolved here.
             try {
-              parseColor(c[key], this.root);
+              if (!CSS.supports("color", String(c[key]))) throw new Error("not a colour");
+              if (/var\(|currentcolor/i.test(String(c[key]))) parseColor(c[key], this.root);
             } catch {
               c.invalid = `${c.invalid ? c.invalid + "; " : ""}its ${key} (${String(c[key]).slice(0, 40)}) is not a colour this browser reads; showing grey`;
               c[key] = "#808080";
@@ -292,13 +295,7 @@ export class Dials extends EventTarget {
         role: "group",
         "aria-label": section.label + " studio instrument",
       });
-      tabs.append(
-        ...section.controls.map((c) => {
-          const b = button(c.label || c.id, "Open " + (c.label || c.id) + " studio", () => this.open(c.id));
-          if ((c.label || c.id).length > 18) b.title = c.label || c.id;
-          return b;
-        }),
-      );
+      // The studio's tabs are made when the studio is first opened (see buildStudio).
       body.append(content);
       const railHost = el("div", { class: "d-rail" });
       content.append(rowlist, railHost, labHost);
@@ -624,8 +621,12 @@ export class Dials extends EventTarget {
       detail.code = this.motionCode(r.section.schema.id);
     this.emit("value", detail);
   }
-  /** The CSS transition, CSS @keyframes animation and WAAPI call a motion section writes. */
-  motionCode(sectionId) {
+  /**
+   * One model of a motion section: its response, keyframes, the section numbers keyed on the
+   * timeline, and the values that apply unkeyed. The studio's ghost, motionAt() and the written
+   * code all read this, so what you see is what the code does.
+   */
+  motionModel(sectionId) {
     const s = this.sections.get(sectionId);
     if (!s) throw new Error("Unknown section " + sectionId);
     const of = (...types) => s.schema.controls.find((c) => types.includes(c.type));
@@ -633,14 +634,32 @@ export class Dials extends EventTarget {
       k = of("keyframes"),
       loop = s.schema.controls.find((c) => c.type === "boolean" && /loop|repeat/i.test(c.id + c.label)),
       rot = s.schema.controls.find((c) => c.type === "angle");
-    const mv = m ? this.get(m.id) : {};
-    return motionCode({
-      motion: Array.isArray(mv) ? { mode: "bezier", bezier: mv, duration: 1000 } : mv,
-      frames: k ? this.get(k.id) : undefined,
-      loop: loop ? !!this.get(loop.id) : false,
-      rotate: rot ? this.get(rot.id) : undefined,
-      name: s.schema.id,
-    });
+    const mv = m ? this.get(m.id) : {},
+      motion = { duration: 1000, delay: 0, ...(Array.isArray(mv) ? { mode: "bezier", bezier: mv } : mv) },
+      frames = k ? this.get(k.id) : undefined,
+      keyed = k
+        ? s.schema.controls
+            .filter((c) => c !== k && ["number", "range", "angle"].includes(c.type) && (frames || []).some((f) => Number.isFinite(f[keyName(c.id)])))
+            .map((c) => keyedOf(c, this.get(c.id)))
+        : [],
+      rotate = rot && !keyed.some((c) => c.id === rot.id) ? this.get(rot.id) : undefined;
+    return { motion, frames, keyed, rotate, loop: loop ? !!this.get(loop.id) : false, name: s.schema.id };
+  }
+  /**
+   * What a motion section shows at `ms` since it started (delay included): the CSS values an
+   * element would have (transform, opacity, rotate and any keyed property), from the same model
+   * as the written code.
+   */
+  motionAt(sectionId, ms) {
+    const m = this.motionModel(sectionId),
+      u = clamp((ms - (m.motion.delay || 0)) / (m.motion.duration || 1000), 0, 1),
+      frames = m.frames && m.frames.length >= 2 ? m.frames : [{ offset: 0, transform: "translateX(0px)" }, { offset: 1, transform: "translateX(100px)" }];
+    return evaluate(frames, u, m.motion, { keyed: m.keyed, statics: m.rotate !== undefined ? { rotate: m.rotate } : {} });
+  }
+  /** The CSS transition, CSS @keyframes animation and WAAPI call a motion section writes. */
+  motionCode(sectionId) {
+    const { motion, frames, keyed, rotate, loop, name } = this.motionModel(sectionId);
+    return motionCode({ motion, frames, loop, rotate, keyed, name });
   }
   /**
    * Read motion code back into a section: a transition rule, an @keyframes animation or a
@@ -658,7 +677,12 @@ export class Dials extends EventTarget {
     const put = (c, v) => {
       if (c && !same(this.get(c.id), v)) this.transact(c.id, v, "code");
     };
-    if (read.motion && m) put(m, { ...this.get(m.id), ...read.motion });
+    if (read.motion && m) {
+      // @keyframes and WAAPI code say whether a loop range is set; one they do not mention is
+      // cleared. A transition cannot loop, so it leaves the range alone.
+      const { loopRange: range, ...was } = this.get(m.id);
+      put(m, { ...was, ...(read.kind === "transition" && range ? { loopRange: range } : {}), ...read.motion });
+    }
     if (read.frames && k) put(k, read.frames);
     if (read.iterations !== undefined && loop) put(loop, read.iterations === Infinity);
     if (read.rotate !== undefined && rot) put(rot, read.rotate);
@@ -797,7 +821,18 @@ export class Dials extends EventTarget {
         if (r.figStale) this.drawRowFigure(r);
         r.figStale = false;
       };
-    for (const r of lazy) r.node.addEventListener("contentvisibilityautostatechange", (e) => !e.skipped && wake(r), { once: true });
+    // A section that scrolls into view draws its rows' figures at once.
+    for (const s of this.sections.values()) {
+      const mine = lazy.filter((r) => r.section === s);
+      if (!mine.length) continue;
+      const node = s.node,
+        on = (e) => {
+          if (e.skipped) return;
+          node.removeEventListener("contentvisibilityautostatechange", on);
+          mine.forEach(wake);
+        };
+      node.addEventListener("contentvisibilityautostatechange", on);
+    }
     let i = 0;
     const slice = () => {
       if (this._figToken !== token || this.disposed) return;
@@ -855,12 +890,20 @@ export class Dials extends EventTarget {
     if (s.depth === 3) s.node.dataset.studioFor = id;
     const c = s.schema.controls.find((c) => c.id === id),
       plugin = c && controls.get(c.type);
+    if (s.depth === 3 && !s.tabs.childElementCount)
+      s.tabs.append(
+        ...s.schema.controls.map((x) => {
+          const b = button(x.label || x.id, "Open " + (x.label || x.id) + " studio", () => this.open(x.id));
+          if ((x.label || x.id).length > 18) b.title = x.label || x.id;
+          return b;
+        }),
+      );
     [...s.tabs.children].forEach((b, i) =>
       b.setAttribute("aria-pressed", String(s.schema.controls[i].id === id)),
     );
     // Keep the current tab in view when the tabs scroll (narrow studios), without moving the page.
     const tab = s.tabs.querySelector('[aria-pressed="true"]');
-    if (tab && s.tabs.scrollWidth > s.tabs.clientWidth) {
+    if (tab && s.depth === 3 && s.node.isConnected && s.tabs.scrollWidth > s.tabs.clientWidth) {
       const l = tab.offsetLeft - s.tabs.offsetLeft;
       if (l < s.tabs.scrollLeft || l + tab.offsetWidth > s.tabs.scrollLeft + s.tabs.clientWidth) s.tabs.scrollLeft = l - 24;
     }
@@ -1094,7 +1137,8 @@ export class Dials extends EventTarget {
   setDepth(id, depth, animate = true) {
     const s = this.sections.get(id);
     if (!s) return;
-    const before = s.node.getBoundingClientRect();
+    // Measured only when the change is animated: reading it forces a layout, once per section on render.
+    const before = animate && s.node.isConnected ? s.node.getBoundingClientRect() : null;
     const prior = s.depth;
     s.animation?.cancel();
     cancelAnimationFrame(s.depthFrame);
@@ -1114,14 +1158,18 @@ export class Dials extends EventTarget {
       b.setAttribute("aria-pressed", String(i + 1 === s.depth)),
     );
     s.lab?.depth?.(s.depth);
+    let shown = 0;
     for (const c of s.schema.controls) {
       const row = this.rows.get(c.id);
       if (row) row.node.hidden = (c.depth || 1) > Math.max(2, s.depth);
+      if (row && !row.node.hidden) shown++;
     }
+    s.node.style.setProperty("--d-rows-shown", s.depth === 1 ? 0 : shown);
     this.options.onDepth?.(id, s.depth);
     this.emit("depth", { section: id, depth: s.depth });
     if (
       animate &&
+      before &&
       prior &&
       s.node.isConnected &&
       !matchMedia("(prefers-reduced-motion: reduce)").matches

@@ -28,6 +28,8 @@ export interface Control {
   }[];
   fields?: (string | { name: string; type?: string })[];
   data?: Record<string, JSONValue>[];
+  /** Real bytes for a picture-showing control: a URL, or { url, name, type }. */
+  source?: string | { url: string; name?: string; type?: string };
   [key: string]: unknown;
 }
 export interface Section {
@@ -84,6 +86,43 @@ export interface Options {
   history?: boolean;
   onChange?(event: ValueEvent): void;
   onDepth?(section: string, depth: Depth): void;
+  /**
+   * The bytes behind a control's value (an asset path, a file name, an image control): a URL,
+   * Blob, File, ImageBitmap, canvas or <img>, a promise of one, or null when the host has none.
+   */
+  source?(
+    control: Control,
+    value: JSONValue,
+  ): SourceBytes | null | Promise<SourceBytes | null>;
+}
+export type SourceBytes =
+  | string
+  | Blob
+  | ImageBitmap
+  | HTMLCanvasElement
+  | OffscreenCanvas
+  | HTMLImageElement;
+export interface MotionModel {
+  motion: { mode?: "bezier" | "spring"; duration: number; delay: number; loopRange?: [number, number]; [key: string]: JSONValue | undefined };
+  frames?: Record<string, JSONValue>[];
+  /** Section numbers keyed on the timeline, each written as a custom property in every frame. */
+  keyed: { key: string; id: string; label: string; property: string | null; unit: string; initial: number }[];
+  rotate?: number;
+  loop: boolean;
+  name: string;
+}
+export interface MotionPose {
+  /** 0 to 1 of one iteration, after the delay. */
+  u: number;
+  segment: number;
+  values: Record<string, number>;
+  /** The CSS an element shows: transform, opacity and each keyed or fixed property. */
+  style: Record<string, string | number>;
+  x: number;
+  opacity: number;
+  rotate: number;
+  scale: number;
+  vars: Record<string, number>;
 }
 export interface DialEvents {
   value: ValueEvent;
@@ -97,6 +136,10 @@ export interface DialEvents {
   depth: { section: string; depth: Depth };
   render: { revision?: string | number };
   paint: { control: string; value: JSONValue };
+  /** A colour bound to a token was edited: the token on the document changed. */
+  token: { control: string; name: string; value: string; phase: Phase };
+  /** The colour studio's palette for a control changed. */
+  palette: { control: string; palette: string[] };
   asset: { control: string; file: File };
   command: { command: "undo" | "redo" };
 }
@@ -123,6 +166,12 @@ export class Dials extends EventTarget {
   reset(id: string): void;
   undo(redo?: boolean): void;
   help(): void;
+  /** The one model of a motion section that the studio ghost, motionAt and motionCode read. */
+  motionModel(section: string): MotionModel;
+  /** What a motion section shows `ms` after it starts, delay included. */
+  motionAt(section: string, ms: number): MotionPose;
+  motionCode(section: string): { transition: string; keyframes: string; waapi: string };
+  applyMotionCode(section: string, text: string): void;
   destroy(): void;
   addEventListener<K extends keyof DialEvents>(
     type: K,

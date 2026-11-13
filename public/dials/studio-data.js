@@ -41,7 +41,7 @@ export function encodingStudio(ctx, host) {
   const cleanup = [];
 
   /* ---- chart ---- */
-  const svg = s("svg", { class: "k-svg kd-chart", role: "img" }),
+  const svg = s("svg", { class: "k-svg kd-chart", role: "application", tabindex: 0, "aria-label": "Chart. Arrows step through the marks; Escape clears." }),
     grid = s("path", { class: "km-grid" }),
     marks = s("g", {}),
     text = s("g", {}),
@@ -139,14 +139,14 @@ export function encodingStudio(ctx, host) {
   const stats = el("div", { class: "k-stats" });
   ctx.rail.append(
     block("Fields", el("div", { class: "kd-fields" }, ...fieldTiles.map((f) => f.tile))),
-    keyHint(["Drag", "a field onto a channel"], ["x y c s", "place the focused field"], ["Arrows", "move along a channel's choices"]),
+    keyHint(["Drag", "a field onto a channel"], ["x y c s", "place the focused field"], ["Arrows", "move along a channel's choices; on the chart or rows, step through rows"], ["Esc", "clear the inspected row"]),
   );
   host.append(
     el(
       "div",
       { class: "k-main" },
       el("section", { class: "k-block" }, el("h3", { class: "k-title" }, "Chart", el("small", { class: "kd-legend" })), svg),
-      el("section", { class: "k-block" }, el("h3", { class: "k-title" }, "Rows", el("small", { text: "hover a row to find its mark" })), tableWrap),
+      el("section", { class: "k-block" }, el("h3", { class: "k-title" }, "Rows", el("small", { text: "hover or arrow through a row to find its mark" })), tableWrap),
     ),
     el("div", { class: "k-side" }, big.node, stats, el("section", { class: "k-block" }, el("h3", { class: "k-title", text: "Channels" }), ...slots.map((x) => x.row)), block("Mark", markChips.node)),
   );
@@ -281,6 +281,34 @@ export function encodingStudio(ctx, host) {
     setHot(m ? Number(m.dataset.i) : -1);
   });
   svg.addEventListener("pointerleave", () => setHot(-1));
+  // The same inspection by keys: on the chart, Left and Right step through the marks in x order; on the
+  // rows, Up and Down step through the rows. Home, End and Escape work on both; each step is announced.
+  const rowWords = (i) => names.map((n) => `${n} ${typeof data[i][n] === "number" ? fx(data[i][n], 2) : data[i][n]}`).join(", ");
+  const stepTo = (i) => {
+    setHot(i);
+    if (i >= 0) panel?.announce?.(`Row ${i + 1} of ${data.length}: ${rowWords(i)}`);
+  };
+  const keyNav = (order) => (e) => {
+    if (!data.length) return;
+    const list = order(),
+      at = list.indexOf(hot),
+      next = { ArrowRight: at + 1, ArrowDown: at + 1, ArrowLeft: at - 1, ArrowUp: at - 1, Home: 0, End: list.length - 1 }[e.key];
+    if (e.key === "Escape" && hot >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      return setHot(-1);
+    }
+    if (next === undefined) return;
+    e.preventDefault();
+    stepTo(list[clamp(at < 0 && next < 0 ? list.length - 1 : next, 0, list.length - 1)]);
+  };
+  const byX = () => {
+    const sc = scales(v0());
+    return data.map((_, i) => i).sort((a, b) => sc.X(data[a]) - sc.X(data[b]) || a - b);
+  };
+  svg.addEventListener("keydown", keyNav(byX));
+  tableWrap.addEventListener("keydown", keyNav(() => data.map((_, i) => i)));
+  svg.addEventListener("blur", () => setHot(-1));
   const onPaint = (e) => {
     if (["mark", "pointSize", "labels"].includes(e.detail?.control)) draw();
   };

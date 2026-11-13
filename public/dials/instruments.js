@@ -8,8 +8,9 @@
 // library has never seen still gets an instrument from its schema alone.
 import { el, pointerSurface, filePick } from "./dom.js";
 import { clamp, same, format, humane, looseJson, validateValue } from "./values.js";
-import { figureMarkup, choiceGlyphs, hash } from "./figures.js";
-import { s, fx, block, hero, field, handle, fitSvg, keyHint, stillLife, adjust, svgPoint, ariaNum } from "./kit.js";
+import { figureMarkup, choiceGlyphs } from "./figures.js";
+import { s, fx, block, hero, field, handle, fitSvg, keyHint, adjust, svgPoint, ariaNum } from "./kit.js";
+import { sectionPicture, coverCanvas, pictureFor, holdFile, missingWords, pictureError } from "./sources.js";
 import { motionAt } from "./motion.js";
 import { parseColor, cssLch } from "./color.js";
 import { paintSeed } from "./studio-sampler.js";
@@ -131,6 +132,8 @@ export function instrument(ctx, host) {
     /** Another control in the same section, by type or figure. */
     sibling: (...types) => ctx.section?.controls.find((x) => x.id !== c.id && (types.includes(x.type) || types.includes(x.figure))),
     later: () => later(),
+    /** The section's picture from the host (see sources.js): an object, null for none, undefined while loading. */
+    picture: () => sectionPicture(panel, ctx.section, () => later()),
   };
   const make = instruments.get(kind) || stages[kind] || shapeStages[kind] || stages.text;
   const st = make(api);
@@ -283,17 +286,10 @@ export function instrument(ctx, host) {
   };
 }
 
-/** A small seeded random, so a batch's sketches stay put between redraws. */
-function mulberry(a) {
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-/** The section's data as unit points [x, y, group]: an encoding sibling's rows if there is one. */
+/**
+ * The section's data as unit points [x, y, group, row]: the encoding control's own rows, placed by
+ * its bound fields. With no rows, or no x and y bound, there are no points: callers say so.
+ */
 export function sectionPoints(api) {
   const enc = api.sibling("encoding"),
     e = enc ? api.panel.get(enc.id) : null,
@@ -303,10 +299,17 @@ export function sectionPoints(api) {
       ys = rows.map((r) => Number(r[e.y])),
       groups = [...new Set(rows.map((r) => r[e.color]))],
       n = (a, x) => (x - Math.min(...a)) / (Math.max(...a) - Math.min(...a) || 1);
-    return rows.map((r, i) => [n(xs, xs[i]), n(ys, ys[i]), Math.max(0, groups.indexOf(r[e.color]))]).filter((p) => p.every(Number.isFinite));
+    return rows.map((r, i) => [n(xs, xs[i]), n(ys, ys[i]), Math.max(0, groups.indexOf(r[e.color])), r]).filter((p) => p.slice(0, 3).every(Number.isFinite));
   }
-  const r = mulberry(7);
-  return Array.from({ length: 36 }, (_, i) => [i / 35, clamp(0.15 + (i / 35) * 0.6 + (r() - 0.5) * 0.3, 0, 1), i % 3]);
+  return [];
+}
+/** Why there are no points, in words. */
+export function noPointsWords(api) {
+  const enc = api.sibling("encoding");
+  if (!enc) return "No data: this section has no encoding control with rows to draw.";
+  const e = api.panel.get(enc.id);
+  if (!Array.isArray(enc.data) || !enc.data.length) return `No rows: ${enc.label || enc.id} carries no data in the schema.`;
+  return `Bind x and y in ${enc.label || enc.id} to place its ${enc.data.length} rows.`;
 }
 /* ---------- a ruler you drag: shared by numbers and record lanes ---------- */
 function ruler(api, svg, { label, range, get, put, unit = "", y0 = () => 0, height = 64, paint }) {
@@ -546,8 +549,13 @@ const stages = {
           })
         : null;
     const box = () => {
-      const h = Math.max(60, size.h - 64 - 40),
-        w = Math.min(size.w - 80, h * 1.6);
+      const h = Math.max(60, size.h - 64 - 40);
+      // Radius leaves the right of the stage to a magnified view of the corner it shapes.
+      if (figure === "radius") {
+        const w = Math.min((size.w - 80) * 0.56, h * 1.6);
+        return { x: 40, y: 16, w, h };
+      }
+      const w = Math.min(size.w - 80, h * 1.6);
       return { x: (size.w - w) / 2, y: 16, w, h };
     };
     function draw(v) {
@@ -566,52 +574,87 @@ const stages = {
         for (let i = 0; i < 4; i++) add("rect", { x: b.x + 24, y: b.y + 24 + i * 16, width: (b.w - 48) * [0.8, 0.95, 0.6, 0.75][i], height: 6, rx: 3, class: "ki-page-line" });
         const ink = api.sibling("color");
         add("rect", { x: b.x + b.w * 0.3, y: b.y + b.h * 0.3, width: b.w * 0.6, height: b.h * 0.55, rx: 8, class: "ki-layer", "fill-opacity": v, style: ink ? `fill:${api.panel.get(ink.id)}` : "" });
-        add("text", { x: b.x + b.w * 0.6, y: b.y + b.h * 0.6, "text-anchor": "middle", class: "ki-layer-text", "fill-opacity": Math.max(v, 0.08), text: `${Math.round(v * 100)}%` });
+        // The reading sits on an opaque tag so it stays legible at any opacity; the layer shows the value.
+        const tag = add("rect", { rx: 6, class: "ki-layer-tag" }),
+          word = add("text", { x: b.x + b.w * 0.6, y: b.y + b.h * 0.575 + 11, "text-anchor": "middle", class: "ki-layer-text", text: `${Math.round(v * 100)}%` }),
+          bb = word.getBBox();
+        for (const [k, n] of Object.entries({ x: bb.x - 12, y: bb.y - 6, width: bb.width + 24, height: bb.height + 12 })) tag.setAttribute(k, fx(n));
       } else if (figure === "radius") {
-        if (image && !photo) photo = stillLife(320, 180);
+        // The section's own picture when the host supplied it; a plain card otherwise.
+        const pic = image || api.sibling("asset", "file") ? api.picture() : null;
+        if (pic?.image && photo?.name !== pic.name) photo = { name: pic.name, url: coverCanvas(pic, 320, 180).toDataURL() };
+        if (!pic?.image) photo = null;
         if (photo) {
           const id = `ki-clip-${c.id}`;
           let defs = svg.querySelector("defs.ki-clip");
           if (!defs) svg.prepend((defs = s("defs", { class: "ki-clip" })));
           defs.replaceChildren(s("clipPath", { id }, s("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: v })));
-          add("image", { href: photo.toDataURL(), x: b.x, y: b.y, width: b.w, height: b.h, preserveAspectRatio: "xMidYMid slice", "clip-path": `url(#${id})` });
+          add("image", { href: photo.url, x: b.x, y: b.y, width: b.w, height: b.h, preserveAspectRatio: "xMidYMid slice", "clip-path": `url(#${id})` });
           add("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: v, class: "ki-outline" });
         } else add("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: v, class: "ki-card" });
         add("path", { d: `M${b.x} ${b.y + v}A${v} ${v} 0 0 1 ${b.x + v} ${b.y}`, class: "ki-arc" });
         add("path", { d: `M${b.x} ${b.y - 8}h${v}`, class: "ki-dim" });
+        // The loupe: the top-left corner magnified so a 4 px change is visible, with a pixel grid
+        // when the zoom allows it. The square in the main view marks what it shows.
+        const lx = b.x + b.w + 32,
+          S = Math.min(b.h, size.w - 40 - lx);
+        if (S > 80) {
+          const span = Math.max(16, Math.min(b.h / 2, v * 1.6 + 8)),
+            z = S / span,
+            lid = `ki-loupe-${c.id}`;
+          let defs = svg.querySelector("defs.ki-loupe");
+          if (!defs) svg.prepend((defs = s("defs", { class: "ki-loupe" })));
+          defs.replaceChildren(s("clipPath", { id: lid }, s("rect", { x: lx, y: b.y, width: S, height: S })));
+          add("rect", { x: b.x - 0.5, y: b.y - 0.5, width: span, height: span, class: "ki-loupe-mark" });
+          const g = add("g", { "clip-path": `url(#${lid})` }),
+            inner = s("g", { transform: `translate(${fx(lx)} ${fx(b.y)}) scale(${fx(z, 3)}) translate(${fx(-b.x)} ${fx(-b.y)})` });
+          inner.append(s("rect", { x: b.x - span, y: b.y - span, width: span * 3, height: span * 3, class: "ki-loupe-bg" }));
+          if (photo) inner.append(s("image", { href: photo.url, x: b.x, y: b.y, width: b.w, height: b.h, preserveAspectRatio: "xMidYMid slice", "clip-path": `url(#ki-clip-${c.id})` }));
+          inner.append(s("rect", { x: b.x, y: b.y, width: b.w, height: b.h, rx: v, class: photo ? "ki-outline" : "ki-card", "vector-effect": "non-scaling-stroke" }));
+          let grid = "";
+          if (z >= 6) for (let i = 1; i < span; i++) grid += `M${fx(lx + i * z)} ${fx(b.y)}v${fx(S)}M${fx(lx)} ${fx(b.y + i * z)}h${fx(S)}`;
+          g.append(inner, s("path", { d: grid, class: "ki-loupe-grid" }), s("path", { d: `M${fx(lx)} ${fx(b.y + v * z)}A${fx(v * z)} ${fx(v * z)} 0 0 1 ${fx(lx + v * z)} ${fx(b.y)}`, class: "ki-arc" }));
+          add("rect", { x: lx, y: b.y, width: S, height: S, class: "ki-loupe-frame" });
+          add("text", { x: lx, y: b.y + S + 16, class: "ki-loupe-note", text: `corner at ${fx(z, 1)}×${z >= 6 ? ", one square per pixel" : ""}` });
+        }
         add("text", { x: b.x + v / 2, y: b.y - 12, "text-anchor": "middle", class: "k-strong", text: `${v}${unit}` });
         corner.at(b.x + v * (1 - Math.SQRT1_2), b.y + v * (1 - Math.SQRT1_2));
         corner.text(`${v}${unit}`);
       } else if (figure === "count") {
-        // The grid with the largest tiles that fits, preferring one with no empty slots (16 is 4 x 4).
+        // The images this batch makes, as the largest grid that fits them; the slots it leaves unused
+        // shrink to a strip of the full capacity below, so the stage is spent on what will exist.
         const n = tiles.length,
+          k = Math.max(1, Math.min(n, Math.round(v))),
+          stripH = 22,
+          bh = b.h - stripH - 14,
           bw = size.w - 80,
-          fitOf = (k) => ({ cols: k, rows: Math.ceil(n / k), cell: Math.min(bw / k, b.h / Math.ceil(n / k)) }),
-          best = Array.from({ length: n }, (_, k) => fitOf(k + 1)).reduce((a, x) => (x.cell * (n % x.cols ? 0.92 : 1) > a.cell * (n % a.cols ? 0.92 : 1) ? x : a)),
+          fitOf = (c) => ({ cols: c, cell: Math.min(bw / c, bh / Math.ceil(k / c), 220) }),
+          best = Array.from({ length: k }, (_, c) => fitOf(c + 1)).reduce((a, x) => (x.cell * (k % x.cols ? 0.92 : 1) > a.cell * (k % a.cols ? 0.92 : 1) ? x : a)),
           { cols, cell } = best,
+          rows = Math.ceil(k / cols),
           x0 = (size.w - cols * cell) / 2,
+          y0 = b.y + (bh - rows * cell) / 2,
+          slot = Math.min(14, (size.w - 80) / n),
+          sx0 = (size.w - n * slot) / 2,
+          sy = b.y + b.h - stripH,
           seedC = api.sibling("seed"),
           seed0 = seedC ? Number(api.panel.get(seedC.id)) || 0 : 0;
         tiles.forEach((t, i) => {
-          const x = x0 + (i % cols) * cell + 3,
-            y = b.y + Math.floor(i / cols) * cell + 3,
-            on = i < v;
-          t.setAttribute("x", fx(x));
-          t.setAttribute("y", fx(y));
-          t.setAttribute("width", fx(cell - 6));
-          t.setAttribute("height", fx(cell - 6));
+          const on = i < v,
+            gx = x0 + (i % cols) * cell + 3,
+            gy = y0 + Math.floor(i / cols) * cell + 3;
           t.classList.toggle("is-on", on);
-          // Each image in the batch is its own variation: a seeded sketch and the seed it will use.
-          if (on && cell > 40) {
-            const r = mulberry(seed0 + i),
-              hue = Math.round(r() * 360),
-              cx = x + (cell - 6) * (0.3 + r() * 0.4),
-              cy = y + (cell - 6) * (0.35 + r() * 0.3);
-            add("circle", { cx: fx(cx), cy: fx(cy), r: fx((cell - 6) * (0.12 + r() * 0.12)), class: "ki-batch-sun", style: `fill:oklch(0.86 0.09 ${hue})` });
-            add("path", { d: `M${fx(x)} ${fx(y + (cell - 6) * 0.72)}Q${fx(x + (cell - 6) * r())} ${fx(y + (cell - 6) * (0.5 + r() * 0.2))} ${fx(x + cell - 6)} ${fx(y + (cell - 6) * (0.6 + r() * 0.2))}V${fx(y + cell - 6)}H${fx(x)}Z`, class: "ki-batch-hill" });
-            if (seedC && cell > 70) add("text", { x: fx(x + 6), y: fx(y + cell - 12), class: "ki-batch-seed", text: String(seed0 + i) });
-          }
+          t.classList.toggle("is-slot", !on);
+          t.setAttribute("x", fx(on ? gx : sx0 + i * slot + 1));
+          t.setAttribute("y", fx(on ? gy : sy));
+          t.setAttribute("width", fx(on ? cell - 6 : slot - 2));
+          t.setAttribute("height", fx(on ? cell - 6 : slot - 2));
+          // Each image in the batch uses its own seed; the tile names it. No picture is drawn: nothing
+          // has been generated, and a host with real outputs shows them instead.
+          if (on && cell > 34) add("text", { x: fx(gx + (cell - 6) / 2), y: fx(gy + (cell - 6) / 2 + 4), "text-anchor": "middle", class: "ki-batch-seed", text: seedC ? `seed ${seed0 + i}` : `image ${i + 1}` });
+          if (on && cell > 34) add("rect", { x: fx(sx0 + i * slot + 1), y: fx(sy), width: fx(slot - 2), height: fx(slot - 2), class: "ki-tile is-on" });
         });
+        add("text", { x: fx(sx0 + n * slot + 8), y: fx(sy + slot - 3), class: "ki-batch-cap", text: `${k} of ${n} slots` });
       } else {
         // The value as itself: a true-scale length, a time, a share, or a proportion.
         const y = b.y + b.h / 2;
@@ -625,7 +668,12 @@ const stages = {
           add("rect", { x: px0, y: b.y, width: pw, height: ph, rx: 3, class: "ki-plot" });
           for (let g = 1; g < 4; g++) add("path", { d: `M${fx(px0)} ${fx(b.y + (ph * g) / 4)}h${fx(pw)}M${fx(px0 + (pw * g) / 4)} ${fx(b.y)}v${fx(ph)}`, class: "ki-grid" });
           for (const [qx, qy, gi] of pts) add("circle", { cx: fx(px0 + 10 + qx * (pw - 20)), cy: fx(b.y + ph - 10 - qy * (ph - 20)), r: fx(Math.max(0.5, v / 2)), class: `ki-pt ki-pt-${gi % 3}` });
-          add("text", { x: px0, y: b.y + ph + 18, text: `${pts.length} marks at ${v} px, true size` });
+          if (pts.length) add("text", { x: px0, y: b.y + ph + 18, text: `${pts.length} marks at ${v} px, true size` });
+          else {
+            // No rows to draw: a row of marks at this size instead, said plainly.
+            for (let i = 0; i < 6; i++) add("circle", { cx: fx(px0 + pw * ((i + 0.5) / 6)), cy: fx(b.y + ph / 2), r: fx(Math.max(0.5, v / 2)), class: "ki-pt ki-pt-0" });
+            add("text", { x: px0, y: b.y + ph + 18, text: `${v} px at true size. ${noPointsWords(api)}` });
+          }
           const mx = px0 + pw + 40,
             mw = size.w - 40 - mx,
             k = Math.max(1, Math.floor(Math.min(mw, ph - 40) / top)),
@@ -655,7 +703,7 @@ const stages = {
             hue = 40 + t * 200,
             light = `oklch(${fx(0.78 + t * 0.12)} ${fx(0.16 - Math.abs(t - 0.45) * 0.2 + 0.02)} ${fx(hue < 120 ? 60 - (1 - t) * 20 : 250)})`;
           add("circle", { cx: size.w / 2, cy: y, r: Math.min(b.h / 2, 90), fill: light, class: "ki-lamp" });
-          add("text", { x: size.w / 2, y: y + 4, "text-anchor": "middle", class: "k-strong", text: v < 3500 ? "warm" : v < 5500 ? "neutral" : "cool" });
+          add("text", { x: size.w / 2, y: y + 4, "text-anchor": "middle", class: "ki-lamp-text", text: v < 3500 ? "warm" : v < 5500 ? "neutral" : "cool" });
         } else {
           const n = 24;
           for (let i = 0; i < n; i++) {
@@ -742,8 +790,11 @@ const stages = {
           [x1, y1] = at(a, g.r + (a % 45 ? 9 : 14));
         d += `M${fx(x0)} ${fx(y0)}L${fx(x1)} ${fx(y1)}`;
         if (a % 45 === 0) {
-          const [tx, ty] = at(a, g.r + 26);
-          labels.append(s("text", { x: tx, y: ty + 3.5, "text-anchor": "middle", text: `${a > 180 && min < 0 ? a - 360 : a}°` }));
+          // Side labels hang outward from their tick (anchored at the near end) so wide words like
+          // "-90°" never run back over the tick marks.
+          const [tx, ty] = at(a, g.r + 20),
+            side = Math.abs(tx - g.cx) < 1 ? 0 : Math.sign(tx - g.cx);
+          labels.append(s("text", { x: tx, y: ty + 3.5 + (side ? 0 : Math.sign(ty - g.cy) * 6), "text-anchor": side < 0 ? "end" : side > 0 ? "start" : "middle", text: `${a > 180 && min < 0 ? a - 360 : a}°` }));
         }
       }
       ticks.setAttribute("d", d);
@@ -799,14 +850,23 @@ const stages = {
       panes[Number(v)].b.focus();
     });
     const motion = api.sibling("motion", "spring", "bezier"),
-      image = api.sibling("image"),
-      source = image ? stillLife(320, 180) : null;
+      image = api.sibling("image");
+    let srcName = null,
+      src = null;
     const drawArt = (p) => {
       const on = p.state;
-      if (figure === "split" && source) {
+      if (figure === "split" && image) {
+        // Both states on the section's real picture; with none, say so instead of drawing one.
+        const pic = api.picture();
+        if (pic?.image && pic.name !== srcName) (srcName = pic.name), (src = coverCanvas(pic, 320, 180).getContext("2d").getImageData(0, 0, 320, 180));
+        if (!pic?.image) {
+          srcName = src = null;
+          p.art.replaceChildren(el("p", { class: "ki-missing", text: pic === undefined ? "Reading the picture…" : missingWords(api.panel.get(api.sibling("asset", "file")?.id) || "") }));
+          p.what.textContent = on ? "the darkroom settings apply" : "the source as it was";
+          return;
+        }
         const cv = Object.assign(document.createElement("canvas"), { width: 320, height: 180 }),
           g = cv.getContext("2d"),
-          src = source.getContext("2d").getImageData(0, 0, 320, 180),
           out = g.createImageData(320, 180);
         adjust(src, out, api.panel.get(image.id), on);
         g.putImageData(out, 0, 0);
@@ -835,14 +895,34 @@ const stages = {
         for (let i = 1; i < 3; i++) svg.append(s("path", { d: `M${14 + i * 70.7} 24V122`, class: on ? "ki-loop-mark" : "ki-grid-line" }));
         p.what.textContent = on ? "animation-iteration-count: infinite" : "animation-iteration-count: 1";
       } else if (figure === "labels") {
-        const r = hash(7);
-        for (let i = 0; i < 9; i++) {
-          const x = 24 + i * 23 + r() * 6,
-            y = 30 + r() * 80;
-          svg.append(s("circle", { cx: fx(x), cy: fx(y), r: 4, class: "ki-dot" }));
-          if (on) svg.append(s("text", { x: fx(x + 6), y: fx(y - 6), text: fx(10 + (110 - y) / 3, 0) }));
+        // The section's real rows, each labelled with its own y value; labels that would collide are
+        // left out and counted, rather than piled on top of each other.
+        const pts = sectionPoints(api),
+          enc = api.sibling("encoding"),
+          yField = enc && api.panel.get(enc.id)?.y;
+        if (!pts.length) {
+          svg.append(s("text", { x: 120, y: 74, "text-anchor": "middle", class: "ki-pair-note", text: noPointsWords(api).slice(0, 48) }));
+          p.what.textContent = on ? "each mark would name its value" : "marks only";
+        } else {
+          const X = (q) => 18 + q * 204,
+            Y = (q) => 124 - q * 100,
+            boxes = [];
+          let shown = 0;
+          for (const [qx, qy, gi] of pts) svg.append(s("circle", { cx: fx(X(qx)), cy: fx(Y(qy)), r: 2.6, class: `ki-dot ki-pt-${gi % 3}` }));
+          if (on)
+            for (const [qx, qy, , row] of [...pts].sort((a, b) => b[1] - a[1])) {
+              const t = fx(Number(row[yField]), Math.abs(Number(row[yField])) < 10 ? 1 : 0),
+                w = t.length * 5.6 + 4,
+                x = X(qx) + 4,
+                y = Y(qy) - 5,
+                box = [x - 2, y - 9, x + w, y + 2];
+              if (box[2] > 236 || boxes.some((o) => box[0] < o[2] && box[2] > o[0] && box[1] < o[3] && box[3] > o[1])) continue;
+              boxes.push(box);
+              shown++;
+              svg.append(s("text", { x: fx(x), y: fx(y), class: "ki-pt-label", text: t }));
+            }
+          p.what.textContent = on ? `${shown} of ${pts.length} marks name their ${yField}${shown < pts.length ? "; the rest would overlap" : ""}` : `${pts.length} marks, no labels`;
         }
-        p.what.textContent = on ? "each mark names its value" : "marks only";
       } else {
         svg.append(s("rect", { x: 20, y: 30, width: 200, height: 80, rx: 40, class: on ? "ki-switch-on" : "ki-switch-off" }), s("circle", { cx: on ? 180 : 60, cy: 70, r: 30, class: "ki-switch-knob" }));
         p.what.textContent = on ? "enabled" : "disabled";
@@ -897,7 +977,8 @@ const stages = {
       next.b.focus();
     });
     // The chosen option, applied: a mark draws the section's data, an alignment sets real text.
-    const preview = blends ? null : el("div", { class: "ki-choice-preview", "aria-hidden": "true" });
+    // Plain words have nothing to apply, so their options are the whole studio: no enlarged copy of a word.
+    const preview = blends || !(glyph || figure === "mark" || figure === "align") ? null : el("div", { class: "ki-choice-preview", "aria-hidden": "true" });
     let shownPreview = "";
     const paintPreview = (v) => {
       if (!preview) return;
@@ -906,7 +987,8 @@ const stages = {
         key = JSON.stringify([v, dot]);
       if (key === shownPreview) return;
       shownPreview = key;
-      if (figure === "mark") {
+      if (figure === "mark" && !sectionPoints(api).length) preview.replaceChildren(el("p", { class: "ki-missing", text: noPointsWords(api) }));
+      else if (figure === "mark") {
         const pts = sectionPoints(api).sort((a, b) => a[0] - b[0]),
           W0 = 640,
           H0 = 380,
@@ -920,15 +1002,27 @@ const stages = {
               : pts.map(([x, y, g]) => `<circle cx="${X(x)}" cy="${Y(y)}" r="${fx(dot / 2)}" class="ki-pt ki-pt-${g % 3}"/>`).join("");
         preview.innerHTML = `<svg viewBox="0 0 ${W0} ${H0}"><path d="M24 ${H0 - 20}H${W0 - 24}" class="ki-axis"/>${body}</svg>`;
       } else if (figure === "align") {
+        // The section's own text, set in its own face and insets, in a narrow and a wide column:
+        // alignment only shows where lines break, so the narrow column wraps.
         const tc = api.sibling("text"),
-          words = (tc && String(api.panel.get(tc.id))) || c.label;
-        preview.replaceChildren(el("p", { class: "ki-align-text", style: `text-align:${v}`, text: Array(5).fill(words).join(" ") }));
+          typeC = api.sibling("typography"),
+          padC = api.sibling("spacing"),
+          ty = typeC ? api.panel.get(typeC.id) || {} : {},
+          pad = padC ? [].concat(api.panel.get(padC.id)).map(Number) : [12, 16, 12, 16],
+          words = (tc && String(api.panel.get(tc.id))) || c.label,
+          face = `font-family:${ty.family || "inherit"};font-size:${Math.min(Number(ty.size) || 17, 40)}px;font-weight:${Number(ty.weight) || 400};letter-spacing:${Number(ty.tracking) || 0}px;line-height:${Number(ty.lineHeight) || 1.3};padding:${pad.map((n) => `${n || 0}px`).join(" ")}`;
+        preview.replaceChildren(
+          ...[
+            ["240 px column", "width:240px"],
+            ["Full measure", "width:100%"],
+          ].map(([name, w]) => el("div", { class: "ki-measure" }, el("span", { text: `${name} · ${v}` }), el("p", { class: "ki-align-text", style: `${face};${w};text-align:${v}`, text: words }))),
+        );
       } else if (glyph) preview.innerHTML = `<svg viewBox="0 0 24 24">${glyph(v, 0, 24, true)}</svg>`;
       else preview.replaceChildren(el("span", { class: "ki-card-word", text: optionLabel(opts.find((o) => same(optionValue(o), v)) ?? v) }));
     };
     return {
       node: preview ? el("div", { class: "ki-choice" }, preview, node) : node,
-      note: blends ? "each mode drawn on two overlapping discs" : "the choice applied above; every option below",
+      note: blends ? "each mode drawn on two overlapping discs" : figure === "align" ? "the section's text set with the choice; every option below" : preview ? "the choice applied above; every option below" : "every option; the picked one is outlined",
       draw(v) {
         paintPreview(v);
         let any = false;
@@ -993,28 +1087,41 @@ const stages = {
         tokens.children[clamp(i + (e.key === "ArrowRight" ? 1 : -1), 0, tokens.children.length - 1)]?.focus();
       }
     });
-    // Emphasis across the prompt: one column per word, dragged up or down to weigh it.
-    const emph = el("div", { class: "ki-emph", "aria-hidden": "true" });
-    const weighAt = (e) => {
-      const cols = [...emph.children].filter((n) => n.classList.contains("ki-emph-col")),
-        i = cols.findIndex((n) => { const r = n.getBoundingClientRect(); return e.clientX >= r.left - 2 && e.clientX <= r.right + 2; });
-      if (i < 0) return;
-      const r = cols[i].querySelector("i").parentElement.getBoundingClientRect(),
-        w = Number(clamp(((r.bottom - e.clientY) / r.height) * 2, 0.1, 2).toFixed(1)),
-        text = api.get(),
-        p = parts(text)[i];
-      if (!p || p.weight === w) return;
-      api.ctx.change(text.slice(0, p.at) + (w === 1 ? p.word : `(${p.word}:${w})`) + text.slice(p.end));
-    };
-    pointerSurface(emph, { start: (e) => (api.ctx.begin("studio-emphasis"), weighAt(e)), move: weighAt, end: () => api.ctx.commit(), cancel: () => api.ctx.cancel?.() });
+    // A word is weighed where it sits: drag it up or down (10 px per 0.1), or use the arrows.
+    let held = null;
+    pointerSurface(tokens, {
+      start: (e) => {
+        const tok = e.target.closest?.(".ki-token"),
+          i = [...tokens.children].indexOf(tok),
+          p = parts(api.get())[i];
+        if (!p) return;
+        tok.focus({ preventScroll: true });
+        held = { i, y: e.clientY, w: p.weight };
+        api.ctx.begin("studio-emphasis");
+      },
+      move: (e) => {
+        if (!held) return;
+        const text = api.get(),
+          p = parts(text)[held.i],
+          w = Number(clamp(held.w + Math.round((held.y - e.clientY) / 10) * 0.1, 0.1, 2).toFixed(1));
+        if (!p || p.weight === w) return;
+        api.ctx.change(text.slice(0, p.at) + (w === 1 ? p.word : `(${p.word}:${w})`) + text.slice(p.end));
+      },
+      end: () => ((held = null), api.ctx.commit()),
+      cancel: () => ((held = null), api.ctx.cancel?.()),
+    });
+    // Caption: set as this section sets it (its specimen face, alignment and insets), at three measures.
+    const typeC = api.sibling("typography"),
+      alignC = api.sibling("align"),
+      padC = api.sibling("spacing");
     const below = prompt
-      ? el("div", { class: "ki-prompt-below" }, block("Words", el("p", { class: "ki-help", text: "Focus a word and press up or down; it is written back as (word:1.2)." }), tokens), block("Emphasis across the prompt", el("p", { class: "ki-help", text: "Drag a column up or down. The line is weight 1." }), emph))
-      : block("Set at four sizes", specimen);
+      ? el("div", { class: "ki-prompt-below" }, block("Words", el("p", { class: "ki-help", text: "Each column fills to its word's weight, 0 to 2; the line is 1. Drag a word up or down, or focus it and press up or down; it is written back as (word:1.2)." }), tokens))
+      : block(typeC || alignC || padC ? "Set as this section sets it" : "Set at three measures", specimen);
     const node = el("div", { class: "ki-text" }, area, below);
     const words = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
     return {
       node,
-      note: prompt ? "type, or weigh words below" : "type; it is set below as it will read",
+      note: prompt ? "type, or weigh words below" : "type; it is set below with the section's face, alignment and insets",
       draw(v) {
         if (!typing && document.activeElement !== area) area.value = v;
         if (prompt) {
@@ -1032,19 +1139,32 @@ const stages = {
             ),
           );
           if (focused >= 0) tokens.children[focused]?.focus();
-          emph.replaceChildren(
-            el("b", { class: "ki-emph-one" }),
-            ...list.map((p) => el("div", { class: "ki-emph-col" + (p.weight !== 1 ? " is-weighed" : "") }, el("span", { class: "ki-emph-bar" }, el("i", { style: `height:${fx((p.weight / 2) * 100, 1)}%` })), el("small", { text: p.word }))),
+        } else {
+          const ty = typeC ? api.panel.get(typeC.id) || {} : {},
+            al = alignC ? api.panel.get(alignC.id) : "left",
+            pad = padC ? [].concat(api.panel.get(padC.id)).map(Number) : [0, 0, 0, 0],
+            px = Number(ty.size) || 15,
+            style = `font-family:${ty.family || "inherit"};font-size:${px}px;font-weight:${Number(ty.weight) || 400};letter-spacing:${Number(ty.tracking) || 0}px;line-height:${Number(ty.lineHeight) || 1.3};text-align:${al};padding:${pad.map((n) => `${n || 0}px`).join(" ")}`;
+          // Each measure is a real column width; the note under it counts the lines the browser broke.
+          const sets = [280, 420, 600].map((w) => {
+            const p = el("p", { style: `${style};width:${w}px`, text: v || " " }),
+              note = el("small");
+            return { w, p, note, node: el("div", { class: "ki-measure" }, el("span", { text: `${w} px column` }), p, note) };
+          });
+          specimen.replaceChildren(...sets.map((x) => x.node));
+          requestAnimationFrame(() =>
+            sets.forEach(({ w, p, note, node }) => {
+              // A pane narrower than the column cannot show it at size: say what width it is set at.
+              const shown = Math.round(p.offsetWidth);
+              if (shown && shown < w - 1) node.firstChild.textContent = `${w} px column, set at ${shown} px (the pane is narrower)`;
+              const lh = parseFloat(getComputedStyle(p).lineHeight) || px * 1.3,
+                inner = p.clientHeight - (pad[0] || 0) - (pad[2] || 0),
+                lines = Math.max(1, Math.round(inner / lh)),
+                per = Math.round((v || "").length / lines);
+              note.textContent = `${lines} ${lines === 1 ? "line" : "lines"} · about ${per} characters a line${typeC ? ` · ${ty.family || "inherit"} ${px}px ${Number(ty.weight) || 400}` : ""}`;
+            }),
           );
-        } else
-          specimen.replaceChildren(
-            ...[
-              ["Caption", 11],
-              ["Body", 15],
-              ["Display", 32],
-              ["Poster", 64],
-            ].map(([name, px]) => el("div", { class: "ki-set" }, el("span", { text: `${name} ${px}px` }), el("p", { style: `font-size:${px}px`, text: v || " " }))),
-          );
+        }
       },
       hero: (v) => ({ value: String(words(v)), unit: words(v) === 1 ? "word" : "words", note: `${v.length} characters · ${v.split("\n").length} ${v.split("\n").length === 1 ? "line" : "lines"}`, tone: "quiet", long: v }),
       keys: prompt ? [["Up Down", "on a word: weight ±0.1"], ["Left Right", "next word"]] : [["Tab", "leaves the editor"]],
@@ -1165,7 +1285,7 @@ const stages = {
       handles.forEach((h) => h.node.remove());
       handles = Array.from({ length: n }, (_, i) => {
         const h = api.handle(svg, {
-          label: `Stop ${i + 1}: arrows move it; Delete removes it`,
+          label: `Stop ${i + 1}: arrows move it; Enter adds a stop after it; Delete removes it`,
           r: 9,
           start: () => {
             picked = i;
@@ -1189,6 +1309,13 @@ const stages = {
         });
         h.node.addEventListener("keydown", (e) => {
           const g = parse(api.get());
+          if (["Enter", "Insert", "+", "="].includes(e.key)) {
+            // A new stop halfway to the next one (or the previous, from the last stop), mixed from both.
+            e.preventDefault();
+            const j = i < g.stops.length - 1 ? i + 1 : i - 1;
+            addStop(Math.round((g.stops[i].at + g.stops[j].at) / 2), true);
+            return;
+          }
           if ((e.key === "Delete" || e.key === "Backspace") && g.stops.length > 2) {
             e.preventDefault();
             g.stops.splice(i, 1);
@@ -1199,15 +1326,19 @@ const stages = {
         return h;
       });
     };
-    band.addEventListener("dblclick", (e) => {
-      const r = band.getBoundingClientRect(),
-        at = Math.round(clamp((e.clientX - r.left) / r.width, 0, 1) * 100),
-        g = parse(api.get()),
+    function addStop(at, focus) {
+      const g = parse(api.get()),
         after = g.stops.findIndex((x) => x.at > at),
         i = after < 0 ? g.stops.length : after;
       g.stops.splice(i, 0, { color: `color-mix(in oklch, ${g.stops[Math.max(0, i - 1)].color}, ${g.stops[Math.min(g.stops.length - 1, i)].color})`, at });
       picked = i;
       api.edit(write(g), "studio-stop-add");
+      api.panel.announce?.(`Stop ${i + 1} added at ${at}%, ${g.stops.length} stops`);
+      if (focus) handles[i]?.node.focus();
+    }
+    band.addEventListener("dblclick", (e) => {
+      const r = band.getBoundingClientRect();
+      addStop(Math.round(clamp((e.clientX - r.left) / r.width, 0, 1) * 100), false);
     });
     // The picked stop's colour as lightness, chroma and hue.
     const lch = () => {
@@ -1257,7 +1388,7 @@ const stages = {
       hero: (v) => ({ value: String(parse(v).stops.length), unit: "stops", note: `${parse(v).angle}°`, tone: "quiet", long: v }),
       fields,
       fieldsTitle: "Picked stop",
-      keys: [["Arrows", "on a stop: move it"], ["Delete", "removes the focused stop"], ["Dbl-click", "the band adds a stop"]],
+      keys: [["Arrows", "on a stop: move it"], ["Enter", "on a stop: add one halfway to the next"], ["Delete", "removes the focused stop"], ["Dbl-click", "the band adds a stop"]],
     };
   },
 
@@ -1364,8 +1495,8 @@ const stages = {
     const geo = (v) => {
       const k = K(),
         [t, r, b, l] = v.map((n) => Math.min(n, 120) * k),
-        cw = Math.max(80, size.w * 0.32),
-        ch = Math.max(40, size.h * 0.22),
+        cw = Math.max(80, size.w * 0.5),
+        ch = Math.max(40, size.h * 0.34),
         w = l + cw + r,
         h = t + ch + b;
       const x = (size.w - w) / 2,
@@ -1416,7 +1547,17 @@ const stages = {
         [g.cx + g.cw / 2, g.cy + g.ch + g.b / 2 + 4],
         [g.x + g.l / 2, g.cy + g.ch / 2 + 4],
       ];
-      text.replaceChildren(s("text", { x: g.cx + g.cw / 2, y: g.cy + g.ch / 2 + 4, "text-anchor": "middle", text: "content" }), ...v.map((n, i) => s("text", { x: labelAt[i][0], y: labelAt[i][1], "text-anchor": "middle", class: "k-strong", text: `${n}` })));
+      // The content box holds the section's own text, set in its own face and alignment, so the insets
+      // are judged around what they will surround. Without a text sibling it says only "content".
+      const textC = api.sibling("text", "textarea"),
+        typeC = api.sibling("typography"),
+        alignC = api.sibling("align"),
+        ty = typeC ? api.panel.get(typeC.id) || {} : {},
+        fo = s("foreignObject", { x: g.cx, y: g.cy, width: g.cw, height: g.ch }),
+        words = el("div", { class: "ki-content-text", text: textC ? api.panel.get(textC.id) : "content" });
+      words.style.cssText = `font-family:${ty.family || "inherit"};font-weight:${Number(ty.weight) || 400};letter-spacing:${Number(ty.tracking) || 0}px;font-size:${fx(Math.min(Number(ty.size) || 13, 40) * Math.min(1, K()))}px;text-align:${alignC ? api.panel.get(alignC.id) : "center"}`;
+      fo.append(words);
+      text.replaceChildren(fo, ...v.map((n, i) => s("text", { x: labelAt[i][0], y: labelAt[i][1], "text-anchor": "middle", class: "k-strong", text: `${n}` })));
       handles.forEach((h, i) => {
         h.at(...spots[i]);
         h.text(`${sides[i]} ${v[i]} px`);
@@ -1440,8 +1581,6 @@ const stages = {
   seed(api) {
     const { c } = api;
     const node = el("div", { class: "ki-seeds", role: "radiogroup", "aria-label": "Neighbouring seeds. Click one to take it." });
-    const steps = api.sibling("sampler") ? () => api.panel.get(api.sibling("sampler").id).steps : () => 24;
-    const cfg = api.sibling("sampler") ? () => api.panel.get(api.sibling("sampler").id).cfg : () => 7;
     const tiles = Array.from({ length: 12 }, (_, i) => {
       const cv = Object.assign(document.createElement("canvas"), { width: 48, height: 48 }),
         cap = el("span"),
@@ -1463,13 +1602,13 @@ const stages = {
     const max = c.max ?? 4294967295;
     return {
       node,
-      note: "the same settings at neighbouring seeds; the current one outlined",
+      note: "neighbouring seeds, each drawn as its 32 bits; nothing is generated here",
       side: block("Roll", roll),
       draw(v) {
         tiles.forEach((t) => {
           const seed = clamp(v - 5 + t.i, 0, max);
           t.b._seed = seed;
-          paintSeed(t.cv, seed, steps(), cfg());
+          paintSeed(t.cv, seed);
           t.cap.textContent = String(seed);
           t.b.setAttribute("aria-checked", String(seed === v));
           t.b.setAttribute("aria-label", `Seed ${seed}`);
@@ -1487,12 +1626,11 @@ const stages = {
     const { c } = api;
     const preview = el("div", { class: "ki-asset-preview" }),
       meta = el("dl", { class: "ki-asset-meta" });
-    let objectUrl = null,
-      file = null;
+    let file = null,
+      shown = null;
     const drop = filePick(`Choose ${c.label || "a file"}`, c.accept || "", (f) => {
       file = f;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      objectUrl = f.type.startsWith("image/") ? URL.createObjectURL(f) : null;
+      holdFile(api.panel, c.id, f);
       api.panel.emit("asset", { control: c.id, file: f });
       api.edit(f.name, "studio-file");
     });
@@ -1502,21 +1640,38 @@ const stages = {
       node,
       note: "choose or drop a file; nothing leaves this computer",
       draw(v) {
-        if (objectUrl) preview.replaceChildren(el("img", { src: objectUrl, alt: v }));
-        else if (looksImage(v)) preview.replaceChildren(stillLife(480, 270));
-        else preview.replaceChildren(el("div", { class: "ki-asset-doc", text: (String(v).split(".").pop() || "file").toUpperCase() }));
+        // The bytes for this value from the host or a file chosen here; nothing else is shown under its name.
+        const pic = v ? pictureFor(api.panel, c, v, () => api.later()) : null,
+          key = `${v}|${pic === undefined ? "loading" : pic ? pic.width + "x" + pic.height : "none"}`;
+        if (key !== shown) {
+          shown = key;
+          if (pic?.image) {
+            const cv = coverCanvas(pic, 480, 270);
+            cv.setAttribute("role", "img");
+            cv.setAttribute("aria-label", `${v}, ${pic.width} × ${pic.height}`);
+            preview.replaceChildren(cv);
+          } else if (!v) preview.replaceChildren();
+          else if (pic === undefined) preview.replaceChildren(el("p", { class: "ki-missing", text: `Reading ${v}…` }));
+          else if (looksImage(v)) preview.replaceChildren(el("p", { class: "ki-missing", text: missingWords(v, pictureError(api.panel, c, v)) }));
+          else preview.replaceChildren(el("p", { class: "ki-missing", text: `${String(v).split(/[\\/]/).pop()}: no preview for this kind of file. Its name is what this control holds.` }));
+        }
+        // With no file there is nothing to preview: the chooser is the studio.
+        preview.hidden = !v;
+        node.classList.toggle("is-empty", !v);
+        const mine = file && file.name === String(v).split(/[\\/]/).pop() ? file : null;
         meta.replaceChildren(
           ...[
-            ["Name", v || "none"],
-            ["Kind", file?.type || `${looksImage(v) ? "image" : "file"} · .${String(v).split(".").pop() || "?"}`],
-            // Size and dimensions are only known once a file is chosen here; nothing is guessed.
-            file ? ["Size", `${Math.round(file.size / 102.4) / 10} KB`] : null,
+            ["Name", v || "none chosen"],
+            v ? ["Kind", mine?.type || pic?.type || `${looksImage(v) ? "image" : "file"} · .${String(v).split(".").pop() || "?"}`] : null,
+            // Size and dimensions only when the bytes are here; nothing is guessed.
+            pic?.width ? ["Pixels", `${pic.width} × ${pic.height}`] : null,
+            mine || pic?.size ? ["Size", `${Math.round((mine?.size ?? pic.size) / 102.4) / 10} KB`] : null,
+            ["Bytes", pic?.image || mine ? (mine ? "chosen here, held in this page" : "from the host") : "not supplied"],
           ].filter(Boolean).flatMap(([k, t]) => [el("dt", { text: k }), el("dd", { text: t })]),
         );
       },
       hero: (v) => ({ value: "", long: v || "No file", note: "", tone: "quiet" }),
       keys: [["Enter", "on the button opens the chooser"]],
-      destroy: () => objectUrl && URL.revokeObjectURL(objectUrl),
     };
   },
 

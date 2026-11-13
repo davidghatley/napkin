@@ -3,7 +3,8 @@
 // fields beside them are the same values as numbers.
 import { el } from "./dom.js";
 import { clamp } from "./values.js";
-import { s, fx, block, hero, field, chips, handle, fitSvg, stillLife, toneOf, adjust, keyHint } from "./kit.js";
+import { s, fx, block, hero, field, chips, handle, fitSvg, toneOf, adjust, keyHint } from "./kit.js";
+import { sectionPicture, coverCanvas, holdFile, missingWords, pictureError } from "./sources.js";
 
 const W = 480,
   H = 270,
@@ -40,11 +41,39 @@ export function imageStudio(ctx, host) {
     ctx.commit();
   };
 
-  /* ---- the picture ---- */
-  let source = stillLife(W, H),
+  /* ---- the picture: the host's bytes for this section, or a plain note that there are none ---- */
+  const assetC = ctx.section?.controls.find((x) => ["asset", "file"].includes(x.type));
+  let source = null,
     split = 0.34,
-    sourceName = "still-life.png";
-  let srcData = source.getContext("2d").getImageData(0, 0, W, H);
+    sourceName = "",
+    srcData = null,
+    small = null,
+    dims = null,
+    shownKey = null;
+  const sourceW = () => dims?.[0],
+    sourceH = () => dims?.[1];
+  const missing = el("p", { class: "ki-missing", role: "note" });
+  const loadPicture = () => {
+    const got = ctx.panel ? sectionPicture(ctx.panel, ctx.section, () => (loadPicture(), render())) : null,
+      name = assetC ? String(ctx.panel.get(assetC.id) || "") : "";
+    const key = got ? got.name + (got.width || "") + (got.size || "") : got === undefined ? "loading" : "none:" + name;
+    if (key === shownKey) return;
+    shownKey = key;
+    if (got && got.image) {
+      source = coverCanvas(got, W, H);
+      srcData = source.getContext("2d").getImageData(0, 0, W, H);
+      small = coverCanvas(got, 160, 90).getContext("2d").getImageData(0, 0, 160, 90);
+      sourceName = got.name;
+      dims = [got.width, got.height];
+      missing.hidden = true;
+    } else {
+      source = srcData = small = dims = null;
+      sourceName = name || "no image";
+      missing.hidden = false;
+      missing.textContent = got === undefined ? `Reading ${name || "the image"}…` : missingWords(name, assetC && pictureError(ctx.panel, assetC, name));
+    }
+    paintLooks?.();
+  };
   const out = new ImageData(W, H),
     pic = Object.assign(document.createElement("canvas"), { width: W, height: H }),
     picG = pic.getContext("2d");
@@ -59,7 +88,7 @@ export function imageStudio(ctx, host) {
     beforeTag = s("text", { class: "ki-tag", text: "Before" }),
     afterTag = s("text", { class: "ki-tag", text: "After" });
   over.append(shade, vignette, thirds, frame, ring, splitLine, beforeTag, afterTag);
-  const stage = el("div", { class: "ki-stage" }, pic, over);
+  const stage = el("div", { class: "ki-stage" }, pic, over, missing);
   let size = { w: 1, h: 1 };
   const fit = fitSvg(over, (w, h) => {
     size = { w, h };
@@ -238,19 +267,18 @@ export function imageStudio(ctx, host) {
   const take = async (file) => {
     if (!file) return;
     try {
-      const bmp = await createImageBitmap(file);
-      const c = Object.assign(document.createElement("canvas"), { width: W, height: H }),
-        g = c.getContext("2d", { willReadFrequently: true }),
-        k = Math.max(W / bmp.width, H / bmp.height);
-      g.drawImage(bmp, (W - bmp.width * k) / 2, (H - bmp.height * k) / 2, bmp.width * k, bmp.height * k);
-      source = c;
-      srcData = g.getImageData(0, 0, W, H);
-      sourceName = file.name;
-      if (ctx.panel?.rows?.has("asset")) ctx.panel.context("asset").set(file.name);
-      render();
+      // Check it decodes before holding it.
+      (await createImageBitmap(file)).close?.();
     } catch {
       nameLine.textContent = "That file is not an image this browser can read.";
+      return;
     }
+    // The chosen file is held for its name: on the section's asset control, which now names it, or
+    // on this image control when the section has none.
+    holdFile(ctx.panel, (assetC || ctx.control).id, file);
+    shownKey = null;
+    if (assetC) ctx.panel.context(assetC.id).set(file.name);
+    render();
   };
   fileInput.addEventListener("change", () => take(fileInput.files[0]));
   drop.addEventListener("dragover", (e) => {
@@ -265,17 +293,29 @@ export function imageStudio(ctx, host) {
   });
 
   /* ---- rail: looks ---- */
-  const small = stillLife(160, 90),
-    smallData = small.getContext("2d").getImageData(0, 0, 160, 90);
+  // Each look on the section's own picture; with no picture, the look's tone curve instead.
   const looks = LOOKS.map((look) => {
-    const c = Object.assign(document.createElement("canvas"), { width: 160, height: 90 }),
-      d = new ImageData(160, 90);
-    adjust(smallData, d, look.v, true);
-    c.getContext("2d").putImageData(d, 0, 0);
-    const b = el("button", { type: "button", class: "k-look", "aria-pressed": "false" }, c, el("span", { text: look.label }));
+    const art = el("span", { class: "k-look-art" });
+    const b = el("button", { type: "button", class: "k-look", "aria-pressed": "false" }, art, el("span", { text: look.label }));
     b.addEventListener("click", () => edit((v) => ({ ...v, ...structuredClone(look.v) }), "look"));
-    return { b, look };
+    return { b, look, art };
   });
+  function paintLooks() {
+    for (const { look, art } of looks) {
+      if (small) {
+        const c = Object.assign(document.createElement("canvas"), { width: 160, height: 90 }),
+          d = new ImageData(160, 90);
+        adjust(small, d, look.v, true);
+        c.getContext("2d").putImageData(d, 0, 0);
+        art.replaceChildren(c);
+      } else {
+        const t = toneOf({ curve: LINEAR, ...look.v });
+        let d = "";
+        for (let i = 0; i <= 32; i++) d += `${i ? "L" : "M"}${fx(8 + (i / 32) * 144, 1)} ${fx(82 - t(i / 32) * 74, 1)}`;
+        art.replaceChildren(s("svg", { viewBox: "0 0 160 90", "aria-hidden": "true" }, s("path", { d: "M8 82H152V8", class: "ki-look-axis" }), s("path", { d, class: "ki-look-curve" })));
+      }
+    }
+  }
   ctx.rail.append(
     block("Looks", el("div", { class: "k-looks" }, ...looks.map((x) => x.b))),
     keyHint(["Arrows", "move a focused handle or point"], ["Shift", "fine steps · Alt coarse"], ["Enter", "on a bar types a number"]),
@@ -301,14 +341,22 @@ export function imageStudio(ctx, host) {
   /* ---- drawing ---- */
   let hist = [];
   function render() {
+    loadPicture();
     const v = v0(),
       on = enabled();
-    hist = adjust(srcData, out, v, on);
-    picG.putImageData(out, 0, 0);
-    if (on && split > 0) picG.drawImage(source, 0, 0, W * split, H, 0, 0, W * split, H);
-    pic.setAttribute("aria-label", `${sourceName}, ${on ? "adjusted" : "adjustments off"}`);
     const tk = thumb.getContext("2d");
-    tk.drawImage(source, 0, 0, W, H, 0, 0, 112, 63);
+    if (srcData) {
+      hist = adjust(srcData, out, v, on);
+      picG.putImageData(out, 0, 0);
+      if (on && split > 0) picG.drawImage(source, 0, 0, W * split, H, 0, 0, W * split, H);
+      tk.drawImage(source, 0, 0, W, H, 0, 0, 112, 63);
+    } else {
+      hist = [];
+      picG.clearRect(0, 0, W, H);
+      tk.clearRect(0, 0, 112, 63);
+    }
+    stage.classList.toggle("is-missing", !srcData);
+    pic.setAttribute("aria-label", srcData ? `${sourceName}, ${on ? "adjusted" : "adjustments off"}` : missing.textContent);
     nameLine.textContent = sourceName;
     paintOverlay();
     paintTone();
@@ -324,17 +372,22 @@ export function imageStudio(ctx, host) {
       if (y <= 0.004) lo += n;
       if (y >= 0.996) hi += n;
     });
-    const cw = Math.round(W * (1 - (v.cropLeft || 0) - (v.cropRight || 0)) * 4),
-      ch = Math.round(H * (1 - (v.cropTop || 0) - (v.cropBottom || 0)) * 4);
+    // Kept size in the source's own pixels when known; otherwise as shares of the frame.
+    const pw = source ? sourceW() : null,
+      ph = source ? sourceH() : null,
+      kw = 1 - (v.cropLeft || 0) - (v.cropRight || 0),
+      kh = 1 - (v.cropTop || 0) - (v.cropBottom || 0),
+      cw = pw ? Math.round(pw * kw) : Math.round(kw * 100),
+      ch = ph ? Math.round(ph * kh) : Math.round(kh * 100);
     readout.replaceChildren(
       ...[
-        ["Shadows clipped", `${fx((lo / total) * 100, 1)}%`],
-        ["Highlights clipped", `${fx((hi / total) * 100, 1)}%`],
-        ["Kept", `${cw} × ${ch}`],
+        ["Shadows clipped", srcData ? `${fx((lo / total) * 100, 1)}%` : "no pixels"],
+        ["Highlights clipped", srcData ? `${fx((hi / total) * 100, 1)}%` : "no pixels"],
+        ["Kept", pw ? `${cw} × ${ch} px` : `${cw}% × ${ch}%`],
       ].map(([k, n]) => el("div", { class: "k-stat" }, el("span", { text: k }), el("b", { text: n }))),
     );
     for (const f of fields) f.update();
-    const ratio = cw / (ch || 1);
+    const ratio = (kw * W) / (kh * H || 1);
     aspect.set([16 / 9, 4 / 3, 1, 4 / 5].find((r) => Math.abs(r - ratio) < 0.01) ?? "free");
     for (const { b, look } of looks) b.setAttribute("aria-pressed", String(TONE_KEYS.every((k) => JSON.stringify(look.v[k]) === JSON.stringify(v[k] ?? (k === "curve" ? LINEAR : undefined)))));
   }
@@ -422,13 +475,14 @@ export function imageStudio(ctx, host) {
     tris.white.text(fx(v.white ?? 1, 3));
     tris.gamma.at(tx(pointX(v, 2)), by);
     tris.gamma.text(`gamma ${fx(v.gamma || 1, 2)}`);
-    clipText.setAttribute("x", tx(1));
-    clipText.setAttribute("y", h - 2);
-    clipText.setAttribute("text-anchor", "end");
+    // Top left, clear of the level triangles along the bottom and of the curve's usual path.
+    clipText.setAttribute("x", tx(0) + 4);
+    clipText.setAttribute("y", 14);
+    clipText.setAttribute("text-anchor", "start");
     clipText.textContent = `in ${fx(v.black || 0, 2)} · ${fx(v.gamma || 1, 2)} · ${fx(v.white ?? 1, 2)}`;
   }
   const onPaint = (e) => {
-    if (e.detail?.control === "enabled") render();
+    if (e.detail?.control === "enabled" || e.detail?.control === assetC?.id) render();
   };
   ctx.panel?.addEventListener?.("paint", onPaint);
   render();
