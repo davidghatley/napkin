@@ -406,7 +406,8 @@ test(
             await q('dialsDemo.panels[5].get("sampling").locked'),
             false,
           );
-          await focus('#sample-data [aria-label="x field"]');
+          await focus('#sample-data [aria-label="x field"] button');
+          await key("Enter");
           await key("End");
           await key("Enter");
           assert.equal(

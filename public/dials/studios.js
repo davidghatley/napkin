@@ -1,4 +1,4 @@
-import { el, button, heading, canvas, grid, pointerSurface, visible } from "./dom.js";
+import { el, button, heading, canvas, grid, pointerSurface, visible, choiceBox, filePick } from "./dom.js";
 import { clamp, clone, expression, same } from "./values.js";
 import {
   parseColor,
@@ -32,13 +32,12 @@ const accent = (node) =>
 const controlValues = (panel, section) =>
   Object.fromEntries(section.controls.map((c) => [c.id, panel.get(c.id)]));
 function choice(label, options, change) {
-  const input = el(
-    "select",
-    { "aria-label": label },
-    ...options.map((x) => el("option", { value: x, text: x })),
+  return el(
+    "div",
+    { class: "d-tool" },
+    el("span", { text: label }),
+    choiceBox(label, options, change),
   );
-  input.addEventListener("change", () => change(input.value));
-  return el("label", { class: "d-tool" }, el("span", { text: label }), input);
 }
 function metric(name) {
   const value = el("strong", { text: "—" });
@@ -47,7 +46,7 @@ function metric(name) {
     set: (text) => (value.textContent = text),
   };
 }
-function fields(ctx, descriptors) {
+function fields(ctx, descriptors, { sliders = false } = {}) {
   const updates = [];
   const box = el("div", { class: "d-lab-fields" });
   for (const desc of descriptors) {
@@ -117,9 +116,38 @@ function fields(ctx, descriptors) {
         input.value = `${value()}${unit}`;
       }
     });
-    box.append(
-      el("label", { class: "d-field" }, el("span", { text: label }), input),
-    );
+    if (!sliders)
+      box.append(
+        el("label", { class: "d-field" }, el("span", { text: label }), input),
+      );
+    if (sliders) {
+      let sliding = false;
+      const range = el("input", {
+        type: "range",
+        min,
+        max,
+        step: step / 10,
+        "aria-label": `${label} slider`,
+      });
+      range.addEventListener("input", () => {
+        if (!sliding) {
+          sliding = true;
+          ctx.begin("studio-slide");
+        }
+        put(Number(Number(range.value).toFixed(6)));
+      });
+      range.addEventListener("change", () => {
+        sliding = false;
+        ctx.commit();
+      });
+      box.classList.add("d-lab-sliders");
+      box.append(
+        el("label", { class: "d-field d-field-slide" }, el("span", { text: label }), range, input),
+      );
+      updates.push(() => {
+        if (document.activeElement !== range || !sliding) range.value = value();
+      });
+    }
     updates.push(() => {
       if (document.activeElement !== input || !ctx.isEditing()) {
         const n = value();
@@ -140,7 +168,7 @@ function swatchRow(label, colors, onPick) {
   }
   return row;
 }
-function updateSwatches(host, label, colors, onPick) {
+function updateSwatches(host, label, colors, onPick, lines) {
   let row = host.firstElementChild;
   if (!row) {
     row = swatchRow(label, [], onPick);
@@ -159,10 +187,22 @@ function updateSwatches(host, label, colors, onPick) {
     b.style.setProperty("--swatch", css);
     b.title = css;
     b.setAttribute("aria-label", `${label}: ${css}`);
+    if (lines) {
+      let lch;
+      try {
+        lch = typeof color === "string" ? parseColor(color) : color;
+      } catch {
+        lch = null;
+      }
+      b.classList.add("d-plate");
+      b.replaceChildren(
+        ...lines(css, lch).map((t, k) => el(k ? "small" : "b", { text: t })),
+      );
+    }
   });
 }
 function colorStudio(ctx, host) {
-  host.append(heading("Color space", "Perceptual lightness × chroma"));
+  host.append(heading("Color space"));
   let space = "srgb",
     planeMode = "OKLCH",
     map = "Off",
@@ -264,19 +304,25 @@ function colorStudio(ctx, host) {
     ["Alpha", "a", 0, 1, 0.01],
   ]);
   const palettes = el("div", { class: "d-palettes d-studio-only" }),
+    plates = el("div", { class: "d-color-plates d-studio-only" }),
     rampHost = el("div"),
     harmonyHost = el("div"),
     historyHost = el("div"),
     imageHost = el("div");
-  const image = el("input", {
-      type: "file",
-      accept: "image/*",
-      "aria-label": "Sample palette from an image",
-    }),
-    sampleStatus = el("output", { class: "d-note" });
-  image.addEventListener("change", async () => {
-    const file = image.files[0];
-    if (!file) return;
+  const sampleStatus = el("output", { class: "d-note" }),
+    eye = canvas("Sampled image. Click a pixel to use its color.", 320, 120, true);
+  eye.classList.add("d-eye");
+  eye.hidden = true;
+  let eyeData;
+  eye.addEventListener("click", (e) => {
+    if (!eyeData) return;
+    const r = eye.getBoundingClientRect(),
+      x = Math.floor(((e.clientX - r.left) / r.width) * eyeData.width),
+      y = Math.floor(((e.clientY - r.top) / r.height) * eyeData.height),
+      i = (clamp(y, 0, eyeData.height - 1) * eyeData.width + clamp(x, 0, eyeData.width - 1)) * 4;
+    ctx.set(toHex([eyeData.data[i] / 255, eyeData.data[i + 1] / 255, eyeData.data[i + 2] / 255]));
+  });
+  const image = filePick("Choose an image", "image/*", async (file) => {
     try {
       const bitmap = await createImageBitmap(file),
         c = document.createElement("canvas");
@@ -284,6 +330,10 @@ function colorStudio(ctx, host) {
       c.height = 96;
       const g = c.getContext("2d", { willReadFrequently: true });
       g.drawImage(bitmap, 0, 0, 96, 96);
+      const view = eye.getContext("2d");
+      view.drawImage(bitmap, 0, 0, 320, 120);
+      eyeData = view.getImageData(0, 0, 320, 120);
+      eye.hidden = false;
       bitmap.close();
       const colors = paletteFromPixels(g.getImageData(0, 0, 96, 96).data);
       imageHost.replaceChildren(
@@ -293,7 +343,7 @@ function colorStudio(ctx, host) {
     } catch {
       sampleStatus.textContent = "Could not read this image";
     }
-  });
+  }, "or drop one here", "Sample palette from an image");
   const token = el("input", {
       placeholder: "--brand-accent",
       "aria-label": "CSS variable name",
@@ -328,7 +378,7 @@ function colorStudio(ctx, host) {
       tokenStatus.textContent = "Select and copy the color readout";
     }
   });
-  palettes.append(
+  plates.append(
     el("div", {}, heading("Ramp", "Gamut fitted, nine stops"), rampHost),
     el(
       "div",
@@ -344,11 +394,14 @@ function colorStudio(ctx, host) {
       ),
       harmonyHost,
     ),
+  );
+  palettes.append(
     el(
       "div",
       {},
       heading("From an image", "Local files stay in this browser"),
       image,
+      eye,
       sampleStatus,
       imageHost,
     ),
@@ -365,7 +418,7 @@ function colorStudio(ctx, host) {
       el("div", { class: "d-tools" }, formats, copy),
     ),
   );
-  host.append(toolbar, main, channels.node, palettes);
+  host.append(toolbar, main, plates, channels.node, palettes);
   const pick = (e) => {
     const r = plane.getBoundingClientRect(),
       x = clamp((e.clientX - r.left) / r.width, 0, 1),
@@ -413,12 +466,12 @@ function colorStudio(ctx, host) {
     updateHistory();
   };
   const updateHistory = () =>
-    updateSwatches(historyHost, "Color history", history, (v) => ctx.set(v));
+    updateSwatches(historyHost, "Color history", history, (v) => ctx.set(v), (css) => [css.length > 18 ? css.slice(0, 18) : css]);
   const raster = document.createElement("canvas");
   raster.width = 192;
   raster.height = 120;
   const rasterContext = raster.getContext("2d");
-  plane.addEventListener("d-resize", () => draw());
+  plane.addEventListener("d-resize", () => update());
   function draw() {
     frame = 0;
     if (dead || !visible(plane)) return;
@@ -526,6 +579,8 @@ function colorStudio(ctx, host) {
   }
   function update() {
     if (dead) return;
+    // Nothing below is seen while the studio is collapsed or scrolled away; it runs once it comes into view.
+    if (!visible(plane)) return;
     const v = parseColor(ctx.get(), ctx.host),
       back = parseColor(background, ctx.host),
       ratio = contrast(v, back);
@@ -561,7 +616,11 @@ function colorStudio(ctx, host) {
                 .map((n) => Math.round(n * 255))
                 .join(" ")} / ${v[3].toFixed(3)})`
             : cssLch(v);
-    updateSwatches(rampHost, "Ramp", ramp(v), (color) => ctx.set(color));
+    const plateLines = (css, lch) => [
+      lch ? `L ${Math.round(lch[0] * 100)}` : css,
+      lch ? `${contrast(lch, back).toFixed(1)} : 1` : "",
+    ];
+    updateSwatches(rampHost, "Ramp", ramp(v), (color) => ctx.set(color), plateLines);
     const offsets = {
       Complement: [0, 180],
       Analogous: [-30, 0, 30],
@@ -576,6 +635,7 @@ function colorStudio(ctx, host) {
         return [v[0], Math.min(v[1], gamutChroma(v[0], H)), H, 1];
       }),
       (color) => ctx.set(color),
+      (css, lch) => [lch ? `${Math.round(lch[2])}°` : css, lch ? `C ${lch[1].toFixed(2)}` : ""],
     );
     if (!frame) frame = requestAnimationFrame(draw);
   }
@@ -606,7 +666,7 @@ function motionStudio(ctx, host) {
       ...rawContext.get(),
     }),
   };
-  host.append(heading("Motion study", "Response, not just a curve"));
+  host.append(heading("Motion study"));
   const plot = canvas(
       "Motion curve. Use the handle fields to edit the curve.",
       600,
@@ -615,7 +675,13 @@ function motionStudio(ctx, host) {
     ),
     ghost = canvas(
       "Ghost trail: the current response above, the pinned earlier response below",
-      600,
+      300,
+      84,
+      false,
+    ),
+    velocity = canvas(
+      "Velocity of the response over time, in change per second",
+      300,
       84,
       false,
     ),
@@ -655,7 +721,7 @@ function motionStudio(ctx, host) {
     timeline = canvas(
       "Timeline with a loop range and one lane of keys per instrument. Arrow keys move the playhead, [ and ] set the loop range, K adds a key.",
       600,
-      24 + 34 * (1 + laneControls.length),
+      24 + 56 * (1 + laneControls.length),
     ),
     track = el("input", {
       type: "range",
@@ -665,7 +731,22 @@ function motionStudio(ctx, host) {
       "aria-label": "Timeline playhead",
     }),
     time = el("output", { class: "d-note" });
-  let reference = clone(ctx.get()),
+  const ease = (v) => ({
+    ...v,
+    mode: "bezier",
+    bezier: [0.25, 0.1, 0.25, 1],
+    delay: 0,
+  });
+  const sameCurve = (p, q) =>
+    JSON.stringify([p.mode, p.bezier, p.stiffness, p.damping, p.mass, p.velocity]) ===
+    JSON.stringify([q.mode, q.bezier, q.stiffness, q.damping, q.mass, q.velocity]);
+  // The ghost starts as the standard CSS ease (or linear when the response already is ease),
+  // then follows the response as it was before your last edit until you pin one yourself.
+  let reference = sameCurve(ease(ctx.get()), ctx.get())
+      ? { ...ease(ctx.get()), bezier: [0, 0, 1, 1] }
+      : ease(ctx.get()),
+    pinned = false,
+    lastCommitted = clone(ctx.get()),
     playhead = 0,
     playing = false,
     start = 0,
@@ -737,6 +818,7 @@ function motionStudio(ctx, host) {
     "Keep the current response as the before ghost",
     () => {
       reference = clone(ctx.get());
+      pinned = true;
       draw();
       renderCompare(ctx.get());
     },
@@ -799,7 +881,7 @@ function motionStudio(ctx, host) {
   const main = el(
     "div",
     { class: "d-motion-main" },
-    el("div", { class: "d-motion-plots" }, plot, ghost),
+    el("div", { class: "d-motion-plots" }, plot, el("div", { class: "d-motion-pair" }, ghost, velocity)),
     el("div", { class: "d-timeline-wrap d-studio-only" }, heading("Timeline", "Loop range, keys, one lane per instrument"), timeline),
     el(
       "div",
@@ -807,8 +889,8 @@ function motionStudio(ctx, host) {
       el("span", { text: "0" }),
       track,
       el("span", { text: "1" }),
+      time,
     ),
-    time,
   );
   const bezierOnly = el(
       "div",
@@ -850,9 +932,11 @@ function motionStudio(ctx, host) {
         x = (e.clientX - r.left) / r.width,
         y = (e.clientY - r.top) / r.height,
         p = v.bezier;
+      const d0 = (v.delay || 0) / ((v.duration || 1000) + (v.delay || 0)),
+        hx = (n) => d0 + (1 - d0) * n;
       dragHandle =
-        Math.hypot(x - p[0], y - (0.84 - p[1] * 0.68)) <
-        Math.hypot(x - p[2], y - (0.84 - p[3] * 0.68))
+        Math.hypot(x - hx(p[0]), y - (0.84 - p[1] * 0.68)) <
+        Math.hypot(x - hx(p[2]), y - (0.84 - p[3] * 0.68))
           ? 0
           : 2;
     },
@@ -860,8 +944,9 @@ function motionStudio(ctx, host) {
       if (ctx.get().mode === "spring") return;
       const r = plot.getBoundingClientRect(),
         v = ctx.get();
+      const d1 = (v.delay || 0) / ((v.duration || 1000) + (v.delay || 0));
       v.bezier[dragHandle] = Number(
-        clamp((e.clientX - r.left) / r.width, 0, 1).toFixed(3),
+        clamp(((e.clientX - r.left) / r.width - d1) / (1 - d1), 0, 1).toFixed(3),
       );
       v.bezier[dragHandle + 1] = Number(
         clamp((0.84 - (e.clientY - r.top) / r.height) / 0.68, -3, 3).toFixed(3),
@@ -871,7 +956,7 @@ function motionStudio(ctx, host) {
     end: () => ctx.commit(),
     cancel: () => ctx.cancel(),
   });
-  for (const cv of [plot, ghost, timeline])
+  for (const cv of [plot, ghost, velocity, timeline])
     cv.addEventListener("d-resize", () => draw());
   function tick(now) {
     if (dead || !playing) return;
@@ -892,11 +977,14 @@ function motionStudio(ctx, host) {
       h = plot.height,
       a = accent(host);
     grid(g, w, h);
-    const xy = ([x, y]) => [x * w, h * (0.84 - y * 0.68)];
+    const dl = (m) => (m.delay || 0) / ((m.duration || 1000) + (m.delay || 0)),
+      xyFor = (m) => ([x, y]) => [(dl(m) + (1 - dl(m)) * x) * w, h * (0.84 - y * 0.68)],
+      xy = xyFor(v);
     g.beginPath();
+    if (dl(reference)) g.moveTo(0, h * 0.84);
     curvePoints(reference).forEach((p, i) => {
-      const [x, y] = xy(p);
-      i ? g.lineTo(x, y) : g.moveTo(x, y);
+      const [x, y] = xyFor(reference)(p);
+      i || dl(reference) ? g.lineTo(x, y) : g.moveTo(x, y);
     });
     g.strokeStyle = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
     g.lineWidth = 1.5;
@@ -904,13 +992,31 @@ function motionStudio(ctx, host) {
     g.stroke();
     g.setLineDash([]);
     g.beginPath();
+    if (dl(v)) g.moveTo(0, h * 0.84);
     curvePoints(v).forEach((p, i) => {
       const [x, y] = xy(p);
-      i ? g.lineTo(x, y) : g.moveTo(x, y);
+      i || dl(v) ? g.lineTo(x, y) : g.moveTo(x, y);
     });
     g.strokeStyle = a;
     g.lineWidth = 2;
     g.stroke();
+    if (dl(v)) {
+      g.fillStyle = a;
+      g.globalAlpha = 0.1;
+      g.fillRect(0, 0, dl(v) * w, h);
+      g.globalAlpha = 1;
+    }
+    g.fillStyle = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
+    g.font = "10px ui-monospace, monospace";
+    g.textBaseline = "alphabetic";
+    g.textAlign = "left";
+    g.fillText("0", 4, h - 4);
+    if (dl(v)) {
+      g.textAlign = "left";
+      g.fillText(`starts at ${v.delay} ms`, dl(v) * w + 4, h - 4);
+    }
+    g.textAlign = "right";
+    g.fillText(`${(v.duration || 1000) + (v.delay || 0)} ms`, w - 4, h - 4);
     if (v.mode !== "spring") {
       const p = v.bezier || [0.25, 0.1, 0.25, 1];
       g.beginPath();
@@ -929,7 +1035,7 @@ function motionStudio(ctx, host) {
         g.fill();
       }
     }
-    const delay = (v.delay || 0) / ((v.duration || 1000) + (v.delay || 0)),
+    const delay = dl(v),
       t = clamp((playhead - delay) / (1 - delay), 0, 1),
       value = motionAt(t, v),
       key = keyframeAt(t, v.keyframes);
@@ -960,18 +1066,56 @@ function motionStudio(ctx, host) {
     gg.setLineDash([]);
     gg.fillStyle = gg.strokeStyle;
     gg.fillRect(gx(motionAt(t, reference)), 54, 16, 24);
+    drawVelocity(v);
     drawTimeline(v);
     time.textContent = `${Math.round(playhead * ((v.duration || 1000) + (v.delay || 0)))} ms · response ${value.toFixed(3)} · keyframe ${key.toFixed(3)}`;
   }
+  function drawVelocity(v) {
+    const g = velocity.getContext("2d"),
+      w = velocity.width,
+      h = velocity.height,
+      a = accent(host),
+      N = 120,
+      duration = (v.duration || 1000) / 1000,
+      sample = Array.from({ length: N + 1 }, (_, i) =>
+        i ? ((motionAt(i / N, v) - motionAt((i - 1) / N, v)) * N) / duration : 0,
+      ),
+      peak = Math.max(0.001, ...sample.map(Math.abs)),
+      d = (v.delay || 0) / ((v.duration || 1000) + (v.delay || 0)),
+      X = (i) => (d + (1 - d) * (i / N)) * w,
+      mid = h * 0.72;
+    grid(g, w, h);
+    g.strokeStyle = getComputedStyle(velocity).getPropertyValue("--d-muted").trim() || "#777";
+    g.beginPath();
+    g.moveTo(0, mid + 0.5);
+    g.lineTo(w, mid + 0.5);
+    g.stroke();
+    g.beginPath();
+    g.moveTo(X(0), mid);
+    sample.forEach((n, i) => g.lineTo(X(i), mid - (n / peak) * (h * 0.62)));
+    g.lineTo(X(N), mid);
+    g.closePath();
+    g.fillStyle = a;
+    g.globalAlpha = 0.22;
+    g.fill();
+    g.globalAlpha = 1;
+    g.strokeStyle = a;
+    g.lineWidth = 1.5;
+    g.stroke();
+    g.fillStyle = getComputedStyle(velocity).getPropertyValue("--d-muted").trim() || "#777";
+    g.font = "10px ui-monospace, monospace";
+    g.textBaseline = "top";
+    g.fillText(`velocity, peak ${peak.toFixed(1)}/s`, 6, 4);
+  }
   const W = 600,
     RULER = 24,
-    LANE = 34,
+    LANE = 56,
     PAD = 12;
   const tx = (t) => PAD + t * (W - 2 * PAD),
     xt = (x) => clamp((x - PAD) / (W - 2 * PAD), 0, 1);
   const laneY = (i) => RULER + i * LANE;
   const laneValueY = (lane, i, value) =>
-    laneY(i) + LANE - 7 - clamp((value - lane.min) / (lane.max - lane.min || 1), 0, 1) * (LANE - 15);
+    laneY(i) + LANE - 9 - clamp((value - lane.min) / (lane.max - lane.min || 1), 0, 1) * (LANE - 21);
   function drawTimeline(v) {
     const g = timeline.getContext("2d"),
       H = timeline.height,
@@ -1043,10 +1187,10 @@ function motionStudio(ctx, host) {
         const x = tx(k.time),
           y = laneValueY(lane, i, k.value);
         g.beginPath();
-        g.moveTo(x, y - 5);
-        g.lineTo(x + 5, y);
-        g.lineTo(x, y + 5);
-        g.lineTo(x - 5, y);
+        g.moveTo(x, y - 7);
+        g.lineTo(x + 7, y);
+        g.lineTo(x, y + 7);
+        g.lineTo(x - 7, y);
         g.closePath();
         g.fillStyle = text;
         g.fill();
@@ -1072,7 +1216,7 @@ function motionStudio(ctx, host) {
     const i = clamp(Math.floor((y - RULER) / LANE), 0, laneControls.length),
       lane = lanes()[i];
     let best = -1,
-      bestD = 11;
+      bestD = 15;
     lane.keys.forEach((k, j) => {
       const d = Math.hypot(tx(k.time) - x, laneValueY(lane, i, k.value) - y);
       if (d < bestD) {
@@ -1108,7 +1252,7 @@ function motionStudio(ctx, host) {
           lane = list[gesture.lane],
           keys = clone(lane.keys),
           key = keys[gesture.index],
-          norm = clamp(1 - (y - laneY(gesture.lane) - 7) / (LANE - 15), 0, 1);
+          norm = clamp(1 - (y - laneY(gesture.lane) - 12) / (LANE - 21), 0, 1);
         key.time = Number(xt(x).toFixed(3));
         key.value = Number((lane.min + norm * (lane.max - lane.min)).toFixed(3));
         ctx.change(laneWrite(lane, keys, v));
@@ -1211,7 +1355,7 @@ function motionStudio(ctx, host) {
   function update() {
     if (dead) return;
     const v = ctx.get();
-    mode.querySelector("select").value = v.mode || "bezier";
+    mode.querySelector(".d-choice").value = v.mode || "bezier";
     numbers.update();
     handles.update();
     rangeFields.update();
@@ -1286,6 +1430,7 @@ function motionStudio(ctx, host) {
             el(
               "div",
               { class: "d-key" },
+              el("span", { class: "d-key-fig", "aria-hidden": "true" }),
               button("◇", `Scrub to key ${i + 1}`, () => {
                 playhead = ctx.get().keyframes?.[i]?.time ?? f.time;
                 track.value = playhead * 1000;
@@ -1305,6 +1450,25 @@ function motionStudio(ctx, host) {
           );
         });
       }
+    }
+    {
+      const frames = [...(v.keyframes || [{ time: 0, value: 0 }, { time: 1, value: 1 }])];
+      const sorted = [...frames].sort((p, q) => p.time - q.time),
+        ys = sorted.map((k) => k.value),
+        lo = Math.min(0, ...ys),
+        hi = Math.max(1, ...ys),
+        px = (t) => 2 + t * 56,
+        py = (n) => 26 - ((n - lo) / (hi - lo || 1)) * 22,
+        d = Array.from({ length: 29 }, (_, k) => {
+          const t = k / 28;
+          return `${k ? "L" : "M"}${px(t).toFixed(1)} ${py(keyframeAt(t, sorted)).toFixed(1)}`;
+        }).join("");
+      [...keyframes.children].forEach((row, i) => {
+        const fig = row.querySelector(".d-key-fig"),
+          k = frames[i];
+        if (fig && k)
+          fig.innerHTML = `<svg viewBox="0 0 60 30" width="60" height="30"><path d="M2 ${py(0)}H58" stroke="var(--d-line)" fill="none"/><path d="${d}" stroke="var(--d-accent)" fill="none" stroke-width="1.5"/><circle cx="${px(k.time)}" cy="${py(k.value)}" r="3" fill="var(--d-text)"/></svg>`;
+      });
     }
     for (const x of exportSpecs) x.code.textContent = x.make(v);
     renderCompare(v);
@@ -1334,6 +1498,20 @@ function motionStudio(ctx, host) {
   }
   return {
     update,
+    commit() {
+      const now = clone(ctx.get());
+      if (
+        !pinned &&
+        (!sameCurve(now, lastCommitted) ||
+          now.delay !== lastCommitted.delay ||
+          now.duration !== lastCommitted.duration)
+      ) {
+        reference = lastCommitted;
+        renderCompare(now);
+        draw();
+      }
+      lastCommitted = now;
+    },
     destroy: () => {
       dead = true;
       cancelAnimationFrame(raf);
@@ -1342,7 +1520,7 @@ function motionStudio(ctx, host) {
   };
 }
 function typeStudio(ctx, host) {
-  host.append(heading("Type specimen", "Shape, rhythm, optical size"));
+  host.append(heading("Type specimen"));
   const specimen = el("div", {
       class: "d-type-specimen",
       contenteditable: "true",
@@ -1364,12 +1542,15 @@ function typeStudio(ctx, host) {
     ["Weight", "weight", 100, 1000, 10],
     ["Tracking", "tracking", -10, 30, 0.1, "px"],
     ["Line height", "lineHeight", 0.5, 3, 0.05],
-  ]);
-  const axisDefinitions = ctx.control.axes || [];
+  ], { sliders: true });
+  const axisDefinitions = (ctx.control.axes || []).length
+    ? ctx.control.axes
+    : [{ tag: "wght", label: "Weight", min: 100, max: 900, default: 400 }];
   const axisCtx = {
     ...ctx,
     get: () => ({
       ...Object.fromEntries(axisDefinitions.map((a) => [a.tag, a.default])),
+      ...(ctx.get().weight !== undefined ? { wght: ctx.get().weight } : {}),
       ...ctx.get().axes,
     }),
     change: (axes) =>
@@ -1381,13 +1562,14 @@ function typeStudio(ctx, host) {
   };
   const axes = fields(
     axisCtx,
-    axisDefinitions.map((a) => [
+    axisDefinitions.filter((a) => a.tag !== "wght").map((a) => [
       a.label || a.tag,
       a.tag,
       a.min,
       a.max,
       a.step || 1,
     ]),
+    { sliders: true },
   );
   const family = el("input", {
     type: "text",
@@ -1397,11 +1579,6 @@ function typeStudio(ctx, host) {
   family.addEventListener("change", () =>
     ctx.set({ ...ctx.get(), family: family.value }),
   );
-  const ruler = el("div", {
-    class: "d-type-ruler",
-    "aria-hidden": true,
-    text: "Hamburgefonstiv 0123456789",
-  });
   specimen.addEventListener("focus", () => ctx.begin("specimen"));
   specimen.addEventListener("input", () =>
     ctx.change({ ...ctx.get(), text: specimen.textContent }),
@@ -1416,22 +1593,50 @@ function typeStudio(ctx, host) {
       specimen.blur();
     }
   });
-  host.append(
+  const glyphs = el("div", { class: "d-glyphs", "aria-hidden": "true" }),
+    waterfall = el("div", { class: "d-waterfall", "aria-hidden": "true" }),
+    strips = el("div", { class: "d-type-side" });
+  for (const ch of "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789&@#?!%")
+    glyphs.append(el("span", { text: ch }));
+  const lines = [12, 16, 24, 36, 56].map((n) =>
+    el("div", {}, el("small", { text: `${n}` }), el("span", { text: n > 40 ? "Sphinx of black" : n > 30 ? "Sphinx of black quartz" : "Sphinx of black quartz, judge my vow" })),
+  );
+  lines.forEach((l, i) => (l.lastChild.style.fontSize = `${[12, 16, 24, 36, 56][i]}px`));
+  waterfall.append(...lines);
+  const stripHosts = axisDefinitions.map((a) => {
+    const row = el("div", { class: "d-axis-strip", role: "group", "aria-label": `${a.label || a.tag} across its range` }),
+      stops = Array.from({ length: 7 }, (_, i) => Math.round(a.min + ((a.max - a.min) * i) / 6));
+    const tiles = stops.map((n) => {
+      const tile = el("button", { type: "button", "aria-pressed": "false", "aria-label": `${a.label || a.tag} ${n}` },
+        el("span", { text: "Ag" }), el("small", { text: String(n) }));
+      tile.firstChild.style.fontVariationSettings = `"${a.tag}" ${n}`;
+      if (a.tag === "wght") tile.firstChild.style.fontWeight = n;
+      tile.addEventListener("click", () => axisCtx.change({ ...axisCtx.get(), [a.tag]: n }));
+      row.append(tile);
+      return [tile, n];
+    });
+    strips.append(el("div", {}, el("h4", { text: `${a.label || a.tag} across its range` }), row));
+    return { a, tiles };
+  });
+  const lab = el(
+    "div",
+    { class: "d-type-lab" },
     specimen,
-    ruler,
+    el("div", {}, el("h4", { text: "Size ladder" }), waterfall),
+  );
+  strips.append(el("div", {}, el("h4", { text: "Character set" }), glyphs));
+  host.append(
+    lab,
     measure,
     nums.node,
     el(
       "div",
       { class: "d-studio-only" },
-      heading("Variable axes", "Declare axes and their ranges in the schema"),
+      heading("Axes"),
       el("label", { class: "d-tool" }, el("span", { text: "Family" }), family),
       axes.node,
-      el("p", {
-        class: "d-note",
-        text: "Axis controls use font-variation-settings. The selected font must contain the declared axes.",
-      }),
     ),
+    strips,
   );
   return {
     update() {
@@ -1442,9 +1647,24 @@ function typeStudio(ctx, host) {
       specimen.style.fontSize = `${v.size || 32}px`;
       specimen.style.fontWeight = v.weight || 400;
       specimen.style.letterSpacing = `${v.tracking || 0}px`;
-      ruler.style.fontFamily = specimen.style.fontFamily;
-      ruler.style.fontWeight = specimen.style.fontWeight;
-      ruler.style.fontVariationSettings = "";
+      const settings = Object.entries(v.axes || {})
+        .map(([tag, n]) => `"${tag.replace(/[^\w]/g, "")}" ${Number(n)}`)
+        .join(",");
+      for (const face of [glyphs, waterfall]) {
+        face.style.fontFamily = specimen.style.fontFamily;
+        face.style.fontWeight = specimen.style.fontWeight;
+        face.style.letterSpacing = `${v.tracking || 0}px`;
+        face.style.fontVariationSettings = settings;
+      }
+      for (const { a, tiles } of stripHosts) {
+        const cur = (v.axes || {})[a.tag] ?? (a.tag === "wght" ? v.weight : a.default);
+        let best = tiles[0];
+        for (const t of tiles) if (Math.abs(t[1] - cur) < Math.abs(best[1] - cur)) best = t;
+        for (const t of tiles) {
+          t[0].setAttribute("aria-pressed", String(t === best));
+          t[0].firstChild.style.fontFamily = specimen.style.fontFamily;
+        }
+      }
       specimen.style.lineHeight = v.lineHeight || 1.2;
       specimen.style.fontVariationSettings = Object.entries(v.axes || {})
         .map(([tag, n]) => `"${tag.replace(/[^\w]/g, "")}" ${Number(n)}`)
@@ -1457,7 +1677,7 @@ function typeStudio(ctx, host) {
 }
 function imageStudio(ctx, host) {
   host.append(
-    heading("Image darkroom", "Levels, curves & a measured histogram"),
+    heading("Image"),
   );
   const preview = canvas("Image after levels, curves, crop and mask", 320, 180, false),
     hist = canvas(
@@ -1506,14 +1726,7 @@ function imageStudio(ctx, host) {
     dead = false,
     frame = 0,
     drag = 2;
-  const upload = el("input", {
-    type: "file",
-    accept: "image/*",
-    "aria-label": "Load image for adjustment",
-  });
-  upload.addEventListener("change", async () => {
-    const file = upload.files[0];
-    if (!file) return;
+  const upload = filePick("Load an image", "image/*", async (file) => {
     try {
       const b = await createImageBitmap(file);
       s.clearRect(0, 0, 320, 180);
@@ -1525,7 +1738,7 @@ function imageStudio(ctx, host) {
     } catch {
       status.textContent = "Could not read image";
     }
-  });
+  }, "or drop one here", "Load image for adjustment");
   const f = fields(ctx, [
     ["Black", "black", 0, 0.99, 0.01],
     ["White", "white", 0.01, 1, 0.01],
@@ -1555,8 +1768,97 @@ function imageStudio(ctx, host) {
       0.01,
     ]),
   );
+  const stage = el("div", { class: "d-stage" }, preview),
+    cropBox = el("div", { class: "d-crop-box" }),
+    ring = el("div", { class: "d-mask-ring" });
+  stage.append(cropBox, ring);
+  const keys = { cropLeft: "x", cropTop: "y", cropRight: "x", cropBottom: "y", mask: "x" },
+    handleDefs = [
+      ["nw", "Crop top left corner", ["cropLeft", "cropTop"]],
+      ["n", "Crop top edge", ["cropTop"]],
+      ["ne", "Crop top right corner", ["cropRight", "cropTop"]],
+      ["e", "Crop right edge", ["cropRight"]],
+      ["se", "Crop bottom right corner", ["cropRight", "cropBottom"]],
+      ["s", "Crop bottom edge", ["cropBottom"]],
+      ["sw", "Crop bottom left corner", ["cropLeft", "cropBottom"]],
+      ["w", "Crop left edge", ["cropLeft"]],
+    ];
+  const setEdge = (v, key, fx, fy) => {
+    const n = {
+      cropLeft: fx,
+      cropRight: 1 - fx,
+      cropTop: fy,
+      cropBottom: 1 - fy,
+    }[key];
+    v[key] = Number(clamp(n, 0, 0.95).toFixed(3));
+  };
+  const handleButtons = handleDefs.map(([pos, label, edges]) => {
+    const h = el("button", {
+      type: "button",
+      class: `d-crop-h d-crop-${pos}`,
+      role: "slider",
+      "aria-label": label,
+      "aria-valuemin": "0",
+      "aria-valuemax": "95",
+    });
+    ctx.surface(h, {
+      start: () => ctx.begin("crop"),
+      move: (e) => {
+        const r = stage.getBoundingClientRect(),
+          v = ctx.get(),
+          fx = clamp((e.clientX - r.left) / r.width, 0, 1),
+          fy = clamp((e.clientY - r.top) / r.height, 0, 1);
+        for (const k of edges) setEdge(v, k, fx, fy);
+        ctx.change(v);
+      },
+      end: () => ctx.commit(),
+      cancel: () => ctx.cancel(),
+    });
+    h.addEventListener("keydown", (e) => {
+      const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (!dir) return;
+      e.preventDefault();
+      const step = 0.01 * (e.shiftKey ? 0.1 : e.altKey ? 10 : 1),
+        v = ctx.get();
+      for (const k of edges) {
+        const axis = keys[k] === "x" ? 0 : 1,
+          sign = k === "cropLeft" || k === "cropTop" ? 1 : -1;
+        v[k] = Number(clamp((v[k] || 0) + dir[axis] * sign * step, 0, 0.95).toFixed(3));
+      }
+      ctx.set(v);
+    });
+    cropBox.append(h);
+    return [h, edges];
+  });
+  const maskHandle = el("button", {
+    type: "button",
+    class: "d-crop-h d-mask-h",
+    role: "slider",
+    "aria-label": "Mask radius",
+    "aria-valuemin": "0",
+    "aria-valuemax": "100",
+  });
+  ctx.surface(maskHandle, {
+    start: () => ctx.begin("mask"),
+    move: (e) => {
+      const r = stage.getBoundingClientRect(),
+        v = ctx.get();
+      v.mask = Number(clamp(Math.abs((e.clientX - r.left) / r.width - 0.5) * 2, 0, 1).toFixed(3));
+      ctx.change(v);
+    },
+    end: () => ctx.commit(),
+    cancel: () => ctx.cancel(),
+  });
+  maskHandle.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    e.preventDefault();
+    const v = ctx.get();
+    v.mask = Number(clamp((v.mask || 0) + (e.key === "ArrowRight" ? 1 : -1) * 0.01 * (e.shiftKey ? 0.1 : e.altKey ? 10 : 1), 0, 1).toFixed(3));
+    ctx.set(v);
+  });
+  ring.append(maskHandle);
   host.append(
-    preview,
+    stage,
     hist,
     status,
     f.node,
@@ -1672,6 +1974,17 @@ function imageStudio(ctx, host) {
     f.update();
     crop.update();
     curveFields.update();
+    const v = ctx.get();
+    cropBox.style.inset = `${(v.cropTop || 0) * 100}% ${(v.cropRight || 0) * 100}% ${(v.cropBottom || 0) * 100}% ${(v.cropLeft || 0) * 100}%`;
+    ring.classList.toggle("is-off", !(v.mask > 0));
+    ring.style.width = `${(v.mask || 0) * 100}%`;
+    ring.style.height = `${(v.mask || 0) * 100}%`;
+    for (const [h, edges] of handleButtons) {
+      const n = Math.round((v[edges[0]] || 0) * 100);
+      h.setAttribute("aria-valuenow", String(n));
+      h.setAttribute("aria-valuetext", edges.map((k) => `${k.replace("crop", "").toLowerCase()} ${Math.round((v[k] || 0) * 100)}%`).join(", "));
+    }
+    maskHandle.setAttribute("aria-valuenow", String(Math.round((v.mask || 0) * 100)));
     if (!frame) frame = requestAnimationFrame(draw);
   }
   return {
@@ -1684,41 +1997,31 @@ function imageStudio(ctx, host) {
 }
 function encodingStudio(ctx, host) {
   host.append(
-    heading("Encoding shelf", "Fields become position, color & size"),
+    heading("Encoding shelf"),
   );
   const plot = canvas(
       "Chart preview from the selected field encodings",
-      400,
-      200,
+      600,
+      340,
       false,
     ),
     shelf = el("div", { class: "d-encoding" }),
+    table = el("div", { class: "d-data-table", role: "table", "aria-label": "Source rows" }),
+    tableNote = el("output", { class: "d-note" }),
+    legend = el("div", { class: "d-legend" }),
     data = ctx.control.data || [],
     fieldsList = ctx.control.fields || Object.keys(data[0] || {}),
     selects = [];
   for (const channel of ["x", "y", "color", "size"]) {
-    const select = el(
-      "select",
-      { "aria-label": `${channel} field` },
-      el("option", { value: "", text: "None" }),
-      ...fieldsList.map((f) =>
-        el("option", {
-          value: typeof f === "object" ? f.name : f,
-          text: typeof f === "object" ? f.name : f,
-        }),
-      ),
-    );
-    select.addEventListener("change", () =>
-      ctx.set({ ...ctx.get(), [channel]: select.value }),
+    const select = choiceBox(
+      `${channel} field`,
+      fieldsList.map((f) => (typeof f === "object" ? f.name : f)),
+      (value) => ctx.set({ ...ctx.get(), [channel]: value }),
+      { none: "None" },
     );
     selects.push([channel, select]);
     shelf.append(
-      el(
-        "label",
-        { class: "d-shelf-slot" },
-        el("b", { text: channel }),
-        select,
-      ),
+      el("div", { class: "d-shelf-slot" }, el("b", { text: channel }), select),
     );
   }
   const mark = choice("Mark", ["point", "bar", "line"], (v) =>
@@ -1727,15 +2030,29 @@ function encodingStudio(ctx, host) {
     stats = el("output", { class: "d-note" });
   host.append(
     plot,
+    legend,
+    stats,
     shelf,
     el("div", { class: "d-tools d-studio-only" }, mark),
-    stats,
+    el("div", { class: "d-studio-only" }, heading("Rows"), table, tableNote),
   );
   plot.addEventListener("d-resize", () => update());
   function update() {
     const v = ctx.get();
     selects.forEach(([k, s]) => (s.value = v[k] || ""));
-    mark.querySelector("select").value = v.mark || "point";
+    if (data.length) {
+      const cols = fieldsList.map((f) => (typeof f === "object" ? f.name : f)),
+        roles = Object.fromEntries(["x", "y", "color", "size"].filter((k) => v[k]).map((k) => [v[k], k]));
+      table.style.setProperty("--cols", cols.length);
+      tableNote.textContent = data.length > 9 ? `First 9 of ${data.length} rows` : `${data.length} rows`;
+      table.replaceChildren(
+        el("div", { role: "row", class: "d-data-head" }, ...cols.map((c) => el("span", { role: "columnheader", text: roles[c] ? `${c} · ${roles[c]}` : c, class: roles[c] ? "is-used" : "" }))),
+        ...data.slice(0, 9).map((row) =>
+          el("div", { role: "row" }, ...cols.map((c) => el("span", { role: "cell", class: roles[c] ? "is-used" : "", text: typeof row[c] === "number" ? Number(row[c].toFixed(2)).toString() : String(row[c]) }))),
+        ),
+      );
+    }
+    mark.querySelector(".d-choice").value = v.mark || "point";
     const g = plot.getContext("2d"),
       w = plot.width,
       h = plot.height;
@@ -1782,12 +2099,55 @@ function encodingStudio(ctx, host) {
       }
     });
     if (v.mark === "line") g.stroke();
+    {
+      const span = (key) => {
+          const vals = data.map((d) => d[key]);
+          return vals.every((n) => typeof n === "number")
+            ? [Math.min(...vals), Math.max(...vals)]
+            : null;
+        },
+        muted = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
+      g.fillStyle = muted;
+      g.font = "10px ui-monospace, monospace";
+      g.textBaseline = "alphabetic";
+      const xs = v.x && span(v.x),
+        ys = v.y && span(v.y);
+      if (xs) {
+        g.textAlign = "left";
+        g.fillText(`${v.x} ${Number(xs[0].toFixed(1))}`, 4, h - 4);
+        g.textAlign = "right";
+        g.fillText(String(Number(xs[1].toFixed(1))), w - 4, h - 4);
+      }
+      if (ys) {
+        g.textAlign = "left";
+        g.fillText(`${v.y} ${Number(ys[1].toFixed(1))}`, 4, 12);
+      }
+      const bits = [];
+      if (v.color) {
+        const vals = data.map((d) => d[v.color]),
+          cats = [...new Set(vals)];
+        if (vals.every((n) => typeof n === "number"))
+          bits.push(el("span", {}, `${v.color} ${Number(Math.min(...vals).toFixed(1))} to ${Number(Math.max(...vals).toFixed(1))}`));
+        else
+          for (const cat of cats) {
+            const dot = el("i");
+            dot.style.background = cssLch([0.65, 0.14, 220 + (cats.indexOf(cat) / Math.max(1, cats.length - 1)) * 130, 1]);
+            bits.push(el("span", {}, dot, `${v.color} ${cat}`));
+          }
+      }
+      if (v.size) {
+        const vals = data.map((d) => d[v.size]);
+        if (vals.every((n) => typeof n === "number"))
+          bits.push(el("span", {}, `size ${v.size} ${Math.min(...vals)} to ${Math.max(...vals)}`));
+      }
+      legend.replaceChildren(...bits);
+    }
     stats.value = `${data.length} rows · x: ${v.x || "index"} · y: ${v.y || "none"} · color: ${v.color || "fixed"} · size: ${v.size || "fixed"}`;
   }
   return { update };
 }
 function samplerStudio(ctx, host) {
-  host.append(heading("Sampler", "Noise becomes a schedule"));
+  host.append(heading("Sampler"));
   const plot = canvas("Sigma schedule at each sampling step", 400, 160, false),
     guidance = canvas(
       "Guidance study: unconditioned prediction plus guidance times the conditional difference",
@@ -1801,6 +2161,8 @@ function samplerStudio(ctx, host) {
       "aria-label": "Seed fingerprint",
     }),
     cells = el("div", { class: "d-step-cells" }),
+    table = el("div", { class: "d-sched-table", role: "table", "aria-label": "Sigma at each step" }),
+    seedGrid = el("div", { class: "d-seed-grid", "aria-hidden": "true" }),
     stats = el("output", { class: "d-note" }),
     f = fields(ctx, [
       ["Steps", "steps", 1, 150, 1],
@@ -1828,12 +2190,14 @@ function samplerStudio(ctx, host) {
     plot,
     cells,
     stats,
+    table,
     el(
       "div",
       { class: "d-studio-only" },
-      heading("Guidance", "u + cfg × (c − u), a one-dimensional study"),
+      heading("Guidance", "u + cfg × (c − u)"),
       guidance,
       seedStrip,
+      seedGrid,
     ),
     f.node,
     el("div", { class: "d-tools" }, scheduler, lock, random),
@@ -1842,7 +2206,7 @@ function samplerStudio(ctx, host) {
     update() {
       const v = ctx.get();
       f.update();
-      scheduler.querySelector("select").value = v.scheduler;
+      scheduler.querySelector(".d-choice").value = v.scheduler;
       lock.textContent = v.locked ? "Seed locked" : "Seed unlocked";
       lock.setAttribute("aria-pressed", String(!!v.locked));
       random.disabled = !!v.locked;
@@ -1851,6 +2215,23 @@ function samplerStudio(ctx, host) {
         ),
         g = plot.getContext("2d");
       grid(g, 400, 160);
+      g.lineWidth = 1;
+      g.setLineDash([3, 3]);
+      g.strokeStyle = getComputedStyle(host).getPropertyValue("--d-muted").trim() || "#888";
+      for (const other of ["karras", "linear", "cosine"]) {
+        if (other === v.scheduler) continue;
+        g.beginPath();
+        schedule(v.steps, other, v.shift).forEach((n, i, all) => {
+          const x = (i / (all.length - 1)) * 400,
+            y = 150 - n * (v.denoise ?? 1) * 140;
+          i ? g.lineTo(x, y) : g.moveTo(x, y);
+        });
+        g.stroke();
+        g.fillStyle = g.strokeStyle;
+        g.font = "10px monospace";
+        g.fillText(other, 6, 150 - schedule(v.steps, other, v.shift)[Math.floor(v.steps / 2)] * (v.denoise ?? 1) * 140 - 4);
+      }
+      g.setLineDash([]);
       g.strokeStyle = accent(host);
       g.lineWidth = 2;
       g.beginPath();
@@ -1899,6 +2280,31 @@ function samplerStudio(ctx, host) {
           const cell = el("i");
           cell.style.opacity = (seed >>> 24) / 255;
           return cell;
+        }),
+      );
+      seedGrid.replaceChildren(
+        ...Array.from({ length: 128 }, () => {
+          seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+          const cell = el("i");
+          cell.style.opacity = (seed >>> 24) / 255;
+          return cell;
+        }),
+      );
+      table.replaceChildren(
+        ...points
+          .slice(1)
+          .map((n, i) => [n, i])
+          .filter(([, i], _, all) => all.length <= 12 || i % Math.ceil(all.length / 12) === 0 || i === all.length - 1)
+          .map(([n, i]) => {
+          const bar = el("i");
+          bar.style.width = `${n * 100}%`;
+          return el(
+            "div",
+            { role: "row" },
+            el("span", { role: "cell", text: String(i + 1) }),
+            el("span", { role: "cell", text: n.toFixed(4) }),
+            el("span", { role: "cell", "aria-label": `sigma ${n.toFixed(4)}` }, bar),
+          );
         }),
       );
       cells.replaceChildren(
@@ -2077,14 +2483,8 @@ function generalStudio(ctx, host) {
       preview.style.background = ctx.get();
     });
   } else if (["asset", "file"].includes(c.type)) {
-    const input = el("input", {
-      type: "file",
-      "aria-label": `Choose ${c.label || "asset"}`,
-    });
     let objectUrl;
-    input.addEventListener("change", () => {
-      const file = input.files[0];
-      if (!file) return;
+    const input = filePick(`Choose ${c.label || "asset"}`, "", (file) => {
       ctx.set(file.name);
       ctx.panel?.emit("asset", { control: c.id, file });
       if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -2196,7 +2596,7 @@ export function createStudio(panel, section, host) {
   // Two columns in a wide studio: the main figure and its direct tools on the left, the rest on the right.
   if (host.dataset.studio !== "motion") {
     const kids = [...host.children].filter((k) => !k.matches(".d-lab-head")),
-      heroSelector = ".d-plot, .d-color-main, .d-type-specimen, .d-type-ruler, .d-step-cells",
+      heroSelector = ".d-plot, .d-stage, .d-color-main, .d-type-specimen, .d-type-ruler, .d-step-cells, .d-type-lab, .d-sched-table, .d-color-plates",
       main = el("div", { class: "d-col d-col-main" }),
       side = el("div", { class: "d-col d-col-side" });
     for (const k of kids)

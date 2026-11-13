@@ -27,8 +27,7 @@ export const heading = (title, note) =>
   el(
     "div",
     { class: "d-lab-head" },
-    el("h3", { text: title }),
-    el("span", { text: note || "" }),
+    el("h3", { text: title, title: note || undefined }),
   );
 export function pointerSurface(node, { start, move, end, cancel }) {
   let active = false,
@@ -168,4 +167,176 @@ export function grid(ctx, w, h) {
     ctx.lineTo(w, (i * h) / 10);
   }
   ctx.stroke();
+}
+/**
+ * A drawn replacement for the browser select. Few short options become a segmented control;
+ * the rest become a button that opens a listbox. `node.value` reads and sets the choice.
+ */
+export function choiceBox(label, options, change, { none } = {}) {
+  const list = options.map((o) =>
+    typeof o === "object" ? o : { value: o, text: String(o) },
+  );
+  if (none !== undefined) list.unshift({ value: "", text: none });
+  const root = el("div", { class: "d-choice", role: "group", "aria-label": label });
+  let current = list[0]?.value ?? "";
+  const label_ = (v) => list.find((o) => o.value === v)?.text ?? String(v);
+  const segmented =
+    list.length <= 4 && list.reduce((n, o) => n + o.text.length, 0) <= 26;
+  const pick = (v, emit) => {
+    if (v === current && emit) return;
+    current = v;
+    paint();
+    if (emit) change(v);
+  };
+  let paint;
+  if (segmented) {
+    const buttons = list.map((o) =>
+      el("button", {
+        type: "button",
+        text: o.text,
+        "aria-pressed": "false",
+        onclick: () => pick(o.value, true),
+      }),
+    );
+    root.classList.add("d-choice-seg");
+    root.append(...buttons);
+    paint = () =>
+      buttons.forEach((b, i) =>
+        b.setAttribute("aria-pressed", String(list[i].value === current)),
+      );
+    root.addEventListener("keydown", (e) => {
+      if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+      e.preventDefault();
+      const i = list.findIndex((o) => o.value === current),
+        n = Math.max(0, Math.min(list.length - 1, i + (e.key === "ArrowRight" ? 1 : -1)));
+      pick(list[n].value, true);
+      buttons[n].focus();
+    });
+  } else {
+    const trigger = el("button", {
+        type: "button",
+        class: "d-choice-trigger",
+        "aria-haspopup": "listbox",
+        "aria-expanded": "false",
+      }),
+      pop = el("div", { class: "d-choice-pop", role: "listbox", "aria-label": label, hidden: "" }),
+      items = [];
+    const build = () => {
+      if (items.length) return;
+      for (const o of list)
+        items.push(
+          el("div", {
+            role: "option",
+            tabindex: "-1",
+            class: "d-choice-item",
+            text: o.text,
+            "data-value": o.value,
+          }),
+        );
+      pop.append(...items);
+    };
+    root.append(trigger);
+    const close = (focus) => {
+      pop.hidden = true;
+      pop.remove();
+      trigger.setAttribute("aria-expanded", "false");
+      document.removeEventListener("pointerdown", outside, true);
+      if (focus) trigger.focus();
+    };
+    const outside = (e) => {
+      if (!root.contains(e.target)) close(false);
+    };
+    const open = () => {
+      build();
+      paint();
+      const r = trigger.getBoundingClientRect();
+      (root.closest(".dials") || document.body).append(pop);
+      pop.hidden = false;
+      pop.style.minWidth = `${r.width}px`;
+      const below = innerHeight - r.bottom > Math.min(220, pop.offsetHeight + 8);
+      pop.style.left = `${r.left}px`;
+      pop.style.top = below ? `${r.bottom + 2}px` : "";
+      pop.style.bottom = below ? "" : `${innerHeight - r.top + 2}px`;
+      trigger.setAttribute("aria-expanded", "true");
+      document.addEventListener("pointerdown", outside, true);
+      (items.find((i) => i.dataset.value === String(current)) || items[0])?.focus();
+    };
+    trigger.addEventListener("click", () => (pop.hidden ? open() : close(true)));
+    trigger.addEventListener("keydown", (e) => {
+      if (["ArrowDown", "ArrowUp", "Enter", " "].includes(e.key) && pop.hidden) {
+        e.preventDefault();
+        open();
+      }
+    });
+    pop.addEventListener("click", (e) => {
+      const item = e.target.closest("[role=option]");
+      if (!item) return;
+      pick(list.find((o) => String(o.value) === item.dataset.value).value, true);
+      close(true);
+    });
+    pop.addEventListener("keydown", (e) => {
+      const i = items.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") items[Math.min(items.length - 1, i + 1)].focus();
+      else if (e.key === "ArrowUp") items[Math.max(0, i - 1)].focus();
+      else if (e.key === "Home") items[0].focus();
+      else if (e.key === "End") items.at(-1).focus();
+      else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        document.activeElement.click();
+        return;
+      } else if (e.key === "Escape" || e.key === "Tab") {
+        if (e.key === "Escape") e.stopPropagation();
+        close(e.key === "Escape");
+        return;
+      } else return;
+      e.preventDefault();
+    });
+    paint = () => {
+      trigger.textContent = label_(current);
+      trigger.title = `${label}: ${label_(current)}`;
+      trigger.setAttribute("aria-label", `${label}: ${label_(current)}`);
+      items.forEach((i) =>
+        i.setAttribute("aria-selected", String(i.dataset.value === String(current))),
+      );
+    };
+  }
+  Object.defineProperty(root, "value", {
+    get: () => current,
+    set: (v) => {
+      if (v !== current && list.some((o) => o.value === v)) pick(v, false);
+    },
+  });
+  paint();
+  return root;
+}
+/** A drawn file chooser that also takes a dropped file. */
+export function filePick(label, accept, onFile, hint = "or drop one here", inputLabel = label) {
+  const input = el("input", {
+      type: "file",
+      accept,
+      tabindex: "-1",
+      "aria-label": inputLabel,
+      class: "d-sr",
+    }),
+    status = el("span", { class: "d-drop-hint", text: hint }),
+    trigger = button(label, label, () => input.click(), "d-drop-button"),
+    root = el("div", { class: "d-drop" }, trigger, status, input);
+  const take = (file) => {
+    if (!file) return;
+    status.textContent = file.name;
+    onFile(file);
+  };
+  input.addEventListener("change", () => take(input.files[0]));
+  root.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    root.classList.add("is-over");
+  });
+  root.addEventListener("dragleave", () => root.classList.remove("is-over"));
+  root.addEventListener("drop", (e) => {
+    e.preventDefault();
+    root.classList.remove("is-over");
+    take(e.dataTransfer?.files?.[0]);
+  });
+  root.status = status;
+  return root;
 }

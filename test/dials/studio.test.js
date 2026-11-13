@@ -148,8 +148,8 @@ test(
           const text = () =>
             q('document.querySelector(".d-compare").textContent');
           const first = await text();
-          assert.match(first, /Settle\s*440 ms\s*440 ms/);
-          assert.match(first, /Overshoot\s*13\.5%\s*13\.5%/);
+          assert.match(first, /Settle\s*440 ms\s*980 ms/);
+          assert.match(first, /Overshoot\s*13\.5%\s*0\.0%/);
           assert.match(
             await q('document.querySelector("[aria-label=\\"CSS easing code\\"]").textContent'),
             /^linear\(0, .*1\)$/,
@@ -217,7 +217,7 @@ test(
           const after = await q('dialsDemo.panels[2].get("ease").range[0]');
           assert.ok(Math.abs(after - 0.3) < 0.02, "range start " + after);
           // Drag the rotation lane key at time 1 down: a value track is written to the response value.
-          const lane2y = box.y + (74 / 92) * box.h;
+          const lane2y = box.y + (107 / 136) * box.h;
           await browser.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: px(1), y: lane2y });
           await browser.send("Input.dispatchMouseEvent", { type: "mousePressed", x: px(1), y: lane2y, button: "left", buttons: 1, clickCount: 1 });
           await browser.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: px(1), y: lane2y - 14, buttons: 1 });

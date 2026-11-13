@@ -667,8 +667,11 @@
 }
 .d-section[data-depth="3"] .d-section-content {
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: 330px minmax(0, 1fr);
   overflow: visible;
+}
+.d-section[data-depth="3"] .d-rows .d-row {
+  grid-template-columns: 12px minmax(64px, 0.8fr) 60px minmax(120px, 1.5fr);
 }
 .d-section[data-depth="3"] .d-rows {
   padding-top: 12px;
@@ -752,9 +755,7 @@
   border-bottom: 1px solid var(--d-text);
 }
 .dials .d-section-name {
-  font: 600 11px var(--d-mono) !important;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font: 600 12px var(--d-sans) !important;
 }
 .dials .d-row {
   height: 36px;
@@ -779,9 +780,7 @@
   border-top: 1px solid var(--d-text);
 }
 .dials .d-lab h3 {
-  font: 600 11px var(--d-mono);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font: 600 12px var(--d-sans);
 }
 .dials .d-plot {
   border-color: var(--d-text);
@@ -841,10 +840,12 @@
 .d-segmented button {
   flex: 1;
   min-width: 0;
-  padding: 2px 4px;
+  padding: 2px 2px;
   font-size: 9px;
   border-radius: 2px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .d-segmented button[aria-checked="true"] {
   background: var(--d-accent);
@@ -1049,6 +1050,7 @@
   grid-area: side;
 }
 /* Rows outside the visible area are not styled, laid out or painted until they scroll in. */
+.d-section[data-depth="1"] .d-row,
 .d-section[data-depth="2"] .d-row,
 .d-section[data-depth="3"] .d-rows .d-row {
   content-visibility: auto;
@@ -1115,4 +1117,460 @@
 .d-section[data-depth="2"] .d-lab {
   content-visibility: auto;
   contain-intrinsic-size: auto 340px;
+}
+
+/* Drawn choice control (replaces the browser select). */
+.d-choice {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.d-choice-seg {
+  border: 1px solid var(--d-line);
+  border-radius: 4px;
+}
+.d-choice-seg button {
+  border: 0;
+  background: transparent;
+  font-size: 10px;
+  padding: 0 9px;
+  min-height: 24px;
+  color: var(--d-muted);
+}
+.d-choice-seg button[aria-pressed="true"] {
+  background: var(--d-accent);
+  color: var(--d-on-accent);
+}
+.d-choice-trigger {
+  min-height: 24px;
+  min-width: 96px;
+  max-width: 100%;
+  padding: 0 24px 0 8px;
+  border: 1px solid var(--d-line);
+  border-radius: 4px;
+  background: var(--d-well) !important;
+  font: 10px var(--d-mono);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+}
+.d-choice-trigger::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  top: 9px;
+  width: 5px;
+  height: 5px;
+  border: solid var(--d-muted);
+  border-width: 0 1px 1px 0;
+  transform: rotate(45deg);
+}
+.d-choice-pop {
+  position: fixed;
+  z-index: 300;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--d-surface);
+  border: 1px solid var(--d-text);
+  border-radius: 4px;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.28);
+  padding: 2px;
+}
+.d-choice-pop[hidden] {
+  display: none;
+}
+.d-choice-item {
+  padding: 5px 10px;
+  font: 10px var(--d-mono);
+  cursor: pointer;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.d-choice-item:hover,
+.d-choice-item:focus-visible {
+  background: var(--d-hover);
+  outline: 2px solid var(--d-accent);
+  outline-offset: -2px;
+}
+.d-choice-item[aria-selected="true"] {
+  color: var(--d-accent);
+  font-weight: 600;
+}
+.d-shelf-slot .d-choice {
+  flex: 1;
+}
+.d-shelf-slot .d-choice-trigger {
+  width: 100%;
+}
+.d-tool > .d-choice {
+  flex: 0 1 auto;
+}
+/* Drawn file chooser with a drop target. */
+.d-drop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px;
+  border: 1px dashed var(--d-line);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.d-drop.is-over {
+  border-color: var(--d-accent);
+  background: var(--d-well);
+}
+.d-drop-button {
+  font-size: 11px;
+  min-height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--d-text);
+  background: var(--d-surface);
+}
+.d-drop-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.d-eye {
+  width: 100%;
+  cursor: crosshair;
+}
+/* Plated swatches: each carries what the color is and how it reads. */
+.d-swatches button.d-plate {
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 6px 7px;
+  text-align: left;
+  font: 10px/1.3 var(--d-mono);
+  overflow: hidden;
+}
+.d-plate b {
+  font-weight: 650;
+  font-size: 11px;
+}
+.d-plate[data-ink="dark"] {
+  color: #111;
+}
+.d-plate[data-ink="light"] {
+  color: #fff;
+}
+.d-color-plates {
+  display: grid;
+  gap: 14px;
+}
+.d-color-plates > div {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.d-color-plates .d-swatches button.d-plate {
+  min-height: 84px;
+}
+/* Image stage with crop and mask handles drawn on the image. */
+.d-stage {
+  position: relative;
+  line-height: 0;
+}
+.d-stage .d-plot {
+  width: 100%;
+}
+.d-crop-box {
+  position: absolute;
+  outline: 1px solid #fff;
+  box-shadow:
+    0 0 0 1px #111,
+    0 0 0 100vmax rgb(0 0 0 / 0.0);
+  pointer-events: none;
+}
+.d-crop-h {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #111;
+  background: #fff;
+  border-radius: 0;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: move;
+}
+.d-crop-nw { left: 0; top: 0; cursor: nwse-resize; }
+.d-crop-n { left: 50%; top: 0; cursor: ns-resize; }
+.d-crop-ne { left: 100%; top: 0; cursor: nesw-resize; }
+.d-crop-e { left: 100%; top: 50%; cursor: ew-resize; }
+.d-crop-se { left: 100%; top: 100%; cursor: nwse-resize; }
+.d-crop-s { left: 50%; top: 100%; cursor: ns-resize; }
+.d-crop-sw { left: 0; top: 100%; cursor: nesw-resize; }
+.d-crop-w { left: 0; top: 50%; cursor: ew-resize; }
+.d-mask-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px dashed #fff;
+  border-radius: 50%;
+  outline: 1px dashed #111;
+  pointer-events: none;
+}
+.d-mask-ring.is-off {
+  border-color: transparent;
+  outline-color: transparent;
+}
+.d-mask-h {
+  left: 100%;
+  top: 50%;
+  border-radius: 50%;
+  margin: -7px 0 0 -7px;
+  cursor: ew-resize;
+}
+.d-crop-h:focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 2px;
+}
+/* Typography lab. */
+.d-type-lab {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.d-type-lab h4,
+.d-type-side h4 {
+  margin: 0 0 6px;
+  font: 600 11px var(--d-sans);
+  color: var(--d-muted);
+}
+.d-axis-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 4px;
+}
+.d-axis-strip button {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: 8px 2px 4px;
+  border: 1px solid var(--d-line);
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.d-axis-strip button span {
+  font-size: 26px;
+  line-height: 1;
+}
+.d-axis-strip button small {
+  font: 9px var(--d-mono);
+  color: var(--d-muted);
+}
+.d-axis-strip button[aria-pressed="true"] {
+  border-color: var(--d-accent);
+  box-shadow: inset 0 0 0 1px var(--d-accent);
+}
+.d-glyphs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
+  border-left: 1px solid var(--d-line);
+  border-top: 1px solid var(--d-line);
+}
+.d-glyphs span {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  font-size: 22px;
+  border-right: 1px solid var(--d-line);
+  border-bottom: 1px solid var(--d-line);
+}
+.d-waterfall {
+  display: grid;
+  gap: 4px;
+}
+.d-waterfall > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.d-waterfall small {
+  font: 9px var(--d-mono);
+  color: var(--d-muted);
+}
+.d-type-side {
+  display: grid;
+  gap: 16px;
+}
+/* Slider inside a studio field. */
+.d-field-slide {
+  grid-column: 1 / -1;
+}
+.d-field-slide input[type="range"] {
+  width: 100%;
+  min-width: 0;
+}
+/* Sampler schedule table and previews. */
+.d-sched-table {
+  display: grid;
+  gap: 3px;
+  font: 10px var(--d-mono);
+}
+.d-sched-table > div {
+  display: grid;
+  grid-template-columns: 34px 58px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+.d-sched-table i {
+  display: block;
+  height: 8px;
+  background: var(--d-accent);
+}
+.d-seed-grid {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 2px;
+}
+.d-seed-grid i {
+  aspect-ratio: 1;
+  background: var(--d-accent);
+}
+.d-data-table {
+  display: grid;
+  font: 10px var(--d-mono);
+  border: 1px solid var(--d-line);
+}
+.d-data-table > div {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  border-bottom: 1px solid var(--d-line);
+}
+.d-data-table span {
+  padding: 3px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.d-data-table .is-used {
+  color: var(--d-accent);
+}
+.d-data-head {
+  position: sticky;
+  top: 0;
+  background: var(--d-well);
+  font-weight: 600;
+}
+.d-key-fig {
+  display: inline-flex;
+}
+.d-key-fig svg {
+  display: block;
+}
+.d-motion-details {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+.d-motion-details .d-lab-head {
+  margin-top: 6px;
+}
+.d-exports code.d-export {
+  max-height: 150px;
+}
+.d-field-slide {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 76px;
+  align-items: center;
+  gap: 10px;
+}
+.d-lab-sliders {
+  display: grid;
+  grid-template-columns: 1fr !important;
+  gap: 4px;
+}
+.d-section[data-depth="3"] .d-type-specimen {
+  min-height: min(250px, 30vh);
+}
+.d-eye[hidden] {
+  display: none;
+}
+.d-tool {
+  flex-wrap: wrap;
+}
+.d-color-plates {
+  gap: 24px;
+}
+.d-drop {
+  flex-wrap: wrap;
+}
+.d-motion-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.d-motion-pair .d-plot {
+  min-width: 0;
+}
+.d-exports code.d-export {
+  max-height: 64px;
+}
+.d-glyphs {
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+}
+.d-glyphs span {
+  height: 34px;
+  font-size: 18px;
+}
+.d-track output {
+  white-space: nowrap;
+  flex: none;
+}
+.d-section[data-depth="2"] .d-motion-pair .d-plot {
+  height: 42px;
+}
+.d-value > .d-choice {
+  width: 100%;
+}
+.d-value .d-choice-trigger {
+  width: 100%;
+  min-width: 0;
+  height: 24px;
+}
+.d-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font: 10px var(--d-mono);
+  color: var(--d-muted);
+  min-height: 16px;
+}
+.d-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.d-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.d-color-plates > div + div {
+  margin-top: 24px;
+}
+.d-plate b,
+.d-plate small {
+  background: var(--d-surface);
+  color: var(--d-text);
+  padding: 0 4px;
+  line-height: 1.5;
+}
+.d-plate small:empty {
+  display: none;
 }

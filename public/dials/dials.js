@@ -13,7 +13,7 @@ import {
 } from "./values.js";
 import { parseColor, cssLch } from "./color.js";
 import { drawFigure } from "./figures.js";
-import { el, button, pointerSurface } from "./dom.js";
+import { el, button, pointerSurface, choiceBox } from "./dom.js";
 import { createStudio } from "./studios.js";
 const controls = new Map(),
   figures = new Map();
@@ -317,16 +317,18 @@ export class Dials extends EventTarget {
         input.append(b);
       }
     } else if (c.type === "select") {
-      input = el("select", { "aria-labelledby": uid });
-      (c.options || []).forEach((o, i) =>
-        input.append(
-          el("option", { value: i, text: typeof o === "object" ? o.label : o }),
-        ),
+      input = choiceBox(
+        c.label,
+        (c.options || []).map((o, i) => ({
+          value: String(i),
+          text: typeof o === "object" ? o.label : String(o),
+        })),
+        (i) => {
+          const o = c.options[Number(i)];
+          this.transact(c.id, typeof o === "object" ? o.value : o);
+        },
       );
-      input.addEventListener("change", () => {
-        const o = c.options[Number(input.value)];
-        this.transact(c.id, typeof o === "object" ? o.value : o);
-      });
+      input.setAttribute("aria-labelledby", uid);
     } else {
       input = el("input", {
         type: "text",
@@ -569,9 +571,11 @@ export class Dials extends EventTarget {
           !Array.isArray(c.value)
             ? this.summary(c)
             : format(c.value, c);
-      else if (input.tagName === "SELECT")
-        input.value = (c.options || []).findIndex((o) =>
-          same(typeof o === "object" ? o.value : o, c.value),
+      else if (input.classList.contains("d-choice"))
+        input.value = String(
+          (c.options || []).findIndex((o) =>
+            same(typeof o === "object" ? o.value : o, c.value),
+          ),
         );
     }
     if (input?.getAttribute("role") === "switch") {

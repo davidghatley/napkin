@@ -91,7 +91,20 @@ export function toHex(lch) {
   );
 }
 let probe;
+// Colors that do not depend on the surrounding element convert once; callers get a copy.
+const parsed = new Map();
+const contextual = /var\(|current|light-dark|inherit|initial|unset|revert|system|canvas|text|field|button|link|mark|accent/i;
 export function parseColor(value, parent = document.documentElement) {
+  const key = typeof value === "string" && !contextual.test(value) ? value : null;
+  if (key && parsed.has(key)) return [...parsed.get(key)];
+  const out = convert(value, parent);
+  if (key) {
+    if (parsed.size > 2000) parsed.clear();
+    parsed.set(key, [...out]);
+  }
+  return out;
+}
+function convert(value, parent) {
   if (!probe) {
     probe = document.createElement("span");
     probe.hidden = true;
