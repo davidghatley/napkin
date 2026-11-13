@@ -415,6 +415,7 @@ test("cheats are rejected and honest work passes: focus ring, causal scrub, lead
     r.writeHead(200, { "content-type": "text/html" });
     r.end("<body>" + (pages[q.url.slice(1)] || ""));
   }).listen(0, "127.0.0.1");
+  await new Promise((r) => srv.once("listening", r));
   const base = "http://127.0.0.1:" + srv.address().port + "/";
   const b = await launchChromium();
   try {
