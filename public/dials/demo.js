@@ -297,21 +297,15 @@ for (const sample of samples) {
   );
   const subject = el("div", { class: "subject", role: "img", "aria-label": `${sample.title}: live result of the values below` }),
     mount = el("div", { class: "study-mount" });
-  card.append(subject, mount);
+  card.append(mount);
   document.querySelector("#studies").append(card);
   let draw = () => {};
   const panel = new Dials(mount, {
     theme: "light",
     studio: "viewport",
     label: sample.title,
-    // The result stays in sight at every depth: above the rows at dial and bench, at the top of the
-    // studio's rail (beside the rows it came with) when the studio covers the page.
     onDepth: (id, depth) => {
       card.classList.toggle("is-studio", depth === 3);
-      const rail = depth === 3 && mount.querySelector(`.d-section[data-section="${CSS.escape(id)}"] .d-rail`);
-      if (rail) rail.prepend(subject);
-      else if (subject.parentElement !== card) card.insertBefore(subject, mount);
-      subject.classList.toggle("is-anchored", !!rail);
       requestAnimationFrame(() => draw());
     },
     onChange: (event) => {
@@ -321,7 +315,9 @@ for (const sample of samples) {
     },
   });
   panel.addEventListener("paint", (e) => draw(e.detail.control));
+  // The library keeps the result in view: under the head at dial and bench, atop the studio rail in the studio.
   panel.render(sample.schema);
+  panel.setSubject(panel.schema.sections[0].id, subject, false);
   draw = subjects[sample.id]?.(subject, (id) => panel.get(id), panel) || (() => {});
   requestAnimationFrame(() => draw());
   // Subjects drawn to their box redraw when the box changes size (a folded panel gives them room).

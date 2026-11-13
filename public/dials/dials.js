@@ -300,7 +300,9 @@ export class Dials extends EventTarget {
       const railHost = el("div", { class: "d-rail" });
       content.append(rowlist, railHost, labHost);
       head.insertBefore(tabs, resize);
-      node.append(head, body);
+      const subjectHost = el("div", { class: "d-subject" });
+      subjectHost.hidden = true;
+      node.append(head, subjectHost, body);
       const s = {
         schema: section,
         node,
@@ -315,6 +317,7 @@ export class Dials extends EventTarget {
         rowlist,
         labHost,
         railHost,
+        subjectHost,
         tabs,
         studioControl: first?.id,
         depth: 0,
@@ -338,6 +341,8 @@ export class Dials extends EventTarget {
         false,
       );
       fragment.append(node);
+      const given = this.options.subject?.(section.id, section);
+      if (given) this.setSubject(section.id, given, false);
       this.setDepth(section.id, section.depth || 2, false);
     }
     this.root.append(fragment);
@@ -918,7 +923,54 @@ export class Dials extends EventTarget {
       b.setAttribute("aria-pressed", String(s.schema.controls[i].id === id)),
     );
     s.labHost.inert = !!c?.disabled;
+    this.placeSubject(s, false);
+    this.markEditing(s);
     if (update) s.lab?.update?.();
+  }
+  /**
+   * The thing a section edits (a card, a specimen, a chart: any element the host owns) stays in view
+   * at every depth. It sits under the section's head at dial and bench, and at the top of the
+   * studio's rail, over the rows it came with, when the studio opens; the move is animated from
+   * where it was. Pass null to let go of it. Also available as options.subject(sectionId, section).
+   */
+  setSubject(id, node, animate = true) {
+    const s = this.sections.get(id);
+    if (!s) return this;
+    s.subject = node || null;
+    if (!node) s.subjectHost.hidden = true;
+    this.placeSubject(s, animate);
+    return this;
+  }
+  placeSubject(s, animate = true) {
+    const node = s.subject;
+    if (!node) return;
+    const rail = s.depth === 3 && s.lab && s.railHost.isConnected,
+      target = rail ? s.railHost : s.subjectHost,
+      before = animate && node.isConnected ? node.getBoundingClientRect() : null;
+    if (rail) target.prepend(node);
+    else if (node.parentElement !== target) target.replaceChildren(node);
+    s.subjectHost.hidden = !!rail || !s.subjectHost.firstChild;
+    node.classList.toggle("is-anchored", !!rail);
+    node.dataset.anchored = rail ? "studio" : "section";
+    if (before && before.width && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const after = node.getBoundingClientRect();
+      if (Math.abs(before.x - after.x) + Math.abs(before.y - after.y) > 1)
+        node.animate(
+          [{ transformOrigin: "top left", transform: `translate(${before.x - after.x}px,${before.y - after.y}px)` }, { transformOrigin: "top left", transform: "none" }],
+          { duration: 160, easing: "cubic-bezier(.2,.8,.2,1)" },
+        );
+    }
+  }
+  /** Mark the row whose studio is open, so the row and its subject stay found while the pane is large. */
+  markEditing(s) {
+    if (s.depth !== 3 && !s.marked) return;
+    s.marked = s.depth === 3;
+    for (const c of s.schema.controls) {
+      const row = this.rows.get(c.id);
+      if (!row) continue;
+      if (s.depth === 3 && c.id === s.studioControl) row.node.dataset.editing = "true";
+      else delete row.node.dataset.editing;
+    }
   }
   open(id, depth = 3) {
     const r = this.rows.get(id);
@@ -1158,6 +1210,8 @@ export class Dials extends EventTarget {
       b.setAttribute("aria-pressed", String(i + 1 === s.depth)),
     );
     s.lab?.depth?.(s.depth);
+    this.placeSubject(s, false);
+    this.markEditing(s);
     let shown = 0;
     for (const c of s.schema.controls) {
       const row = this.rows.get(c.id);
@@ -1166,6 +1220,7 @@ export class Dials extends EventTarget {
     }
     s.node.style.setProperty("--d-rows-shown", s.depth === 1 ? 0 : shown);
     this.options.onDepth?.(id, s.depth);
+    this.placeSubject(s, animate);
     this.emit("depth", { section: id, depth: s.depth });
     if (
       animate &&
