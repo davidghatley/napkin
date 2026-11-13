@@ -1,6 +1,8 @@
 /* The DREAM 3 surface: the instrument panel host, the palette, the key map, card focus, board groups, compare and present.
    It takes the dials design language (docs/dials.md): Inter for every word, one cobalt accent, hairline rules, 32 px rows,
    Stem 7 only for hero numerals. Light and dark follow the chrome tokens of canvas.css. */
+/* The chrome's text is set in Inter from the first paint: the face is preloaded and blocks briefly instead of swapping in late (a late swap moves every line). */
+@font-face { font-family: "Dials Inter"; src: url("/dials/fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: block; }
 :root {
   --nk-sans: "Dials Inter", "Inter Var", "Inter", ui-sans-serif, system-ui, sans-serif;
   --nk-accent: #1f45d3; --nk-accent-text: #1c3fc4; --nk-select: #1f45d3;
@@ -11,8 +13,13 @@ body { font-family: var(--nk-sans); }
 
 /* ------------------------------------------------------------------ instruments (one panel, drawn by dials) */
 #instruments[hidden], #panel[hidden] { display: none; }
-#instruments { border-top: 1px solid var(--nk-line); }
-#panel:empty + #instruments, #panel[hidden] + #instruments { border-top: 0; }
+/* One column, split in two fixed parts when both are showing: the element panel above scrolls in the upper part, the instrument panel in the
+   lower. Neither part changes size when the other one's content does (a staged edit, a note, a section that opens), so nothing moves. */
+#inspector { display: flex; flex-direction: column; overflow: hidden; }
+#inspector > #panel { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; }
+#inspector > #instruments { flex: 0 0 40%; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; border-top: 1px solid var(--nk-line); }
+#inspector > #panel:empty + #instruments, #inspector > #panel[hidden] + #instruments { flex: 1 1 auto; border-top: 0; }
+#inspector > #instruments[hidden] { display: none; }
 #instruments .instruments { display: block; }
 #instruments .inst-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 14px 10px; }
 #instruments .inst-head h2 { margin: 0; font: 600 14px/20px var(--nk-sans); color: var(--nk-text); overflow-wrap: anywhere; }

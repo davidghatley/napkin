@@ -66,18 +66,21 @@ export function initSurface(ctx) {
 
   async function selectPath(path) {
     const want = String(path ?? '').trim();
+    const startFocus = document.activeElement;
     if (!want) { ctx.hint('Name a file: Select orbit.html'); return; }
     const lookup = () => componentOfItem(want) || (ctx.state.components.all().find((x) => x.path === want || ctx.itemOf(x.component) === want) || ctx.state.components.all().find((x) => norm(x.name) === norm(want)))?.component;
     let id = lookup();
+    if (!id) ctx.instruments?.preview(want); // a file's id is its path: its panel can be read and drawn before its card exists
     for (let i = 0; i < 60 && !id && performance.now() < 20000; i++) { await new Promise((r) => setTimeout(r, 50)); id = lookup(); } // just after load the canvas may still be reading its files
     if (!id) { ctx.hint(`No file called “${want}” on this canvas`); return; }
-    ctx.stage.live?.(id);
     ctx.instruments?.preview(ctx.itemOf(id), id); // the panel does not wait for a frame that is still loading
+    ctx.stage.live?.(id);
     let sel = cardSelection(id);
     for (let i = 0; i < 40 && sel && sel.node === '' && ctx.state.components.get(id)?.kind === 'html'; i++) { await new Promise((r) => setTimeout(r, 50)); sel = cardSelection(id); } // a frame still loading
     ctx.select(sel);
     bringIntoView(id);
-    if (!document.activeElement?.closest?.('#instruments, #panel')) focusCard(id); // a frame that took a while to load must not take focus back from a control the person has reached since
+    const moved = document.activeElement !== startFocus && document.activeElement?.closest?.('#instruments, #panel');
+    if (!moved) focusCard(id); // a frame that took a while to load must not take focus back from a control the person has reached since
   }
 
   // Spatial focus: the nearest card that way, judged by the centres of the cards on screen (straight ahead beats diagonal).

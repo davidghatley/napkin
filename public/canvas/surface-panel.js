@@ -59,15 +59,15 @@ export function initInstruments(ctx) {
   // One read of an item's controls at a time (a phrase being typed asks for the same item at every key). A write made while a
   // read was out makes that read stale, so its revision is not kept.
   const flight = new Map(), gen = new Map();
-  function read(id) {
+  function read(id, priority = 'high') { // a read a person waits for goes first in the browser's queue; the warm-up ones go last
     if (flight.has(id)) return flight.get(id);
-    const p = readNow(id).finally(() => flight.delete(id));
+    const p = readNow(id, priority).finally(() => flight.delete(id));
     flight.set(id, p);
     return p;
   }
-  async function readNow(id) {
+  async function readNow(id, priority) {
     const g = gen.get(id) || 0;
-    const r = await fetch('/api/controls/' + enc(id));
+    const r = await fetch('/api/controls/' + enc(id), { priority });
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || 'no instruments');
     // A section the person opened at a depth carries it; its controls keep the depth they were declared with.
@@ -107,17 +107,27 @@ export function initInstruments(ctx) {
     return `<header class="inst-head"><div><h2>${esc(name)}</h2><p>${esc(what)}</p></div><div class="inst-tools"><button type="button" data-inst-undo title="Undo the last instrument change (G U)">Undo</button>${many ? '' : `<a href="/view/${enc(list[0])}" target="_blank" rel="noopener" title="Open this file alone">Open</a>`}</div></header><p class="inst-status" role="status" aria-live="polite"></p>`;
   }
 
+  // The selection changes, so the element panel above may appear, vanish or change height and this panel's top edge moves with it. For two
+  // frames it is out of sight, so the move is never a layout shift. (A panel the person is working in keeps its place.)
+  let quietTimer = 0;
+  function quiet() {
+    if (host.contains(document.activeElement)) return;
+    host.style.visibility = 'hidden';
+    cancelAnimationFrame(quietTimer);
+    quietTimer = requestAnimationFrame(() => { quietTimer = requestAnimationFrame(() => { host.style.visibility = ''; }); });
+  }
   async function show() {
     const list = ids(), mine = ++token;
     const key = list.join('\n');
-    if (!list.length) { if (previewing > performance.now() && panel) return; clear(); return; } // a file being selected (its frame still loading) keeps its panel
+    if (!list.length) { if (previewing > performance.now() && panel) return; quiet(); clear(); return; } // a file being selected (its frame still loading) keeps its panel
     previewing = 0;
     // The same selection: keep the panel (and its focus, gesture and depths), refresh its values.
     if (key === shown && panel) { refresh(); return; }
+    quiet();
     const cached = list.map((id) => schemas.get(id));
     if (cached.every(Boolean)) draw(list, cached, mine); // drawn at once from what was read before, then brought up to date
     let fresh;
-    try { fresh = await Promise.all(list.map(read)); } catch (e) { if (mine === token) { clear(); host.innerHTML = `<p class="inst-empty" role="alert">${esc(plain(e.message))}</p>`; } return; }
+    try { fresh = await Promise.all(list.map((id) => read(id))); } catch (e) { if (mine === token) { clear(); host.innerHTML = `<p class="inst-empty" role="alert">${esc(plain(e.message))}</p>`; } return; }
     if (mine !== token) return;
     if (!cached.every(Boolean) || !same(cached.map((s) => structure(s)), fresh.map((s) => structure(s)))) draw(list, fresh, mine);
     else values(fresh);
@@ -139,7 +149,10 @@ export function initInstruments(ctx) {
     // Pictures come from the file's own bytes (/raw/<id>); a control that is not a picture says so instead of drawing one.
     panel = new Dials(host.querySelector('.inst-mount'), { studio: 'viewport', history: false, pagePalette: false, label: 'Instruments', source: (c) => (['image', 'asset', 'file'].includes(c.type) ? '/raw/' + enc(list[0]) : null) });
     panel.items = list;
+    const t0 = performance.now();
     panel.render(schema);
+    api.lastDrawMs = performance.now() - t0;
+    performance.mark('inst-drawn');
     for (const sec of schema.sections) for (const c of sec.controls) if (Array.isArray(c.palette) && c.palette.length) colorObjects(panel, c.id).palette.splice(0, Infinity, ...c.palette); // the colours kept before
     for (const f of host.querySelectorAll('.d-figure')) f.setAttribute('data-figure', ''); // every figure is findable as one, whatever it draws it with
     shown = list.join('\n');
@@ -155,7 +168,7 @@ export function initInstruments(ctx) {
   async function refresh() {
     if (!panel) return;
     const list = panel.items, mine = token;
-    try { const fresh = await Promise.all(list.map(read)); if (mine === token && panel?.items === list) values(fresh); } catch {}
+    try { const fresh = await Promise.all(list.map((id) => read(id))); if (mine === token && panel?.items === list) values(fresh); } catch {}
   }
   const status = (text) => { const s = host.querySelector('.inst-status'); if (s) s.textContent = plain(text); };
 
@@ -278,7 +291,7 @@ export function initInstruments(ctx) {
   function depth(label, d) {
     const row = find(label);
     if (!row) return false;
-    if (d === 3) panel.open(row.c.id, 3); else panel.setDepth(row.section.schema.id, d);
+    if (d === 3) panel.open(row.c.id, 3); else panel.setDepth(row.section.schema.id, d, false); // a command settles at once: its result is measured and read, not watched
     if (d === 3) (row.section.node.querySelector('.d-lab [tabindex="0"], .d-lab button, .d-lab input') || row.section.node.querySelector('button'))?.focus({ focusVisible: true });
     else (d === 1 ? row.section.toggle : row.label).focus({ focusVisible: true });
     return true;
@@ -303,7 +316,7 @@ export function initInstruments(ctx) {
     const onScreen = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight; };
     const cards = [...document.querySelectorAll('#world [data-item-id]')]; // the cards on screen first, then the rest, at most 120
     const ids = [...new Set([...cards.filter(onScreen), ...cards].map((e) => e.dataset.itemId))].filter((id) => !schemas.has(id)).slice(0, 120);
-    for (let i = 0; i < ids.length; i += 4) { await Promise.all(ids.slice(i, i + 4).map((id) => read(id).catch(() => {}))); await new Promise((r) => (window.requestIdleCallback || setTimeout)(r)); }
+    for (let i = 0; i < ids.length; i += 2) { await Promise.all(ids.slice(i, i + 2).map((id) => read(id, 'low').catch(() => {}))); await new Promise((r) => (window.requestIdleCallback || setTimeout)(r)); } // two at a time: the browser has six connections and a person's own read needs one
   };
   let warmed = 0;
   const warmSoon = () => { clearTimeout(warmed); warmed = setTimeout(() => (window.requestIdleCallback || setTimeout)(warm), 250); };
@@ -311,6 +324,7 @@ export function initInstruments(ctx) {
   warmSoon(); setTimeout(warmSoon, 1500);
   // Draw the panel for a file before the canvas has finished selecting it (a frame still loading). The selection that follows keeps it.
   async function preview(id, component) {
+    performance.mark('inst-preview');
     if (!id || shown === id) return;
     if (component) cardOf.set(id, component);
     previewing = performance.now() + 4000;
