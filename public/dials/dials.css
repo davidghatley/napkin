@@ -4825,3 +4825,16 @@ ul.ki-tags {
 .ki-cards:not(.ki-choice .ki-cards) {
   grid-auto-rows: 132px;
 }
+/* A stage with nothing to draw large (plain word options, no file chosen) takes the height of what
+   it holds, so the readout and fields sit right under it instead of below an empty field. */
+.ki-stage-block:has(> .ki-cards:last-child, > .ki-asset.is-empty:last-child) {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+.ki-stage-block > .ki-asset.is-empty:last-child {
+  flex: 0 0 auto;
+  grid-template-rows: auto auto;
+}
+.ki-asset.is-empty .d-drop {
+  min-height: 0;
+}
