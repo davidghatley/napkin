@@ -533,6 +533,13 @@ export async function observe(b, url, markers = null) {
   await b.eval(
     "new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))",
   );
+  // First-contentful-paint is delivered asynchronously after the frame that paints: wait for the
+  // entry (up to 3 s) instead of guessing with two animation frames.
+  await b
+    .eval(
+      "new Promise(r=>{const t0=performance.now();const q=()=>performance.getEntriesByName('first-contentful-paint').length||performance.now()-t0>3000?r():setTimeout(q,25);q()})",
+    )
+    .catch(() => {});
   const dom = await b.eval(
     `({text:document.body.innerText,kind:document.querySelector('[data-napkin-kind]')?.dataset.napkinKind,paint:performance.getEntriesByName('first-contentful-paint')[0]?.startTime,meaningful:window.__meaningful})`,
   );
