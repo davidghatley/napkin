@@ -104,6 +104,7 @@ async function limited(fn) {
     waiting.shift()?.();
   }
 }
+const extraRate = (out, seconds, rate) => (seconds && out.length / 4 / seconds < rate * 1.5 ? out.length / 4 / seconds : rate);
 const audioCache = new Map();
 async function audio(ctx) {
   const key = ctx.file + ctx.key;
@@ -111,6 +112,12 @@ async function audio(ctx) {
   let result = ctx.kind === 'wav' ? wavPeaks(ctx) : null;
   if (!result) {
     try {
+      // Sample rate follows the length so a long file stays within the buffer: 8 kHz for short files, down to 2 kHz.
+      let seconds = 0;
+      try {
+        seconds = Number((await exec('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', ctx.file], { timeout: 4000 })).stdout) || 0;
+      } catch {}
+      const rate = seconds ? Math.max(2000, Math.min(8000, Math.floor(96e6 / 4 / seconds))) : 4000;
       const decode = (extra, timeout) => limited(() => exec(
         'ffmpeg',
         [
@@ -122,12 +129,12 @@ async function audio(ctx) {
           '-ac',
           '1',
           '-ar',
-          '1000',
+          String(rate),
           '-f',
           'f32le',
           'pipe:1',
         ],
-        { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, timeout },
+        { encoding: 'buffer', maxBuffer: 100 * 1024 * 1024, timeout },
       ));
       // The whole file when it decodes in time, otherwise its first minute.
       let out;
@@ -142,7 +149,7 @@ async function audio(ctx) {
         const j = Math.min(239, Math.floor((i / n) * 240));
         peaks[j] = Math.max(peaks[j], Math.abs(out.readFloatLE(i * 4)));
       }
-      result = { peaks, sampledSeconds: n / 1000 };
+      result = { peaks, sampledSeconds: n / (extraRate(out, seconds, rate)) };
     } catch {
       result = {
         peaks: [],
