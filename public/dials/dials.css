@@ -3298,9 +3298,7 @@
   padding: 14px 16px;
   resize: none;
   border-radius: 6px;
-  background:
-    repeating-linear-gradient(to bottom, transparent 0 25px, var(--d-line) 25px 26px) 0 13px / 100% 26px local,
-    var(--d-surface);
+  background: var(--d-surface);
   box-shadow: inset 0 0 0 1px var(--d-line);
   font: 400 16px/26px var(--d-sans);
   color: var(--d-text);
@@ -3410,16 +3408,44 @@
   overflow: hidden;
 }
 .ki-shadow-card {
-  width: 220px;
-  height: 140px;
+  position: relative;
+  width: min(52%, 360px);
+  aspect-ratio: 16 / 11;
   border-radius: 8px;
   background: var(--d-surface);
-  display: grid;
-  place-items: end start;
-  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px;
   box-sizing: border-box;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
+}
+.ki-sc-media {
+  flex: 1 1 auto;
+  border-radius: 4px;
+  background: linear-gradient(160deg, color-mix(in oklab, var(--d-accent) 30%, var(--d-well)), var(--d-well));
+}
+.ki-sc-line {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--d-line);
+}
+.ki-sc-line.is-short {
+  width: 60%;
+}
+.ki-shadow-page {
+  position: absolute;
+  inset: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+.ki-shadow-page i {
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--d-text) 7%, transparent);
 }
 .ki-shadow-svg {
   position: absolute;
@@ -4365,4 +4391,174 @@ ul.ki-tags {
 /* The side column is narrow: fields pair up only when both names fit. */
 .k-side .k-fields:not(.k-one) {
   grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+}
+/* Batch: the chosen tiles are a contact sheet of seeded sketches. */
+.ki-tile.is-on {
+  fill: color-mix(in oklab, var(--d-accent) 16%, var(--d-surface));
+  stroke: var(--d-accent);
+  stroke-width: 1.5;
+}
+.ki-batch-sun,
+.ki-batch-hill,
+.ki-batch-seed {
+  pointer-events: none;
+}
+.ki-batch-hill {
+  fill: var(--d-accent);
+  fill-opacity: 0.85;
+}
+.ki-svg text.ki-batch-seed {
+  fill: var(--d-on-accent);
+  font: 500 11px/1 var(--d-mono);
+}
+/* Point size: the section's data at true size. */
+.ki-plot {
+  fill: var(--d-surface);
+  stroke: var(--d-line);
+}
+.ki-pt {
+  fill-opacity: 0.85;
+}
+.ki-pt-0 {
+  fill: var(--d-accent);
+}
+.ki-pt-1 {
+  fill: var(--d-text);
+}
+.ki-pt-2 {
+  fill: color-mix(in oklab, var(--d-accent) 45%, var(--d-faint));
+}
+/* Choices: the chosen option applied, above compact cards. */
+.ki-choice {
+  display: grid;
+  grid-template-rows: minmax(200px, 1fr) auto;
+  gap: 14px;
+  height: 100%;
+}
+.ki-choice-preview {
+  display: grid;
+  place-items: center;
+  min-height: 200px;
+  padding: 16px 20px;
+  border-radius: 3px;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  color: var(--d-accent);
+  overflow: hidden;
+}
+.ki-choice-preview svg {
+  width: 100%;
+  height: 100%;
+  max-height: 320px;
+}
+.ki-choice-preview svg[viewBox="0 0 24 24"] {
+  width: auto;
+  height: min(100%, 200px);
+}
+.ki-choice-preview .ki-axis {
+  stroke: var(--d-line);
+}
+.ki-choice-preview .ki-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke: var(--d-accent);
+}
+.ki-choice-preview .ki-line-1 {
+  stroke: var(--d-text);
+}
+.ki-choice-preview .ki-line-2 {
+  stroke: color-mix(in oklab, var(--d-accent) 45%, var(--d-faint));
+}
+.ki-align-text {
+  width: 100%;
+  max-width: 24em;
+  padding: 14px 16px;
+  border-inline: 1px dashed var(--d-line);
+  margin: 0;
+  color: var(--d-text);
+  font: 400 17px/1.5 var(--d-sans);
+}
+.ki-choice .ki-cards {
+  grid-auto-rows: 112px;
+}
+.ki-choice .ki-card-art svg {
+  width: auto;
+  height: 52px;
+}
+/* Prompt: the word tray takes its content's height; emphasis columns fill the rest. */
+.ki-prompt-below {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.ki-prompt-below > .k-block:first-child {
+  flex: none;
+}
+.ki-prompt-below > .k-block:first-child .ki-tokens {
+  min-height: 0;
+  flex: none;
+}
+.ki-prompt-below > .k-block:last-child {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+.ki-emph {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 180px;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 10px 12px 6px;
+  border-radius: 3px;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+.ki-emph-col {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ki-emph-bar {
+  position: relative;
+  flex: 1 1 auto;
+  border-radius: 2px;
+  background: var(--d-well);
+}
+.ki-emph-bar i {
+  position: absolute;
+  inset: auto 0 0 0;
+  border-radius: 2px;
+  background: color-mix(in oklab, var(--d-accent) 55%, var(--d-well));
+}
+.ki-emph-col.is-weighed .ki-emph-bar i {
+  background: var(--d-accent);
+}
+.ki-emph-col small {
+  font-size: 11px;
+  color: var(--d-muted);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The weight-1 line sits at half the bar height (bars run 0 to 2). */
+.ki-emph-one {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: calc(6px + 17px + (100% - 10px - 6px - 17px) / 2);
+  border-top: 1px dashed var(--d-text);
+  opacity: 0.45;
+  pointer-events: none;
+  z-index: 1;
 }

@@ -204,7 +204,7 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
       // A cell clips when its text is wider than the box and it hides the overflow.
       const audit = `(()=>{const s=document.querySelector('.d-section[data-depth="3"]')||document.querySelector("#t-host .d-section[data-depth='3']");if(!s)return "no studio";
         const lab=s.querySelector(".k-studio, .d-lab");if(!lab)return "no lab";
-        const tall=Math.max(0,...[...lab.querySelectorAll(".k-main svg, .k-main canvas, .d-cx-main svg, .d-cx-main canvas, .k-main img, .k-main *")].filter(n=>n.matches("svg,canvas,img,.ki-card-pick")||getComputedStyle(n).backgroundImage!=="none").map(n=>n.getBoundingClientRect().height));
+        const tall=Math.max(0,...[...lab.querySelectorAll(".k-main svg, .k-main canvas, .d-cx-main svg, .d-cx-main canvas, .k-main img, .k-main *")].filter(n=>n.matches("svg,canvas,img,.ki-card-pick,.ki-specimen,.ki-emph")||getComputedStyle(n).backgroundImage!=="none").map(n=>n.getBoundingClientRect().height));
         if(tall<80)return "blank stage "+tall;
         const clipped=[...s.querySelectorAll("*")].filter(n=>{const c=getComputedStyle(n);return !n.matches(".d-sr")&&c.textOverflow==="ellipsis"&&n.scrollWidth>n.clientWidth+1}).map(n=>n.className);
         return clipped.length?"clipped "+clipped.join(","):"ok"})()`;
