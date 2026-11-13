@@ -135,7 +135,7 @@ export function randomize(f, bytes, ctx) {
       const out = join(ctx.tmp, "anim." + (f.kind === "gif" ? "gif" : "apng"));
       ff(
         "-filter_complex",
-        `color=c=${A.replace("#", "0x")}:s=160x100:r=5:d=0.6[a];color=c=${B.replace("#", "0x")}:s=160x100:r=5:d=0.4[b];[a][b]concat=n=2:v=1:a=0`,
+        `color=c=${A.replace("#", "0x")}:s=160x100:r=5:d=0.6[a];color=c=${B.replace("#", "0x")}:s=160x100:r=5:d=0.4[b];[a][b]concat=n=2:v=1:a=0${f.kind === "gif" ? ",split[x][y];[x]palettegen[p];[y][p]paletteuse" : ""}`,
         ...(f.kind === "apng" ? ["-plays", "0", "-f", "apng"] : []),
         out,
       );
