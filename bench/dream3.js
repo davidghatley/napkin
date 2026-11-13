@@ -7,6 +7,7 @@
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { ROOT } from "./lib3/runtime.mjs";
+import { leadEnv } from "./lib3/lead-env.mjs";
 import { buildHash } from "./lib3/reviews.mjs";
 const DIMENSIONS = [
   ["D1", "kinds"],
@@ -36,7 +37,7 @@ function exec(args, timeoutMs = 3_600_000) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, args, {
       cwd: ROOT,
-      env: process.env,
+      env: { ...process.env, ...leadEnv() },
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "",

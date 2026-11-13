@@ -26,19 +26,25 @@ import { mockComfy } from "./lib3/comfy.mjs";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 // Setup may use APIs; every interaction inside a journey is a physical CDP key event.
+// [id, pointer steps, raw keystroke cap]. A pointer step is one click, drag, wheel turn or dialog
+// confirmation a person needs for the same outcome with the mouse; typing a value into a field is
+// one step on either side. The keys path may use at most 2x the pointer steps (the Dream's ratio),
+// where opening the palette, typing a whole command phrase and pressing Enter is 3 steps, a chord
+// or single key is 1 step and a run of characters typed into one field is 1 step. The raw cap is
+// a second, absolute limit on every keystroke including typed characters.
 export const journeys = [
-  ["open-folder", 160],
-  ["find-item", 90],
-  ["spatial-focus", 8],
-  ["group", 110],
-  ["color-target", 160],
-  ["compare-variants", 130],
-  ["approve-proposal", 90],
-  ["reject-proposal", 90],
-  ["generate", 100],
-  ["arrange", 40],
-  ["present", 30],
-  ["help-rebind", 130],
+  ["open-folder", 8, 160],
+  ["find-item", 3, 90],
+  ["spatial-focus", 1, 8],
+  ["group", 4, 110],
+  ["color-target", 5, 160],
+  ["compare-variants", 4, 130],
+  ["approve-proposal", 2, 90],
+  ["reject-proposal", 2, 90],
+  ["generate", 4, 100],
+  ["arrange", 2, 40],
+  ["present", 2, 30],
+  ["help-rebind", 6, 130],
 ];
 export async function measure() {
   const mock = await mockComfy();
@@ -62,26 +68,42 @@ export async function measure() {
         } catch (e) {
           error = e.message;
         }
-        let count = 0;
+        let count = 0,
+          steps = 0;
         const cmd = async (text) => {
           count += text.length + 2;
+          steps += 3;
           return palette(b, text);
         };
         const press = async (k, m = 0) => {
           count++;
+          steps++;
           await key(b, k, m);
         };
+        // Characters typed into one already-focused field: many keystrokes, one step.
+        const typeField = async (text) => {
+          steps++;
+          for (const ch of text) {
+            count++;
+            await key(b, ch);
+          }
+        };
         const journey = async (id, fn) => {
-          const budget = journeys.find((x) => x[0] === id)[1];
+          const [, pointer, budget] = journeys.find((x) => x[0] === id);
           await book.check(
             "journey." + id,
-            `keys only; ≤${budget} keystrokes; disk/API outcome; visible focus`,
+            `keys only; ≤${2 * pointer} steps (2x the ${pointer} pointer steps) and ≤${budget} keystrokes; disk/API outcome; visible focus`,
             async () => {
               assert(!error, error);
               count = 0;
+              steps = 0;
               const before = await b.screenshot();
               await fn();
               assert(count <= budget, `${count} keystrokes exceeds ${budget}`);
+              assert(
+                steps <= 2 * pointer,
+                `${steps} key steps exceed 2x the ${pointer} pointer steps`,
+              );
               assert(await focusVisible(b), "keyboard focus is not visible");
               const after = await b.screenshot();
               const diff = diffPng(before, after);
@@ -92,6 +114,8 @@ export async function measure() {
                 value: {
                   keystrokes: count,
                   budget,
+                  steps,
+                  stepBudget: 2 * pointer,
                   pixelsChanged: diff.differing,
                 },
               };
@@ -198,9 +222,7 @@ export async function measure() {
           const target = "#" + nonce().slice(0, 6);
           await cmd("Control " + c.label);
           await press("a", 2);
-          for (const ch of target) {
-            await press(ch);
-          }
+          await typeField(target);
           await press("Enter");
           const got = await request(
             s,

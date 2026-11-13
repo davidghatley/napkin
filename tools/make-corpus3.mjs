@@ -749,5 +749,5 @@ if (
   const out = resolve(arg("--out", join(ROOT, "bench/corpus3")));
   if (process.argv.includes("--stress"))
     await stress(out, { seed: Number(arg("--seed", "7")) });
-  else await generate(out, arg("--tooling", "/tmp/napkin-d3-generator-tools"));
+  else await generate(out, arg("--tooling", join(ROOT, "bench/tools")));
 }

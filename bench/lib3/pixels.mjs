@@ -137,6 +137,22 @@ export async function scrubWalk(
     regionDiff(idle1, idle2, rect) <= tolerance,
     "preview changes by itself while no key is pressed; scrub timing cannot be attributed to the key",
   );
+  // A key that is not the scrub key must not move the preview, not even briefly: a preview that
+  // animates for a moment after ANY keydown is a timing cheat, not a scrub.
+  for (const noop of ["Shift", "Shift"]) {
+    await key(b, noop);
+    const soon = decodePng(await b.screenshot());
+    assert(
+      regionDiff(idle2, soon, rect) <= tolerance,
+      "preview reacts to a key that is not the scrub key; scrub timing is not causal",
+    );
+    await sleep(120);
+    const later = decodePng(await b.screenshot());
+    assert(
+      regionDiff(idle2, later, rect) <= tolerance,
+      "preview changes shortly after an unrelated key",
+    );
+  }
   const frames = new Map([[1, idle2]]),
     times = [];
   let pos = 1;

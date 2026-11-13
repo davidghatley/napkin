@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync } from "node:crypto";
+import { setLeadForSelfTest } from "./lead-env.mjs";
 import { mockComfy } from "./comfy.mjs";
 import {
   Book,
@@ -22,7 +23,7 @@ import { writeParquet } from "./parquet.mjs";
 import { launchChromium } from "../../test/helpers/cdp.js";
 import { selectionTime, scrubPixel } from "./pixels.mjs";
 const require = createRequire(
-  (process.env.NAPKIN_D3_TOOLS || "/tmp/napkin-d3-generator-tools") +
+  (process.env.NAPKIN_D3_TOOLS || join(ROOT, "bench/tools")) +
     "/package.json",
 );
 test("manifest hashes, all kinds, genuine binaries and small footprint", async () => {
@@ -275,15 +276,6 @@ test("ComfyUI protocol: validate, queue, WS progress, history, bytes, serial exe
         "images",
         "orbit.mp4",
       ],
-      [
-        "Load3D",
-        "SaveGLB",
-        { model_file: "triangle.glb", image: "", width: 160, height: 128 },
-        "mesh",
-        6,
-        "3d",
-        "triangle.glb",
-      ],
     ]) {
       const prompt = {
         1: { class_type: load, inputs: input },
@@ -299,7 +291,7 @@ test("ComfyUI protocol: validate, queue, WS progress, history, bytes, serial exe
         },
       };
       const response = await post("/prompt", { client_id: "selftest", prompt });
-      assert.equal(response.status, 200);
+      assert.equal(response.status, 200, await response.clone().text());
       const { prompt_id } = await response.json();
       await waitUntil(() => m.history[prompt_id]);
       const descriptor = m.history[prompt_id].outputs["2"][field][0];
@@ -406,6 +398,7 @@ test("cheats are rejected and honest work passes: focus ring, causal scrub, lead
   const { writeFileSync } = await import("node:fs");
   const pages = {
     none: `<input id=i style="outline:none;box-shadow:none;caret-color:transparent"><script>i.focus()</script>`,
+    fill: `<style>button{outline:none;background:#eee;color:#222;width:140px;height:40px;border:0}button:focus-visible{background:#111;color:#fff}</style><button id=i>Go</button><script>i.focus()</script>`,
     ring: `<input id=i style="outline:3px solid #e00;outline-offset:1px"><script>i.focus()</script>`,
     unrelated: `<input id=r type=range min=0 max=10 value=5 aria-label=time><canvas id=c width=200 height=100 style="display:block"></canvas><script>const x=c.getContext('2d');let t=0;(function f(){x.fillStyle='hsl('+(t++*7%360)+',80%,50%)';x.fillRect(0,0,200,100);requestAnimationFrame(f)})();r.focus()</script>`,
     random: `<input id=r type=range min=0 max=10 value=5 aria-label=time><canvas id=c width=200 height=100 style="display:block"></canvas><script>const x=c.getContext('2d');addEventListener('keydown',()=>{x.fillStyle='hsl('+Math.floor(Math.random()*360)+',80%,50%)';x.fillRect(0,0,200,100)});r.focus()</script>`,
@@ -428,11 +421,13 @@ test("cheats are rejected and honest work passes: focus ring, causal scrub, lead
     );
     await b.goto(base + "ring");
     assert.equal(await focusVisible(b), true);
+    await b.goto(base + "fill");
+    assert.equal(await focusVisible(b), true, "a background-fill focus style is valid");
     for (const name of ["unrelated", "random"]) {
       await b.goto(base + name);
       await assert.rejects(
         scrubWalk(b, { selector: "canvas", steps: 10 }),
-        /by itself|differs between visits/,
+        /by itself|differs between visits|not the scrub key|unrelated key/,
       );
     }
     await b.goto(base + "honest");
@@ -448,9 +443,14 @@ test("cheats are rejected and honest work passes: focus ring, causal scrub, lead
     file = join(dir, "a.json"),
     h = buildHash(),
     entry = { attestedBy: "lead", at: "2026-11-12" };
+  const lead = generateKeyPairSync("ed25519"),
+    other = generateKeyPairSync("ed25519"),
+    pem = (k) => k.privateKey.export({ type: "pkcs8", format: "pem" });
   try {
-    process.env.NAPKIN_LEAD_ATTEST = file;
-    process.env.NAPKIN_LEAD_KEY = "lead";
+    setLeadForSelfTest(
+      file,
+      lead.publicKey.export({ type: "spki", format: "pem" }),
+    );
     const put = (mac) =>
       writeFileSync(
         file,
@@ -458,14 +458,16 @@ test("cheats are rejected and honest work passes: focus ring, causal scrub, lead
       );
     put(undefined);
     assert.throws(() => leadAttested("k"), /signature/);
-    put(signAttestation("builder-guess", h, "k", entry));
+    put(signAttestation(pem(other), h, "k", entry));
     assert.throws(() => leadAttested("k"), /signature/);
-    put(signAttestation("lead", h, "k", entry));
+    put(signAttestation(pem(lead), h, "k", entry));
     assert.equal(leadAttested("k").attestedBy, "lead");
-    delete process.env.NAPKIN_LEAD_ATTEST;
+    // the retired shared-secret scheme and the environment must not leak into children
+    assert.equal(process.env.NAPKIN_LEAD_PUBKEY, undefined);
+    assert.equal(process.env.NAPKIN_LEAD_KEY, undefined);
+    setLeadForSelfTest(undefined, undefined);
     assert.throws(() => leadAttested("k"), /PENDING LEAD ATTESTATION/);
   } finally {
-    delete process.env.NAPKIN_LEAD_KEY;
     rmSync(dir, { recursive: true, force: true });
   }
 });

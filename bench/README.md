@@ -281,21 +281,20 @@ D1 also compares decoded pixels of still-image previews with the source image.
 A fake viewer with an icon, hidden native element and a plausible label does not
 satisfy visible markers and the data checks.
 
-Set `NAPKIN_D3_TOOLS` to a directory outside the repository (the self-test and the generator
-read it; the default is `/tmp/napkin-d3-generator-tools`). To rebuild the committed binary corpus, install the pinned **generator-only** tools
-outside the repository (roughly 32 packages, no model downloads):
+The generator and the self-test need three **generator-only** packages that the product never
+loads. They are declared and pinned in `bench/tools/package.json` (with its lockfile) and are
+installed into `bench/tools/node_modules` (git-ignored):
 
 ```sh
-npm install --prefix "$NAPKIN_D3_TOOLS" --cache /tmp/napkin-d3-npm-cache \
-  --ignore-scripts --no-audit --no-fund \
-  apache-arrow@21.1.0 parquetjs-lite@0.8.7 opentype.js@1.3.4
-node tools/make-corpus3.mjs --tooling "$NAPKIN_D3_TOOLS"
-D3_STRESS_SELFTEST=1 node --test bench/lib3/selftest.mjs
+npm ci --prefix bench/tools --ignore-scripts --no-audit --no-fund   # apache-arrow, parquetjs-lite, opentype.js
+node tools/make-corpus3.mjs                                          # rebuild the committed corpus
+D3_STRESS_SELFTEST=1 node --test bench/lib3/selftest.mjs             # the harness self-test
 ```
 
-These tools are Apache-2.0/MIT; decision 0018 records why they are used. Remove the
-two private `/tmp/napkin-d3-*` tooling/cache directories when finished. Ordinary
-benches use the committed binaries, Node's SQLite and the in-lane Parquet writer.
+`NAPKIN_D3_TOOLS` may point at a different install directory. These tools are Apache-2.0/MIT;
+decision 0018 records why they are used. Ordinary benches use the committed binaries, Node's
+SQLite and the in-lane Parquet writer, and need no install. The self-test also needs `ffprobe`,
+`pdfinfo` and Chromium on the machine; it creates short socket paths itself (no wrapper script).
 
 The self-test uses independent Arrow, Parquet and font readers, ffprobe, pdfinfo,
 unzip, SQLite, Chromium font decoding, actual key events, actual compositor frames,
@@ -357,7 +356,12 @@ conventions make those observations concrete before builders implement them:
 - Timeline controls are accessible range inputs/sliders with “time” in their label.
   Standalone animated viewers must offer a keyboard path to that timeline. Their
   dials schema includes loop/range and, for editable CSS/WAAPI/SVG, keyframe controls.
-  A keyframe value is an array of actual frame records with a `transform` property.
+  A keyframe value is an array of at least two frame records, each an object that may carry
+  `offset` and CSS properties; the bench sets `transform: "translateX(Npx)"` on the second
+  record through `POST /api/control`. The file may encode it any way (CSS `@keyframes`, WAAPI
+  `animate()`, SMIL, `transform` attributes): the bench only requires the number N in the
+  written code (comments do not count) and, after a restart, that sweeping the item's animation
+  clock moves some element on screen by about N px (0.8 N to 1.25 N + 4 px).
 - Board readback includes `selection: [id]`, `compare: {item, variants: [...]}` and
   `presentation: boolean`. `/api/keys` returns `{bindings:[{command,keys}],
 commands:[{id,palette}]}`. Commands include arrange-by-kind and can be rebound.
@@ -376,6 +380,25 @@ commands:[{id,palette}]}`. Commands include arrange-by-kind and can be rebound.
   a control's live figure is an svg, canvas or `[data-figure]` of at least 12 x 8 px inside its
   `data-control-id` row, the modified marker is `[data-modified]`, a studio is
   `[data-studio-for="<control id>"]` covering at least 30% of the screen for color and motion.
+  A focus indicator is any visible difference between the focused and unfocused element and
+  its 4 px surround (at least 4% of the box or 60 changed pixels, channel difference > 40): an
+  outline, a ring, a background fill, an inverted colour or a thick underline all count; a
+  blinking caret does not.
+  A palette is typed with the exact command phrase followed by Enter. The top-ranked entry for
+  an exact phrase must be that command (exact and prefix matches rank above fuzzy ones). The
+  bench never types abbreviations.
+  `GET /api/controls/<id>` sections may hold a single control. The `figure` field is optional;
+  the rendered figure is not (an svg, canvas, img or `[data-figure]` of at least 12 x 8 px
+  inside the control's row that changes pixels when the value changes), for every control
+  including toggles and selects. At bench depth the opened section must be taller than a dial
+  row and show min(2, controls in that section) controls.
+  The axe states (palette, panel, studio, key map) are checked open first: a palette is a
+  `[role=dialog]`, `[role=combobox]` or `[data-palette]` region with at least 6 descendants and
+  `[role=option]` entries; a panel `[data-controls-for]` and a studio `[data-studio-for]` each
+  have at least 8 descendants; the key map is a `[role=dialog]` with at least 10.
+  Mixed-folder cards show content from the file: for plain-text kinds a distinctive word from
+  the file body (not part of the path) is in the card's rendered text for at least 80% of the
+  sampled visible cards.
   Palette commands used by the benches: `Select`, `Control`, `Dial|Bench|Studio`, `Reset`,
   `Open folder`, `Group`, `Compare variants`, `Approve`, `Reject`, `Generate`,
   `Arrange by <mode>`, `Present`, `Rebind <command> to <keys>`.
@@ -443,10 +466,17 @@ the real bindings). The rebind journey first moves the arrangement away from "ki
 no-op key cannot pass. axe runs on the populated canvas, with the palette open and with
 the key map open; an empty canvas fails. The palette must list a random sample of
 advertised commands.
+Each journey has a pointer-step count P (the clicks, drags and confirmations the same
+outcome needs with a mouse; typing a value into a field is one step on either side) and passes
+only if its key steps are at most 2 x P (the Dream's ratio) and its raw keystrokes are within
+the cap in the table. Key steps: palette open + a whole typed phrase + Enter = 3, a chord or a
+single key = 1, a run of characters typed into one field = 1. P per journey: open folder 8, find
+item 3, spatial focus 1, group 4, color target 5, compare variants 4, approve 2, reject 2,
+generate 4, arrange 2, present 2, help and rebind 6.
 The palette uses Ctrl K, a command phrase, and Enter. Names and values below are
 chosen during the run; the brackets describe arguments, not literal text.
 
-| Journey          | Scripted actions                                                     | Budget | Required outcome                                                           |
+| Journey          | Scripted actions                                                     | Keystroke cap | Required outcome                                                           |
 | ---------------- | -------------------------------------------------------------------- | -----: | -------------------------------------------------------------------------- |
 | Open folder      | `Open folder [fresh folder]`, then `Open folder [original]`          |    160 | `/api/items` switches to the random sentinel and back; source bytes intact |
 | Find item        | `Select [randomized HTML path]`                                      |     90 | Board selection contains that real item id                                 |
@@ -537,12 +567,17 @@ gates are **lead-attested**: they are not met by default and read two inputs sup
 outside the repo and its worktrees:
 
 - `NAPKIN_LEAD_ATTEST`: path to a JSON document the lead keeps outside the repository.
-- `NAPKIN_LEAD_KEY`: the secret the lead signs entries with.
+- `NAPKIN_LEAD_PUBKEY`: the lead's Ed25519 **public** key as PEM text. The bench holds only the
+  public key; the private key stays with the lead and is used by `bench/lead-sign.mjs`
+  (`--keygen <dir>` once; `--key lead.key --file attest.json --name <gate> --json '{...}'` per
+  gate). Nothing the bench's environment, process list or children can read allows signing. Both
+  variables are also removed from `process.env` at start-up (`lib3/lead-env.mjs`), so the product,
+  Chromium and MCP children never inherit them; `dream3.js` re-passes them only to bench children.
 
 The document is `{ sourceHash, <key>: { attestedBy, at, ...fields, mac } }` where
 `sourceHash` is `buildHash()` (lib3/reviews.mjs: hash of `src/` and `public/`) and `mac` is
-the hex HMAC-SHA256, keyed by `NAPKIN_LEAD_KEY`, of the canonical JSON of
-`{ sourceHash, key, entry }` (entry without `mac`). `signAttestation` computes it. A missing
+the hex Ed25519 signature, by the lead's private key, of the canonical JSON of
+`{ sourceHash, key, entry }` (entry without `mac`). A missing
 file, an unsigned or wrongly signed entry, a different source hash or a file inside the repo
 fails with `PENDING LEAD ATTESTATION`. Checks that wait on the lead are listed per dimension
 as "lead-attested pending" and keep ACCEPTANCE at NOT MET.

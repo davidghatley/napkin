@@ -156,7 +156,7 @@ export async function measure() {
         ["cool", "0x2c4fd0", 5],
       ])
         for (let i = 0; i < count; i++) {
-          const path = `${cluster}-${nonce()}.png`;
+          const path = `item-${nonce()}.png`; // neutral name: only pixels reveal the cluster
           execFileSync("ffmpeg", [
             "-hide_banner",
             "-loglevel",

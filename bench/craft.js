@@ -82,13 +82,25 @@ export async function measure() {
             cards >= 5,
             `axe on an empty canvas proves nothing (${cards} cards)`,
           );
+          // Each state must really be open and non-trivial before it is scanned: scanning an
+          // empty page or a no-op command proves nothing.
+          const open = (selector, min, what) =>
+            b.eval(
+              `(()=>{const e=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>{const r=e.getBoundingClientRect();return r.width>40&&r.height>20});return e?e.querySelectorAll('*').length:0})()`,
+            ).then((n) => assert(n >= min, `${what} is not open (${n} nodes; need >= ${min})`));
           const found = { canvas: await axe(b) };
           await key(b, "k", 2);
+          await open("[role=dialog],[role=combobox],[data-palette]", 6, "the command palette");
+          assert(
+            (await b.eval("document.querySelectorAll('[role=option]').length")) >= 1,
+            "the palette lists no options",
+          );
           found.palette = await axe(b);
           await key(b, "Escape");
           const html = listed.find((x) => x.kind === "html");
           await palette(b, "Select " + html.path);
           await sleep(300);
+          await open("[data-controls-for]", 8, "the selected-item panel");
           found.panel = await axe(b);
           const schema = await request(
             s,
@@ -97,9 +109,12 @@ export async function measure() {
           const c = schema.sections.flatMap((x) => x.controls)[0];
           await palette(b, "Studio " + c.label);
           await sleep(300);
+          await open("[data-studio-for]", 8, "the control studio");
           found.studio = await axe(b);
           await key(b, "Escape");
           await key(b, "?");
+          await sleep(200);
+          await open("[role=dialog]", 10, "the key map");
           found.keymap = await axe(b);
           await key(b, "Escape");
           const all = Object.values(found).flat();

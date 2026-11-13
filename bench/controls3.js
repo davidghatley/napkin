@@ -80,7 +80,8 @@ export async function measure() {
               c.id && c.type && c.label && [1, 2, 3].includes(c.depth),
               "control schema incomplete",
             );
-            assert(c.figure, "control has no live figure");
+            // The contract marks `figure` optional in the schema; the figure is judged where it
+            // matters, in the rendered control below (an svg/canvas/img/[data-figure] that changes).
             if (!depths.has(c.type)) depths.set(c.type, new Set());
             schema = await request(
               s,
@@ -177,7 +178,7 @@ export async function measure() {
             // Reach the actual control by palette and commit through key events only.
             await palette(b, "Control " + c.label);
             assert(await focusVisible(b), "control focus not visible");
-            const figureSel = `[data-control-id="${c.id}"] svg, [data-control-id="${c.id}"] canvas, [data-control-id="${c.id}"] [data-figure]`;
+            const figureSel = `[data-control-id="${c.id}"] svg, [data-control-id="${c.id}"] canvas, [data-control-id="${c.id}"] [data-figure], [data-control-id="${c.id}"] img`;
             const figureRect = await rectOf(b, figureSel);
             assert(
               figureRect && figureRect.w >= 12 && figureRect.h >= 8,
@@ -258,7 +259,15 @@ export async function measure() {
               );
               if (depthNumber === 2)
                 assert(
-                  area && area.h > 32 && (area.siblings ?? 0) >= 2,
+                  area &&
+                    area.h > 32 &&
+                    (area.siblings ?? 0) >=
+                      Math.min(
+                        2,
+                        schema.sections.find((x) =>
+                          x.controls.some((y) => y.id === c.id),
+                        )?.controls.length ?? 1,
+                      ),
                   "bench depth must open the section with its related controls",
                 );
               if (

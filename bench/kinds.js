@@ -379,14 +379,38 @@ export async function measure() {
       const cards = await wb.eval(
         `(()=>{const cards=[...document.querySelectorAll('[data-item-id]')];return{n:cards.length,blank:cards.filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight&&!${CARD_CONTENT}(e)}).length}})()`,
       );
+      // Content oracle on visible cards: a card must show something FROM the file, not only its
+      // name. For plain-text kinds the bench reads each visible file and requires a distinctive
+      // word from its body (not part of its path) in the card's rendered text.
+      const textKinds = new Set(["md", "txt", "csv", "tsv", "json", "jsonl", "code", "diff", "patch", "css", "tsx", "jsx", "html"]);
+      const allItems = await items(ws);
+      const visibleCards = await wb.eval(
+        `JSON.stringify([...document.querySelectorAll('[data-item-id]')].filter(e=>{const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight}).map(e=>{let t=e.innerText||'';for(const f of e.querySelectorAll('iframe'))try{t+=' '+f.contentDocument.body.innerText}catch{}t+=' '+[...e.querySelectorAll('pre,table,article,ul,ol,[role=table],[role=grid],[role=log]')].map(x=>x.textContent).join(' ');return[e.dataset.itemId,t]}))`,
+      );
+      const byId = new Map(allItems.map((x) => [x.id, x]));
+      let judged = 0, matched = 0;
+      for (const [id, text] of JSON.parse(visibleCards)) {
+        const it = byId.get(id);
+        if (!it || !textKinds.has(it.kind)) continue;
+        let body = "";
+        try { body = readFileSync(join(workload, it.path), "utf8"); } catch { continue; }
+        const words = [...new Set(body.match(/[A-Za-z][A-Za-z0-9_-]{5,}/g) || [])].filter((w) => !it.path.toLowerCase().includes(w.toLowerCase()));
+        if (!words.length) continue;
+        judged++;
+        if (words.slice(0, 40).some((w) => text.includes(w))) matched++;
+      }
+      cards.judged = judged;
+      cards.matched = matched;
       await book.check(
         "mixed.open",
-        "1000 items; complete visible cards < 2 s from CLI start",
+        "1000 items; complete visible cards (real content from the file, not just the name) < 2 s from CLI start",
         () => ({
           ok:
             ws.ms + performance.now() - t < 2000 &&
             cards.n > 0 &&
-            cards.blank === 0,
+            cards.blank === 0 &&
+            cards.judged >= 3 &&
+            cards.matched >= Math.ceil(cards.judged * 0.8),
           value: { ms: ws.ms + performance.now() - t, cards },
         }),
       );

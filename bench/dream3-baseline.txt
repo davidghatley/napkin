@@ -114,22 +114,22 @@ effects.visible | FAIL | {"sampled":0,"changed":0,"flat":[]} | changing a contro
 widgets.distinct | FAIL | {"types":0,"shapes":[]} | control types are distinct widgets, not one box with 12 names (>= 8 distinct widget shapes)
 persist.fresh-process | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | committed control values are re-read from files by a fresh server process
 affordances.auto | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | modified marker, reset, typed math with units, fine/coarse scrub, copy and paste on a real numeric control
-studios.color-motion | FAIL | {"error":"PENDING LEAD ATTESTATION (studios): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md"} | full color and motion studios at depth 3 (OKLCH planes, gamut and contrast maps, palettes, ramps, harmony, sampled palettes, token binding, history; curve and spring editors with ghost) [lead-attested]
-blind.rubric | FAIL | {"error":"PENDING LEAD ATTESTATION (instruments): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md"} | >= 8/10 blind against Tweakpane, Leva and DialKit, A/B order swapped [lead-attested]
+studios.color-motion | FAIL | {"error":"PENDING LEAD ATTESTATION (studios): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | full color and motion studios at depth 3 (OKLCH planes, gamut and contrast maps, palettes, ramps, harmony, sampled palettes, token binding, history; curve and spring editors with ghost) [lead-attested]
+blind.rubric | FAIL | {"error":"PENDING LEAD ATTESTATION (instruments): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | >= 8/10 blind against Tweakpane, Leva and DialKit, A/B order swapped [lead-attested]
 D3 | beat 0/14 | dream 0/14
 Check | Result | Value | Target
-journey.open-folder | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤160 keystrokes; disk/API outcome; visible focus
-journey.find-item | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤90 keystrokes; disk/API outcome; visible focus
-journey.spatial-focus | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤8 keystrokes; disk/API outcome; visible focus
-journey.group | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤110 keystrokes; disk/API outcome; visible focus
-journey.color-target | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤160 keystrokes; disk/API outcome; visible focus
-journey.compare-variants | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤130 keystrokes; disk/API outcome; visible focus
-journey.approve-proposal | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤90 keystrokes; disk/API outcome; visible focus
-journey.reject-proposal | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤90 keystrokes; disk/API outcome; visible focus
-journey.generate | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤100 keystrokes; disk/API outcome; visible focus
-journey.arrange | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤40 keystrokes; disk/API outcome; visible focus
-journey.present | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤30 keystrokes; disk/API outcome; visible focus
-journey.help-rebind | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤130 keystrokes; disk/API outcome; visible focus
+journey.open-folder | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤16 steps (2x the 8 pointer steps) and ≤160 keystrokes; disk/API outcome; visible focus
+journey.find-item | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤6 steps (2x the 3 pointer steps) and ≤90 keystrokes; disk/API outcome; visible focus
+journey.spatial-focus | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤2 steps (2x the 1 pointer steps) and ≤8 keystrokes; disk/API outcome; visible focus
+journey.group | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤8 steps (2x the 4 pointer steps) and ≤110 keystrokes; disk/API outcome; visible focus
+journey.color-target | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤10 steps (2x the 5 pointer steps) and ≤160 keystrokes; disk/API outcome; visible focus
+journey.compare-variants | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤8 steps (2x the 4 pointer steps) and ≤130 keystrokes; disk/API outcome; visible focus
+journey.approve-proposal | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤4 steps (2x the 2 pointer steps) and ≤90 keystrokes; disk/API outcome; visible focus
+journey.reject-proposal | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤4 steps (2x the 2 pointer steps) and ≤90 keystrokes; disk/API outcome; visible focus
+journey.generate | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤8 steps (2x the 4 pointer steps) and ≤100 keystrokes; disk/API outcome; visible focus
+journey.arrange | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤4 steps (2x the 2 pointer steps) and ≤40 keystrokes; disk/API outcome; visible focus
+journey.present | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤4 steps (2x the 2 pointer steps) and ≤30 keystrokes; disk/API outcome; visible focus
+journey.help-rebind | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | keys only; ≤12 steps (2x the 6 pointer steps) and ≤130 keystrokes; disk/API outcome; visible focus
 axe.zero | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | 0 axe violations on the populated canvas, with the palette open and with the key map open
 commands.reachable | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | 100% advertised commands have bindings or palette paths, and the palette really lists a random sample
 D4 | beat 0/11 | dream 0/14
@@ -178,7 +178,7 @@ writers.concurrent | FAIL | {"error":"no run"} | 4 concurrent writers, 0 lost or
 events.latency | FAIL | {"samples":0,"p95":"Infinity"} | ≥30 matched edit events; p95 <100 ms
 script.30 | FAIL | {"error":"no run"} | 30-step scripted run, all preceding operations pass
 surface.visible | FAIL | {"error":"Missing MCP mirror list_items; advertised: list_tokens, propose_adoption, list_components, read_component, apply_edits, create_component, add_variant, rename_component, delete_component, render_component, search, subscribe"} | the person sees run, steps, agent presence, a pending proposal and a question on screen, and they clear when answered
-real.codex-opencode | FAIL | {"error":"PENDING LEAD ATTESTATION (agents): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md"} | two real harnesses (Codex, opencode) complete the README proving task unaided from its one line [lead-attested]
+real.codex-opencode | FAIL | {"error":"PENDING LEAD ATTESTATION (agents): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | two real harnesses (Codex, opencode) complete the README proving task unaided from its one line [lead-attested]
 D6 | beat 0/7 | dream 0/8 | lead-attested pending 1
 Check | Result | Value | Target
 workflow.instruments | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | workflow inputs derived from discovered ComfyUI node schemas
@@ -188,7 +188,7 @@ queue.placeholder-progress | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":
 provenance.reopen | FAIL | {"error":"no generation output"} | output retains exact workflow + inputs; reopen generates identical backend prompt
 seed-and-sweep | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | seed round-trips; 2×2 grid over any two sampler parameters
 outputs.multimedia | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | video, audio and 3D use the same queue/result/provenance path
-real.gpu-smoke | FAIL | {"error":"PENDING LEAD ATTESTATION (generation): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md"} | one real ComfyUI workflow through the shared GPU lock: queued, history output, result bytes and provenance matching [lead-attested]
+real.gpu-smoke | FAIL | {"error":"PENDING LEAD ATTESTATION (generation): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | one real ComfyUI workflow through the shared GPU lock: queued, history output, result bytes and provenance matching [lead-attested]
 D7 | beat 0/0 | dream 0/18
 Check | Result | Value | Target
 timeline.css-animation | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | real timeline scrub; loop range; keyframe controls where editable
@@ -215,11 +215,11 @@ cold.start | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":
 axe.light | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | 0 axe violations in light: canvas, palette, selected-item panel, studio, key map
 axe.dark | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | 0 axe violations in dark: canvas, palette, selected-item panel, studio, key map
 themes.differ | FAIL | {"error":"GET /api/items: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | light and dark are real themes: the canvas is clearly darker in dark
-rubric.critics | FAIL | {"error":"PENDING LEAD ATTESTATION (craft): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md"} | two fresh critics >= 8/10 blind against the floor products' screenshots, A/B swapped [lead-attested]
-slop.audit | FAIL | {"error":"PENDING LEAD ATTESTATION (slop): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md"} | slop audit reports 0 tells on canvas, panel, studio and key map [lead-attested]
+rubric.critics | FAIL | {"error":"PENDING LEAD ATTESTATION (craft): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | two fresh critics >= 8/10 blind against the floor products' screenshots, A/B swapped [lead-attested]
+slop.audit | FAIL | {"error":"PENDING LEAD ATTESTATION (slop): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | slop audit reports 0 tells on canvas, panel, studio and key map [lead-attested]
 
 DREAM 3 scoreboard — CPU Chromium, isolated folders and free ports
-Measured: 2026-11-12T23:46:03.782Z | Node v26.8.2 | product 53ed5c383ff861866078bf0f644f7a3cf1304d0acc841dd889f85261454c1283
+Measured: 2026-11-13T00:13:27.985Z | Node v26.8.2 | product 53ed5c383ff861866078bf0f644f7a3cf1304d0acc841dd889f85261454c1283
 Dimension | Beat-the-best met/total | Dream met/total | Lead-attested pending
 D1 | 0/8 | 0/55 | 0
 D2 | 0/10 | 0/56 | 2
@@ -230,8 +230,8 @@ D6 | 0/7 | 0/8 | 1
 D7 | 0/0 | 0/18 | 0
 D8 | 0/0 | 0/6 | 2
 Regression gate | Result
-fidelity | PASS
-edits | PASS
-imposed | PASS
+fidelity | NOT RUN
+edits | NOT RUN
+imposed | NOT RUN
 test suite | NOT RUN
-ACCEPTANCE: NOT MET — D1: 56 check(s) failing; D2: 58 check(s) failing; D2: 2 lead-attested gate(s) pending; D3: 14 check(s) failing; D4: 14 check(s) failing; D5: 29 check(s) failing; D5: 1 lead-attested gate(s) pending; D6: 8 check(s) failing; D6: 1 lead-attested gate(s) pending; D7: 18 check(s) failing; D8: 6 check(s) failing; D8: 2 lead-attested gate(s) pending; test suite not run
+ACCEPTANCE: NOT MET — D1: 56 check(s) failing; D2: 58 check(s) failing; D2: 2 lead-attested gate(s) pending; D3: 14 check(s) failing; D4: 14 check(s) failing; D5: 29 check(s) failing; D5: 1 lead-attested gate(s) pending; D6: 8 check(s) failing; D6: 1 lead-attested gate(s) pending; D7: 18 check(s) failing; D8: 6 check(s) failing; D8: 2 lead-attested gate(s) pending; fidelity not run; edits not run; imposed not run; test suite not run

@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createPublicKey, createPrivateKey, sign, verify } from "node:crypto";
 import { join, resolve, sep } from "node:path";
 import { ROOT, assert, walk } from "./runtime.mjs";
+import { LEAD } from "./lead-env.mjs";
 // Source hash of the product under test.
 export function buildHash() {
   const files = [
@@ -24,15 +25,18 @@ const canonical = (x) =>
 // real Codex/opencode runs, the GPU smoke through the shared lock). Nothing in the repository can
 // satisfy them. The lead supplies two things from outside the repo:
 //   NAPKIN_LEAD_ATTEST  path to a JSON document kept outside this repo and its worktrees
-//   NAPKIN_LEAD_KEY     the secret the lead signs entries with (HMAC-SHA256 of the canonical
-//                       { sourceHash, key, entry } object, hex, stored as entry.mac)
+//   NAPKIN_LEAD_PUBKEY  the lead's Ed25519 PUBLIC key (PEM text). Entries are signed with the
+//                       matching private key by bench/lead-sign.mjs, which only the lead runs.
+// The bench holds only the public key, so a product (or anything it can run) that reads the
+// bench's environment learns nothing that lets it forge an entry. The variables are also removed
+// from every child process the bench starts (cleanEnv in runtime.mjs).
 // Absent, unsigned, stale (different product source hash) or hand-written input is "not met".
 export function leadAttested(key) {
-  const file = process.env.NAPKIN_LEAD_ATTEST,
-    secret = process.env.NAPKIN_LEAD_KEY;
+  const file = LEAD.file,
+    pub = LEAD.pub;
   assert(
-    file && secret,
-    `PENDING LEAD ATTESTATION (${key}): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_KEY; see bench/README.md`,
+    file && pub,
+    `PENDING LEAD ATTESTATION (${key}): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md`,
   );
   const path = resolve(file);
   assert(
@@ -51,18 +55,24 @@ export function leadAttested(key) {
     "attestedBy and at required",
   );
   const { mac, ...body } = e;
-  const want = createHmac("sha256", secret)
-    .update(canonical({ sourceHash: doc.sourceHash, key, entry: body }))
-    .digest();
-  assert(
-    typeof mac === "string" &&
-      mac.length === want.length * 2 &&
-      timingSafeEqual(Buffer.from(mac, "hex"), want),
-    "Attestation signature invalid",
-  );
+  let ok = false;
+  try {
+    ok =
+      typeof mac === "string" &&
+      verify(
+        null,
+        Buffer.from(canonical({ sourceHash: doc.sourceHash, key, entry: body })),
+        createPublicKey(pub),
+        Buffer.from(mac, "hex"),
+      );
+  } catch {}
+  assert(ok, "Attestation signature invalid");
   return e;
 }
-export const signAttestation = (secret, sourceHash, key, entry) =>
-  createHmac("sha256", secret)
-    .update(canonical({ sourceHash, key, entry }))
-    .digest("hex");
+// Used by bench/lead-sign.mjs (lead only) and the self-test.
+export const signAttestation = (privateKeyPem, sourceHash, key, entry) =>
+  sign(
+    null,
+    Buffer.from(canonical({ sourceHash, key, entry })),
+    createPrivateKey(privateKeyPem),
+  ).toString("hex");

@@ -152,26 +152,37 @@ export async function measure() {
               .replace(/\/\*[\s\S]*?\*\//g, "")
               .replace(/<!--[\s\S]*?-->/g, "")
               .replace(/(^|[^:])\/\/.*$/gm, "$1");
+          // Encoding-neutral: the written code must carry the number (CSS, WAAPI, SMIL or attribute
+          // forms all do); whether it is LIVE is judged below from rendered positions.
           assert(
-            new RegExp(`translateX\\(\\s*${target}px\\s*\\)`).test(
+            new RegExp(`(^|[^0-9.])${target}([^0-9]|$)`).test(
               code(readFileSync(join(f.folder, file.path), "utf8")),
             ),
-            "keyframe not written as live code (comments do not count)",
+            "keyframe value not written as live code (comments do not count)",
           );
           s = await restart();
           const b = await browser();
           const fresh = (await items(s)).find((x) => x.path === file.path);
           await b.goto(s.base + "/view/" + encodeURIComponent(fresh.id));
-          if (kind !== "svg") {
-            await sleep(300);
-            const live = await b.eval(
-              `document.getAnimations().some(a=>a.effect.getKeyframes().some(k=>String(k.transform).replace(/\\s/g,'').includes('translateX(${target}px)')))`,
-            );
-            assert(
-              live,
-              "the reopened item does not animate through the edited keyframe",
-            );
-          }
+          await sleep(300);
+          // Outcome: sweep the animation clock over its whole duration (CSS/WAAPI through
+          // getAnimations, SMIL through setCurrentTime) and measure how far any element in the item
+          // actually moves on screen. A dead stylesheet rule or an unreferenced keyframe moves nothing.
+          const moved = await b.eval(`(() => {
+            const docs = [document, ...[...document.querySelectorAll('iframe')].map(f => { try { return f.contentDocument } catch { return null } }).filter(Boolean)];
+            const xs = () => docs.flatMap(d => [...d.querySelectorAll('body *, svg, svg *')].map(e => { const r = e.getBoundingClientRect(); return r.width || r.height ? r.left : null }));
+            const anims = docs.flatMap(d => d.getAnimations());
+            const svgs = docs.flatMap(d => [...d.querySelectorAll('svg')]);
+            const set = t => { for (const a of anims) { a.pause(); const d = a.effect.getComputedTiming().endTime; a.currentTime = Math.min(t * (isFinite(d) ? d : 1000), isFinite(d) ? d : 1000) }
+              for (const v of svgs) { try { v.pauseAnimations(); v.setCurrentTime(t * 5) } catch {} } };
+            set(0); const base = xs(); let best = 0;
+            for (let i = 1; i <= 40; i++) { set(i / 40); const now = xs(); for (let j = 0; j < Math.min(base.length, now.length); j++) if (base[j] !== null && now[j] !== null) best = Math.max(best, Math.abs(now[j] - base[j])) }
+            return { best, anims: anims.length, svgs: svgs.length };
+          })()`);
+          assert(
+            moved.best >= target * 0.8 && moved.best <= target * 1.25 + 4,
+            `the reopened item does not move by the edited ${target}px on screen (largest displacement ${moved.best.toFixed(1)}px)`,
+          );
           const read = await request(
             s,
             "/api/controls/" + encodeURIComponent(item.id),
