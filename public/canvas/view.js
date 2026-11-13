@@ -134,14 +134,16 @@ export function createView(ctx, stageEl, worldEl) {
     clearTimeout(refitTimer);
     refitTimer = setTimeout(() => {
       if (!lastFit || anim || !near(v, lastFit)) return;
-      const r = fitters.all(); if (!r) return;
+      const r = (lastWork && fitters.work?.()) || fitters.all(); if (!r) return;
       const t = view.fitView(r, { pad: 72, max: 1 });
       if (!near(t, lastFit)) { lastFit = t; set(t); }
     }, 120);
   };
   ctx.on('render', refit); ctx.on('layout', refit);
+  let lastWork = false;
   view.fitAll = (opts = {}) => {
-    const r = fitters.all();
+    lastWork = !!opts.work;
+    const r = (opts.work && fitters.work?.()) || fitters.all();
     if (!r) { lastFit = null; return set({ x: 80, y: 120, z: 1 }, opts); }
     lastFit = view.fitView(r, { pad: 72, max: 1 });
     return view.fitRect(r, { pad: 72, max: 1, ...opts });

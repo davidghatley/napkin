@@ -43,9 +43,9 @@ export function initKinds(ctx) {
         owned = [...ctx.state.components.values()].filter((c) => c.path).map((c) => c.path),
         paths = new Set(owned);
       for (const item of items) {
-        // A file the dialect or the document engine already draws is not drawn twice. Dialect paths are relative
-        // to the folder it opened (often components/), so a suffix match counts.
-        if (paths.has(item.path) || ((item.kind === 'tsx' || item.kind === 'jsx') && owned.some((p) => item.path.endsWith('/' + p)))) continue;
+        // HTML, TSX and JSX files are always drawn as components (the TSX dialect or the document engine), never twice.
+        // They stay items for the API; the canvas draws each of them once, as a component.
+        if (['html', 'tsx', 'jsx'].includes(item.kind) || paths.has(item.path)) continue;
         seen.add(item.id);
         const old = ctx.state.components.get(item.id);
         const revision = String(item.meta.modifiedAt) + ':' + item.bytes;

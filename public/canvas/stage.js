@@ -164,7 +164,7 @@ export function createStage(ctx, root, world, view) {
       if (!visible(sec)) { sec.pending = true; sec.el.dataset.ready = '1'; return; }
     }
     // the budget holds on every road in (first draw, a styles answer, an edit): frames beyond DOC_BUDGET wait, named, until there is room
-    if ((c.kind === 'html' || c.item) && !sec.docFrame && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER && [...sections.values()].filter((x) => x.docFrame).length >= DOC_BUDGET) {
+    if ((c.kind === 'html' || c.item) && !sec.docFrame && (c.item ? ctx.state.components.total : ctx.state.components.size) > CULL_AFTER && [...sections].filter(([k, x]) => x.docFrame && !!ctx.state.components.get(k)?.item === !!c.item).length >= DOC_BUDGET) { // (file items and components keep separate budgets)
       sec.pending = true; sec.el.dataset.ready = '1';
       if (!c.item && !sec.frame.querySelector('.bundle-pending')) sec.frame.innerHTML = `<div class="bundle-pending">${esc(c.name)} · ${esc(c.path)}<br>loads when you scroll to it</div>`;
       return;
@@ -378,8 +378,11 @@ export function createStage(ctx, root, world, view) {
       for (const id of pend) { const x = sections.get(id); x.size = { ...est }; x.el.style.setProperty('--nk-w', `${est.w}px`); x.el.style.setProperty('--nk-h', `${est.h}px`); }
     }
     for (const id of ids) if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); }
-    const todo = ids.filter((id) => !placed(id) && !auto.has(id)).sort(byName);
-    const taken = ids.filter(placed);
+    const isItem = (id) => !!ctx.state.components.get(id)?.item;
+    // Files that are not components are packed after them, so a component never lands somewhere different because other files exist.
+    const todo = ids.filter((id) => !placed(id) && !auto.has(id) && !isItem(id)).sort(byName);
+    const todoItems = ids.filter((id) => !placed(id) && !auto.has(id) && isItem(id)).sort(byName);
+    const taken = ids.filter((id) => placed(id) && !isItem(id));
     // the reserve depends on the zoom the whole layout will be viewed at, which depends on the reserve: settle it in a few steps
     const box = view.stageBox();
     const fitZoom = (res) => { // what Shift+1 will show: the frames and their 36 px title strip, 72 px padding, at most 100%
@@ -395,6 +398,11 @@ export function createStage(ctx, root, world, view) {
     }
     for (const id of todo) { const p = res.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
     SHELF_W = res.width;
+    if (todoItems.length) {
+      const seated = ids.filter((id) => sections.get(id).pos && !todoItems.includes(id)), ir = pack(todoItems, seated, 1);
+      for (const id of todoItems) { const p = ir.out.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
+      SHELF_W = Math.max(SHELF_W, ir.width);
+    }
     const last = todo.at(-1);
     shelf = last ? { x: res.out.get(last).x + headBox(sections.get(last), z).w + GAP_X, y: res.out.get(last).y, h: sections.get(last).size.h } : { x: 0, y: 0, h: 0 };
     laidOut = true;
@@ -494,7 +502,9 @@ export function createStage(ctx, root, world, view) {
   const allRect = () => union([...sections.keys()].map(componentRect));
   function nodeRect(sel) { live(sel.component); const el = selectedElement(sel); return el ? elementRect(el) : null; }
   const selectionRect = () => (ctx.state.selections.length ? union(ctx.state.selections.map(nodeRect)) : null);
-  view.setFitters({ all: allRect, selection: selectionRect });
+  // The first view of a folder frames its components (the work it was opened for); file items sit beside them and Shift+1 shows everything.
+  const workRect = () => { const own = [...sections.keys()].filter((id) => !ctx.state.components.get(id)?.item); return own.length ? union(own.map(componentRect)) : allRect(); };
+  view.setFitters({ all: allRect, selection: selectionRect, work: workRect });
 
   // ---------------------------------------------------------------------------------------------- overlays
   function place(box, target, label, base) {
@@ -654,11 +664,13 @@ export function createStage(ctx, root, world, view) {
     // A frame of the document engine is a whole page, so they load progressively and under a budget: a few per pass for the frames in view (at fit-all too), never more than
     // DOC_BUDGET at once. When the frames in view want more than the budget, the loaded ones farthest from the view are unloaded (they keep their size and their name).
     const isDocSec = (id) => ctx.state.components.get(id)?.kind === 'html' || ctx.state.components.get(id)?.item;
-    let docs = [...sections.values()].filter((x) => x.docFrame).length, started = 0, wanting = false;
+    const loadedOf = (item) => [...sections].filter(([k, x]) => x.docFrame && !!ctx.state.components.get(k)?.item === item).length;
+    const budget = { true: loadedOf(true), false: loadedOf(false) }; let started = 0, wanting = false;
     for (const [id, sec] of sections) {
       if (ctx.state.components.get(id)?.item && z < 0.35 && !keep.has(id)) continue;
       if (sec.pending && visible(sec) && isDocSec(id)) {
-        if (docs < DOC_BUDGET && started < DOC_BATCH) { docs++; started++; render(id, true).catch(console.error); } else wanting = true;
+        const isItem = !!ctx.state.components.get(id)?.item;
+        if (budget[isItem] < DOC_BUDGET && started < DOC_BATCH) { budget[isItem]++; started++; render(id, true).catch(console.error); } else wanting = true;
       } else if (sec.pending && visible(sec)) render(id, true).catch(console.error);
     }
     if (wanting) { // unload the farthest loaded frames to make room, then come back for the rest

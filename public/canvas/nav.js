@@ -69,7 +69,7 @@ export function initNav(ctx) {
       return;
     }
     if (saved?.view && !saved.focus) view.set(saved.view);
-    else view.fitAll({ animate: false });
+    else view.fitAll({ animate: false, work: true });
   }
   addEventListener('hashchange', () => {
     const h = fromHash();
