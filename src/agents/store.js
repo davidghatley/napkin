@@ -13,11 +13,11 @@
 // Every method throws RunError(message, status). Messages end in "Next: ..." so an agent can act on them.
 import { createHash, randomBytes } from 'node:crypto';
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync, appendFileSync,
-  statSync, renameSync, rmSync, unlinkSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, realpathSync,
 } from 'node:fs';
 import { dirname, join, resolve, sep, posix } from 'node:path';
 import { writeAtomic } from '../atomic.js';
+import { writeAgentState, appendAgentLog, removeAgentState } from '../commit.js';
 import { stateRoot } from '../doc/folder.js';
 import { explainError } from '../errors.js';
 
@@ -49,8 +49,6 @@ const OUTCOMES = {
 export function createRuns({ root, stateDir = stateRoot(), items, broadcast = () => {}, colorOf = () => ({}) }) {
   root = realpathSync(root);
   const dir = join(stateDir, createHash('sha256').update(Buffer.from(root)).digest('hex').slice(0, 20), 'agents');
-  // The state folder is made on the first write: merely opening a folder leaves no trace in the state directory.
-  const ensure = () => { mkdirSync(join(dir, 'runs'), { recursive: true }); mkdirSync(join(dir, 'content'), { recursive: true }); };
 
   const runs = new Map();            // id -> run
   const questions = new Map();       // id -> question (global: a question may belong to no run)
@@ -60,10 +58,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
 
   // ------------------------------------------------------------------------------------------------ persistence
   const writeJson = (file, value) => {
-    ensure();
-    const tmp = `${file}.tmp-${process.pid}`;
-    writeFileSync(tmp, JSON.stringify(value));
-    renameSync(tmp, file);
+    writeAgentState(file, JSON.stringify(value));
   };
   const saveRun = (run) => { run.updatedAt = Date.now(); writeJson(join(dir, 'runs', `${run.id}.json`), run); };
   const saveLoose = () => writeJson(join(dir, 'loose.json'), { questions: looseQuestions, proposals: looseProposals });
@@ -89,7 +84,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   try {
     const lines = readFileSync(logFile, 'utf8').split('\n').filter(Boolean);
     const keep = lines.length > LOG_KEEP ? lines.slice(-Math.floor(LOG_KEEP / 2)) : lines;
-    if (keep !== lines) writeFileSync(logFile, keep.join('\n') + '\n');
+    if (keep !== lines) writeAgentState(logFile, keep.join('\n') + '\n');
     for (const l of keep) { try { ring.push(JSON.parse(l)); } catch { /* torn last line */ } }
     ring = ring.slice(-RING);
     seq = ring.at(-1)?.seq ?? 0;
@@ -103,7 +98,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     const ev = { type, seq: ++seq, at: Date.now(), ...data };
     if (persist) {
       ring.push(ev); if (ring.length > RING * 1.5) ring = ring.slice(-RING);
-      try { ensure(); appendFileSync(logFile, JSON.stringify(ev) + '\n'); } catch { /* the log is best effort; the run files are the record */ }
+      try { appendAgentLog(logFile, JSON.stringify(ev) + '\n'); } catch { /* the log is best effort; the run files are the record */ }
     }
     broadcast({ ...ev, ...(ev.by ? colorOf(ev.by) : {}) });
     wake();
@@ -281,7 +276,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
       ...previewOf(buf, rel), mime: guessMime(rel),
       ...(replaces ? { replaces } : {}),
     };
-    ensure(); writeFileSync(contentFile(id), buf);
+    writeAgentState(contentFile(id), buf);
     return register(p, run, by);
   }
   function register(p, run, by) {
@@ -347,7 +342,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     persistProposal(p);
     touch(by, run, `${kind} ${p.path}`);
     const ev = emit('run-proposal-resolved', { run: p.run, by, id: p.id, proposal: p.id, outcome: kind, comment: note, path: p.path, proposedBy: p.by, kind: p.kind, ...result });
-    if (kind !== 'accepted') { try { unlinkSync(contentFile(p.id)); } catch { /* none */ } }
+    if (kind !== 'accepted') { removeAgentState(contentFile(p.id)); }
     return { ok: true, status: kind, outcome: kind, seq: ev.seq, ...result };
   }
   // Writing an accepted proposal. Throws (leaving it pending) when the file changed since it was proposed.

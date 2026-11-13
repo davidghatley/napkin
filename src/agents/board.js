@@ -6,7 +6,8 @@
 // `runs` is derived on every read: one section per run, holding the files that run made, so artifacts land in a
 // run's section as they are made without anyone writing a group.
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { writeAgentState } from '../commit.js';
 import { join } from 'node:path';
 import { stateRoot } from '../doc/folder.js';
 import { RunError } from './store.js';
@@ -37,7 +38,7 @@ export function createBoard({ root, stateDir = stateRoot(), emit = () => {}, bro
   try { s = { ...s, ...JSON.parse(readFileSync(file, 'utf8')) }; } catch { /* first start */ }
   // What the person sees right now is not worth keeping across a restart.
   s.selection = []; s.view = undefined;
-  const save = () => { mkdirSync(dir, { recursive: true }); const tmp = `${file}.tmp-${process.pid}`; writeFileSync(tmp, JSON.stringify({ ...s, selection: undefined, view: undefined })); renameSync(tmp, file); };
+  const save = () => writeAgentState(file, JSON.stringify({ ...s, selection: undefined, view: undefined }));
   const get = () => ({ ...JSON.parse(JSON.stringify(s)), runs: runSections() });
 
   function set(by, body = {}) {

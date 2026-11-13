@@ -192,7 +192,7 @@ export function initRuns(ctx) {
     else if (!waiting) nodes.push(h('p', { class: 'rp-empty', text: 'Agents are connected. Runs they start show up here.' }));
     body.replaceChildren(...nodes);
     if (S.announce) { live.textContent = S.announce; S.announce = ''; clearTimeout(clearLive); clearLive = setTimeout(() => { live.textContent = ''; }, 3000); }
-    if (keepFocus || typing) {
+    if (keepFocus || typing || focusedId) {
       keepFocus = false;
       const sel = typing ? `[data-note-for="${CSS.escape(typing.id)}"]` : focusedId ? `[data-proposal-id="${CSS.escape(focusedId)}"],[data-question-id="${CSS.escape(focusedId)}"]` : null;
       const el = (sel && root.querySelector(sel)) ?? (focusedId ? root.querySelector('.rp-card') : null);

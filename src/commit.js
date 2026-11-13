@@ -3,7 +3,7 @@
 // summary that it records as a revision and announces as a frame. Nothing else in src/ touches a component .tsx with fs.
 // Every write goes through writeFileAtomic (REL-01): temp file in the same folder, fsync, rename; a new file is created
 // exclusively (link), so it can never replace one that exists.
-import { unlinkSync, mkdirSync, rmSync } from 'node:fs';
+import { unlinkSync, mkdirSync, rmSync, appendFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { writeFileAtomic } from './atomic-write.js';
 
@@ -54,3 +54,8 @@ export function writeItemLayout(file, frames) {
   mkdirSync(dirname(file), { recursive: true });
   writeFileAtomic(file, JSON.stringify(frames));
 }
+
+// Agent state (runs, event log, held proposal bytes, board): private application state in napkin's state dir, never in the opened folder.
+export function writeAgentState(file, data) { mkdirSync(dirname(file), { recursive: true }); writeFileAtomic(file, data); }
+export function appendAgentLog(file, line) { mkdirSync(dirname(file), { recursive: true }); appendFileSync(file, line); }
+export function removeAgentState(file) { try { unlinkSync(file); } catch { /* already gone */ } }
