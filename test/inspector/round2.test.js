@@ -48,7 +48,7 @@ test('round 2: inherited values are listed with a link that selects the ancestor
     assert.ok(inh.some((r) => r.label === 'font' && /\.card\.dark/.test(r.link) && /14px\/20px/.test(r.value)), 'the font shorthand on the ancestor is one row');
     assert.equal(await a.q(`/Nothing styles/.test(document.querySelector('#doc-values').innerText)`), false);
     await a.q(`document.querySelector('#doc-inherited .plink').click()`);
-    await a.browser.waitFor(`!!document.querySelector('#panel .doc-head[data-node="${card.node}"] ~ .doc-body')`);
+    await a.browser.waitFor(`!!document.querySelector('#panel .doc-body[data-node="${card.node}"]')`);
     // server and canvas agree on what is inherited
     const srv = (await (await fetch(`${a.app.url}api/component/p.html/rules?node=${span.node}`)).json()).node.inherited;
     assert.deepEqual(srv.map((r) => [r.prop, r.from]).sort(), [['color', card.node], ['font', card.node]].sort());

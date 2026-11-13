@@ -4,9 +4,9 @@
 // Every control still writes CSS through ctx.sendEdits: one `set` per property, and one batch per change
 // (several selected nodes = one revision). The panel never writes files. Text typed into a field survives a
 // rebuild (ui.draft) until it is saved.
-import { keyLabel } from './keylabel.js';
 import { plain, stripNext } from './words.js';
 import { renderDocPanel } from './doc-panel.js';
+import { sectionHtml, wireSections } from './sections.js';
 import { index, axes, resolveStyle, propOf } from '/src/model.js';
 import { isFlex, isGrid, mainProp, sizeMode, sizePatch, pinPatch, pinsOf, tracks, placementOf, placePatch } from '/src/layout.js';
 import { parseColor, formatColor, fileSpace, documentColors, colorsIn } from '/src/color.js';
@@ -56,8 +56,6 @@ const DESIGN = new Set([...Object.keys(F), ...ALLBORDERS, 'flexWrap', 'gridTempl
 const ALIGN = ['flex-start', 'center', 'flex-end'];
 const AL_NAME = [['top left', 'top', 'top right'], ['left', 'center', 'right'], ['bottom left', 'bottom', 'bottom right']];
 
-const keep = (k, set) => { try { localStorage.setItem(k, JSON.stringify([...set])); } catch {} };
-const recall = (k) => { try { return new Set(JSON.parse(localStorage.getItem(k) || '[]')); } catch { return new Set(); } };
 // Panel-only state (nothing here is document state).
 const ui = {
   selKey: '',      // component|variant: the edit target resets to Base when it changes
@@ -66,9 +64,6 @@ const ui = {
   errors: {},      // key -> { text, retry?: { component, edits } }
   forms: {},       // key -> true while an inline form is open
   draft: {},       // input id -> unsaved text
-  closed: recall('napkin.panel.closed'), // sections the user collapsed (remembered in this browser)
-  opened: recall('napkin.panel.opened'), // sections the user expanded (overrides a collapsed default)
-  advanced: false,
   sides: { pad: false, rad: false }, // per-side padding and per-corner radius expanded
   side: '',        // which border side the Stroke controls edit ('' = all)
   info: false,     // the scope explanation
@@ -182,12 +177,16 @@ const GLYPH = {
   col: G('M3 2v8M9 2v8'), row: G('M2 3h8M2 9h8'),
 };
 
+// The element part of the one right panel (#pp-element, inside #panel): the sections of the selected layer or element. The header
+// (panel-head.js) and the file's own sections (surface-panel.js, after these in the same list) are drawn with it.
 export function renderPanel(ctx) {
-  const el = document.querySelector('#panel');
+  const el = document.querySelector('#pp-element');
   wire(ctx, el);
   wireProps(ctx, el); wireVariants(ctx, el);
+  wireSections(el);
+  ctx.panelHead?.render();
   if (ui.scrubbing) return;
-  ctx.instruments?.show(); // the instrument panel (surface-panel.js) for the file(s) selected, above this one
+  ctx.instruments?.show(); // the file's own sections (surface-panel.js), after this element's in the same list
   { // an HTML component of the document engine has its own panel (doc-panel.js)
     const s0 = ctx.state.selection, c0 = s0 && ctx.state.components.get(s0.component);
     // A file item, or several cards: the instrument panel is the whole panel.
@@ -200,16 +199,13 @@ export function renderPanel(ctx) {
   const doc = comp?.doc;
   const node = doc && index(doc).byId.get(sel.node);
   if (!node && comp?.readOnly) {
-    el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="mono" id="sel-node">${esc(sel.node)}</span></div></div><p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>`;
+    el.innerHTML = `<p class="hint pp-note" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>`;
     return;
   }
-  if (!node && !ctx.state.components.size) {
-    el.innerHTML = '<div class="empty-panel"><h2>Design</h2><p class="hint">Your selection’s properties appear here.</p></div>'; return;
-  }
-  if (!node) {
-    el.innerHTML = `<div class="empty-panel"><svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true"><rect x="7" y="9" width="34" height="30" rx="5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 4"/><path d="M19 20l11 5-5 2-2 5z" fill="currentColor"/></svg>
-      <h2>Nothing selected</h2><p class="hint">Click a layer or an element on the canvas. Shift-click or drag a box to select several.</p>
-      <dl class="keys"><dt><kbd>${keyLabel('Mod+K')}</kbd></dt><dd>Jump to anything</dd><dt><kbd>Enter</kbd></dt><dd>Focus a component</dd><dt><kbd>Alt+I</kbd></dt><dd>Jump to the inspector</dd><dt><kbd>${keyLabel('Mod+K')}</kbd></dt><dd>…then type a property: Radius, Fill, Gap</dd><dt><kbd>${keyLabel('Shift+1')}</kbd></dt><dd>Fit everything</dd><dt><kbd>Alt</kbd></dt><dd>Measure to hovered</dd></dl></div>`;
+  if (!node) { // nothing selected: one line and the canvas's settings (panel-head.js)
+    delete el.dataset.full;
+    if (ctx.panelHead) { ctx.panelHead.empty(el); return; }
+    el.innerHTML = '<p class="pp-empty">Select something to edit it.</p>';
     return;
   }
   const selKey = `${sel.component}|${JSON.stringify(sel.variant)}`;
@@ -304,7 +300,8 @@ export function renderPanel(ctx) {
       <div class="seg sizeseg" role="radiogroup" aria-label="${name} sizing">${opts.map(([m, text, tip]) => `<button type="button" role="radio" id="size-${prop}-${m}" aria-checked="${mode === m}" data-size="${prop}" data-mode="${m}" title="${tip}"${dis}><span>${text}</span></button>`).join('')}</div>
       <div class="fbox num${kind ? ' ' + kind : ''}"><input id="${prop}" data-field="style" data-prop="${prop}" data-step="1"${kind ? ' data-eff="1"' : ''} autocomplete="off" spellcheck="false" value="${esc(mode === 'fill' && !kind ? shown : shown)}" placeholder="${mixed ? 'Mixed' : 'Auto'}" aria-label="${name}"${mixed ? ' data-mixed="1"' : ''}${dis}>${NUMBER.test(shown) && !mixed ? '<span class="unit" aria-hidden="true">px</span>' : ''}${tags(prop, name)}</div>${boxHint(prop)}${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
-  const section = (id, title, body, { open = true, action = '' } = {}) => `<details class="sec" data-sec="${id}"${(ui.closed.has(id) ? false : ui.opened.has(id) ? true : open) ? ' open' : ''}><summary>${title}${action}</summary><div class="sbody">${body}</div></details>`;
+  // One section look for the whole panel (sections.js): open or closed is remembered per kind of selection and section.
+  const section = (id, title, body, { open = true, action = '', cls = '' } = {}) => sectionHtml({ kind: 'tsx', id, title, body, open, action, cls });
   const has = (prop) => nodes.some((n) => resolvedOf(n)[prop] !== undefined);
   // Fill, Stroke, Shadow: always a settled header with a + at its end; the body appears once there is one.
   const plus = (id, label, props, def) => `<button type="button" class="addbtn" id="add-${id}" data-action="set-prop" data-props="${props.join(',')}" data-def="${esc(inFormat(def, space))}" aria-label="Add ${label.toLowerCase()}" title="Add ${label.toLowerCase()}"${dis}><svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M6 2v8M2 6h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>`;
@@ -350,7 +347,7 @@ export function renderPanel(ctx) {
   };
   const padField = field('padding', { extra: expand('pad', padSides, 'Padding per side') });
   const container = node.children.length > 0;
-  const layout = section('layout', 'Layout',
+  const layout = section('layout', 'Auto layout',
     seg('display', 'Display', [['block', 'Block'], ['flex', 'Flex', '', /flex/], ['grid', 'Grid']])
     + (flex ? `<div class="irow dirrow">${seg('flexDirection', 'Direction', [['row', 'Row', I.row, /^(row|undefined)$/], ['column', 'Column', I.column]])}<button type="button" class="togbtn" id="wrap-toggle" data-action="wrap" aria-pressed="${wrapOn}" title="Wrap onto new lines when full"${dis}>${I.wrap}<span>Wrap</span></button></div>` : '')
     + (flex ? `<div class="alignrow">${matrix}<div class="stack">${field('gap', { extra: gapAuto })}${padField}</div></div>${err('align')}` : '')
@@ -366,7 +363,7 @@ export function renderPanel(ctx) {
   const pinSeg = (axis, items) => `<div class="fld full"><div class="seg pins" role="radiogroup" aria-label="${axis === 'h' ? 'Horizontal' : 'Vertical'} pin">${items.map(([m, text, tip]) => `<button type="button" role="radio" id="pin-${axis}-${m}" aria-checked="${pins[axis] === m}" data-pin="${axis}" data-mode="${m}" title="${tip}"${dis}>${text}</button>`).join('')}</div></div>`;
   const inset = (p) => { const v = val(p).value; return v === undefined ? '' : field(p, { eff: false }); };
   const limitsOpen = ui.limits || ['minWidth', 'maxWidth', 'minHeight', 'maxHeight'].some(has);
-  const sizeSec = section('size', 'Size',
+  const sizeSec = section('size', 'Layout',
     sizeRow('width') + sizeRow('height')
     + `<div class="limitsrow"><button type="button" class="minibtn" id="limits-toggle" data-action="limits" aria-expanded="${limitsOpen}" title="Minimum and maximum size">Min / Max <svg viewBox="0 0 8 8" width="8" height="8" aria-hidden="true"><path d="${limitsOpen ? 'M1 5.500 4 2.500 7 5.500' : 'M1 2.500 4 5.500 7 2.500'}" fill="none" stroke="currentColor" stroke-width="1.200" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`
     + (limitsOpen ? row(field('minWidth'), field('maxWidth')) + row(field('minHeight'), field('maxHeight')) : '')
@@ -393,7 +390,7 @@ export function renderPanel(ctx) {
     `<div class="fld full colorf${isOver(sideProp) ? ' overridden' : ''}">${colorRow('stroke', 'stroke-color', bp ? bp.c : '', { eye: { off: strokeOff }, alphaId: 'stroke-a', remove: { id: 'stroke', props: strokeProps } })}${tags(sideProp, 'Stroke')}${err('style-' + sideProp)}${err('reset-' + sideProp)}</div>
      <div class="irow n2">${part('stroke', 'stroke-w', 'Width', bp ? String(bp.w) : '', { part: 'w', ph: '1', glyph: GLYPH.padding })}<div class="fld"><div class="fbox sel"><label class="flabel pfx" for="stroke-s"><span class="lt">Style</span></label><select id="stroke-s" data-field="part" data-group="stroke" data-part="s"${dis}>${['solid', 'dashed', 'dotted', 'none'].map((s) => `<option${bp?.s === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div></div></div>`, '1px solid #1f2937', { force: !!ui.side, always: strokeSides });
   const sv = val('boxShadow'), sp = parseShadow(sv.value);
-  const effects = optSection('effects', 'Shadow', ['boxShadow'], has('boxShadow'),
+  const effects = optSection('effects', 'Effects', ['boxShadow'], has('boxShadow'),
     sp || sv.value === undefined || sv.mixed ? `<div class="fld full colorf${isOver('boxShadow') ? ' overridden' : ''}">${colorRow('shadow', 'shadow-color', sp ? sp.c : '', { alphaId: 'shadow-a', remove: { id: 'effects', props: ['boxShadow'] } })}${tags('boxShadow', 'Shadow')}${err('style-boxShadow')}${err('reset-boxShadow')}</div>
       <div class="irow n2">${part('shadow', 'shadow-x', 'X', sp ? String(sp.x) : '', { part: 'x', glyph: GLYPH.left })}${part('shadow', 'shadow-y', 'Y', sp ? String(sp.y) : '', { part: 'y', glyph: GLYPH.top })}</div>
       <div class="irow n2">${part('shadow', 'shadow-blur', 'Blur', sp ? String(sp.b) : '', { part: 'b' })}${part('shadow', 'shadow-spread', 'Spread', sp ? String(sp.s) : '', { part: 's' })}</div>`
@@ -403,7 +400,7 @@ export function renderPanel(ctx) {
   const wt = val('fontWeight');
   const effW = cs ? Number(cs.fontWeight) : null;
   const weightSel = `<div class="fld"><div class="fbox sel${wt.value === undefined && !wt.mixed ? ' inherited' : ''}" title="${wt.value === undefined && !wt.mixed ? 'Inherited from the parent' : ''}"><label class="flabel pfx" for="fontWeight">${L('B')}<span class="lt">Weight</span></label><select id="fontWeight" data-field="weight"${dis}>${wt.mixed ? '<option value="" selected>Mixed</option>' : ''}${wt.value === undefined && !wt.mixed ? `<option value="" selected>${effW ?? 400}</option>` : ''}${[...new Set([...(wt.value !== undefined && !WEIGHTS.includes(Number(wt.value)) ? [wt.value] : []), ...WEIGHTS])].map((w) => `<option value="${w}"${!wt.mixed && String(wt.value) === String(w) ? ' selected' : ''}>${w}</option>`).join('')}</select>${tags('fontWeight', 'Weight')}</div>${err('style-fontWeight')}</div>`;
-  const typeSec = section('type', 'Text',
+  const typeSec = section('type', 'Typography',
     `<p class="hint typehint">Grey values come from the parent. Type a value to set one here.</p>` + field('fontFamily', { wide: true }) + row(field('fontSize'), weightSel) + row(field('lineHeight'), field('letterSpacing'))
     + seg('textAlign', 'Align', [['left', 'Left', I.left], ['center', 'Center', I.center], ['right', 'Right', I.right]], { iconOnly: true, eff: (c) => ({ start: 'left', end: 'right', justify: 'left' }[c.textAlign] ?? c.textAlign) }) + field('color'), { open: isText });
 
@@ -415,10 +412,10 @@ export function renderPanel(ctx) {
       <div class="fld full"><div class="fbox txt"><label class="flabel pfx" for="alt"><span class="lt">Alt text</span></label><input id="alt" data-field="attr" data-attr="alt" autocomplete="off" value="${esc(node.attrs?.alt ?? '')}"${dis}></div>${err('attr-alt')}</div>`);
   } else if (single && !node.children.length) {
     const bound = node.textProp;
-    content = `<div class="contentrow" data-sec="content">${bound
+    content = section('content', 'Text', `<div class="contentrow">${bound
       ? `<p class="shows" id="shows">shows <code>${esc(bound)}</code> <button type="button" class="btn small" id="unbind" data-action="unbind"${dis}>Unbind</button></p>`
       : `<div class="fld full textrow"><div class="fbox txt"><label class="flabel pfx" for="text">${L('T')}<span class="lt">Text</span></label><input id="text" data-field="text" autocomplete="off" value="${esc(node.text ?? '')}"${dis}></div>${ui.forms.bind ? '' : `<button type="button" class="btn small" id="make-setting" data-action="open" data-form="bind" title="Let the component's user change this text"${dis}>Make setting</button>`}</div>
-         ${ui.forms.bind ? `<form data-submit="bind" class="inline"><label for="bind-prop">Setting name</label><input id="bind-prop" autocomplete="off" value="${esc(ui.draft['bind-prop'] ?? (/^[a-z][a-zA-Z0-9]*$/.test(node.id) ? node.id : 'text'))}"${dis}><div class="row2"><button type="submit" class="btn primary" id="bind-submit"${dis}>Bind</button><button type="button" class="btn" data-action="close" data-form="bind">Cancel</button></div></form>` : ''}`}${err('text')}${err('bind')}</div>`;
+         ${ui.forms.bind ? `<form data-submit="bind" class="inline"><label for="bind-prop">Setting name</label><input id="bind-prop" autocomplete="off" value="${esc(ui.draft['bind-prop'] ?? (/^[a-z][a-zA-Z0-9]*$/.test(node.id) ? node.id : 'text'))}"${dis}><div class="row2"><button type="submit" class="btn primary" id="bind-submit"${dis}>Bind</button><button type="button" class="btn" data-action="close" data-form="bind">Cancel</button></div></form>` : ''}`}${err('text')}${err('bind')}</div>`);
   }
 
   const extra = [...new Set(nodes.flatMap((n) => Object.keys(resolvedOf(n))))].filter((p) => !DESIGN.has(p));
@@ -426,9 +423,9 @@ export function renderPanel(ctx) {
     const { value, mixed } = val(prop), shown = value === undefined ? '' : String(value);
     return `<div class="fld full${isOver(prop) ? ' overridden' : ''}"><div class="fbox txt"><label class="flabel pfx mono" for="${prop}"><span class="lt">${esc(prop)}</span></label><input id="${prop}" data-field="style" data-prop="${prop}" data-text="1" autocomplete="off" spellcheck="false" value="${esc(shown)}" placeholder="${mixed ? 'Mixed' : ''}"${dis}>${tags(prop, prop)}</div>${err('style-' + prop)}${err('reset-' + prop)}</div>`;
   };
-  const advanced = `<details class="sec adv" data-sec="advanced"${ui.advanced ? ' open' : ''}><summary>Advanced: all CSS</summary><div class="sbody">${extra.map(advRow).join('')}
+  const advanced = section('advanced', 'Advanced: all CSS', `${extra.map(advRow).join('')}
     ${ui.forms.style ? `<form data-submit="add-style" class="inline"><label for="new-style-name">Property</label><input id="new-style-name" placeholder="boxShadow" autocomplete="off"${dis}><label for="new-style-value">Value</label><input id="new-style-value" autocomplete="off"${dis}><div class="row2"><button type="submit" class="btn primary" id="add-style-submit"${dis}>Add</button><button type="button" class="btn" data-action="close" data-form="style">Cancel</button></div></form>`
-    : `<button type="button" class="btn" id="add-style" data-action="open" data-form="style"${dis}>+ property</button>`}${err('add-style')}</div></details>`;
+    : `<button type="button" class="btn" id="add-style" data-action="open" data-form="style"${dis}>+ property</button>`}${err('add-style')}`, { open: false, cls: 'adv' });
 
   const explain = t.available ? (t.overriding ? `Edits go to ${esc(t.chosen[0])}=${esc(t.chosen[1])} only. Everything else keeps the base value.` : 'Edits go to the base and reach every variant that does not override them.')
     : (Object.keys(sel.variant || {}).length ? 'This cell is all base values, so there is no override to make. Edits go to the base.' : 'This component has no variants yet. Edits go to the base.');
@@ -449,16 +446,17 @@ export function renderPanel(ctx) {
   const composeUi = multi ? '' : section('compose', 'Composition', composeBody(ctx, doc, node, comp, dis), { open: !!(node.instance || node.slot || node.when) });
 
   const vlabel = variantLabel(sel.variant);
-  el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="sep" aria-hidden="true">›</span><span class="nodename" id="sel-node">${esc(node.id)} <span class="tagname">&lt;${esc(node.tag)}&gt;</span>${multi ? ` <b class="more">+${nodes.length - 1}</b>` : ''}</span></div>
+  // The header (name, glyph, tag) is panel-head.js's. Here: which variant an edit goes to, then the sections in the panel's one order
+  // (standards section 7 rule 4): Layout, Auto layout, Appearance, Typography, Fill, Stroke, Effects, the component's own (Settings,
+  // Variants, Composition), then the content (Text or Image) and all other CSS. A section shows only where it applies.
+  el.innerHTML = `<div class="pp-context">
     <div class="selmeta"><span class="metacap">Variant</span><span class="vchip" id="sel-variant">${esc(vlabel)}</span><span class="sr" id="sel-target">${t.overriding ? `override ${esc(t.chosen[0])}=${esc(t.chosen[1])}` : 'Base'}</span></div>
     ${multi ? `<p class="hint multi" id="sel-multi">${nodes.length} layers selected. Fields show Mixed where they differ; a change applies to all of them in one edit.</p>` : ''}
     ${comp.readOnly ? `<p class="hint" id="sel-readonly">read-only: ${esc(comp.readOnly)}</p>` : ''}
     ${scope}</div>
-    ${node.instance ? '' : isText ? content + typeSec + look + fill + stroke + effects + layout + sizeSec
-      : node.tag === 'img' ? content + sizeSec + look + stroke + effects + layout
-      : container ? layout + sizeSec + look + fill + stroke + effects + (showType ? typeSec : '')
-      : sizeSec + look + fill + stroke + effects + (showType ? typeSec : '') + layout}${node.instance ? '' : advanced}
-    ${composeUi}${propsUi}${variantsUi}`;
+    ${node.instance ? '' : sizeSec + layout + look + (node.tag !== 'img' && (isText || showType) ? typeSec : '') + (node.tag === 'img' ? '' : fill) + stroke + effects}
+    ${propsUi}${variantsUi}${composeUi}${content}${node.instance ? '' : advanced}`;
+  wireSections(el);
 
   for (const sw of el.querySelectorAll('.chipcolor')) {
     const v = sw.dataset.color;
@@ -681,17 +679,7 @@ function wire(ctx, el) {
   });
   // Leaving a field with nothing to write (the value is back where it began) puts the canvas back.
   el.addEventListener('focusout', (ev) => { if (ev.target.dataset?.field === 'style' && previewed.length) restore(); });
-  // only a person's click or key on a summary counts as a choice; a redraw inserting <details> also fires toggle
-  let userToggle = 0;
-  el.addEventListener('pointerdown', (ev) => { if (ev.target.closest?.('summary')) userToggle = Date.now(); }, true);
-  el.addEventListener('keydown', (ev) => { if (ev.target.matches?.('summary')) userToggle = Date.now(); }, true);
-  el.addEventListener('click', (ev) => { if (ev.target.closest?.('summary')) userToggle = Date.now(); }, true);
-  el.addEventListener('toggle', (ev) => {
-    const d = ev.target;
-    if (!d.matches?.('details.sec') || Date.now() - userToggle > 500) return;
-    const id = d.dataset.sec;
-    if (id === 'advanced') ui.advanced = d.open; else { if (d.open) { ui.closed.delete(id); ui.opened.add(id); } else { ui.closed.add(id); ui.opened.delete(id); } keep('napkin.panel.closed', ui.closed); keep('napkin.panel.opened', ui.opened); }
-  }, true);
+  // (Open and closed sections are sections.js's: remembered per kind and section.)
 
   el.addEventListener('change', async (ev) => {
     const t = ev.target, s = ctx.state.selection, doc = curDoc();
@@ -806,7 +794,7 @@ function wire(ctx, el) {
     const b = ev.target.closest('button[data-action]');
     if (!b) return;
     const a = b.dataset.action;
-    if (a === 'open') { ui.forms[b.dataset.form] = true; if (b.dataset.form === 'style') ui.advanced = true; rerender(); setTimeout(() => el.querySelector(`form[data-submit] input`)?.focus(), 0); }
+    if (a === 'open') { ui.forms[b.dataset.form] = true; rerender(); setTimeout(() => el.querySelector(`form[data-submit] input`)?.focus(), 0); }
     else if (a === 'close') { delete ui.forms[b.dataset.form]; for (const id of Object.keys(ui.draft)) if (el.querySelector(`form [id="${CSS.escape(id)}"]`)) delete ui.draft[id]; rerender(); }
     else if (a === 'retry') { const e = ui.errors[b.dataset.key]; if (e?.retry) await run(b.dataset.key, e.retry.component, e.retry.edits, e.retry.opts); }
     else if (a === 'reset') {

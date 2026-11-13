@@ -51,7 +51,7 @@ test('surface: palette phrases, one instrument panel, spatial focus, groups, key
   await b.waitFor(`fetch('/api/controls/a.css').then(r=>r.json()).then(j=>j.sections.flatMap(s=>s.controls).find(c=>c.id===${JSON.stringify(num.id)}).value===${num.value + 5})`, 5000);
   assert.ok(readdirSync(files).some((f) => f.startsWith('a.css') && (f !== 'a.css' || readFileSync(join(files, f), 'utf8') !== CSS)), 'the file or the recipe beside it changed');
   assert.equal(await b.eval(`document.activeElement.classList.contains('d-label')`), true, 'Enter hands focus to the label, where arrows step');
-  await b.eval(`document.querySelector('[data-inst-undo]').click()`);
+  await palette('Undo the last instrument change'); // the panel's Undo button went with its second header: G U, Ctrl+Z, or the palette
   await b.waitFor(`fetch('/api/controls/a.css').then(r=>r.json()).then(j=>j.sections.flatMap(s=>s.controls).find(c=>c.id===${JSON.stringify(num.id)}).value===${num.value})`, 5000);
 
   // Arrow keys walk the cards by position; Shift adds the next one; Group names them without touching the folder.

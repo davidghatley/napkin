@@ -64,7 +64,7 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
       assert.deepEqual(notIndexed, [], `controls in the panel that Cmd-K does not know (${total} focusable, ${found.length} indexed)`);
       let worst = 0;
       for (const f of found) {
-        await b.eval(`(() => { document.activeElement.blur(); document.querySelectorAll('#panel details').forEach((d) => (d.open = false)); })()`);
+        await b.eval(`(() => { document.activeElement.blur(); document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = false)); })()`);
         let keys = 0;
         await open(); keys++;
         for (const ch of f.q) { await io.key(ch); keys++; }
@@ -110,7 +110,7 @@ test('round 3 polish: messages clear and name the field; the snap toast follows 
   try {
     await b.waitFor(`napkin.find('Button').doc.root.style.borderRadius === 7`);
     await pick(b, 'Button', 'root', { size: 'md', state: 'default' });
-    const type = async (id, text) => { await b.eval(`(() => { document.querySelectorAll('#panel details').forEach((d) => (d.open = true)); const e = document.getElementById('${id}'); e.scrollIntoView(); e.focus(); e.select(); })()`); await b.send('Input.insertText', { text }); await io.key('Enter'); await sleep(450); };
+    const type = async (id, text) => { await b.eval(`(() => { document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true)); const e = document.getElementById('${id}'); e.scrollIntoView(); e.focus(); e.select(); })()`); await b.send('Input.insertText', { text }); await io.key('Enter'); await sleep(450); };
     await t.test('a stroke-colour error names the colour and the Stroke colour field', async () => {
       await type('stroke-color', 'banana');
       const msg = await b.eval(`[...document.querySelectorAll('.field-error')].map((e) => e.textContent).join(' | ')`);
@@ -127,9 +127,9 @@ test('round 3 polish: messages clear and name the field; the snap toast follows 
     });
     await t.test('add setting with a bad name: plain message, caret stays in the name field, nothing written', async () => {
       const before = readFileSync(file, 'utf8');
-      await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(300);
+      await b.eval(`document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true))`); await sleep(300);
       await b.eval(`document.getElementById('add-prop')?.click()`); await sleep(250);
-      await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(300);
+      await b.eval(`document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true))`); await sleep(300);
       await b.eval(`(() => { const e = document.getElementById('new-prop-name'); e.focus(); e.select(); })()`); assert.equal(await b.eval(`document.activeElement.id`), 'new-prop-name');
       await b.eval(`window.__f = []; document.addEventListener('focusin', (e) => __f.push('in:' + e.target.id), true); document.addEventListener('focusout', (e) => __f.push('out:' + e.target.id), true); new MutationObserver(() => __f.push('mut')).observe(document.querySelector('#panel'), { childList: true, subtree: true })`);
       await b.send('Input.insertText', { text: 'Foo' }); await io.key('Enter'); await sleep(450);
@@ -141,7 +141,7 @@ test('round 3 polish: messages clear and name the field; the snap toast follows 
       await b.eval(`document.querySelectorAll('#panel [data-cmp="close"]').forEach((x) => x.click())`);
     });
     await t.test('a keyboard snap moves focus to Undo; Ctrl+Z hides the toast and the snap is undone', async () => {
-      await b.eval(`(() => { document.querySelectorAll('#panel details').forEach((d) => (d.open = true)); const d = document.getElementById('off-token-borderRadius'); d.scrollIntoView(); d.focus(); })()`);
+      await b.eval(`(() => { document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true)); const d = document.getElementById('off-token-borderRadius'); d.scrollIntoView(); d.focus(); })()`);
       assert.equal(await b.eval(`document.activeElement.id`), 'off-token-borderRadius');
       await io.key('Enter');
       await b.waitFor(`document.activeElement.id === 'snap-undo'`);
@@ -179,8 +179,8 @@ test('WPC-14: every panel form x {bad, empty, duplicate}: one plain sentence, ca
     for (const spec of FORMS) for (const [value, expect] of spec.cases) await t.test(`${spec.form}: ${JSON.stringify(value)}`, async () => {
       const before = [text('Button.tsx'), text('Card.tsx')];
       await pick(b, spec.node[0], spec.node[1], { size: 'md', state: 'default' });
-      await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(350);
-      if (spec.open && !(await b.eval(`!!document.getElementById(${JSON.stringify(spec.field)})`))) { await b.eval(`document.querySelector(${JSON.stringify(spec.open)})?.click()`); await sleep(350); await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true))`); await sleep(250); }
+      await b.eval(`document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true))`); await sleep(350);
+      if (spec.open && !(await b.eval(`!!document.getElementById(${JSON.stringify(spec.field)})`))) { await b.eval(`document.querySelector(${JSON.stringify(spec.open)})?.click()`); await sleep(350); await b.eval(`document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true))`); await sleep(250); }
       await b.eval(`(() => { const e = document.getElementById(${JSON.stringify(spec.field)}); e.focus(); e.select(); })()`);
       assert.equal(await b.eval('document.activeElement.id'), spec.field, 'the field can be focused');
       if (value) await b.send('Input.insertText', { text: value }); else await io.key('Backspace');

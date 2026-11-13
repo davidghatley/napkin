@@ -103,7 +103,7 @@ export async function open({ files = FILES, dir = writeFolder(files), width = 14
     },
     async select(component, node) {
       await q(`napkin.select({ component: ${JSON.stringify(component)}, node: ${JSON.stringify(node)}, variant: {} })`);
-      await browser.waitFor(`!!napkin.inspector && !!document.querySelector('#panel .doc-head[data-node="${node}"] ~ .doc-body')`);
+      await browser.waitFor(`!!napkin.inspector && !!document.querySelector('#panel .doc-body[data-node="${node}"]')`);
       await sleep(250);
     },
     // type into a value field like a person (focus, select all, insert text); does not leave the field

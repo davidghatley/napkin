@@ -19,6 +19,7 @@ import { colorObjects } from '/dials/studios.js';
 import { plain } from './words.js';
 import { openColorPicker } from './colorpop.js';
 import { capList } from './panel-height.js';
+import { isOpen, remember } from './sections.js';
 
 const enc = encodeURIComponent;
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -48,9 +49,11 @@ registerFigure('specimen', (host, c, v) => {
 export function initInstruments(ctx) {
   const host = document.createElement('div');
   host.id = 'instruments';
-  host.tabIndex = 0; host.setAttribute('role', 'region'); host.setAttribute('aria-label', 'File instruments'); // a scrolling region can be reached by keys
-  const el0 = document.querySelector('#panel'); el0.tabIndex = 0; el0.setAttribute('role', 'region'); el0.setAttribute('aria-label', 'Element panel');
-  document.querySelector('#panel').after(host); // below the element panel, so drawing it never moves what is above
+  // The file's own sections (Source, Viewer, a picture's adjustments...) are the end of the panel's one list (#panel): after the
+  // element's sections (#pp-element), under the one header (panel-head.js).
+  const list = document.querySelector('#panel'); list.tabIndex = 0; list.setAttribute('role', 'region'); list.setAttribute('aria-label', 'Properties'); // a scrolling region can be reached by keys
+  const el0 = document.querySelector('#pp-element');
+  list.append(host);
 
   const schemas = new Map(); // item id -> { revision, sections } as last read
   const originals = new Map(); // "item|control" -> the value first seen this session: what Reset goes back to
@@ -104,14 +107,6 @@ export function initInstruments(ctx) {
     }
     return copy;
   }
-  function header(list, many) {
-    const c = ctx.state.components.get(cardOf.get(list[0]) ?? list[0]) || { name: list[0] };
-    const withElement = !many && !document.querySelector('#panel').hidden && document.querySelector('#panel').childElementCount > 0; // the element panel is above: this one is the whole file's
-    const name = many ? `${list.length} selected` : withElement ? 'Whole file' : c.name;
-    const what = many ? 'Shared instruments: a change goes to each of them' : `${withElement ? c.name + ' · ' : ''}${c.fileKind || c.kind || 'file'}${c.bytes !== undefined ? ' · ' + Number(c.bytes).toLocaleString() + ' bytes' : ''}`;
-    return `<header class="inst-head"><div><h2>${esc(name)}</h2><p>${esc(what)}</p></div><div class="inst-tools"><button type="button" data-inst-undo title="Undo the last instrument change (G U)">Undo</button>${many ? '' : `<a href="/view/${enc(list[0])}" target="_blank" rel="noopener" title="Open this file alone">Open</a>`}</div></header><p class="inst-status" role="status" aria-live="polite"></p>`;
-  }
-
   // The selection changes, so the element panel above may appear, vanish or change height and this panel's top edge moves with it. For two
   // frames it is out of sight, so the move is never a layout shift. (A panel the person is working in keeps its place.)
   let quietTimer = 0;
@@ -149,7 +144,7 @@ export function initInstruments(ctx) {
     const schema = prepare(list[0], many ? shared(schemaList) : schemaList[0]);
     panel?.destroy();
     host.hidden = false;
-    host.innerHTML = `<div class="instruments" data-controls-for="${esc(list[0])}"${many ? ` data-controls-many="${esc(list.join(' '))}"` : ''} role="region" aria-label="Instruments of ${esc(many ? list.length + ' cards' : list[0])}">${header(list, many)}<div class="inst-mount"></div></div>`;
+    host.innerHTML = `<div class="instruments" data-controls-for="${esc(list[0])}"${many ? ` data-controls-many="${esc(list.join(' '))}"` : ''}><p class="inst-status" role="status" aria-live="polite"></p><div class="inst-mount"></div></div>`;
     if (!schema.sections.length) host.querySelector('.inst-mount').innerHTML = `<p class="inst-empty">${many ? 'These cards share no instruments. Select one to tune it.' : 'This file has no instruments.'}</p>`;
     // Pictures come from the file's own bytes (/raw/<id>); a control that is not a picture says so instead of drawing one.
     // reveal: the panel's width shows more of a colour's editor (standards section 7 rule 6b); a narrow panel's swatch opens the
@@ -166,9 +161,16 @@ export function initInstruments(ctx) {
     // The height lever (rule 6c): a section's long list shows six rows; its bottom edge drags down for more, or Show all.
     const comp0 = ctx.state.components.get(cardOf.get(list[0]) ?? list[0]), kind = comp0?.fileKind || comp0?.kind || 'file';
     for (const s of panel.sections.values()) capList(s.rowlist, { key: `${kind}.${s.schema.id}`, label: s.schema.label || s.schema.id, rows: () => [...s.rowlist.children].filter((r) => !r.hidden) });
+    // Open or closed is remembered per kind and section (sections.js), the same as the element's sections: Viewer closed on one
+    // PNG stays closed on the next. (Set before wire(), so putting it back is not taken for a new choice.)
+    for (const s of panel.sections.values()) {
+      const want = isOpen(kind, s.schema.id, undefined);
+      if (want === false && s.depth > 1) panel.setDepth(s.schema.id, 1, false);
+      else if (want === true && s.depth === 1) panel.setDepth(s.schema.id, 2, false);
+    }
+    panel.kind = kind;
     shown = list.join('\n');
     wire(panel);
-    host.querySelector('[data-inst-undo]').onclick = () => undo();
   }
   function values(fresh) {
     if (!panel) return;
@@ -242,6 +244,7 @@ export function initInstruments(ctx) {
     p.addEventListener('palette', ({ detail: e }) => { for (const id of p.items) ctx.fetch('/api/board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ palette: { item: id, control: e.control, palette: e.palette } }) }).catch(() => {}); });
     p.addEventListener('depth', ({ detail }) => {
       if (detail.auto) return; // the panel's width chose it, not the person
+      remember(p.kind, detail.section, detail.depth > 1);
       for (const id of p.items) ctx.fetch('/api/board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ depth: { item: id, section: detail.section, depth: detail.depth } }) }).catch(() => {});
     });
   }

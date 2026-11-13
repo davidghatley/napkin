@@ -4,7 +4,9 @@
 // reads it, so the canvas column reflows and nothing overlaps it. The panel is an `inspector` size container, so its sections can
 // show more as it gets wider. The width is remembered (localStorage 'napkin.right'; index.html restores it before the first paint)
 // and clamped again when the window changes size.
-//   initRightPanel(ctx) -> ctx.rightPanel = { width(), setWidth(px, { save }), reset(), bounds() }
+// Ctrl+Shift+\ (or the header's button) hides the panel and the canvas takes the width; the same key, or selecting something on the
+// canvas, brings it back. Hidden or not is remembered too ('napkin.right.open').
+//   initRightPanel(ctx) -> ctx.rightPanel = { width(), setWidth(px, { save }), reset(), bounds(), toggle(open?), isOpen() }
 
 export const RIGHT_DEFAULT = 280, RIGHT_MIN = 240;
 const KEY = 'napkin.right', STEP = 8, BIG = 64;
@@ -78,6 +80,28 @@ export function initRightPanel(ctx) {
 
   addEventListener('resize', () => apply(wanted));
   apply(wanted);
-  ctx.rightPanel = { width: () => shown, setWidth, reset, bounds: () => ({ min: RIGHT_MIN, max: rightMax(), default: RIGHT_DEFAULT }) };
+
+  // Hide and show. The stage keeps its place on screen: the canvas grows to the right, nothing under the pointer moves.
+  const insp = document.querySelector('#inspector'), body = document.body;
+  let open = true;
+  try { open = localStorage.getItem(KEY + '.open') !== 'closed'; } catch {}
+  function show() {
+    body.dataset.right = document.documentElement.dataset.right = open ? 'open' : 'closed';
+    insp.inert = !open; edge.inert = !open;
+  }
+  function toggle(want) {
+    const next = typeof want === 'boolean' ? want : !open;
+    if (next === open) return open;
+    if (!next && (insp.contains(document.activeElement) || edge === document.activeElement)) document.querySelector('#stage')?.focus({ preventScroll: true }); // focus never stays in a panel that is going away
+    open = next;
+    try { localStorage.setItem(KEY + '.open', open ? 'open' : 'closed'); } catch {}
+    show();
+    ctx.stage?.refreshOverlays?.();
+    ctx.emit?.('shell', { right: open ? shown : 0 });
+    return open;
+  }
+  show();
+  ctx.on?.('select', () => { if (!open && ctx.state.selection) toggle(true); });
+  ctx.rightPanel = { width: () => shown, setWidth, reset, bounds: () => ({ min: RIGHT_MIN, max: rightMax(), default: RIGHT_DEFAULT }), toggle, isOpen: () => open };
   return ctx.rightPanel;
 }

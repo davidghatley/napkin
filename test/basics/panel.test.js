@@ -12,8 +12,9 @@ import { input } from '../helpers/input.js';
 
 const AXE = readFileSync(join(ROOT, 'node_modules', 'axe-core', 'axe.min.js'), 'utf8');
 
-function folder() {
+function folder(extra = {}) {
   const r = tempRepo(['Card', 'Button']);
+  for (const [name, body] of Object.entries(extra)) writeFileSync(join(r.compDir, name), body);
   writeFileSync(join(r.compDir, 'landing.html'), `<!doctype html><html><head><link rel="stylesheet" href="theme.css"></head><body><main class="hero"><h1>Plan the week</h1><p>One page, one list.</p><button class="cta">Start</button></main><section class="cards"><article class="card"><h2>Monday</h2><p>Design review</p></article><article class="card"><h2>Tuesday</h2><p>Ship the shell</p></article></section></body></html>\n`);
   writeFileSync(join(r.compDir, 'theme.css'), `:root { --ink: #1d2433; --paper: #fbf7ef; --line: #d9d2c3; --accent: #2f6fdf; --muted: #6b7280; --good: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --wash: #eef2f7; }\nbody { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--paper); }\n.hero { padding: 32px; } .cards { display: flex; gap: 16px; padding: 0 32px 32px; } .card { padding: 16px; border: 1px solid #d9d2c3; border-radius: 8px; }\n.cta { padding: 8px 16px; border: 0; border-radius: 6px; background: #1d2433; color: #fff; }\n`);
   writeFileSync(join(r.compDir, 'mark.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M2 2h16L2 18z" fill="#1d2433"/></svg>\n`);
@@ -28,13 +29,13 @@ async function axe(b, include) {
 async function theme(b, want) {
   await b.eval(`(() => { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); if (cur !== ${JSON.stringify(want)}) document.querySelector('#theme-toggle').click(); })()`);
 }
-async function boot(size = [1440, 900]) {
-  const r = folder();
+async function boot(size = [1440, 900], extra = {}) {
+  const r = folder(extra);
   const server = await startServer(r.compDir, { timeout: 20000 });
   const b = await launchChromium({ width: size[0], height: size[1] });
   await b.goto(server.url);
   await b.waitFor('document.body.dataset.ready === "1"', 30000);
-  await b.eval(`try { localStorage.removeItem('napkin.right'); localStorage.removeItem('napkin.left'); } catch {}`);
+  await b.eval(`try { for (const k of ['napkin.right', 'napkin.right.open', 'napkin.left', 'napkin.sections']) localStorage.removeItem(k); } catch {}`);
   await b.goto(server.url); // the width is restored before the first paint, so a clean start is a reload
   await b.waitFor('document.body.dataset.ready === "1"', 30000);
   await sleep(400);
@@ -358,5 +359,165 @@ test('the height lever: a long list shows six rows; its bottom edge drags (and k
     assert.equal(m.seen, m.total, 'every row'); assert.equal(m.capped, false); assert.equal(m.all, 'Show fewer'); assert.equal(m.expanded, 'true');
     await b.eval(`${LONG}.rowlist.nextElementSibling.querySelector('.nk-cap-grip').focus()`); await io.key('Home'); await sleep(100);
     assert.equal(JSON.parse(await b.eval(CAP())).seen, 6, 'Home: six again');
+  } finally { await close(); }
+});
+
+// ---- one panel: one header, one ordered list of sections (standards section 7) ----
+// The order every selection follows; a section shows only when it applies, so a selection's list is this list with gaps.
+const ORDER = {
+  html: ['Layout', 'Spacing', 'Appearance', 'Typography', 'Fill', 'Stroke', 'Effects', 'Text', 'Classes', 'Other CSS', 'Inherited', 'Inline style', 'Rules', 'Variables here', 'Your variables', 'Check'],
+  tsx: ['Layout', 'Auto layout', 'Appearance', 'Typography', 'Fill', 'Stroke', 'Effects', 'Settings', 'Variants', 'Composition', 'Text', 'Image', 'Advanced: all CSS'],
+};
+// The headings of the one list, top to bottom: the element's sections, then the file's (dials).
+const HEADINGS = `JSON.stringify([...document.querySelectorAll('#panel :is(.pp-sec > .pp-sec-t .pp-sec-l, .sec.empty > .sectitle, .d-section-name)')].filter((e) => !e.closest('.pp-sec .pp-sec') && e.getClientRects().length).map((e) => e.textContent.trim()))`;
+const STRUCTURE = `JSON.stringify({
+  heads: [...document.querySelectorAll('#inspector header, #inspector .inst-head, #inspector .doc-head, #inspector .selhead')].filter((e) => !e.matches('.d-section-head') && e.getClientRects().length).map((e) => e.id || e.className),
+  lists: document.querySelectorAll('#inspector > #panel').length,
+  outside: [...document.querySelectorAll('#inspector .pp-sec, #inspector .d-section')].filter((e) => !e.closest('#panel')).length,
+  name: document.querySelector('#pp-head .pp-name')?.textContent.trim(), tag: document.querySelector('#pp-head .pp-tag')?.textContent.trim() ?? null,
+  glyph: !!document.querySelector('#pp-head .pp-glyph svg'), undo: !!document.querySelector('#inspector [data-inst-undo]'),
+})`;
+const inOrder = (got, order) => got.every((h, i) => order.includes(h) && (i === 0 || order.indexOf(h) > order.indexOf(got[i - 1])));
+// A real click on something: a layers row by name, or an element inside an HTML frame on the canvas.
+async function clickRow(b, io, name) {
+  const r = JSON.parse(await b.eval(`JSON.stringify((() => { const row = [...document.querySelectorAll('#layers .lrow')].find((x) => x.querySelector('.lname')?.textContent === ${JSON.stringify(name)}); if (!row) return null; row.scrollIntoView({ block: 'center' }); const q = row.querySelector('.lname').getBoundingClientRect(); return { x: q.left + 8, y: q.top + q.height / 2 }; })())`));
+  assert.ok(r, `a layers row named ${name}`);
+  await io.click(r.x, r.y); await sleep(700);
+}
+async function clickIn(b, io, file, css) {
+  await b.waitFor(`!!napkin.stage.sections.get(napkin.find(${JSON.stringify(file)})?.component)?.docFrame?.tree()?.tree`, 15000);
+  const r = JSON.parse(await b.eval(`JSON.stringify((() => { const s = napkin.stage.sections.get(napkin.find(${JSON.stringify(file)}).component), fr = s.el.querySelector('iframe'), f = fr.getBoundingClientRect(), z = f.width / fr.offsetWidth, h = fr.contentDocument.querySelector(${JSON.stringify(css)}).getBoundingClientRect(); return { x: f.left + (h.left + Math.min(h.width / 4, 20)) * z, y: f.top + (h.top + h.height / 2) * z }; })())`));
+  await io.click(r.x, r.y); await sleep(700);
+}
+const headerOf = (b, label) => b.eval(`(() => { const l = [...document.querySelectorAll('#panel .pp-sec-l')].find((e) => e.textContent.trim() === ${JSON.stringify(label)}); return l ? l.closest('.pp-sec-h').getAttribute('aria-expanded') : null; })()`);
+async function clickHeader(b, io, label) {
+  const r = JSON.parse(await b.eval(`JSON.stringify((() => { const h = [...document.querySelectorAll('#panel .pp-sec-l')].find((e) => e.textContent.trim() === ${JSON.stringify(label)}).closest('.pp-sec-h'); h.scrollIntoView({ block: 'center' }); const q = h.getBoundingClientRect(); return { x: q.left + 40, y: q.top + q.height / 2 }; })())`));
+  await io.click(r.x, r.y); await sleep(200);
+}
+
+test('one panel: one header and one ordered list for an HTML element, a TSX component and a file; the empty state is one line and the canvas settings', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    // nothing selected: one line, then the canvas's own settings; no header, no shortcut tutorial
+    await b.eval(`napkin.select(null)`); await sleep(300);
+    assert.equal(await b.eval(`document.querySelector('#pp-empty')?.textContent`), 'Select something to edit it.');
+    assert.equal(await b.eval(`document.querySelector('#pp-head').hidden`), true);
+    assert.equal(await b.eval(`document.querySelectorAll('#panel kbd, #panel li, #panel .empty-panel').length`), 0, 'no shortcut list');
+    assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#panel .pp-label')].map((e) => e.textContent))`)), ['Zoom', 'Background', 'Tokens']);
+    const z0 = await b.eval(`napkin.view.get().z`);
+    const zin = JSON.parse(await b.eval(`JSON.stringify((() => { const q = document.querySelector('[data-pp=zoom-in]').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; })())`));
+    await io.click(zin.x, zin.y); await sleep(400);
+    assert.ok(await b.eval(`napkin.view.get().z`) > z0, 'the panel zooms the canvas');
+
+    // an element in an HTML file, clicked on the canvas
+    await clickIn(b, io, 'landing', 'h1');
+    let st = JSON.parse(await b.eval(STRUCTURE));
+    assert.deepEqual(st.heads, ['pp-head'], 'exactly one header');
+    assert.equal(st.lists, 1); assert.equal(st.outside, 0, 'every section is in the one list');
+    assert.equal(st.name, 'Plan the week'); assert.equal(st.tag, '<h1>'); assert.ok(st.glyph); assert.equal(st.undo, false);
+    const html = JSON.parse(await b.eval(HEADINGS));
+    const els = html.filter((h) => ORDER.html.includes(h));
+    assert.ok(els.length >= 5 && inOrder(els, ORDER.html), `HTML order: ${html}`);
+    assert.deepEqual(els.slice(0, 2), ['Layout', 'Spacing']);
+    assert.ok(els.includes('Typography') && els.indexOf('Typography') < els.indexOf('Text'), 'Typography (a text element) before its content');
+    assert.ok(html.indexOf(els.at(-1)) < html.length - 1, 'the file’s own sections come after the element’s');
+    for (const adv of ['Rules', 'Check']) assert.equal(await headerOf(b, adv), 'false', `${adv} starts closed`);
+
+    // a TSX component's layer, picked in the layers panel
+    await clickRow(b, io, 'title');
+    st = JSON.parse(await b.eval(STRUCTURE));
+    assert.deepEqual(st.heads, ['pp-head']); assert.equal(st.outside, 0);
+    assert.equal(st.name, 'title');
+    const tsx = JSON.parse(await b.eval(HEADINGS)).filter((h) => ORDER.tsx.includes(h));
+    assert.ok(tsx.length >= 5 && inOrder(tsx, ORDER.tsx), `TSX order: ${tsx}`);
+    assert.equal(tsx[0], 'Layout');
+    assert.equal(await headerOf(b, 'Advanced: all CSS'), 'false', 'Advanced starts closed');
+
+    // a file: the same header, its own sections in the same list
+    await clickRow(b, io, 'theme.css');
+    st = JSON.parse(await b.eval(STRUCTURE));
+    assert.deepEqual(st.heads, ['pp-head']); assert.equal(st.outside, 0); assert.equal(st.name, 'theme.css'); assert.equal(st.tag, null);
+    assert.ok(JSON.parse(await b.eval(HEADINGS)).length >= 1);
+    assert.ok(await b.eval(`!!document.querySelector('#pp-head #pp-open[href^="/view/"]')`), 'Open this file alone is in the header');
+
+    // every section heading is one button with aria-expanded, 12 to 13 px, medium
+    const heads = JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#panel .pp-sec-h, #panel .d-section-name')].map((e) => ({ tag: e.tagName, exp: e.getAttribute('aria-expanded'), fs: parseFloat(getComputedStyle(e).fontSize), fw: Number(getComputedStyle(e).fontWeight) })))`));
+    for (const h of heads) { assert.equal(h.tag, 'BUTTON'); assert.ok(h.fs >= 12 && h.fs <= 13, `font ${h.fs}`); assert.equal(h.fw, 500); }
+  } finally { await close(); }
+});
+
+test('one panel: a section closed on one selection stays closed on the next of the same kind; the header renames in place', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot([1440, 900], { 'print.css': ':root { --ink: #000; --paper: #fff; --line: #999; }\n.hero { padding: 0; } .card { border: 0; color: var(--ink); }\n' });
+  try {
+    await clickIn(b, io, 'landing', 'h1');
+    assert.equal(await headerOf(b, 'Typography'), 'true');
+    await clickHeader(b, io, 'Typography');
+    assert.equal(await headerOf(b, 'Typography'), 'false');
+    assert.equal(await b.eval(`document.querySelector('#panel [data-sec=type] > .pp-sec-b').hidden`), true);
+    await clickIn(b, io, 'landing', 'p'); // another element of the same kind
+    assert.equal(await b.eval(`document.querySelector('#pp-head .pp-tag').textContent`), '<p>');
+    assert.equal(await headerOf(b, 'Typography'), 'false', 'still closed on the next HTML element');
+    await clickRow(b, io, 'title'); // a TSX layer is another kind: its own memory
+    assert.equal(await headerOf(b, 'Typography'), 'true', 'a TSX layer is another kind: Typography open there');
+    await clickHeader(b, io, 'Typography');
+    await clickHeader(b, io, 'Typography');
+    assert.equal(await headerOf(b, 'Typography'), 'true');
+    await clickIn(b, io, 'landing', 'h1');
+    assert.equal(await headerOf(b, 'Typography'), 'false');
+    await clickHeader(b, io, 'Typography'); // open again for the next run
+
+    // a file's sections (dials) follow the same memory: closed on one stylesheet, closed on the next
+    await clickRow(b, io, 'theme.css');
+    const first = await b.eval(`[...napkin.instruments.panel().sections.values()][0].schema.id`);
+    const name = JSON.parse(await b.eval(`JSON.stringify((() => { const n = [...napkin.instruments.panel().sections.values()][0].node.querySelector('.d-section-name'); const q = n.getBoundingClientRect(); return { x: q.left + 30, y: q.top + q.height / 2 }; })())`));
+    await io.click(name.x, name.y); await sleep(300);
+    assert.equal(await b.eval(`[...napkin.instruments.panel().sections.values()][0].node.dataset.depth`), '1');
+    await clickRow(b, io, 'print.css');
+    assert.equal(await b.eval(`napkin.instruments.panel().sections.get(${JSON.stringify(first)})?.node.dataset.depth`), '1', 'closed on the next CSS file too');
+    assert.equal(await b.eval(`JSON.parse(localStorage.getItem('napkin.sections'))['css.' + ${JSON.stringify(first)}]`), false);
+
+    // the header's name is the layers rename: click it, type, Enter
+    await clickRow(b, io, 'title');
+    const nm = JSON.parse(await b.eval(`JSON.stringify((() => { const q = document.querySelector('#pp-head button.pp-name').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; })())`));
+    await io.click(nm.x, nm.y); await sleep(200);
+    assert.ok(await b.eval(`document.activeElement?.tagName === 'INPUT' && !!document.activeElement.closest('#pp-head')`), 'the name turns into a field in place');
+    await b.eval(`document.activeElement.value = 'headline'`);
+    await io.key('Enter'); await sleep(900);
+    assert.equal(await b.eval(`napkin.state.selection.node`), 'headline');
+    assert.equal(await b.eval(`document.querySelector('#pp-head .pp-name').textContent`), 'headline');
+    assert.ok(await b.eval(`!!document.querySelector('#layers .lrow[data-node="headline"]')`), 'the layers panel shows the new name');
+  } finally { await close(); }
+});
+
+test('one panel: Ctrl+Shift+\\ hides the panel and the canvas takes the width; the key again, or selecting something, brings it back', { timeout: 120000 }, async () => {
+  const { b, io, url, close } = await boot();
+  try {
+    const keys = await (await fetch(url + 'api/keys')).json();
+    assert.ok(keys.bindings.some((k) => k.command === 'toggle-right' && k.keys === 'Ctrl+Shift+\\'), 'one binding, from actions.js');
+    await clickRow(b, io, 'title');
+    assert.match(await b.eval(`document.querySelector('#pp-collapse').dataset.key`), /Shift/);
+    await b.eval(`document.querySelector('#stage').focus()`);
+    const s0 = await box(b, '#stage');
+    await io.key('|', { ctrl: true, shift: true, code: 'Backslash' }); await sleep(400);
+    assert.equal(await b.eval(`document.body.dataset.right`), 'closed');
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('#inspector')).visibility`), 'hidden');
+    assert.equal(await b.eval(`document.querySelector('#inspector').inert`), true);
+    const s1 = await box(b, '#stage');
+    assert.ok(s1.r > s0.r + 200 && Math.round(s1.r) === 1440, `the canvas takes the width (${s0.r} -> ${s1.r})`);
+    await io.key('|', { ctrl: true, shift: true, code: 'Backslash' }); await sleep(400);
+    assert.equal(await b.eval(`document.body.dataset.right`), 'open');
+    assert.equal(Math.round((await box(b, '#stage')).r), Math.round(s0.r));
+
+    // hidden, then something is selected on the canvas: the panel comes back
+    await io.key('|', { ctrl: true, shift: true, code: 'Backslash' }); await sleep(300);
+    await reload(b, url);
+    assert.equal(await b.eval(`document.body.dataset.right`), 'closed', 'remembered');
+    await clickIn(b, io, 'landing', 'h1');
+    assert.equal(await b.eval(`document.body.dataset.right`), 'open');
+    assert.equal(await b.eval(`document.querySelector('#pp-head .pp-name').textContent`), 'Plan the week');
+    // the header's button hides it too
+    const hb = JSON.parse(await b.eval(`JSON.stringify((() => { const q = document.querySelector('#pp-collapse').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; })())`));
+    await io.click(hb.x, hb.y); await sleep(300);
+    assert.equal(await b.eval(`document.body.dataset.right`), 'closed');
   } finally { await close(); }
 });

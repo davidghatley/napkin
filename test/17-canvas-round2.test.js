@@ -134,7 +134,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await select('Card', 'title');
       assert.equal(await q(`document.querySelectorAll('.sec.empty .addbtn').length`), 3, 'Fill, Stroke and Shadow are settled headers with a + at the end');
       assert.equal(await q(`document.querySelector('[data-sec=fill]').tagName`), 'DIV', 'a header, not an empty section to open');
-      assert.equal(await q(`[...document.querySelectorAll('details.sec')].slice(0, 1).map((d) => d.dataset.sec)[0]`), 'type', 'a text node starts with Text');
+      assert.equal(await q(`[...document.querySelectorAll('#panel .pp-sec')].slice(0, 1).map((d) => d.dataset.sec)[0]`), 'type', 'a text node starts with Text');
       assert.equal(await q(`document.querySelector('[data-sec=layout]').open`), false, 'Layout starts collapsed on a text node');
       await select('Button', 'root', { size: 'md', state: 'default' });
     });
@@ -173,7 +173,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     await t.test('fonts read as a name, and a picked family keeps the fallback stack', async () => {
       await select('Card', 'card');
       await browser.waitFor(`!!document.querySelector('[data-sec=type]')`);
-      if (!(await q(`document.querySelector('[data-sec=type]').open`))) await q(`document.querySelector('[data-sec=type] > summary').click()`); // Text starts closed on a frame
+      if (!(await q(`document.querySelector('[data-sec=type]').open`))) await q(`document.querySelector('[data-sec=type] .pp-sec-h').click()`); // Text starts closed on a frame
       await browser.waitFor(`document.querySelector('[data-sec=type]').open`);
       assert.equal(await q(`document.querySelector('#fontFamily').value`), 'Georgia');
       await q(`document.querySelector('#fontFamily').focus()`);

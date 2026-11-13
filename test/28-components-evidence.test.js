@@ -14,7 +14,7 @@ test('components evidence screenshots', { skip: !OUT, timeout: 240000 }, async (
   const L = await lab({ Button: fx('Button'), Card: fx('Card'), Chip: fx('Chip') }, { theme: 'light' });
   const { q, browser } = L;
   const shot = async (name) => { await sleep(250); const f = join(OUT, `components-${name}.png`); writeFileSync(f, await browser.screenshot()); assert.ok(statSync(f).size < 300 * 1024, `${name} is ${statSync(f).size} bytes`); };
-  const secs = (open) => q(`document.querySelectorAll('#panel details.sec').forEach((d) => { d.open = ${JSON.stringify(open)}.includes(d.dataset.sec); })`);
+  const secs = (open) => q(`document.querySelectorAll('#panel .pp-sec').forEach((d) => { d.open = ${JSON.stringify(open)}.includes(d.dataset.sec); })`);
   try {
     await L.edit('Button', [{ op: 'describeProp', name: 'label', text: 'The words on the button' }, { op: 'describeProp', name: 'size', text: 'How big it is' }, { op: 'addProp', name: 'disabled', type: 'boolean', default: false }]);
     await L.select('Button', 'root', { size: 'md', state: 'default' });
@@ -37,7 +37,7 @@ test('components evidence screenshots', { skip: !OUT, timeout: 240000 }, async (
     // composition
     await L.edit('Card', [{ op: 'insertInstance', parent: 'card', id: 'cta', component: 'Button', props: { label: 'Buy now' } }, { op: 'addProp', name: 'children', type: 'node' }, { op: 'insert', parent: 'card', node: { id: 'extra', tag: 'div' } }, { op: 'set', path: 'extra.@slot', value: 'children' }]);
     await L.select('Card', 'cta');
-    await q(`document.querySelectorAll('#panel details.sec').forEach((d) => { d.open = d.dataset.sec === 'compose'; }); napkin.nav.focus(napkin.find('Card').component, 'cta', { animate: false })`);
+    await q(`document.querySelectorAll('#panel .pp-sec').forEach((d) => { d.open = d.dataset.sec === 'compose'; }); napkin.nav.focus(napkin.find('Card').component, 'cta', { animate: false })`);
     await shot('compose');
     // play
     await q(`napkin.play.set(true)`);

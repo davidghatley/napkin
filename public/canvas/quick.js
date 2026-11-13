@@ -2,6 +2,7 @@
 // Enter flies there (about 280 ms; none with prefers-reduced-motion) and selects it.
 import { actionsFor } from './actions.js';
 import { search } from './fuzzy.js';
+import { openAround } from './sections.js';
 import { variantGrid } from '/src/model.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -26,8 +27,8 @@ export function initQuick(ctx) {
 
   // Every control of the inspector, named by its section and label ("Fill colour", "Stroke colour", "Shadow", "Layout align top left",
   // "Settings label"), so Cmd-K reaches any property, not just the labelled number fields.
-  const ALIAS = { Stroke: 'Border', Appearance: 'Corner opacity', Layout: 'Auto layout flex grid' };
-const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'], Text: ['font', 'type'], Layout: ['auto layout', 'flex'] }; // other words that find a section's controls
+  const ALIAS = { Stroke: 'Border', Appearance: 'Corner opacity', 'Auto layout': 'Flex grid', Typography: 'Text font' };
+const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'], Text: ['content'], Typography: ['font', 'type', 'text'], 'Auto layout': ['layout', 'flex'], Layout: ['size'] }; // other words that find a section's controls
   const GENERIC = /^(Colour|Opacity|Width|Style|Size|Hug|Fill|Fixed|Block|Flex|Grid|Row|Column|Wrap|Left|Right|Top|Bottom|Center|All sides|Min \/ Max|Space between|Hide|Remove|Show)$/;
   // Names for the controls whose own label says little ("md", "×", "+ value"): built from the control's id.
   const BY_ID = [
@@ -44,6 +45,7 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
     const id = el.id;
     for (const [re, f] of BY_ID) { const m = re.exec(id); if (m) return f(m, panel); }
     if (el.tagName === 'SUMMARY') return (el.firstChild?.textContent.trim() || el.textContent.trim()).replace(/^Advanced.*/, 'Advanced');
+    if (el.classList.contains('pp-sec-h')) return (el.querySelector('.pp-sec-l')?.textContent.trim() || '').replace(/^Advanced.*/, 'Advanced');
     if (id === 'add-effects') return 'Shadow';
     const lab = id && panel.querySelector(`label[for="${CSS.escape(id)}"]`);
     const own = el.tagName === 'BUTTON' ? el.textContent.trim() : '';
@@ -55,25 +57,32 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
   // Every focusable control of the inspector gets a name, so Cmd-K reaches all of them (WPC-07). A bare name that two controls share
   // ("Colour", "Width", "Hug") is prefixed with its section; if that is still shared, with its id.
   // display:none anywhere between the control and the panel means nobody can focus it (a closed <details> does not count: it opens).
-  const notRendered = (el, panel) => { for (let e = el; e && e !== panel; e = e.parentElement) if (getComputedStyle(e).display === 'none') return true; return false; };
+  // A closed section (sections.js: its body is [hidden]) does not count either: it opens the same way.
+  const folded = (e) => e.classList?.contains('pp-sec-b');
+  const notRendered = (el, panel) => { for (let e = el; e && e !== panel; e = e.parentElement) if (!folded(e) && getComputedStyle(e).display === 'none') return true; return false; };
+  const hiddenIn = (el) => { for (let e = el.closest('[hidden]'); e; e = e.parentElement?.closest('[hidden]')) if (!folded(e)) return true; return false; };
+  const secOf = (el) => el.closest('.pp-sec, details');
+  const isHead = (el) => el.tagName === 'SUMMARY' || el.classList.contains('pp-sec-h');
+  const secName = (s) => (s?.tagName === 'DETAILS' ? s.querySelector('summary')?.firstChild?.textContent : s?.querySelector(':scope > .pp-sec-t .pp-sec-l')?.textContent)?.trim() || '';
   function panelControls() {
     const panel = document.querySelector('#panel'), list = [];
     if (!panel) return list;
     const seenIn = new Map();
     for (const el of panel.querySelectorAll('input, select, textarea, button, summary')) {
-      if (el.disabled || el.type === 'color' || el.tabIndex < 0 || el.closest('[hidden]') || notRendered(el, panel)) continue;
-      const det = el.closest('details'), section = det?.querySelector('summary')?.firstChild?.textContent.trim() || '';
-      if (!el.id) el.id = el.tagName === 'SUMMARY' ? `sum-${(det?.dataset.sec || section).toLowerCase().replace(/\W+/g, '-')}` : `ctl-${(el.textContent.trim() || el.type || el.tagName).toLowerCase().replace(/\W+/g, '-')}-${list.length}`; // controls with no id of their own get one, so they can be focused by id
+      if (el.closest('#instruments')) continue; // the file's own sections (dials) have their own keys
+      if (el.disabled || el.type === 'color' || el.tabIndex < 0 || hiddenIn(el) || notRendered(el, panel)) continue;
+      const det = secOf(el), section = secName(det);
+      if (!el.id) el.id = isHead(el) ? `sum-${(det?.dataset.sec || section).toLowerCase().replace(/\W+/g, '-')}` : `ctl-${(el.textContent.trim() || el.type || el.tagName).toLowerCase().replace(/\W+/g, '-')}-${list.length}`; // controls with no id of their own get one, so they can be focused by id
       const name = nameOf(el, panel);
       if (!name) continue;
       const order = (seenIn.set(det, (seenIn.get(det) ?? -1) + 1), seenIn.get(det));
-      list.push({ id: el.id, order, section, name, force: /^propdef-/.test(el.id) && el.tagName === 'INPUT', button: el.tagName === 'BUTTON' || el.tagName === 'SUMMARY', add: /^(add-prop|add-axis|add-value-[^-]+)$/.test(el.id) });
+      list.push({ id: el.id, order, section, name, force: /^propdef-/.test(el.id) && el.tagName === 'INPUT', button: el.tagName === 'BUTTON' || isHead(el), add: /^(add-prop|add-axis|add-value-[^-]+)$/.test(el.id) });
     }
     const count = (f) => { const c = new Map(); for (const p of list) c.set(f(p).toLowerCase(), (c.get(f(p).toLowerCase()) || 0) + 1); return c; };
     const bare = count((p) => p.name);
-    for (const p of list) p.label = /^Align /.test(p.name) || (p.section === 'Size' && /^(Width|Height)$/.test(p.name)) ? p.name : p.force || bare.get(p.name.toLowerCase()) > 1 || GENERIC.test(p.name) ? (p.section && !p.name.toLowerCase().startsWith(p.section.toLowerCase()) ? `${p.section.replace(/^Advanced.*/, 'Advanced')} ${p.name}` : p.name) : p.name;
+    for (const p of list) p.label = /^Align /.test(p.name) || (/^(Size|Layout)$/.test(p.section) && /^(Width|Height)$/.test(p.name)) ? p.name : p.force || bare.get(p.name.toLowerCase()) > 1 || GENERIC.test(p.name) ? (p.section && !p.name.toLowerCase().startsWith(p.section.toLowerCase()) ? `${p.section.replace(/^Advanced.*/, 'Advanced')} ${p.name}` : p.name) : p.name;
     const full = count((p) => p.label);
-    for (const p of list) { if (full.get(p.label.toLowerCase()) > 1) p.label = `${p.label} (${humanId(p.id)})`; p.alias = ALIAS[p.section] && p.section !== 'Layout' ? ALIAS[p.section] : ''; }
+    for (const p of list) { if (full.get(p.label.toLowerCase()) > 1) p.label = `${p.label} (${humanId(p.id)})`; p.alias = ALIAS[p.section] ?? ''; }
     return list;
   }
   // The inspector's fields of the current selection, so Cmd-K + "rad" + Enter lands in Radius. Rebuilt on every query: the panel may have
@@ -109,11 +118,11 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
   function focusField(el) {
     if (!el) return false;
     const id = el.id, sc = document.getElementById('scope'), sel = ctx.state.selection;
-    if (id && !/^(propdef|add-|axis-|value-|remove-|grip-|make-|insert-|edit-|scope|sum-|new-)/.test(id) && el.tagName !== 'SUMMARY' && sc && sc.value !== 'variant' && sc.options[1] && !sc.options[1].disabled && sel) { // a variant cell is selected: land in that variant's scope
+    if (id && !/^(propdef|add-|axis-|value-|remove-|grip-|make-|insert-|edit-|scope|sum-|new-)/.test(id) && !isHead(el) && sc && sc.value !== 'variant' && sc.options[1] && !sc.options[1].disabled && sel) { // a variant cell is selected: land in that variant's scope
       sc.value = 'variant'; sc.dispatchEvent(new Event('change', { bubbles: true }));
       el = document.getElementById(id) || el;
     }
-    for (let d = el.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+    openAround(el);
     el.focus({ preventScroll: false }); el.select?.();
     return document.activeElement === el;
   }
@@ -181,16 +190,16 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
     if (item.kind === 'property') {
       const el = document.getElementById(item.field);
       if (item.add) { // "Add setting", "Add variant", "Add variant value": open the form and land in its name field
-        for (let d = el?.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
+        openAround(el);
         const want0 = item.field === 'add-prop' ? 'new-prop-name' : item.field === 'add-axis' ? 'new-axis-name' : `new-value-${item.field.replace(/^add-value-/, '')}`;
         if (!document.getElementById(want0)) el?.click(); // the form may already be open: then just land in it
         const want = item.field === 'add-prop' ? 'new-prop-name' : item.field === 'add-axis' ? 'new-axis-name' : `new-value-${item.field.replace(/^add-value-/, '')}`;
-        let tries = 0; const land = () => { const f = document.getElementById(want); if (f) { const open = (x) => { for (let d = x.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true; x.focus(); }; open(f); setTimeout(() => { if (document.activeElement.id !== want) { const g = document.getElementById(want); if (g) open(g); } }, 150); return; } if (++tries < 20) requestAnimationFrame(land); }; land();
+        let tries = 0; const land = () => { const f = document.getElementById(want); if (f) { const open = (x) => { openAround(x); x.focus(); }; open(f); setTimeout(() => { if (document.activeElement.id !== want) { const g = document.getElementById(want); if (g) open(g); } }, 150); return; } if (++tries < 20) requestAnimationFrame(land); }; land();
         return;
       }
-      if (el?.tagName === 'SUMMARY') { // Enter on a section moves into its first field
-        for (let d = el.closest('details'); d; d = d.parentElement?.closest('details')) d.open = true;
-        const fields = [...(el.closest('details')?.querySelectorAll('input, select, textarea, button') ?? [])].filter((x) => !x.disabled && x.tabIndex >= 0 && x.type !== 'color' && getComputedStyle(x).display !== 'none' && !x.closest('[hidden]'));
+      if (el && isHead(el)) { // Enter on a section moves into its first field
+        const sec = secOf(el); openAround(el);
+        const fields = [...(sec.querySelectorAll('input, select, textarea, button') ?? [])].filter((x) => x !== el && !x.disabled && x.tabIndex >= 0 && x.type !== 'color' && getComputedStyle(x).display !== 'none' && !x.closest('[hidden]'));
         focusField(fields.find((x) => x.tagName !== 'BUTTON') || fields[0] || el); return; // a text field before any button
       }
       focusField(el); return;

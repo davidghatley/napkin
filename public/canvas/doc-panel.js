@@ -16,6 +16,7 @@ import { stripsHtml, wireStrips, askProp } from './inspector-vars.js';
 import { initMeasure } from './measure-overlay.js';
 import { usersOfVariable } from './stage-highlight.js';
 import { capList } from './panel-height.js';
+import { sectionHtml, wireSections, openAround } from './sections.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const normSel = (t) => String(t).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\s*([,>+~])\s*/g, '$1').trim();
@@ -150,7 +151,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const node = frame?.node(sel.node);
   const target = frame?.element(sel.node)?.el;
   const key = `${comp.component}|${sel.node}|${comp.revision}|${stamp}`;
-  if (!node) { el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span></div><p class="hint">${esc(comp.path)} · loading…</p></div>`; return; }
+  if (!node) { el.innerHTML = `<p class="hint pp-note">${esc(comp.path)} · loading…</p>`; return; }
   const focus = document.activeElement && el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
   if (el.dataset.full === key && focus) return; // a redraw would take the field from under the cursor
   el.dataset.full = key;
@@ -172,7 +173,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const explain = cas ? cas.explain(target) : { rules: [], inline: [], props: {}, vars: {}, inherited: [] };
   const classes = (node.attrs?.class || '').split(/\s+/).filter(Boolean);
   const textOnly = !node.children.length && node.text !== undefined;
-  const label = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.map((c) => '.' + c).join('')}`, labelShort = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.slice(0, 2).map((c) => '.' + c).join('')}${classes.length > 2 ? ` +${classes.length - 2}` : ''}`;
+  const label = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.map((c) => '.' + c).join('')}`;
   const computed = /^\{/.test(node.attrs?.className ?? '') ? String(node.attrs.className).replace(/^\{|\}$/g, '').replace(/\s+/g, ' ').slice(0, 70) : null; // classes a React file works out in code
   const index = (r) => { // which of the same-selector rules in that file this is (contract ruling 7)
     const same = data.rules.filter((x) => x.file === r.file && x.kind === 'style' && normSel(x.selector) === normSel(r.selector) && normMedia(x.media.at(-1)) === normMedia(r.media.at(-1)));
@@ -291,23 +292,35 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       ${t(62, 52, 'padding', 'cap')}${t(160, 54, pd[0])}${t(160, 100, pd[2])}${t(80, 76, pd[3])}${t(240, 76, pd[1])}
       ${t(160, 76, `${cw} × ${ch}`, 'cnt')}</svg></figure>`;
   }
+  // The values, one section per group in the panel's order (Layout, Spacing, Appearance, Typography, Fill, Stroke, Effects). A text
+  // element always has its Typography: what is set here, what it inherits (with where from), and the rest as the browser works it out,
+  // each typed over like any value. What fits no group is "Other CSS", after the content sections.
+  const kindKey = /\.(tsx|jsx)$/i.test(comp.path || '') ? 'tsx' : 'html';
+  const sec = (id, title, body, o = {}) => (body ? sectionHtml({ kind: kindKey, id, title, body, ...o }) : '');
+  const texty = textOnly || !!node.runs?.length;
+  const TYPE_GROUP = GROUPS.find(([id]) => id === 'type')[2];
+  const typeInherited = new Set(); // inherited rows Typography shows (the Inherited section then leaves them out)
   function valuesHtml() {
     const by = new Map(GROUPS.map(([id]) => [id, []]).concat([['other', []]]));
     const taken = new Set(['width', 'height']);
     for (const prop of Object.keys(SIDES)) if (explain.props[prop] || SIDES[prop].some(([sd]) => explain.props[partProp(prop, sd)])) { taken.add(prop); for (const [sd] of SIDES[prop]) taken.add(partProp(prop, sd)); }
     for (const pw of props) if (!taken.has(pw[0])) by.get(groupOf(pw[0])).push(valueRow(pw));
-    const head = (name, extra = '') => `<h4 class="pl-gh">${name}${extra}</h4>`;
-    const groupHtml = (id, name, body) => (body ? `<div class="pl-group" data-group="${id}">${head(name)}${body}</div>` : '');
+    if (texty) {
+      const covered = new Set(props.map(([p]) => p));
+      for (const e of explain.inherited) if (TYPE_GROUP.test(e.prop)) { typeInherited.add(e); by.get('type').push(inheritedRow(e)); covered.add(e.prop); for (const x of e.sets || []) covered.add(x); }
+      for (const p of ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'text-align']) if (!covered.has(p)) by.get('type').push(valueRow([p, winOf(p)]));
+    }
     const sideList = (names) => names.filter((p) => taken.has(p)).map(sidesBlock).join('');
-    const out = [
-      groupHtml('layout', 'Layout', geometry() + by.get('layout').join('')),
-      // padding is offered on every element (Figma shows it on every frame); margin and a radius once something sets them
-      groupHtml('spacing', 'Spacing', (taken.has('padding') ? '' : sidesBlock('padding')) + sideList(['padding', 'margin']) + by.get('spacing').join('') + boxFigure()),
-      groupHtml('appearance', 'Appearance', sideList(['border-radius']) + by.get('appearance').join('')),
-      ...GROUPS.slice(3).map(([id, name]) => groupHtml(id, name, by.get(id).join(''))),
-      groupHtml('other', 'Other', by.get('other').join('')),
-    ];
-    return out.join('');
+    return {
+      main: [
+        sec('layout', 'Layout', geometry() + by.get('layout').join('')),
+        // padding is offered on every element (Figma shows it on every frame); margin and a radius once something sets them
+        sec('spacing', 'Spacing', (taken.has('padding') ? '' : sidesBlock('padding')) + sideList(['padding', 'margin']) + by.get('spacing').join('') + boxFigure()),
+        sec('appearance', 'Appearance', sideList(['border-radius']) + by.get('appearance').join('')),
+        ...GROUPS.slice(3).map(([id, name]) => sec(id, name, by.get(id).join(''))),
+      ].join(''),
+      other: sec('other', 'Other CSS', by.get('other').join(''), { open: false }),
+    };
   }
   // what this element takes from an ancestor because nothing sets it here, with a link that selects that ancestor
   // How long a value reads: a long one takes its own line under its name when the panel is too narrow for both (inspector-doc.css).
@@ -342,60 +355,42 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       <code class="prop"${why ? ` title="${esc(why)}"` : ''}>${esc(prop)}</code><input class="val" data-key="${esc(k)}" value="${esc(value)}" aria-label="${esc(prop)}" spellcheck="false"${resolved ? ` title="now ${esc(resolved)}"` : why ? ` title="${esc(why)}"` : ''}>${important ? '<span class="imp">!important</span>' : ''}<button type="button" class="decl-x" aria-label="Remove ${esc(prop)}">×</button>${src}</div>`;
   }
   const rulesStrong = [...explain.rules].reverse();
-  // a soft fold: closed it takes no room, but what is in it stays in reach (Tab into it opens it)
-  const softOpen = (id) => !!openFolds.get(id);
-  const soft = (id) => (softOpen(id) ? ' data-open="1"' : '');
-  const fold = (id, dflt) => ((openFolds.has(id) ? openFolds.get(id) : dflt) ? ' open' : '');
 
+  const values = props.length || target ? valuesHtml() : { main: '', other: '' };
+  const inheritedRest = explain.inherited.filter((e) => !typeInherited.has(e));
+  const codeNote = !props.length && computed ? `<p class="hint">Its classes are worked out in code: <code>${esc(computed)}</code> at line ${node.line} of ${esc(base(comp.path))}. No stylesheet rule of this folder matches it here. Change them in that file.</p>` : '';
+  // One list, in the panel's order (standards section 7 rule 4): the design sections, then this element's content and where its
+  // values come from (Text, Classes, Other CSS, Inherited, Inline style, Rules, Variables), then the checks. The header is
+  // panel-head.js's; the file's own sections (Source, Viewer) follow from the instruments.
   el.innerHTML = `
     <button type="button" class="doc-skip" id="doc-skip">Skip to your variables</button>
-    <div class="selhead doc-head" data-node="${esc(sel.node)}">
-      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(labelShort)}</span></div>
-      <p class="hint mono doc-where"><span id="doc-source" title="${esc(comp.path)}:${node.line}">${esc(comp.path)}:${node.line}</span><button type="button" id="doc-frame-width" title="Frame width and breakpoints (B)">${frame.width} px <kbd>B</kbd></button></p>
-    </div>
-    <div class="doc-body">
-      ${textOnly ? `<section class="dsec"><h3>Text</h3><textarea id="doc-text" data-key="text" rows="${Math.min(4, Math.max(1, Math.ceil(node.text.length / 38)))}" aria-label="Text">${esc(node.text)}</textarea></section>` : ''}
-      ${node.runs?.length ? `<section class="dsec"><h3>Text <span class="where">${node.runs.length} run${node.runs.length === 1 ? '' : 's'} between its elements</span></h3>${node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join('')}</section>` : ''}
-      <section class="dsec"><h3>Classes</h3>
-        <div class="doc-classes" id="doc-classes">${classes.length > 12 ? `<span class="hint" title="${esc(classes.join(' '))}">first 12 of ${classes.length}</span>` : ''}${classes.slice(0, 12).map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
-          <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>
-      </section>
-      <section class="dsec" id="doc-values"><h3>Where each value comes from${mainFile ? `<span class="where hfile">${esc(mainFile)}</span>` : ''}</h3>
-        ${props.length || target ? valuesHtml() : ''}${props.length ? '' : computed ? `<p class="hint">Its classes are worked out in code: <code>${esc(computed)}</code> at line ${node.line} of ${esc(base(comp.path))}. No stylesheet rule of this folder matches it here. Change them in that file.</p>` : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : '<p class="hint">Nothing styles this element yet.</p>'}
-      </section>
-      ${explain.inherited.length ? `<section class="dsec soft" id="doc-inherited" data-soft="inherited"${soft('inherited')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('inherited')}">Inherited <span class="where">${explain.inherited.length} from the elements around it</span></button></h3><div class="soft-b">${explain.inherited.map(inheritedRow).join('')}</div></section>` : ''}
-      <details class="dsec fold" data-fold="inline"${fold('inline', inlineDecls.length > 0)}><summary><h3>Inline style <span class="where">${inlineDecls.length ? `${inlineDecls.length} set` : 'none yet'}</span></h3></summary>
-        <div class="decls" id="doc-inline">${inlineDecls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'style', over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
-          <div class="decl add"><input class="prop" data-key="inline-new-prop" placeholder="property" aria-label="New inline property" spellcheck="false"><input class="val" data-key="inline-new-val" placeholder="value" aria-label="New inline value" spellcheck="false"></div></div>
-      </details>
-      <details class="dsec fold" data-fold="rules"${fold('rules', false)}><summary><h3>Rules <span class="where">${rulesStrong.length} matching, strongest first</span></h3></summary>
-        ${rulesStrong.length ? '<div class="rules-list">' + rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
+    <div class="doc-body" data-node="${esc(sel.node)}">
+      ${values.main}
+      ${textOnly ? sec('text', 'Text', `<textarea id="doc-text" data-key="text" rows="${Math.min(4, Math.max(1, Math.ceil(node.text.length / 38)))}" aria-label="Text">${esc(node.text)}</textarea>`) : ''}
+      ${node.runs?.length ? sec('runs', 'Text', node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join(''), { note: `${node.runs.length} run${node.runs.length === 1 ? '' : 's'}` }) : ''}
+      ${sec('classes', 'Classes', `<div class="doc-classes" id="doc-classes">${classes.length > 12 ? `<span class="hint" title="${esc(classes.join(' '))}">first 12 of ${classes.length}</span>` : ''}${classes.slice(0, 12).map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
+          <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>${codeNote}`)}
+      ${values.other}
+      ${inheritedRest.length ? sec('inherited', 'Inherited', `<div id="doc-inherited">${inheritedRest.map(inheritedRow).join('')}</div>`, { open: false, note: `${inheritedRest.length} from around it` }) : ''}
+      ${sec('inline', 'Inline style', `<div class="decls" id="doc-inline">${inlineDecls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'style', over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
+          <div class="decl add"><input class="prop" data-key="inline-new-prop" placeholder="property" aria-label="New inline property" spellcheck="false"><input class="val" data-key="inline-new-val" placeholder="value" aria-label="New inline value" spellcheck="false"></div></div>`, { open: false, note: inlineDecls.length ? `${inlineDecls.length} set` : 'none yet' })}
+      ${sec('rules', 'Rules', rulesStrong.length ? '<div class="rules-list">' + rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
           <div class="rhead"><button type="button" class="lit" data-lit-sel="${esc(r.selector)}" data-lit-file="${esc(r.file)}" title="Light up every place this rule applies"><code class="sel">${esc(r.selector)}</code></button>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line} · specificity ${r.specificity.join(',')}">${esc(base(r.file))}:${r.line}</span></div>
           <div class="decls">${r.decls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'rule', rule: r.order, idx: index(data.rules[r.order]), line: d.line, over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
             <div class="decl add"><input class="prop" data-key="r${r.order}-new-prop" data-rule="${r.order}" placeholder="property" aria-label="New property in ${esc(r.selector)}" spellcheck="false"><input class="val" data-key="r${r.order}-new-val" data-rule="${r.order}" placeholder="value" aria-label="New value in ${esc(r.selector)}" spellcheck="false"></div></div>
-        </div>`).join('') + '</div>' : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>'}
-      </details>
-      ${varNames.length ? `<section class="dsec soft" data-soft="vars-here"${soft('vars-here')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('vars-here')}">Variables here <span class="where">${varNames.length}, the definition that applies</span></button></h3><div class="soft-b"><div class="decls">${varNames.map(varRow).join('')}</div></div></section>` : ''}
-      <section class="dsec" id="doc-vars"><h3>Your variables <span class="where">${Object.keys(folderVars).length} in this folder</span></h3>
-        <input id="doc-vars-filter" data-key="vars-filter" class="vfilter" type="search" placeholder="find a variable" aria-label="Find a variable" spellcheck="false">
+        </div>`).join('') + '</div>' : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>', { open: false, note: `${rulesStrong.length} matching${mainFile ? ' · ' + esc(mainFile) : ''}` })}
+      ${varNames.length ? sec('vars-here', 'Variables here', `<div class="decls">${varNames.map(varRow).join('')}</div>`, { open: false, note: String(varNames.length) }) : ''}
+      ${sec('vars', 'Your variables', `<div id="doc-vars"><input id="doc-vars-filter" data-key="vars-filter" class="vfilter" type="search" placeholder="find a variable" aria-label="Find a variable" spellcheck="false">
         <div id="doc-vars-body">${stripsHtml(groups, new Set(varNames))}</div>
-        <p class="hint">Click one to use it on the value you are in, or drag it onto an element.</p>
-      </section>
-      <section class="dsec" id="doc-checks"><h3>Check <span class="where">hold Alt over an element to measure it</span></h3>
-        <div class="mrow"><button type="button" class="mchip" id="chk-contrast" aria-pressed="false">Contrast</button><button type="button" class="mchip" id="chk-order" aria-pressed="false">Focus order</button><span class="hint" id="chk-sum"></span></div>
-      </section>
+        <p class="hint">Click one to use it on the value you are in, or drag it onto an element.</p></div>`, { open: false, note: `${Object.keys(folderVars).length} in this folder` })}
+      ${sec('checks', 'Check', `<div id="doc-checks"><div class="mrow"><button type="button" class="mchip" id="chk-contrast" aria-pressed="false">Contrast</button><button type="button" class="mchip" id="chk-order" aria-pressed="false">Focus order</button><span class="hint" id="chk-sum"></span></div><p class="hint">Hold Alt over an element to measure it.</p></div>`, { open: false })}
       <p class="field-error" id="doc-error" hidden></p>
     </div>
     <div id="doc-dock" hidden>
       <div id="doc-staged" aria-live="polite"></div>
       <div class="doc-foot" id="doc-foot"><button type="button" class="primary" id="doc-apply">Apply <kbd>↵</kbd></button><button type="button" id="doc-cancel">Cancel <kbd>Esc</kbd></button></div>
     </div>`;
-  el.querySelectorAll('details.fold').forEach((d) => d.addEventListener('toggle', () => openFolds.set(d.dataset.fold, d.open)));
-  el.querySelectorAll('.dsec.soft').forEach((sec) => {
-    const set = (on) => { openFolds.set(sec.dataset.soft, on); sec.toggleAttribute('data-open', on); sec.querySelector('.soft-h').setAttribute('aria-expanded', String(on)); };
-    sec.querySelector('.soft-h').addEventListener('click', () => set(!sec.hasAttribute('data-open')));
-    sec.querySelector('.soft-b').addEventListener('focusin', () => set(true));
-  });
+  wireSections(el);
   el.querySelectorAll('.pl-adv').forEach((b) => {
     const hostEl = b.closest('.pl-adv-host'), prop = b.dataset.adv;
     if (!hostEl) { b.remove(); return; }
@@ -403,9 +398,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     b.addEventListener('click', () => { const on = !hostEl.classList.contains('open'); hostEl.classList.toggle('open', on); b.setAttribute('aria-expanded', String(on)); openFolds.set('adv:' + prop, on); });
   });
   // the height lever: a long list shows six rows, its bottom edge drags for more (panel-height.js)
-  const kindKey = comp.fileKind || 'html';
-  const rl = el.querySelector('#doc-values ~ details[data-fold="rules"] .rules-list'); if (rl) capList(rl, { key: `${kindKey}.rules`, label: 'Rules', rows: () => [...rl.children] });
-  for (const [sel2, key2, name2] of [['#doc-inline', 'inline', 'Inline style'], ['[data-soft="vars-here"] .decls', 'vars-here', 'Variables here']]) { const l = el.querySelector(sel2); if (l) capList(l, { key: `${kindKey}.${key2}`, label: name2, rows: () => [...l.children].filter((r) => !r.classList.contains('add')) }); }
+  const rl = el.querySelector('[data-sec="rules"] .rules-list'); if (rl) capList(rl, { key: `${kindKey}.rules`, label: 'Rules', rows: () => [...rl.children] });
+  for (const [sel2, key2, name2] of [['#doc-inline', 'inline', 'Inline style'], ['[data-sec="vars-here"] .decls', 'vars-here', 'Variables here']]) { const l = el.querySelector(sel2); if (l) capList(l, { key: `${kindKey}.${key2}`, label: name2, rows: () => [...l.children].filter((r) => !r.classList.contains('add')) }); }
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
   else if (backTo?.key === selKey) { el.querySelector(`.vrow input[data-prop="${CSS.escape(backTo.prop)}"]`)?.focus({ preventScroll: true }); backTo = null; }
   wireKeys(el);
@@ -461,8 +455,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     b.addEventListener('pointerenter', () => { if (!staged) light(spec()); }); b.addEventListener('pointerleave', () => { if (!staged) light(null); });
     b.addEventListener('focus', () => { if (!staged) light(spec()); }); b.addEventListener('blur', () => { if (!staged) light(null); });
   });
-  el.querySelector('#doc-skip')?.addEventListener('click', () => { const c = el.querySelector('#doc-vars .ivchip'); c?.scrollIntoView({ block: 'center' }); c?.focus({ preventScroll: true }); });
-  el.querySelector('#doc-frame-width')?.addEventListener('click', () => ctx.breakpoints?.open?.());
+  el.querySelector('#doc-skip')?.addEventListener('click', () => { openAround(el.querySelector('#doc-vars')); const c = el.querySelector('#doc-vars .ivchip'); c?.scrollIntoView({ block: 'center' }); c?.focus({ preventScroll: true }); });
 
   // ---------- the staged value: scope, the change, Apply ----------
   const winners = explain.props;

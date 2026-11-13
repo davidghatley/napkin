@@ -15,16 +15,8 @@ body { font-family: var(--nk-sans); }
 #instruments[hidden], #panel[hidden] { display: none; }
 /* One column: the element panel, then the instrument panel under it. Drawing this one never moves the element panel; when the element panel
    changes, this one is out of sight for two frames (surface-panel.js), so it is never a layout shift. */
-#inspector > #instruments { border-top: 1px solid var(--nk-line); scrollbar-gutter: stable; }
-#inspector > #panel:empty + #instruments, #inspector > #panel[hidden] + #instruments { border-top: 0; }
 #inspector { scrollbar-gutter: stable; }
 #instruments .instruments { display: block; }
-#instruments .inst-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 14px 10px; }
-#instruments .inst-head h2 { margin: 0; font: 600 14px/20px var(--nk-sans); color: var(--nk-text); overflow-wrap: anywhere; }
-#instruments .inst-head p { margin: 2px 0 0; font: 12px/16px var(--nk-sans); color: var(--nk-text-2); }
-#instruments .inst-tools { display: flex; gap: 6px; flex: none; }
-#instruments .inst-tools > * { font: 500 12px/1 var(--nk-sans); padding: 7px 10px; border-radius: 6px; border: 1px solid var(--nk-line); background: var(--nk-chrome-2); color: var(--nk-text); text-decoration: none; cursor: pointer; }
-#instruments .inst-tools > *:hover { background: var(--nk-chrome-3); }
 #instruments .inst-status:empty { display: none; }
 #instruments .inst-status { margin: 0 14px 8px; font: 12px/16px var(--nk-sans); color: var(--nk-text-2); }
 #instruments .inst-empty { margin: 0; padding: 12px 14px 16px; font: 12px/18px var(--nk-sans); color: var(--nk-text-2); }
@@ -63,7 +55,7 @@ body { font-family: var(--nk-sans); }
 #shortcuts dt { max-width: 55%; }
 #shortcuts dd { margin: 0; text-align: right; font: 11px/1.4 var(--nk-mono); color: var(--nk-text-2); }
 #shortcuts button { font: 500 12px/1 var(--nk-sans); border: 1px solid var(--nk-line); background: var(--nk-chrome-2); color: var(--nk-text); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
-#shortcuts button:focus-visible, #instruments .inst-tools > *:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
+#shortcuts button:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
 #shortcuts .km-status:empty { display: none; }
 @media (max-width: 650px) { #shortcuts .km-list, #shortcuts .km-more { grid-template-columns: 1fr; } }
 

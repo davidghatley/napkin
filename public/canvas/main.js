@@ -65,6 +65,7 @@ import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
 import { initContextMenu } from './context-menu.js';
 import { initRightPanel } from './right-panel.js';
+import { initPanelHead } from './panel-head.js';
 import { initCreate } from './create.js';
 
 const $ = (s) => document.querySelector(s);
@@ -156,6 +157,7 @@ initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
+initPanelHead(ctx); // the right panel's one header (type glyph, name, tag) and its empty state
 initInstruments(ctx); // the one instrument panel (dials) for whatever is selected
 initSurface(ctx); // commands, bindings, spatial focus, board state (commands.js)
 initShortcuts(ctx);
