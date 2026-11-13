@@ -28,6 +28,7 @@ import {
 } from "./motion.js";
 import { schedule } from "./figures.js";
 import { imageStudio } from "./studio-image.js";
+import { typeStudio as typeLab } from "./studio-type.js";
 import { samplerStudio as samplerLab } from "./studio-sampler.js";
 import { field as kField } from "./kit.js";
 import { motionStudio as motionLab } from "./studio-motion.js";
@@ -2643,7 +2644,7 @@ export function createStudio(panel, section, host, rail = document.createElement
     lab = motionLab(ctx, host);
   else if (["motion", "bezier", "spring"].includes(c.type))
     lab = motionStudio(ctx, host);
-  else if (c.type === "typography") lab = typeStudio(ctx, host);
+  else if (c.type === "typography") lab = typeLab(ctx, host);
   else if (c.type === "image") lab = imageStudio(ctx, host);
   else if (c.type === "encoding") lab = encodingStudio(ctx, host);
   else if (c.type === "sampler") lab = samplerLab(ctx, host);

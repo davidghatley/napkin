@@ -3059,3 +3059,111 @@
   flex-direction: row;
   justify-content: space-between;
 }
+
+/* ---------- Type studio ---------- */
+.kt-spec-wrap {
+  min-height: 210px;
+  max-height: 300px;
+  overflow: auto;
+  padding: 20px 24px;
+  border-radius: 3px;
+  background:
+    repeating-linear-gradient(to bottom, transparent 0 calc(var(--lead, 36px) - 1px), color-mix(in srgb, var(--d-accent) 22%, transparent) calc(var(--lead, 36px) - 1px) var(--lead, 36px))
+      0 20px / 100% calc(100% - 20px) no-repeat,
+    var(--d-well);
+}
+.kt-spec {
+  outline: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--d-text);
+  cursor: text;
+  font-kerning: normal;
+}
+.kt-spec-wrap:focus-within {
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+.kt-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 28px;
+}
+.kt-ladder {
+  display: flex;
+  flex-direction: column;
+}
+.dials .kt-rung {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  align-items: baseline;
+  gap: 8px;
+  height: auto;
+  min-height: 0;
+  padding: 2px 6px 2px 0;
+  border-radius: 0;
+  text-align: left;
+  color: var(--d-text);
+  overflow: hidden;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .kt-rung:hover {
+  background: transparent;
+}
+.kt-rung-px {
+  font-family: var(--d-pixel);
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.kt-rung-ag {
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 1.15;
+}
+.dials .kt-rung[aria-checked="true"] {
+  box-shadow: inset 2px 0 0 var(--d-accent), inset 0 -1px 0 var(--d-line);
+  padding-left: 8px;
+}
+.dials .kt-rung[aria-checked="true"] .kt-rung-px {
+  color: var(--d-accent-text);
+}
+.kt-pad {
+  height: 300px;
+  background: var(--d-well);
+  border-radius: 3px;
+}
+.k-svg .kt-cell {
+  fill: color-mix(in srgb, var(--d-text) 22%, transparent);
+}
+.kt-cross {
+  stroke: var(--d-accent);
+  stroke-dasharray: 2 3;
+}
+.k-svg .kt-chip-ag {
+  font-size: 26px;
+  fill: var(--d-text);
+}
+.kt-weights {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.dials .kt-weights .k-chip-glyph {
+  box-shadow: none;
+  padding: 0 0 2px;
+}
+.dials .kt-weights .k-chip-glyph svg {
+  width: 100%;
+  background: transparent;
+}
+.dials .kt-weights .k-chip-glyph[aria-checked="true"] svg {
+  box-shadow: inset 0 -2px 0 var(--d-accent);
+  border-radius: 0;
+}
+.kt-glyphs {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+  font-size: 16px;
+  line-height: 28px;
+  text-align: center;
+  color: var(--d-text);
+}
