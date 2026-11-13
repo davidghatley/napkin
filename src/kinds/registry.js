@@ -34,12 +34,14 @@ function define(id, extensions, mime, family, magic) {
     extensions,
     mime,
     family,
-    detect: (ctx) =>
-      magic?.(ctx) ? (id === 'binary' ? 0.1 : 2) : extensions.includes(ctx.ext) ? 1 : 0,
+    detect: (ctx) => {
+      const m = magic?.(ctx);
+      return m ? (id === 'binary' ? 0.1 : typeof m === 'number' ? m : 2) : extensions.includes(ctx.ext) ? 1 : 0;
+    },
     metadata: (ctx) => metadata(ctx, family),
     viewer: (ctx) => renderViewer(ctx),
     preview: (ctx, query) => previewData(ctx, query),
-    controls: (ctx) => sections(ctx),
+    controls: (ctx) => sections(ctx, entries.map((d) => d.id).sort()),
     apply: (ctx, c, v) =>
       c.target.mode === 'recipe'
         ? { recipe: { ...ctx.recipe, [c.target.key]: v } }
@@ -82,7 +84,7 @@ function metadata(ctx, family) {
 }
 // Broad fallbacks first, specific magic and content detection last. Plugins have final precedence.
 define('binary', [], 'application/octet-stream', 'binary', () => true);
-define('txt', ['.txt', '.log'], textMime, 'text', (c) => c.ext === '' && !c.head.includes(0));
+define('txt', ['.txt', '.log'], textMime, 'text', (c) => c.ext === '' && !c.head.includes(0) && 1.1);
 define(
   'code',
   [
@@ -152,12 +154,45 @@ define(
   (c) => /^diff --git /m.test(c.text) || /^--- .*\n\+\+\+ /m.test(c.text),
 );
 define('patch', ['.patch'], textMime, 'diff', (c) => c.ext === '.patch' && 3);
-define('json', ['.json', '.jsonc'], 'application/json', 'json');
-define('jsonl', ['.jsonl', '.ndjson'], 'application/x-ndjson', 'table');
-define('csv', ['.csv'], 'text/csv', 'table');
-define('tsv', ['.tsv'], 'text/tab-separated-values', 'table');
+// Content sniffing: only when the name says nothing useful (no extension, or a catch-all one such as .bin).
+const vague = (c) => ['', '.bin', '.dat', '.data', '.tmp', '.txt', '.log', '.file'].includes(c.ext);
+const parsed = (c) => {
+  if (!/^\s*[\[{]/.test(c.text) || c.bytes > LIMIT_SNIFF) return null;
+  try {
+    return JSON.parse(c.text);
+  } catch {
+    return null;
+  }
+};
+const LIMIT_SNIFF = 1024 * 1024;
+define('json', ['.json', '.jsonc'], 'application/json', 'json', (c) => vague(c) && parsed(c) !== null && 1.5);
+define('jsonl', ['.jsonl', '.ndjson'], 'application/x-ndjson', 'table', (c) => {
+  if (!vague(c) || c.bytes > LIMIT_SNIFF) return false;
+  const lines = c.text.split(/\r?\n/).filter(Boolean).slice(0, 20);
+  return (
+    lines.length >= 2 &&
+    lines.every((l) => {
+      try {
+        return typeof JSON.parse(l) === 'object';
+      } catch {
+        return false;
+      }
+    }) &&
+    1.6
+  );
+});
+// A delimited table has at least three lines with the same number of separators outside quotes.
+const delimitedBy = (c, ch) => {
+  if (!vague(c) || c.head.includes(0)) return false;
+  const lines = c.text.split(/\r?\n/).filter(Boolean).slice(0, 12);
+  if (lines.length < 3) return false;
+  const n = (l) => l.replace(/"[^"]*"/g, '').split(ch).length - 1;
+  return n(lines[0]) >= 1 && lines.slice(0, -1).every((l) => n(l) === n(lines[0])) && 1.2;
+};
+define('csv', ['.csv'], 'text/csv', 'table', (c) => delimitedBy(c, ','));
+define('tsv', ['.tsv'], 'text/tab-separated-values', 'table', (c) => delimitedBy(c, '\t') && 1.3);
 define('css', ['.css'], 'text/css', 'css');
-define('html', ['.html', '.htm'], 'text/html', 'component');
+define('html', ['.html', '.htm'], 'text/html', 'component', (c) => vague(c) && /^\s*(?:<!doctype\s+html|<html[\s>])/i.test(c.text));
 // Animated pages are still components; the kind names what moves them. Higher score beats plain html.
 const page = (c) => c.ext === '.html' || c.ext === '.htm';
 define(

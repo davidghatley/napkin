@@ -249,11 +249,20 @@ export function recipeControls(ctx) {
     ),
   );
 }
-export function sections(ctx) {
+export function sections(ctx, kindIds = []) {
   const native = ctx.bytes <= 1024 * 1024 ? nativeControls(ctx) : [];
   return [
     ...(native.length ? [{ id: 'source', label: 'File values', controls: native }] : []),
-    { id: 'view', label: 'Viewer', controls: recipeControls(ctx) },
+    {
+      id: 'view',
+      label: 'Viewer',
+      controls: [
+        ...recipeControls(ctx),
+        ...(kindIds.length
+          ? [control('view:kind', 'Open as', ctx.recipe.kind ?? ctx.kind, { mode: 'recipe', key: 'kind' }, { type: 'select', options: kindIds, figure: { type: 'value' }, storage: 'recipe' })]
+          : []),
+      ],
+    },
   ];
 }
 export function validate(c, value) {

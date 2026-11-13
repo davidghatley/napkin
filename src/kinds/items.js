@@ -9,7 +9,7 @@ import {
 import { resolve, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { writeItemValue, removeItemRecipe, writeItemLayout } from '../commit.js';
-import { context, detectKind, decodeText } from './registry.js';
+import { context, detectKind, decodeText, kinds } from './registry.js';
 import { explainError } from '../errors.js';
 import { window, LIMIT } from './readers.js';
 import { validate } from './controls.js';
@@ -122,12 +122,23 @@ export function openItems(
     const file = abs(id),
       st = statSync(file);
     if (!st.isFile()) throw new ItemError('This item is not a file. Next: choose a file item.', 404);
-    const key = `${st.dev}:${st.ino}:${st.size}:${st.mtimeNs ?? st.mtimeMs}:${st.ctimeMs}`;
+    // "Open as": a recipe may name a kind, for a file whose name and contents give no hint.
+    let override = null,
+      sidecar = '';
+    try {
+      const rs = statSync(file + '.napkin-recipe.json');
+      sidecar = `:${rs.size}:${rs.mtimeMs}`;
+      if (rs.size < 65536) {
+        const asked = JSON.parse(readFileSync(file + '.napkin-recipe.json', 'utf8')).kind;
+        override = kinds().find((k) => k.id === asked) || null;
+      }
+    } catch {}
+    const key = `${st.dev}:${st.ino}:${st.size}:${st.mtimeNs ?? st.mtimeMs}:${st.ctimeMs}${sidecar}`;
     let cached = cache.get(id);
     if (!cached || cached.key !== key) {
       const head = window(file),
         ctx = context(id, head, st.size),
-        definition = detectKind(ctx);
+        definition = override || detectKind(ctx);
       ctx.kind = definition.id;
       ctx.definition = definition;
       ctx.file = file;
