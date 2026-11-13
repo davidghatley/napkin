@@ -228,7 +228,7 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
       }
       await q(`tPanel.open("dmx")`);
       await sleep(120);
-      assert.match(await q(`document.querySelector("#t-host .ki .ki-declared").textContent`), /dmx-universe/);
+      assert.equal(await q(`document.querySelectorAll("#t-host .ki .ki-declared").length`), 0, "no raw declaration padding the frame");
       assert.ok((await q(`document.querySelectorAll("#t-host .ki .ki-stage-block svg *").length`)) > 8, "the unknown type draws lanes");
       await q(`document.querySelector("#t-host").remove()`);
     });
