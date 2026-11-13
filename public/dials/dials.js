@@ -108,6 +108,12 @@ const depthNames = [
   ["Bench", "every control"],
   ["Studio", "the full editor, in the panel"],
 ];
+// The width lever (options.reveal, standards section 7 rule 6b): the panel's width decides how much of a colour's editor shows.
+// Narrow: the row (swatch and value; the swatch opens the host's anchored picker). Medium: the channel sliders and a larger
+// proof under the rows. Wide: the whole editor (plane, sliders, ramp, palette), in place. Measured on the panel's own width.
+export const TIER_MEDIUM = 340,
+  TIER_WIDE = 460;
+export const tierOf = (w) => (w >= TIER_WIDE ? "wide" : w >= TIER_MEDIUM ? "medium" : "narrow");
 const expandGlyph =
   '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 6.5L8 3.5L11 6.5M5 9.5L8 12.5L11 9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 export function render(schema, container, options = {}) {
@@ -147,6 +153,11 @@ export class Dials extends EventTarget {
     });
     this.root.append(this.status);
     container.append(this.root);
+    this.tier = null;
+    if (options.reveal && typeof ResizeObserver === "function") {
+      this.sizer = new ResizeObserver(() => this.retier());
+      this.sizer.observe(this.root);
+    }
     this.root.addEventListener("keydown", (e) => this.keydown(e));
     // Copy a value from a row or a studio; paste it on any other control, of any type that can hold it.
     // The clipboard carries the words and, for other panels, the typed value.
@@ -232,6 +243,7 @@ export class Dials extends EventTarget {
     this.schema = next;
     this.revision = next.revision;
     this.root.replaceChildren(this.status);
+    if (this.options.reveal) this.setTier(tierOf(this.root.clientWidth || this.container.clientWidth || 0), false);
     const fragment = document.createDocumentFragment();
     for (const section of next.sections) {
       const node = el("section", {
@@ -259,6 +271,13 @@ export class Dials extends EventTarget {
       expand.title = "Full editor in the panel (S)";
       expand.innerHTML = expandGlyph;
       expand.setAttribute("aria-expanded", "false");
+      // A colour section answers the panel's width instead (the width lever): it has no editor button.
+      const studioOf = section.controls.find((c) => c.type === section.studio) || first,
+        inline = !!this.options.reveal && studioOf?.type === "color";
+      if (inline) {
+        node.dataset.reveal = "width";
+        expand.hidden = true;
+      }
       const head = el(
         "header",
         { class: "d-section-head" },
@@ -301,6 +320,8 @@ export class Dials extends EventTarget {
         tabs,
         studioControl: first?.id,
         depth: 0,
+        inline,
+        auto: false,
       };
       this.sections.set(section.id, s);
       if (first) {
@@ -325,6 +346,7 @@ export class Dials extends EventTarget {
       const given = this.options.subject?.(section.id, section);
       if (given) this.setSubject(section.id, given, false);
       this.setDepth(section.id, section.depth || 2, false);
+      this.retierSection(s);
     }
     this.root.append(fragment);
     // Finish row mutations before studios read computed styles and draw their previews.
@@ -501,6 +523,7 @@ export class Dials extends EventTarget {
     });
     if (c.type === "boolean")
       fig.addEventListener("click", () => this.transact(c.id, !c.value));
+    if (c.type === "color") fig.addEventListener("click", () => this.pickColor(c.id));
     // A value the schema got wrong was repaired; the row says what happened, in words.
     if (c.invalid) {
       node.dataset.invalid = "";
@@ -895,7 +918,7 @@ export class Dials extends EventTarget {
     }
     // A studio is drawn when it is opened, so swapping a whole panel stays cheap.
     s.lab = null;
-    s.labStale = s.depth !== 3;
+    s.labStale = s.depth !== 3 && !this.showsLab(s);
     if (s.labStale) return;
     s.lab = plugin?.studio
       ? plugin.studio({ ...this.context(id), panel: this, rail: s.railHost }, s.labHost)
@@ -944,12 +967,13 @@ export class Dials extends EventTarget {
   }
   /** Mark the row whose studio is open, so the row and its subject stay found while the pane is large. */
   markEditing(s) {
-    if (s.depth !== 3 && !s.marked) return;
-    s.marked = s.depth === 3;
+    const on = s.depth === 3 || (this.showsLab(s) && s.schema.controls.filter((c) => c.type === "color").length > 1);
+    if (!on && !s.marked) return;
+    s.marked = on;
     for (const c of s.schema.controls) {
       const row = this.rows.get(c.id);
       if (!row) continue;
-      if (s.depth === 3 && c.id === s.studioControl) row.node.dataset.editing = "true";
+      if (on && c.id === s.studioControl) row.node.dataset.editing = "true";
       else delete row.node.dataset.editing;
     }
   }
@@ -1170,9 +1194,16 @@ export class Dials extends EventTarget {
       }),
     );
   }
-  setDepth(id, depth, animate = true) {
+  setDepth(id, depth, animate = true, meta = {}) {
     const s = this.sections.get(id);
     if (!s) return;
+    // A wide panel shows a colour section's whole editor: opening it there opens all of it (and the panel's width, not a
+    // button, takes it back). The depth it came to by width is not the person's choice, so it is not kept (meta.auto).
+    if (s.inline && this.tier === "wide" && clamp(depth, 1, 3) === 2) {
+      depth = 3;
+      meta = { ...meta, auto: true };
+    }
+    s.auto = !!meta.auto && clamp(depth, 1, 3) === 3;
     // Measured only when the change is animated: reading it forces a layout, once per section on render.
     const before = animate && s.node.isConnected ? s.node.getBoundingClientRect() : null;
     const prior = s.depth;
@@ -1187,6 +1218,7 @@ export class Dials extends EventTarget {
     s.body.inert = s.depth === 1;
     s.toggle.setAttribute("aria-expanded", String(s.depth > 1));
     s.expand.setAttribute("aria-expanded", String(s.depth === 3));
+    if (s.depth === 2 && s.labStale && this.showsLab(s)) this.buildStudio(s, s.studioControl);
     s.lab?.depth?.(s.depth);
     this.placeSubject(s, false);
     this.markEditing(s);
@@ -1197,9 +1229,9 @@ export class Dials extends EventTarget {
       if (row && !row.node.hidden) shown++;
     }
     s.node.style.setProperty("--d-rows-shown", s.depth === 1 ? 0 : shown);
-    this.options.onDepth?.(id, s.depth);
+    if (!meta.auto) this.options.onDepth?.(id, s.depth);
     this.placeSubject(s, animate);
-    this.emit("depth", { section: id, depth: s.depth });
+    this.emit("depth", { section: id, depth: s.depth, ...(meta.auto && { auto: true }) });
     if (
       animate &&
       before &&
@@ -1226,13 +1258,72 @@ export class Dials extends EventTarget {
     if (s.depth === 1 && s.body.contains(document.activeElement))
       s.toggle.focus();
     if (s.depth < 3 && s.tabs.contains(document.activeElement))
-      s.expand.focus();
+      (s.expand.hidden ? s.toggle : s.expand).focus();
+  }
+  /** The width lever: the panel's tier (narrow, medium, wide) and what each colour section shows at it. */
+  setTier(tier, apply = true) {
+    if (tier === this.tier) return;
+    this.tier = tier;
+    this.root.dataset.tier = tier;
+    if (apply) for (const s of this.sections.values()) this.retierSection(s);
+  }
+  retier() {
+    if (this.disposed || !this.root.isConnected) return;
+    const w = this.root.clientWidth;
+    if (w) this.setTier(tierOf(w));
+  }
+  /** Whether a section's editor is on screen below the full editor: a colour section in a medium panel shows its sliders. */
+  showsLab(s) {
+    return !!s.inline && this.tier === "medium" && s.depth === 2;
+  }
+  retierSection(s) {
+    if (!s.inline) return;
+    if (this.tier === "wide" && s.depth === 2) this.setDepth(s.schema.id, 3, false, { auto: true });
+    else if (this.tier !== "wide" && s.auto && s.depth === 3) this.setDepth(s.schema.id, 2, false, { auto: true });
+    if (this.showsLab(s) && s.labStale) this.buildStudio(s, s.studioControl);
+    this.markEditing(s);
+  }
+  /**
+   * A colour's swatch: in a narrow panel it opens the host's picker anchored to the swatch (options.pickColor, kept inside
+   * the panel); in a medium panel it points the sliders under the rows at this colour; with the full editor shown it
+   * switches the editor to it. Without a host picker (or for a colour bound to a token) it opens the full editor.
+   */
+  pickColor(id) {
+    const r = this.rows.get(id);
+    if (!r || r.c.disabled) return;
+    const s = r.section;
+    if (s.depth === 3) return this.open(id);
+    if (this.showsLab(s)) {
+      if (s.studioControl !== id || s.labStale) this.buildStudio(s, id);
+      this.markEditing(s);
+      return;
+    }
+    const pick = this.options.pickColor,
+      text = format(r.c.value, r.c);
+    if (!pick || /^\s*var\(/i.test(text)) return this.open(id);
+    pick({
+      anchor: r.fig,
+      value: text,
+      label: r.c.label || r.c.id,
+      onPreview: (t) => {
+        if (!this.active.has(id)) this.begin(id, "picker");
+        this.change(id, t);
+      },
+      onCommit: (t) => {
+        if (this.active.has(id)) {
+          this.change(id, t);
+          this.commit(id);
+        } else this.transact(id, t);
+      },
+    });
   }
   /**
    * Scroll the panel (the nearest scrolling box around the section, never the page) so the section is in view: its head
-   * first when the section is taller than the box.
+   * first when the section is taller than the box. Sections off screen are laid out from a placeholder height
+   * (content-visibility), so once the ones above have their real height (and its own opening animation is over) it
+   * looks again.
    */
-  reveal(id) {
+  reveal(id, again = false) {
     const s = this.sections.get(id);
     if (!s?.node.isConnected) return this;
     let box = s.node.parentElement;
@@ -1241,6 +1332,15 @@ export class Dials extends EventTarget {
     const b = box.getBoundingClientRect(), r = s.node.getBoundingClientRect();
     if (r.top < b.top) box.scrollTop += r.top - b.top;
     else if (r.bottom > b.bottom) box.scrollTop += Math.min(r.bottom - b.bottom, r.top - b.top);
+    if (!again) {
+      // after the section's own opening animation (its box is scaled while it runs) and two frames for the rest
+      const later = () => {
+        const anims = s.node.getAnimations?.() ?? [];
+        if (anims.length) Promise.all(anims.map((a) => a.finished.catch(() => {}))).then(() => this.reveal(id, true));
+        else this.reveal(id, true);
+      };
+      requestAnimationFrame(() => requestAnimationFrame(later));
+    }
     return this;
   }
   keydown(e) {
@@ -1271,10 +1371,10 @@ export class Dials extends EventTarget {
       this.help();
       return;
     }
-    if (e.key === "Escape" && !editing && s?.depth === 3) {
+    if (e.key === "Escape" && !editing && s?.depth === 3 && !s.auto) {
       e.preventDefault();
       this.setDepth(s.schema.id, 2);
-      s.expand.focus();
+      (s.expand.hidden ? s.toggle : s.expand).focus();
       return;
     }
     if (!row || editing) return;
@@ -1315,6 +1415,11 @@ export class Dials extends EventTarget {
       e.preventDefault();
       const n = e.key === "Home" ? row.c.min : row.c.max;
       if (n !== undefined) this.transact(row.c.id, n);
+      return;
+    }
+    if (["Enter", " "].includes(e.key) && e.target === row.fig && row.c.type === "color" && row.section.depth !== 3) {
+      e.preventDefault();
+      this.pickColor(row.c.id);
       return;
     }
     if (
@@ -1646,6 +1751,7 @@ export class Dials extends EventTarget {
   destroy() {
     if (this.disposed) return;
     livePanels.delete(this);
+    this.sizer?.disconnect();
     this.gestures.forEach((dispose) => dispose());
     this.gestures = [];
     for (const id of [...this.active.keys()]) this.cancel(id);

@@ -251,3 +251,70 @@ dialog.ivask .hint { margin: 8px 0 0; font-size: 11px; color: var(--nk-text-3); 
 #panel .var-themes code { font: 10.5px var(--nk-mono); }
 dialog.ivask { position: fixed; inset: 60px 332px auto auto; margin: 0; z-index: 60; }
 #inspect-overlay .im-s { background: rgba(120, 90, 30, .92); }
+
+/* ---------- the width lever for an element's values (standards section 7 rule 6b, rule 7) ----------
+   Groups in Figma's order. At the default 280 px: every row is label, field. From 340 px of panel content (a 360 px panel): related fields pair up (X beside Y,
+   W beside H, a padding's sides and a radius's corners two by two) and the sides need no toggle. From 460 px: the box figure.
+   Labels wrap at their hyphens instead of being cut. Only --nk- tokens: 4 px steps, 11/12/13 px type, 24 px fields. */
+#panel .pl-group { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+#panel .pl-group + .pl-group { margin-top: var(--nk-s2); }
+#panel .pl-gh { margin: 0; padding: var(--nk-s1) 0; font: 600 var(--nk-fs-label)/16px var(--nk-sans); color: var(--nk-text-3); }
+#panel .vrow .phead label { white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; font: var(--nk-fs-label)/16px var(--nk-mono); padding: var(--nk-s1) 0; }
+#panel .vrow .pval input.val, #panel .vrow .pval input.ro { height: var(--nk-h-field); font: var(--nk-fs-label) var(--nk-mono); border-radius: var(--nk-radius); }
+#panel .vrow .pval input.ro { flex: 1; min-width: 0; padding: 0 6px; border: 1px solid transparent; background: transparent; color: var(--nk-text-2); box-sizing: border-box; }
+#panel .vrow.ghost .pval input.val::placeholder { color: var(--nk-text-3); opacity: 1; }
+#panel .pl-pair { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: var(--nk-s2); min-width: 0; }
+#panel .pl-pair > .vrow { min-width: 0; }
+#panel .pl-pair .pfrom, #panel .pfrom.pvar { flex-wrap: wrap; } /* a half-width row, or a variable with its own definition line: the file and line move down, whole */
+/* the small toggle at the right of a row, for its sides or corners */
+#panel .pl-adv { flex: none; display: inline-grid; place-items: center; width: var(--nk-h-field); height: var(--nk-h-field); margin-left: var(--nk-s1); padding: 0; border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-text-3); cursor: pointer; }
+#panel .pl-adv:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
+#panel .pl-adv[aria-expanded="true"] { background: var(--nk-chrome-2); color: var(--nk-accent-text); }
+#panel .pl-adv:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 0; }
+#panel .pl-adv-host:not(.open) > .pl-sides { display: none; }
+#panel .pl-sides { padding-left: var(--nk-s3); border-left: 1px solid var(--nk-line); margin: 0 0 var(--nk-s1) var(--nk-s1); }
+#panel .pl-sides .vrow { grid-template-columns: 84px minmax(0, 1fr); }
+#panel .pl-sides .vrow .phead label { overflow-wrap: normal; }
+#panel .pl-box { display: none; margin: var(--nk-s2) 0 0; }
+#panel .pl-box svg { display: block; width: 100%; max-width: 360px; height: auto; font: var(--nk-fs-label) var(--nk-mono); }
+#panel .pl-box rect { stroke-width: 1; }
+#panel .pl-box .bm-m { fill: color-mix(in srgb, #f6b26b 14%, transparent); stroke: color-mix(in srgb, #f6b26b 60%, var(--nk-line)); stroke-dasharray: 3 3; }
+#panel .pl-box .bm-b { fill: color-mix(in srgb, #ffe599 14%, var(--nk-chrome)); stroke: color-mix(in srgb, #e0b84a 70%, var(--nk-line)); }
+#panel .pl-box .bm-p { fill: color-mix(in srgb, #93c47d 16%, var(--nk-chrome)); stroke: color-mix(in srgb, #93c47d 60%, var(--nk-line)); }
+#panel .pl-box .bm-c { fill: color-mix(in srgb, #6fa8dc 22%, var(--nk-chrome)); stroke: color-mix(in srgb, #6fa8dc 70%, var(--nk-line)); }
+#panel .pl-box text { fill: var(--nk-text); text-anchor: middle; dominant-baseline: middle; }
+#panel .pl-box text.cap { fill: var(--nk-text-3); text-anchor: start; font-family: var(--nk-sans); }
+#panel .pl-box text.cnt { font-weight: 600; }
+@container inspector (min-width: 340px) {
+  #panel .pl-pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #panel .pl-geo > .vrow { grid-template-columns: 24px minmax(0, 1fr); }
+  #panel .pl-sides > .vrow { grid-template-columns: 64px minmax(0, 1fr); }
+  #panel .pl-adv-host > .pl-sides { display: grid !important; }
+  #panel .pl-adv-host .pl-adv { display: none; }
+  #panel .vrow .phead .res { max-width: 40%; }
+}
+@container inspector (min-width: 460px) {
+  #panel .vrow { grid-template-columns: 136px minmax(0, 1fr); }
+  #panel .pl-sides > .vrow { grid-template-columns: 88px minmax(0, 1fr); }
+  #panel .pl-geo > .vrow { grid-template-columns: 24px minmax(0, 1fr); }
+  #panel .pl-box { display: block; }
+  #panel .vrow .pval .sw { width: 20px; height: 20px; }
+}
+/* Long values are never cut: a name wraps instead of ending in an ellipsis, and a value too long for the field beside its name
+   moves to its own line under it (narrow: every declaration with a file and line after it, and any value past 12 characters;
+   medium: past 12 for declarations, past 30 for values; wide: past 30 for declarations). doc-panel.js marks .long and .xlong. */
+#panel .decl .prop, #panel .decl .lit.prop code { white-space: normal; overflow: visible; overflow-wrap: anywhere; text-overflow: clip; }
+#panel .decl.xlong:not(.add) { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+#panel .decl.xlong:not(.add) > .prop { grid-column: 1 / -1; }
+@container inspector (max-width: 339.98px) {
+  #panel .vrow.long { grid-template-columns: minmax(0, 1fr); }
+  #panel .vrow.long > .pval { grid-column: 1; grid-row: 2; }
+  #panel .decl:not(.add) { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+  #panel .decl:not(.add) > .prop { grid-column: 1 / -1; }
+}
+@container inspector (min-width: 340px) and (max-width: 459.98px) {
+  #panel .vrow.xlong { grid-template-columns: minmax(0, 1fr); }
+  #panel .vrow.xlong > .pval { grid-column: 1; grid-row: 2; }
+  #panel .decl.long:not(.add) { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+  #panel .decl.long:not(.add) > .prop { grid-column: 1 / -1; }
+}

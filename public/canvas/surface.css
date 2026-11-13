@@ -93,3 +93,15 @@ body { font-family: var(--nk-sans); }
 #instruments .d-section:not([data-depth="1"]) .d-row:has(> .d-value > textarea) { grid-template-columns: 12px minmax(0, 1fr) var(--d-fig-w); row-gap: 4px; padding-bottom: 6px; }
 #instruments .d-section:not([data-depth="1"]) .d-row:has(> .d-value > textarea) > .d-value { grid-column: 1 / -1; }
 #instruments .d-section:not([data-depth="1"]) .d-row > .d-value > textarea { max-height: 72px; overflow: auto; }
+
+/* ------------------------------------------------------------------ the width lever, host side (standards section 7 rule 6b) */
+/* Rows keep a gutter on the right like the one on the left: a select's arrow never meets the panel's edge. */
+#instruments .d-row { padding-right: var(--nk-s3); }
+/* A colour is one line at every tier below the full editor: dot, label, swatch, value. The label wraps rather than being cut. */
+#instruments .d-section:not([data-depth="1"]):not([data-depth="3"]) .d-row[data-type="color"]:has(> .d-value > textarea) { grid-template-columns: 12px minmax(0, 1fr) var(--nk-h-field) minmax(0, 1.25fr); row-gap: 0; padding-bottom: 0; }
+#instruments .d-section:not([data-depth="1"]):not([data-depth="3"]) .d-row[data-type="color"] > .d-value { grid-column: auto; }
+#instruments .d-row[data-type="color"] > .d-figure { width: var(--nk-h-field); height: var(--nk-h-field); border-radius: var(--nk-radius); }
+#instruments .dials[data-tier="medium"] .d-section:not([data-depth="1"]):not([data-depth="3"]) .d-row[data-type="color"]:has(> .d-value > textarea) { grid-template-columns: 12px minmax(0, 1fr) 48px minmax(0, 1.25fr); }
+#instruments .dials[data-tier="medium"] .d-row[data-type="color"] > .d-figure { width: 48px; }
+#instruments .d-row[data-editing="true"] > .d-label { color: var(--nk-text); font-weight: 600; }
+#instruments .d-section > .d-section-inner .nk-cap { padding-left: var(--nk-s3); }
