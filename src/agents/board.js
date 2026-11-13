@@ -32,13 +32,12 @@ function checkGroups(groups, depth = 0, seen = new Set()) {
 
 export function createBoard({ root, stateDir = stateRoot(), emit = () => {}, broadcast = () => {}, runSections = () => [] }) {
   const dir = join(stateDir, createHash('sha256').update(Buffer.from(root)).digest('hex').slice(0, 20), 'agents');
-  mkdirSync(dir, { recursive: true });
   const file = join(dir, 'board.json');
   let s = { revision: 0, arrange: { by: 'kind' }, groups: [], views: [], selection: [], compare: { item: null, variants: [] }, presentation: false };
   try { s = { ...s, ...JSON.parse(readFileSync(file, 'utf8')) }; } catch { /* first start */ }
   // What the person sees right now is not worth keeping across a restart.
   s.selection = []; s.view = undefined;
-  const save = () => { const tmp = `${file}.tmp-${process.pid}`; writeFileSync(tmp, JSON.stringify({ ...s, selection: undefined, view: undefined })); renameSync(tmp, file); };
+  const save = () => { mkdirSync(dir, { recursive: true }); const tmp = `${file}.tmp-${process.pid}`; writeFileSync(tmp, JSON.stringify({ ...s, selection: undefined, view: undefined })); renameSync(tmp, file); };
   const get = () => ({ ...JSON.parse(JSON.stringify(s)), runs: runSections() });
 
   function set(by, body = {}) {

@@ -49,8 +49,8 @@ const OUTCOMES = {
 export function createRuns({ root, stateDir = stateRoot(), items, broadcast = () => {}, colorOf = () => ({}) }) {
   root = realpathSync(root);
   const dir = join(stateDir, createHash('sha256').update(Buffer.from(root)).digest('hex').slice(0, 20), 'agents');
-  mkdirSync(join(dir, 'runs'), { recursive: true });
-  mkdirSync(join(dir, 'content'), { recursive: true });
+  // The state folder is made on the first write: merely opening a folder leaves no trace in the state directory.
+  const ensure = () => { mkdirSync(join(dir, 'runs'), { recursive: true }); mkdirSync(join(dir, 'content'), { recursive: true }); };
 
   const runs = new Map();            // id -> run
   const questions = new Map();       // id -> question (global: a question may belong to no run)
@@ -60,6 +60,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
 
   // ------------------------------------------------------------------------------------------------ persistence
   const writeJson = (file, value) => {
+    ensure();
     const tmp = `${file}.tmp-${process.pid}`;
     writeFileSync(tmp, JSON.stringify(value));
     renameSync(tmp, file);
@@ -71,7 +72,8 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     for (const q of run.questions) questions.set(q.id, q);
     for (const p of run.proposals) proposals.set(p.id, p);
   };
-  for (const f of readdirSync(join(dir, 'runs'))) {
+  let saved = []; try { saved = readdirSync(join(dir, 'runs')); } catch { /* nothing saved yet */ }
+  for (const f of saved) {
     if (!f.endsWith('.json')) continue;
     try { index(JSON.parse(readFileSync(join(dir, 'runs', f), 'utf8'))); } catch { /* a half-written file is skipped; the rename above is atomic */ }
   }
@@ -101,7 +103,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
     const ev = { type, seq: ++seq, at: Date.now(), ...data };
     if (persist) {
       ring.push(ev); if (ring.length > RING * 1.5) ring = ring.slice(-RING);
-      try { appendFileSync(logFile, JSON.stringify(ev) + '\n'); } catch { /* the log is best effort; the run files are the record */ }
+      try { ensure(); appendFileSync(logFile, JSON.stringify(ev) + '\n'); } catch { /* the log is best effort; the run files are the record */ }
     }
     broadcast({ ...ev, ...(ev.by ? colorOf(ev.by) : {}) });
     wake();
@@ -279,7 +281,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
       ...previewOf(buf, rel), mime: guessMime(rel),
       ...(replaces ? { replaces } : {}),
     };
-    writeFileSync(contentFile(id), buf);
+    ensure(); writeFileSync(contentFile(id), buf);
     return register(p, run, by);
   }
   function register(p, run, by) {
