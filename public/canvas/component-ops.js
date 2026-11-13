@@ -68,9 +68,12 @@ export function initComponentOps(ctx) {
     return c;
   }
 
+  // An HTML file drawn as a frame is renamed, deleted and duplicated as a file (file-ops.js): in place on its label, into the trash.
+  const isFile = (c) => c?.kind === 'html' && !c.doc;
   function rename(id, opts = {}) {
     const c = pick(id);
     if (!c) return false;
+    if (isFile(c)) { if (c.fileKind !== 'html') { ctx.hint(`Rename ${c.path} in your editor for now: renaming a React file here comes in the next pass.`); return false; } return ctx.fileOps.rename(c.component); }
     if (c.readOnly) { ctx.hint(`${c.name} is read-only (${String(c.readOnly).replace(/\.$/, '')}), so it can't be renamed here. Rename it in your editor.`); return false; }
     openDialog(`<form method="dialog" id="cmp-rename" autocomplete="off"><h2 id="cmp-dialog-title">Rename ${esc(c.name)}</h2>
       <p>The file, the exported function and its Props type change together, and so do the import and tags in any component that uses it. Where it sits on the canvas stays.</p>
@@ -99,6 +102,7 @@ export function initComponentOps(ctx) {
   async function remove(id, opts = {}) {
     const c = pick(id);
     if (!c) return false;
+    if (isFile(c)) { if (c.fileKind !== 'html') { ctx.hint(`Delete ${c.path} in your editor for now: deleting a React file here comes in the next pass.`); return false; } return ctx.fileOps.remove(c.component); }
     if (c.readOnly) { ctx.hint(`${c.name} is read-only (${String(c.readOnly).replace(/\.$/, '')}), so it can't be deleted here. Delete the file in your editor.`); return false; }
     const get = (path) => ctx.fetch(path).then((r) => r.json()).catch(() => null);
     const [snap, graph, list] = await Promise.all([get(`/api/components/${encodeURIComponent(c.component)}`), get(`/api/components/${encodeURIComponent(c.component)}/graph`), get('/api/components')]);
@@ -133,6 +137,7 @@ export function initComponentOps(ctx) {
     const d = last;
     if (!d) return false;
     last = null;
+    if (d.undo) { const ok = await d.undo(); if (!ok) last = d; return ok; } // a file's rename, delete or copy (file-ops.js)
     if (d.kind === 'rename') {
       const c = ctx.state.components.get(d.id);
       if (!c) { showToast(`Can't put the old name back: ${d.to} is gone.`, false); return false; }
@@ -152,11 +157,18 @@ export function initComponentOps(ctx) {
 
   addEventListener('keydown', (ev) => {
     if ((document.body.dataset.modal && document.body.dataset.modal !== 'component') || dialog.open || typing(ev.target) || ev.isComposing) return;
-    if (ev.key === 'F2' && !ev.defaultPrevented && ctx.state.selection) { ev.preventDefault(); rename(); return; }
+    // F2: a frame (a file's card or root) renames the file; a layer of a TSX component renames the layer
+    if (ev.key === 'F2' && !ev.defaultPrevented && ctx.state.selection) {
+      if (ctx.ops?.isFrame?.() === false) { if (ctx.state.components.get(ctx.state.selection.component)?.doc && ctx.layers?.rename()) ev.preventDefault(); return; }
+      ev.preventDefault(); rename(); return;
+    }
     if (last && ev.key.toLowerCase() === 'z' && (ev.ctrlKey || ev.metaKey) && !ev.shiftKey && !ev.altKey) { ev.preventDefault(); ev.stopImmediatePropagation(); undoLast(); }
   });
 
   ctx.on('change', (f) => { if ((f.by === 'you' || f.mine) && !/^(renamed|deleted|created)\b/.test(f.summary || '')) last = null; }); // a newer edit of yours is what Cmd-Z undoes now
-  ctx.cmpOps = { rename, remove, undoLast, undoDelete: undoLast, nameOf };
+  ctx.on('doc-change', (f) => { if (f.by === 'you' && f.kind !== 'file' && f.kind !== 'undo' && last?.undo) last = null; }); // an edit of a file after it: Cmd-Z undoes that edit now
+  // file-ops.js: what Ctrl+Z (or the toast's Undo) does next, and the toast
+  const remember = (d) => { last = d; };
+  ctx.cmpOps = { rename, remove, undoLast, undoDelete: undoLast, nameOf, remember, toast: showToast };
   return ctx.cmpOps;
 }

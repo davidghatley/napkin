@@ -1,6 +1,6 @@
 // Right-click menus (docs/basics/standards.md section 8): one menu, filled only from the command registry (actions.js), for
-// what is under the pointer: the empty canvas, a frame (a file's card), an element inside a frame, several selected things, or
-// a row of the layers panel. Groups come in one order everywhere (edit, arrange, create, view, delete) with a 1 px rule between
+// what is under the pointer: the empty canvas, a frame (a file: its card, its label, its root row in the layers, however it was
+// reached), an element inside a frame, several selected things, or a row of the layers panel. Groups come in one order everywhere (edit, arrange, create, view, delete) with a 1 px rule between
 // them; each item shows the command's key at the right through keylabel.js; an item that does not apply now stays, dimmed, and
 // says why. Order is the one submenu.
 //   Open: right-click; Shift+F10 or the Menu key while the canvas or the layers panel has the keyboard (at the selection, or the
@@ -17,7 +17,7 @@ const ORDER = { sub: 'Order', items: ['bring-forward', 'send-backward', 'bring-t
 // The item sets, as action ids in five groups: edit, arrange, create, view, delete.
 export const MENUS = {
   canvas: [['paste'], [], ['frame', 'text', 'image'], ['select-all', 'fit', 'actual', 'toggle-left'], []],
-  frame: [['paste', 'component-rename'], [], ['frame', 'text', 'image'], ['fit-selection', 'open-code'], ['component-delete']],
+  frame: [['copy', 'paste', 'duplicate', 'component-rename'], [], ['frame', 'text', 'image'], ['fit-selection', 'open-code'], ['delete']],
   element: [['cut', 'copy', 'paste', 'duplicate', 'rename'], ['select-parent', 'select-children', ORDER, 'wrap'], ['create-component'], ['fit-selection', 'open-code'], ['delete']],
   several: [['cut', 'copy', 'duplicate'], ['select-parent', 'wrap'], ['create-component'], ['fit-selection'], ['delete']],
   file: [[], [], [], ['fit-selection'], []], // a picture, a stylesheet, a text file: napkin shows it, it does not edit it here; or several cards
@@ -102,6 +102,7 @@ export function initContextMenu(ctx) {
     menu.classList.remove('nk-in'); void menu.offsetWidth; menu.classList.add('nk-in');
     place(menu, at.x, at.y);
     document.body.dataset.menu = kind;
+    menu.dataset.input = sub.dataset.input = opts.keyboard ? 'keys' : 'pointer';
     if (opts.keyboard) focusItem(menu, firstOn(menu)); else menu.focus({ preventScroll: true });
     ctx.emit('menu', { open: true, kind });
   }
@@ -162,6 +163,7 @@ export function initContextMenu(ctx) {
 
   function onKey(ev) {
     if (!state) return false;
+    menu.dataset.input = sub.dataset.input = 'keys';
     const el = current(), list = items(el), i = list.indexOf(document.activeElement);
     const go = (j) => focusItem(el, list[(j + list.length) % list.length]);
     const k = ev.key;
@@ -170,9 +172,9 @@ export function initContextMenu(ctx) {
     else if (k === 'Home') go(0);
     else if (k === 'End') go(list.length - 1);
     else if (k === 'ArrowRight') { if (el === menu && list[i]?.dataset.sub) openSub(list[i], { focus: true }); }
-    else if (k === 'ArrowLeft') { if (el === sub) closeSub(true); }
+    else if (k === 'ArrowLeft') { if (!sub.hidden) closeSub(true); }
     else if (k === 'Enter' || k === ' ') run(list[i]);
-    else if (k === 'Escape') { if (el === sub) closeSub(true); else close({ restore: true }); }
+    else if (k === 'Escape') { if (!sub.hidden) closeSub(true); else close({ restore: true }); } // one level: an open submenu first (opened by the keys or by hovering its item)
     else if (k === 'Tab') close({ restore: true });
     else if (k.length === 1 && /\S/.test(k) && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
       // a letter jumps to the next item whose name starts with it
@@ -197,10 +199,11 @@ export function initContextMenu(ctx) {
   function kindNow() {
     const sels = ctx.state.selections;
     if (!sels.length) return 'canvas';
-    if (sels.length > 1) return sels.every((s) => s.card || s.node === 'item') ? 'file' : 'several';
+    const frame = (s) => s.card || !!ctx.ops?.isFrame?.(s); // a file's card and its root (a layer row, the <html>) are one thing
+    if (sels.length > 1) return sels.every((s) => s.node === 'item' || frame(s)) ? 'file' : 'several';
     const s = sels[0], c = comp(s.component);
     if (!c || c.item || (c.readOnly && !c.doc)) return 'file';
-    return s.card ? 'frame' : 'element';
+    return frame(s) ? 'frame' : 'element';
   }
   const titleOf = (kind) => {
     const s = ctx.state.selection, c = s && comp(s.component), name = c ? ctx.title(c) : '';
@@ -278,6 +281,7 @@ export function initContextMenu(ctx) {
     el.addEventListener('pointermove', (ev) => {
       const it = ev.target.closest('[role=menuitem]');
       if (!it || it === document.activeElement) return;
+      menu.dataset.input = sub.dataset.input = 'pointer'; // (the ring is the keyboard's; the pointer's item has the fill only)
       focusItem(el, it);
       if (el === menu) {
         clearTimeout(subTimer);

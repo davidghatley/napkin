@@ -136,3 +136,9 @@ section.cmp:has(.mctl) .ghint { display: none; }
 #cmp-toast #cmp-toast-dismiss { border: 0; background: transparent; font-size: 15px; padding: 0 6px; color: var(--nk-text-2); }
 /* WPC-32: too big for its frame at this zoom: hidden (zoom in to filter) */
 section.cmp[data-mctl-off] .mctl { display: none; }
+/* b-menus: an HTML frame's label renamed in place (file-ops.js); the message under it says why a name is refused */
+.nk-rename { position: fixed; z-index: 30; height: 24px; box-sizing: border-box; padding: 0 var(--nk-s2); font: 600 12px var(--nk-sans); color: var(--nk-text); background: var(--nk-chrome); border: 1px solid var(--nk-accent); border-radius: 6px; box-shadow: var(--nk-shadow-pop); outline: none; }
+.nk-rename:focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: var(--nk-ring-offset); }
+.nk-rename[aria-invalid="true"] { border-color: var(--nk-measure); }
+.nk-rename-msg { position: fixed; z-index: 30; margin: 0; max-width: 360px; padding: var(--nk-s1) var(--nk-s2); font: 12px/1.4 var(--nk-sans); color: var(--nk-text); background: var(--nk-chrome); border: 1px solid var(--nk-measure); border-radius: 6px; box-shadow: var(--nk-shadow-pop); }
+.nk-rename-msg[hidden] { display: none; }

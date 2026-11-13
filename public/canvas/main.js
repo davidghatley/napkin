@@ -30,6 +30,7 @@ import { renderPanel } from './panel.js';
 import { initTools } from './tools.js';
 import { initLayers } from './layers.js';
 import { initComponentOps } from './component-ops.js';
+import { initFileOps } from './file-ops.js';
 import { initQuick } from './quick.js';
 import { initReadOnly } from './readonly.js';
 import { initEmpty } from './empty.js';
@@ -150,6 +151,7 @@ initTools(ctx);
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
+initFileOps(ctx); // an HTML file as a frame: rename on its label, duplicate beside it, delete to the trash, each undoable
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
 initInstruments(ctx); // the one instrument panel (dials) for whatever is selected

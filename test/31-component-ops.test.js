@@ -60,7 +60,7 @@ test('WPC-28: the row menu deletes after a confirm, names what uses it, and Undo
     await L.q(`document.querySelector('#layers .lcomp[data-component=${JSON.stringify(id)}] .lmore').click()`);
     const items = await L.q(`[...document.querySelectorAll('#ctxmenu [role=menuitem]')].map((b) => b.querySelector('.nk-ml').textContent).join('|')`);
     assert.match(items, /Rename…/); assert.match(items, /Delete file…$/);
-    await L.q(`document.querySelector('#ctxmenu [data-action=component-delete]').click()`);
+    await L.q(`document.querySelector('#ctxmenu [data-action=delete]').click()`);
     await waitFor(L, `document.querySelector('#cmp-dialog').open && document.querySelector('#cmp-ok')`);
     assert.match(await L.q(`document.querySelector('#cmp-dialog p').textContent`), /removes Button\.tsx.*Nothing else uses Button.*undo/);
     assert.ok(existsSync(join(L.compDir, 'Button.tsx')), 'asked first');
@@ -189,7 +189,7 @@ test('WPC-28: after a rename focus stays on the renamed row; Cancel on delete fr
     await waitFor(L, `napkin.find('Panel')?.doc && document.activeElement?.classList.contains('lcomp') && document.activeElement.dataset.component === ${JSON.stringify(id)}`);
     // row menu -> Delete -> Cancel
     await L.q(`document.querySelector(${JSON.stringify(row + ' .lmore')}).click()`);
-    await L.q(`document.querySelector('#ctxmenu [data-action=component-delete]').click()`);
+    await L.q(`document.querySelector('#ctxmenu [data-action=delete]').click()`);
     await waitFor(L, `document.querySelector('#cmp-dialog').open && !!document.querySelector('#cmp-ok')`);
     await L.q(`document.querySelector('#cmp-cancel').click()`);
     await waitFor(L, `document.activeElement?.classList.contains('lcomp') && document.activeElement.dataset.component === ${JSON.stringify(id)}`);

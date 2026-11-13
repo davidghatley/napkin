@@ -4,6 +4,9 @@
 //   GET  /api/component/<id>/rules       the component's cascade: sheets and rules with file, line and byte ranges
 //        ?node=<id>&width=W&theme=T      plus `node`: the rules matching that element in cascade order, each value's winner, var()s resolved
 //   GET  /api/component/<id>/history     napkin's edits to it, newest first
+//   GET  /api/component/<id>/source      { file, revision, source, lines: { node: [first, last] } }: the whole file (the code strip)
+//   POST /api/files/duplicate { component, x?, y? }  POST /api/files/rename { component, name }   an HTML file as a whole
+//   POST /api/files/trash { component } -> { trash }  POST /api/files/restore { trash }            (a frame: delete and undo)
 //   GET  /view/<id>?width=W&theme=T      the component as its own document (src/doc/view.js)
 //   GET  /raw/<path>                     a file of the folder, as it is (what /view's relative URLs load)
 //   POST /api/edit  { component, baseRevision, edits }      -> { ok, revision } | { ok: false, error }
@@ -74,13 +77,22 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
           return json(res, 200, node ? engine.rulesAt(id, node, { width: url.searchParams.get('width'), theme: url.searchParams.get('theme') }) : engine.rulesOf(id)), true;
         }
         if (sub === 'history') return json(res, 200, { ok: true, component: engine.component(id).id, history: engine.history(id) }), true;
-        return fail(res, 404, 'not found: use /api/component/<id>, /rules or /history'), true;
+        if (sub === 'source') return json(res, 200, engine.source(id)), true;
+        return fail(res, 404, 'not found: use /api/component/<id>, /rules, /history or /source'), true;
       }
       if (path === '/api/layout') {
         if (method === 'GET') return json(res, 200, { ok: true, frames: engine.layout() }), true;
         const m = await body(req); who(req);
         const n = (v) => (v === undefined || v === null ? v : Number(v));
         return json(res, 200, engine.setLayout(m?.component, { x: n(m?.x), y: n(m?.y), width: n(m?.width) })), true;
+      }
+      const fileOp = /^\/api\/files\/(duplicate|rename|trash|restore)$/.exec(path);
+      if (fileOp && method === 'POST') {
+        const m = await body(req); who(req);
+        const r = fileOp[1] === 'duplicate' ? engine.duplicateFile(m?.component, { x: Number(m?.x), y: Number(m?.y) })
+          : fileOp[1] === 'rename' ? engine.renameFile(m?.component, m?.name)
+          : fileOp[1] === 'trash' ? engine.trashFile(m?.component) : engine.restoreFile(m?.trash);
+        return json(res, 200, r), true;
       }
       if (method === 'POST' && path === '/api/edit') {
         const m = await body(req);

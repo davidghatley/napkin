@@ -6,7 +6,10 @@
 // The same verbs for the menus and the palette (context-menu.js, actions.js), on both engines: the TSX dialect (ctx.sendEdits) and the
 // document engine's HTML and React files (POST /api/edit, one batch, one undo step):
 //   ctx.ops.can(verb) -> true | the reason it is off now | null (it can never apply to this selection)
-//   ctx.ops.{ remove, order(forward|backward|front|back), selectParent, selectChildren, copyNow, cutNow, pasteNow }
+//   ctx.ops.{ remove, order(forward|backward|front|back), selectParent, selectChildren, selectAll, copyNow, cutNow, pasteNow, isFrame }
+// A frame (a file's card, or its root: the dialect's root layer, an HTML file's <html> or <body>) is the file as a whole: Copy
+// takes what it holds, Duplicate, Rename and Delete act on the file (file-ops.js; a TSX component's own dialogs, component-ops.js).
+// Undo after a Delete or a Cut puts the selection back as it was.
 import { plain, SANS } from './words.js';
 import { index, VOID } from '/src/model.js';
 import { pasteHtml } from './html-paste.js';
@@ -163,7 +166,7 @@ export function initEditOps(ctx) {
   document.addEventListener('cut', async (ev) => {
     if (typing(ev.target) || !copy(ev)) return;
     const k = picked();
-    if (k?.ids.length) await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
+    if (k?.ids.length) { const sels = [...ctx.state.selections], before = k.c.revision, r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id }))); remember(k.s.component, before, r, sels); }
   });
   document.addEventListener('paste', (ev) => { if (typing(ev.target) || !ev.clipboardData) return; ev.preventDefault(); paste(ev.clipboardData).catch((e) => say(plain(e.message || e))); });
   document.addEventListener('keydown', (ev) => {
@@ -205,6 +208,17 @@ export function initEditOps(ctx) {
   }
   const kind = () => { const s = ctx.state.selection, c = s && ctx.state.components.get(s.component); return !c ? null : c.item ? 'item' : c.doc ? 'dialect' : c.kind === 'html' ? 'engine' : null; };
 
+  // A frame: the file as a whole (its card, or its root).
+  function isFrame(s = ctx.state.selection) {
+    const c = s && ctx.state.components.get(s.component);
+    if (!c || c.item) return false;
+    if (s.card) return true;
+    if (c.doc) return s.node === c.doc.root.id;
+    return TOP.has(ctx.stage?.sections.get(s.component)?.docFrame?.node?.(s.node)?.tag);
+  }
+  const oneFrame = () => ctx.state.selections.length === 1 && isFrame();
+  const htmlFile = (c) => c?.kind === 'html' && !c.doc && c.fileKind === 'html';
+
   // What each verb can do with the selection now. A reason is shown on the disabled menu item.
   function can(verb) {
     const k = kind(), c = k && ctx.state.components.get(ctx.state.selection.component);
@@ -212,6 +226,16 @@ export function initEditOps(ctx) {
     if (k === 'item') return null;
     if (c.readOnly) return `${c.name} is read-only`;
     const many = ctx.state.selections.length > 1;
+    if (oneFrame()) {
+      const react = k === 'engine' && !htmlFile(c);
+      switch (verb) {
+        case 'copy': return k === 'dialect' || ctx.copyCode?.picks().length ? true : 'Nothing in this frame to copy yet';
+        case 'paste': return k === 'dialect' ? (target() ? true : 'Select a layer to paste into') : true;
+        case 'duplicate': return react ? 'Duplicate a React file in your editor for now' : k === 'dialect' ? 'Duplicating a TSX component comes in the next pass: copy its file in your editor' : true;
+        case 'delete': case 'rename-file': return react ? `${verb === 'delete' ? 'Delete' : 'Rename'} a React file in your editor for now` : true;
+        case 'cut': return null; // a frame is its file: Copy, then Delete
+      }
+    }
     if (k === 'dialect') {
       const p = picked(), n = p && p.byId.get(p.s.node), par = n && p.parentOf.get(n.id);
       switch (verb) {
@@ -245,19 +269,47 @@ export function initEditOps(ctx) {
   }
   const refuse = (verb) => { const r = can(verb); if (r === true) return false; say(r || 'Not for this selection'); return true; };
 
+  // Undo after a delete (or a cut) selects again what was selected: the step's revision says it is that step being undone.
+  let undoSel = null; // { component, before, after, sels }
+  function remember(component, before, r, sels) { if (r?.ok) undoSel = { component, before, after: r.revision, sels: sels.map((x) => ({ ...x })) }; }
+  ctx.on('undone', async (u) => {
+    const r = undoSel;
+    if (!r || u.component !== r.component || (u.revision !== r.before && u.undone?.revision !== r.after)) return;
+    undoSel = null;
+    const f = ctx.stage?.sections.get(r.component)?.docFrame;
+    for (let i = 0; i < 160; i++) {
+      const c = ctx.state.components.get(r.component);
+      const there = f ? f.tree()?.revision === u.revision && r.sels.every((x) => f.has(x.node)) : c?.doc && r.sels.every((x) => index(c.doc).byId.has(x.node));
+      if (there) break;
+      await new Promise((res) => setTimeout(res, 25));
+    }
+    ctx.selectMany(r.sels);
+  });
   async function remove() {
+    if (oneFrame()) {
+      if (refuse('delete')) return null;
+      const id = ctx.state.selection.component;
+      return kind() === 'dialect' ? ctx.cmpOps?.remove(id) : ctx.fileOps?.remove(id);
+    }
+    const sels = [...ctx.state.selections];
     if (kind() === 'dialect') {
       const k = picked();
       if (!k?.ids.length) return say('Select something to delete (the root of a component stays)');
-      const r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
+      const before = k.c.revision, r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
+      remember(k.s.component, before, r, sels);
       if (r.ok) ctx.select(null);
       return r;
     }
     if (refuse('delete')) return null;
-    const e = eng();
+    const e = eng(), before = e.c.revision;
     const j = await engEdit(e.c, e.ids.map((node) => ({ op: 'delete', node })), e.ids.length > 1 ? `Deleted ${e.ids.length} elements` : `Deleted <${e.at.n.tag}>`);
+    remember(e.c.component, before, j, sels);
     if (j.ok) ctx.select(null);
     return j;
+  }
+  async function frameDuplicate() {
+    if (refuse('duplicate')) return null;
+    return ctx.fileOps?.duplicate(ctx.state.selection.component);
   }
   async function engDuplicate() {
     if (refuse('duplicate')) return null;
@@ -296,6 +348,16 @@ export function initEditOps(ctx) {
     if (kind() === 'dialect') { const k = picked({ root: true }); ctx.select({ ...k.s, node: k.parentOf.get(k.s.node).id }); return; }
     const e = eng(); ctx.select({ component: e.c.component, node: e.at.parent.node, variant: {} });
   }
+  // Ctrl+A: every element beside the selected one (its scope); with a frame or nothing selected, every card.
+  function selectAll() {
+    const s = ctx.state.selection;
+    if (!s || isFrame(s) || ctx.state.components.get(s.component)?.item) return ctx.surface?.selectAll();
+    if (kind() === 'dialect') { const k = picked({ root: true }), par = k && k.parentOf.get(s.node); if (par) ctx.selectMany(par.children.map((x) => ({ ...s, node: x.id }))); return; }
+    const e = eng(); if (!e?.at) return;
+    const list = e.at.parent ? visible(e.at.parent.children) : visible(e.tree).filter((n) => !TOP.has(n.tag));
+    ctx.selectMany(list.map((x) => ({ component: e.c.component, node: x.node, variant: {} })));
+    ctx.hint(`${list.length} selected`);
+  }
   function selectChildren() {
     if (refuse('children')) return;
     if (kind() === 'dialect') { const k = picked({ root: true }); ctx.selectMany(k.byId.get(k.s.node).children.map((x) => ({ ...k.s, node: x.id }))); return; }
@@ -309,10 +371,16 @@ export function initEditOps(ctx) {
     if (!done) { if (kind() === 'engine') ctx.copyCode?.copy(); else copy(); }
     return true;
   }
+  // Cut: everything selected goes to the clipboard first (the copy event fills it from the whole selection), then exactly those go.
   async function cutNow() {
     if (refuse('cut')) return null;
+    if (kind() === 'engine') { if (!(await ctx.copyCode?.copy())) return null; return remove(); } // (nothing goes unless the copy holds it)
     copyNow();
-    return kind() === 'engine' ? remove() : (async () => { const k = picked(); return k?.ids.length ? ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id }))) : null; })();
+    const k = picked(), sels = [...ctx.state.selections];
+    if (!k?.ids.length) return null;
+    const before = k.c.revision, r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
+    remember(k.s.component, before, r, sels);
+    return r;
   }
   // The clipboard as a paste event would give it; napkin's own last copy when the page may not read the clipboard.
   async function readClipboard() {
@@ -334,13 +402,14 @@ export function initEditOps(ctx) {
     if (kind() === 'engine') {
       const e = eng();
       // onto a frame (its card): into the body; onto an element: into it, as the keys do
-      const into = e.s.card ? (e.at.parent?.node ?? null) : null;
+      const top = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(e.tree) ?? e.tree.find((n) => n.tag === 'html');
+      const into = isFrame(e.s) ? (top?.node ?? e.at.parent?.node ?? null) : null;
       return ctx.copyCode?.paste(data.getData('text/plain'), data.getData('text/html'), into);
     }
     return paste(data);
   }
 
-  Object.assign(ops, { duplicate: async () => (kind() === 'engine' ? engDuplicate() : duplicate()), wrap, unwrap, hide, copy, paste, payload, can, kind, remove, order, selectParent, selectChildren, copyNow, cutNow, pasteNow });
+  Object.assign(ops, { duplicate: async () => (oneFrame() ? frameDuplicate() : kind() === 'engine' ? engDuplicate() : duplicate()), wrap, unwrap, hide, copy, paste, payload, can, kind, remove, order, selectParent, selectChildren, selectAll, copyNow, cutNow, pasteNow, isFrame });
   ctx.ops = ops;
   return ops;
 }
