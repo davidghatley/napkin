@@ -67,6 +67,38 @@ function sample(ch, time) {
   if (interp === 'STEP') return a;
   return path === 'rotation' ? slerp(a, b, t) : a.map((v, k) => v + (b[k] - v) * t);
 }
+// The scene at its first pose, in world space, as at most `max` flat triangles with a color each.
+// The card thumbnail and the server's metadata use this; the viewer runs the full scene itself.
+export function flattenScene(scene, max = 500) {
+  const world = new Array(scene.nodes.length);
+  const walk = (i, parent) => {
+    const n = scene.nodes[i];
+    world[i] = mul(parent, n.matrix || trs(n.t, n.r, n.s));
+    for (const c of n.children) if (scene.nodes[c] && !world[c]) walk(c, world[i]);
+  };
+  for (const i of scene.roots) if (scene.nodes[i]) walk(i, I4());
+  const total = scene.meshes.reduce((a, m) => a + m.prims.reduce((k, q) => k + q.idx.length / 3, 0), 0),
+    stride = Math.max(1, Math.ceil(total / max)),
+    tris = [],
+    colors = [];
+  scene.nodes.forEach((n, i) => {
+    if (n.mesh === null || !world[i] || !scene.meshes[n.mesh]) return;
+    const m = world[i];
+    for (const p of scene.meshes[n.mesh].prims) {
+      const mat = scene.materials[p.material],
+        color = (mat ? mat.color : [0.55, 0.64, 0.6, 1]).slice(0, 3).map((v) => Math.round(255 * Math.min(1, Math.max(0, v)) ** (1 / 2.2))),
+        at = (k) => {
+          const x = p.pos[k * 3], y = p.pos[k * 3 + 1], z = p.pos[k * 3 + 2];
+          return [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14]].map((v) => Math.round(v * 1000) / 1000);
+        };
+      for (let k = 0; k < p.idx.length; k += 3 * stride) {
+        tris.push(...at(p.idx[k]), ...at(p.idx[k + 1]), ...at(p.idx[k + 2]));
+        colors.push(color);
+      }
+    }
+  });
+  return { tris, colors, total };
+}
 const srgb = (v) => Math.round(255 * Math.min(1, Math.max(0, v)) ** (1 / 2.2));
 export function modelView({ root, scene, recipe: r, label, bar, note, fmt, isReduced, esc }) {
   const stats = scene.stats || {};
