@@ -340,7 +340,7 @@ th small {
   height: 310px;
   display: block;
 }
-.chart text {
+.chart:not(.vl) text {
   fill: var(--muted);
   font: 10px system-ui;
 }
@@ -352,13 +352,13 @@ th small {
 .chart.vl text {
   fill: currentColor;
 }
-.chart .axis {
+.chart:not(.vl) .axis {
   stroke: var(--line);
 }
-.chart .mark {
+.chart:not(.vl) .mark {
   fill: var(--accent);
 }
-.chart .series {
+.chart:not(.vl) .series {
   stroke: var(--accent);
   fill: none;
   stroke-width: 3;

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { arrowBytes } from './arrow-writer.js';
+import { sceneGltf } from './scene.js';
 const here = dirname(fileURLToPath(import.meta.url));
 const vi = (n) => {
   let x = BigInt(n);
@@ -496,6 +497,7 @@ export function generateSamples(dir = here, { media = true } = {}) {
     scene: 0,
   };
   put('triangle.gltf', 'gltf', JSON.stringify(gltf));
+  put('scene.gltf', 'gltf', JSON.stringify(sceneGltf()));
   delete gltf.buffers[0].uri;
   let gj = Buffer.from(JSON.stringify(gltf));
   gj = Buffer.concat([gj, Buffer.alloc((4 - (gj.length % 4)) % 4, 32)]);

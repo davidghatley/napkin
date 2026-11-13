@@ -15,6 +15,7 @@ import {
 import { decodeText } from './registry.js';
 import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
+import { parseGltf, parseObj } from './gltf.js';
 import { indexable, buildIndex, readRecords } from './rowindex.js';
 const exec = promisify(execFile),
   esc = (s) =>
@@ -135,69 +136,11 @@ async function audio(ctx) {
   return result;
 }
 function model(ctx) {
-  let vertices = [],
-    faces = [];
-  if (ctx.kind === 'obj') {
-    for (const line of ctx.text.split(/\r?\n/)) {
-      const parts = line.trim().split(/\s+/);
-      if (parts[0] === 'v') vertices.push(parts.slice(1, 4).map(Number));
-      if (parts[0] === 'f')
-        faces.push(
-          parts.slice(1).map((v) => {
-            const n = Number(v.split('/')[0]);
-            return n < 0 ? vertices.length + n : n - 1;
-          }),
-        );
-      if (vertices.length > 50000 || faces.length > 50000) break;
-    }
-    return { vertices, faces, limited: ctx.bytes > LIMIT };
-  }
-  let gltf, bin;
-  if (ctx.kind === 'glb') {
-    const b = window(ctx.file, 0, 8 * LIMIT);
-    if (b.length < 20) throw new Error('Truncated GLB. Next: open the model or archive in its own application, or request a smaller entry.');
-    const n = b.readUInt32LE(12);
-    if (n > LIMIT) throw new Error('GLB JSON exceeds 1 MiB. Next: open the model or archive in its own application, or request a smaller entry.');
-    gltf = JSON.parse(b.toString('utf8', 20, 20 + n).trim());
-    const p = 20 + n;
-    if (p + 8 <= b.length) bin = b.subarray(p + 8, p + 8 + b.readUInt32LE(p));
-  } else gltf = jsonData(ctx);
-  const buffers = (gltf.buffers || []).map((b, i) => {
-    if (i === 0 && bin) return bin;
-    if (b.byteLength > 8 * LIMIT) throw new Error('Model buffer exceeds 8 MiB preview limit. Next: open the model or archive in its own application, or request a smaller entry.');
-    if (b.uri?.startsWith('data:'))
-      return Buffer.from(b.uri.slice(b.uri.indexOf(',') + 1), 'base64');
-    if (!b.uri || /^(?:https?:|\/)/.test(b.uri))
-      throw new Error('Model buffer must be in the opened folder. Next: open the model or archive in its own application, or request a smaller entry.');
-    return window(ctx.resolveRelative(b.uri), 0, 8 * LIMIT);
+  if (ctx.kind === 'obj') return parseObj(ctx.text, ctx.bytes > LIMIT);
+  return parseGltf(ctx, () => {
+    if (ctx.bytes > 8 * LIMIT) throw new Error('This glTF description is over 8 MiB. Next: open the model in its own application, or request a smaller entry.');
+    return JSON.parse(decodeText(window(ctx.file, 0, 8 * LIMIT)));
   });
-  const accessor = (index) => {
-    const a = gltf.accessors[index],
-      v = gltf.bufferViews[a.bufferView],
-      b = buffers[v.buffer],
-      dim = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 }[a.type],
-      width = { 5121: 1, 5123: 2, 5125: 4, 5126: 4 }[a.componentType];
-    if (!dim || !width) throw new Error('Unsupported model accessor. Next: open the model or archive in its own application, or request a smaller entry.');
-    const read = (p) => (a.componentType === 5126 ? b.readFloatLE(p) : b.readUIntLE(p, width));
-    return Array.from({ length: Math.min(a.count, 50000) }, (_, i) =>
-      Array.from({ length: dim }, (_, j) =>
-        read(
-          (v.byteOffset || 0) + (a.byteOffset || 0) + i * (v.byteStride || dim * width) + j * width,
-        ),
-      ),
-    );
-  };
-  for (const mesh of gltf.meshes || [])
-    for (const p of mesh.primitives || []) {
-      if (p.attributes?.POSITION === undefined) continue;
-      const vs = accessor(p.attributes.POSITION),
-        base = vertices.length;
-      vertices.push(...vs);
-      const idx = p.indices === undefined ? vs.map((_, i) => i) : accessor(p.indices).flat();
-      for (let i = 0; i + 2 < idx.length; i += 3)
-        faces.push(idx.slice(i, i + 3).map((n) => n + base));
-    }
-  return { vertices, faces };
 }
 // A PDF page is drawn by poppler into a PNG; headless and embedded browsers have no PDF plugin.
 const pdfCache = new Map();

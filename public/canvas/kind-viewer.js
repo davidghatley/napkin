@@ -1,5 +1,6 @@
 import { plain } from './words.js';
 import { renderVegaLite } from './vega-lite.js';
+import { modelView } from './model-view.js';
 // The same live surface is used in /view and in canvas frames. No remote scripts or GPU renderer.
 const item = JSON.parse(document.querySelector('#item').textContent),
   root = document.querySelector('#viewer'),
@@ -402,84 +403,6 @@ function notebook(j) {
     )
     .join('')}</div>`;
 }
-function turningModel(mesh) {
-  root.innerHTML =
-    bar(label, `${fmt(mesh.vertices.length)} vertices · ${fmt(mesh.faces.length)} faces`) +
-    `<canvas class="model" width="900" height="600" aria-label="Turning 3D model"></canvas>` +
-    (mesh.limited ? note('Mesh preview is bounded to the source window.') : '');
-  const canvas = root.querySelector('canvas'),
-    ctx = canvas.getContext('2d'),
-    vs = mesh.vertices,
-    fs = mesh.faces;
-  if (!vs.length) {
-    root.insertAdjacentHTML('beforeend', note('No triangle positions were found'));
-    return;
-  }
-  const lo = [0, 1, 2].map((i) => Math.min(...vs.map((v) => v[i]))),
-    hi = [0, 1, 2].map((i) => Math.max(...vs.map((v) => v[i]))),
-    center = lo.map((n, i) => (n + hi[i]) / 2),
-    scale = 230 / Math.max(0.001, ...hi.map((n, i) => n - lo[i]));
-  let angle = Number(r.rotation) || 0,
-    active = true;
-  document.addEventListener('visibilitychange', () => {
-    active = !document.hidden;
-  });
-  const draw = (t) => {
-    if (active) {
-      if (!isReduced && r.spin !== false) angle += 0.35;
-      const a = (angle * Math.PI) / 180,
-        project = vs.map((v) => {
-          const x = (v[0] - center[0]) * scale,
-            y = (v[1] - center[1]) * scale,
-            z = (v[2] - center[2]) * scale;
-          return [
-            450 + x * Math.cos(a) + z * Math.sin(a),
-            315 - y * 0.9 + (z * Math.cos(a) - x * Math.sin(a)) * 0.3,
-            z * Math.cos(a) - x * Math.sin(a),
-          ];
-        });
-      ctx.clearRect(0, 0, 900, 600);
-      ctx.strokeStyle = '#b0c3b8';
-      ctx.lineWidth = 1;
-      for (let i = 0; i < 11; i++) {
-        const x = 130 + i * 64;
-        ctx.beginPath();
-        ctx.moveTo(x, 440);
-        ctx.lineTo(x + 90, 540);
-        ctx.moveTo(130, 440 + i * 10);
-        ctx.lineTo(860, 440 + i * 10);
-        ctx.stroke();
-      }
-      const sorted = fs
-        .slice(0, 16000)
-        .map((f) => ({ f, z: f.reduce((s, i) => s + (project[i]?.[2] || 0), 0) / f.length }))
-        .sort((a, b) => a.z - b.z);
-      for (const { f, z } of sorted) {
-        if (f.some((i) => !project[i])) continue;
-        ctx.beginPath();
-        f.forEach((i, j) =>
-          j ? ctx.lineTo(project[i][0], project[i][1]) : ctx.moveTo(project[i][0], project[i][1]),
-        );
-        ctx.closePath();
-        if (!r.wireframe) {
-          ctx.fillStyle = `hsl(158 21% ${Math.max(22, Math.min(76, 48 + z / 12))}%)`;
-          ctx.fill();
-        }
-        ctx.strokeStyle = r.wireframe ? '#2e6d5b' : '#345f5180';
-        ctx.stroke();
-      }
-      if (!fs.length) {
-        ctx.fillStyle = '#28785d';
-        for (const [x, y] of project) ctx.fillRect(x, y, 3, 3);
-      }
-    }
-    requestAnimationFrame(draw);
-  };
-  requestAnimationFrame(draw);
-  canvas.onpointermove = (e) => {
-    if (e.buttons) angle += e.movementX;
-  };
-}
 // A small Lottie vector player: shape layers, transforms, paths, fills, strokes and animated properties.
 function lottie(j) {
   root.innerHTML =
@@ -687,7 +610,7 @@ async function run() {
   }
   if (item.family === 'pdf') return pdfViewer();
   if (item.family === 'zip') return archive();
-  if (item.family === 'model') return turningModel(await data());
+  if (item.family === 'model') return modelView({ root, scene: await data(), recipe: r, label, bar, note, fmt, isReduced, esc });
   const d = await data();
   if (item.family === 'binary') {
     const b = d.hex.match(/.{1,2}/g) || [],

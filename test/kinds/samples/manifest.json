@@ -50,5 +50,6 @@
   "tone.mp3": "mp3",
   "tone.flac": "flac",
   "tone.ogg": "ogg",
-  "tone.m4a": "m4a"
+  "tone.m4a": "m4a",
+  "scene.gltf": "gltf"
 }

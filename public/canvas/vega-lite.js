@@ -662,7 +662,7 @@ function drawUnit(u, X, Y, C, size, opacityScale) {
     const rowsR = items.length ? items : [{}];
     for (const r of rowsR) {
       const x = pos(r, 'x'), y = pos(r, 'y'), x2 = pos(r, 'x2'), y2 = pos(r, 'y2');
-      const stroke = strokeOf(r) || (colorEnc ? fillOf(r) : mk.color || '#444'), dash = mk.strokeDash ? `stroke-dasharray="${mk.strokeDash.join(' ')}"` : '';
+      const stroke = strokeOf(r) || (colorEnc ? fillOf(r) : mk.color || 'currentColor'), dash = mk.strokeDash ? `stroke-dasharray="${mk.strokeDash.join(' ')}"` : '';
       const base = `stroke="${esc(stroke)}" stroke-width="${mk.size ?? mk.strokeWidth ?? 1}" ${dash}`;
       let line = '';
       if (x !== null && y !== null) line = `<line x1="${num(x)}" x2="${num(x2 ?? x)}" y1="${num(y)}" y2="${num(y2 ?? y)}" ${base}/>`;
@@ -821,12 +821,10 @@ async function renderUnit(spec, inh, ctx) {
   const width = typeof spec.width === 'number' ? spec.width : typeof inh.width === 'number' ? inh.width : 420,
     height = typeof spec.height === 'number' ? spec.height : typeof inh.height === 'number' ? inh.height : 260;
   const lay = layoutView(units, { width, height, step: { x: spec.width?.step ?? inh.width?.step, y: spec.height?.step ?? inh.height?.step } }, ctx);
-  const title = spec.title ?? inh.title,
-    titleText = typeof title === 'string' ? title : title?.text;
   const left = 62,
-    top = titleText ? 34 : 12,
+    top = 12,
     right = lay.hasLegend ? 120 : 16;
-  const svg = `<g class="vl-unit">${titleText ? `<text class="vl-big" x="${left}" y="20">${esc(titleText)}</text>` : ''}<g transform="translate(${left} ${top})"><g class="vl-body">${lay.body}</g><g class="vl-marks">${lay.marks}</g>${lay.axes}<g transform="translate(${lay.size.w + 18} 0)">${lay.legends}</g></g></g>`;
+  const svg = `<g class="vl-unit"><g transform="translate(${left} ${top})"><g class="vl-body">${lay.body}</g><g class="vl-marks">${lay.marks}</g>${lay.axes}<g transform="translate(${lay.size.w + 18} 0)">${lay.legends}</g></g></g>`;
   return { svg, width: left + lay.size.w + right, height: top + lay.size.h + 52, empty: lay.empty };
 }
 function replaceRepeat(spec, map) {
