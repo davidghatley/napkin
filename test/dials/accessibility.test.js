@@ -60,8 +60,8 @@ test(
   },
 );
 
-// Every tab of every studio, both themes: the six samples, the lamp rig the library was never
-// written for, and every documented and hostile value shape. axe runs on the open studio.
+// Every tab of every full editor (once the studio), both themes: the six samples, the lamp rig the library was never
+// written for, and every documented and hostile value shape. axe runs on the open editor, which stays inside its panel.
 test("every tab of every studio passes axe in both themes", { timeout: 600000 }, async (t) => {
   const { hostileSchemas } = await import("./hostile.js");
   const source = readFileSync(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
@@ -82,7 +82,9 @@ test("every tab of every studio passes axe in both themes", { timeout: 600000 },
         await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 60)));
         const s = p.root.querySelector('.d-section[data-depth="3"]');
         const r = await axe.run(s, { resultTypes: ["violations"] });
-        out.push({ id: c.id, v: r.violations.map((v) => v.id + " " + v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")) });
+        // the full editor opens in place inside its panel: never a fixed overlay, never wider than the panel
+        const b = s.getBoundingClientRect(), h = p.root.getBoundingClientRect(), placed = getComputedStyle(s).position !== "fixed" && b.left >= h.left - 0.5 && b.right <= h.right + 0.5;
+        out.push({ id: c.id, v: r.violations.map((v) => v.id + " " + v.nodes.slice(0, 3).map((n) => n.target.join(" ")).join(" | ")).concat(placed ? [] : ["editor outside its panel"]) });
       }
       p.setDepth(sid, 2, false);
       return out;
@@ -97,7 +99,7 @@ test("every tab of every studio passes axe in both themes", { timeout: 600000 },
         }
       }
       for (const schema of extra) {
-        const res = await browser.eval(`(async()=>{const h=document.createElement("div");h.className="t-axe";h.style.cssText="position:absolute;left:0;top:0;width:1100px";document.body.append(h);window.tAxe=new dialsDemo.Dials(h,{studio:"inline"}).render(${schema});const r=await (${sweep})("window.tAxe");tAxe.destroy();h.remove();return r})()`);
+        const res = await browser.eval(`(async()=>{const h=document.createElement("div");h.className="t-axe";h.style.cssText="position:absolute;left:0;top:0;width:1100px";document.body.append(h);window.tAxe=new dialsDemo.Dials(h).render(${schema});const r=await (${sweep})("window.tAxe");tAxe.destroy();h.remove();return r})()`);
         for (const x of res) {
           tabs++;
           if (x.v.length) failures.push(`${theme} / extra / ${x.id}: ${x.v.join("; ")}`);
@@ -139,6 +141,7 @@ test("every focusable node has an accessible name, page and every studio tab", {
         await browser.eval(`dialsDemo.panels[${i}].open(${JSON.stringify(id)})`);
         await new Promise((r) => setTimeout(r, 120));
         await scan(`panel ${i} / ${id}`);
+        if (await browser.eval(`(()=>{const p=dialsDemo.panels[${i}],s=p.root.querySelector('.d-section[data-depth="3"]');return !s||getComputedStyle(s).position==="fixed"})()`)) unnamed.push(`panel ${i} / ${id}: the editor did not open in place`);
       }
       await browser.eval(`(()=>{const p=dialsDemo.panels[${i}];p.setDepth([...p.sections.keys()][0],2,false)})()`);
     }

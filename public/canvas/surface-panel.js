@@ -7,7 +7,7 @@
 //   ctx.instruments.show()            draw the panel for ctx.state.selections (called on every selection change)
 //   ctx.instruments.controls()        [{ id, label, type, value, section }] of the panel on screen
 //   ctx.instruments.focusControl(l)   focus the value of the control labelled l (opens its section first)
-//   ctx.instruments.depth(l, 1|2|3)   dial / bench / studio for the control labelled l
+//   ctx.instruments.depth(l, 1|2|3)   fold / open / open with the full editor, the section of the control labelled l (always inside the panel)
 //   ctx.instruments.reset(l)          back to its default
 //   ctx.instruments.undo()            undo the newest instrument change of the selection
 //
@@ -149,7 +149,7 @@ export function initInstruments(ctx) {
     host.innerHTML = `<div class="instruments" data-controls-for="${esc(list[0])}"${many ? ` data-controls-many="${esc(list.join(' '))}"` : ''} role="region" aria-label="Instruments of ${esc(many ? list.length + ' cards' : list[0])}">${header(list, many)}<div class="inst-mount"></div></div>`;
     if (!schema.sections.length) host.querySelector('.inst-mount').innerHTML = `<p class="inst-empty">${many ? 'These cards share no instruments. Select one to tune it.' : 'This file has no instruments.'}</p>`;
     // Pictures come from the file's own bytes (/raw/<id>); a control that is not a picture says so instead of drawing one.
-    panel = new Dials(host.querySelector('.inst-mount'), { studio: 'viewport', history: false, pagePalette: false, label: 'Instruments', source: (c) => (['image', 'asset', 'file'].includes(c.type) ? '/raw/' + enc(list[0]) : null) });
+    panel = new Dials(host.querySelector('.inst-mount'), { history: false, pagePalette: false, label: 'Instruments', source: (c) => (['image', 'asset', 'file'].includes(c.type) ? '/raw/' + enc(list[0]) : null) });
     panel.items = list;
     const t0 = performance.now();
     panel.render(schema);
@@ -233,7 +233,6 @@ export function initInstruments(ctx) {
     p.addEventListener('palette', ({ detail: e }) => { for (const id of p.items) ctx.fetch('/api/board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ palette: { item: id, control: e.control, palette: e.palette } }) }).catch(() => {}); });
     p.addEventListener('depth', ({ detail }) => {
       for (const id of p.items) ctx.fetch('/api/board', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ depth: { item: id, section: detail.section, depth: detail.depth } }) }).catch(() => {});
-      document.body.toggleAttribute('data-studio-open', [...p.sections.values()].some((s) => s.depth === 3));
     });
   }
 
@@ -283,7 +282,6 @@ export function initInstruments(ctx) {
   function focusControl(label) {
     const row = find(label);
     if (!row) return false;
-    for (const sec of panel.sections.values()) if (sec.depth === 3) panel.setDepth(sec.schema.id, 2, false); // a studio left open would cover the control
     if (row.section.depth === 1) panel.setDepth(row.section.schema.id, 2, false);
     const target = row.node.querySelector('.d-value input, .d-value textarea, .d-value [role=switch], .d-value [role=radio][tabindex="0"], .d-value button, .d-value [tabindex="0"]') || row.label;
     row.node.scrollIntoView({ block: 'nearest' });
@@ -294,8 +292,8 @@ export function initInstruments(ctx) {
   function depth(label, d) {
     const row = find(label);
     if (!row) return false;
-    if (d === 3) panel.open(row.c.id, 3); else panel.setDepth(row.section.schema.id, d, false); // a command settles at once: its result is measured and read, not watched
-    if (d === 3) (row.section.node.querySelector('.d-lab [tabindex="0"], .d-lab button, .d-lab input') || row.section.node.querySelector('button'))?.focus({ focusVisible: true });
+    if (d === 3) panel.open(row.c.id, 3); else { panel.setDepth(row.section.schema.id, d, false); panel.reveal(row.section.schema.id); } // a command settles at once: its result is measured and read, not watched
+    if (d === 3) (row.section.node.querySelector('.d-lab [tabindex="0"], .d-lab button, .d-lab input') || row.section.node.querySelector('button'))?.focus({ focusVisible: true, preventScroll: true });
     else (d === 1 ? row.section.toggle : row.label).focus({ focusVisible: true });
     return true;
   }

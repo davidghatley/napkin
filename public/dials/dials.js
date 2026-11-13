@@ -76,25 +76,23 @@ const keyBindings = (keys) => [
   ["3 then l", "Change by a count (on a label)"],
   ["g then h j k l / arrows", "Move focus to the nearest instrument that way"],
   ["g g / g e", "First / last row of the section"],
-  ["g s / g r / g u", "Studio / reset / undo"],
-  ["g 1 / g 2 / g 3", "Dial / bench / studio for this section"],
-  ["Digits while dragging", "Type a number; Enter applies it (rows and studio handles)"],
+  ["g s / g r / g u", "Full editor / reset / undo"],
+  ["g 1 / g 2 / g 3", "Close / open / full editor for this section"],
+  ["Digits while dragging", "Type a number; Enter applies it (rows and editor handles)"],
   ["Shift / Alt", "Fine / coarse adjustment"],
   ["Home / End", "Minimum / maximum"],
-  ["Arrows on Size", "Resize the studio pane; Shift for larger steps"],
   [
     keys.reset.join(" / ") + " / double-click label",
     "Reset to the declared default",
   ],
   [
     keys.studio.join(" / ") + " / Enter on figure",
-    "Open this control in the studio",
+    "Open this control's full editor in the panel",
   ],
   ["Ctrl C / Ctrl V", "Copy / paste a value (on a label)"],
-  ["Ctrl K", "Find any control, or change a section's depth"],
+  ["Ctrl K", "Find any control, or open or close a section"],
   ["Ctrl Z / Ctrl Shift Z", "Undo / redo"],
-  ["1 / 2 / 3", "Dial / bench / studio (on section depth buttons)"],
-  ["Escape", "Cancel edit / leave studio"],
+  ["Escape", "Cancel edit / close the full editor"],
   [keys.help.join(" / "), "Show this key map"],
 ];
 export const bindings = keyBindings(defaultKeys);
@@ -108,10 +106,10 @@ const depthGlyphs = [
 const depthNames = [
   ["Dial", "one row"],
   ["Bench", "every control"],
-  ["Studio", "the full pane"],
+  ["Studio", "the full editor, in the panel"],
 ];
-const sizeGlyph =
-  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13 7V13H7M13 13L8.5 8.5M3 9V3H9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const expandGlyph =
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 6.5L8 3.5L11 6.5M5 9.5L8 12.5L11 9.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 export function render(schema, container, options = {}) {
   return new Dials(container, options).render(schema);
 }
@@ -133,7 +131,6 @@ export class Dials extends EventTarget {
     this.disposed = false;
     this.root = el("div", {
       class: "dials",
-      "data-studio-mode": options.studio === "viewport" ? "viewport" : "inline",
       "aria-label": options.label || "Instruments",
     });
     if (options.theme) this.root.dataset.theme = options.theme;
@@ -251,40 +248,24 @@ export class Dials extends EventTarget {
         () => this.setDepth(section.id, s.depth === 1 ? 2 : 1),
         "d-section-name",
       );
-      const depth = el("div", {
-        class: "d-depth",
-        role: "group",
-        "aria-label": `${section.label} depth`,
-      });
-      const buttons = depthNames.map(([name, what], i) => {
-        const b = button("", `${section.label}: ${name}`, () =>
-          this.setDepth(section.id, i + 1),
-        );
-        b.title = `${name}: ${what} (${i + 1})`;
-        b.innerHTML = depthGlyphs[i];
-        return b;
-      });
-      depth.append(...buttons);
-      const resize = button(
+      // One disclosure for the section's full editor (what was the studio), drawn inside the panel beneath the rows.
+      // There is no depth selector and no full-window pane: the section opens in place (decision 0023).
+      const expand = button(
         "",
-        "Resize studio pane with arrow keys; click for compact size",
-        () =>
-          this.resizeStudio(
-            section.id,
-            Math.min(800, s.node.parentElement.clientWidth),
-            640,
-          ),
-        "d-pane-size d-studio-only",
+        `${section.label || section.id}: full editor`,
+        () => this.setDepth(section.id, s.depth === 3 ? 2 : 3),
+        "d-expand",
       );
-      resize.innerHTML = sizeGlyph;
+      expand.title = "Full editor in the panel (S)";
+      expand.innerHTML = expandGlyph;
+      expand.setAttribute("aria-expanded", "false");
       const head = el(
         "header",
         { class: "d-section-head" },
         toggle,
         fig,
         summary,
-        resize,
-        depth,
+        expand,
       );
       const body = el("div", { class: "d-section-inner" }),
         content = el("div", { class: "d-section-content" }),
@@ -299,7 +280,7 @@ export class Dials extends EventTarget {
       body.append(content);
       const railHost = el("div", { class: "d-rail" });
       content.append(rowlist, railHost, labHost);
-      head.insertBefore(tabs, resize);
+      head.insertBefore(tabs, expand);
       const subjectHost = el("div", { class: "d-subject" });
       subjectHost.hidden = true;
       node.append(head, body);
@@ -310,8 +291,7 @@ export class Dials extends EventTarget {
         toggle,
         fig,
         summary,
-        buttons,
-        resize,
+        expand,
         body,
         content,
         rowlist,
@@ -978,7 +958,10 @@ export class Dials extends EventTarget {
     if (!r) throw new Error("Unknown control " + id);
     const s = r.section;
     if (s.studioControl !== id) this.buildStudio(s, id);
+    // Compatible with the three depths it once had: 3 (the default) shows the full editor, 2 opens the section,
+    // 1 folds it. Every one of them happens inside the panel, which scrolls the section into view.
     this.setDepth(s.schema.id, depth);
+    this.reveal(s.schema.id);
     return this;
   }
   reset(id) {
@@ -1201,15 +1184,9 @@ export class Dials extends EventTarget {
     // Contract hook: the open studio names the control it is for.
     if (s.depth === 3) s.node.dataset.studioFor = s.studioControl || s.schema.controls[0]?.id || "";
     else delete s.node.dataset.studioFor;
-    if (s.depth !== 3) {
-      s.node.style.width = "";
-      s.node.style.height = "";
-    }
     s.body.inert = s.depth === 1;
     s.toggle.setAttribute("aria-expanded", String(s.depth > 1));
-    s.buttons.forEach((b, i) =>
-      b.setAttribute("aria-pressed", String(i + 1 === s.depth)),
-    );
+    s.expand.setAttribute("aria-expanded", String(s.depth === 3));
     s.lab?.depth?.(s.depth);
     this.placeSubject(s, false);
     this.markEditing(s);
@@ -1248,26 +1225,23 @@ export class Dials extends EventTarget {
     }
     if (s.depth === 1 && s.body.contains(document.activeElement))
       s.toggle.focus();
-    if (
-      s.depth < 3 &&
-      (s.tabs.contains(document.activeElement) ||
-        s.resize === document.activeElement)
-    )
-      s.buttons[s.depth - 1].focus();
+    if (s.depth < 3 && s.tabs.contains(document.activeElement))
+      s.expand.focus();
   }
-  resizeStudio(id, width, height) {
+  /**
+   * Scroll the panel (the nearest scrolling box around the section, never the page) so the section is in view: its head
+   * first when the section is taller than the box.
+   */
+  reveal(id) {
     const s = this.sections.get(id);
-    if (!s || s.depth !== 3) return;
-    const viewport = this.root.dataset.studioMode === "viewport",
-      maxWidth = viewport
-        ? document.documentElement.clientWidth
-        : s.node.parentElement.clientWidth,
-      maxHeight = viewport ? innerHeight : innerHeight * 0.9;
-    s.node.style.width = `${clamp(width, Math.min(360, maxWidth), maxWidth)}px`;
-    s.node.style.height = `${clamp(height, Math.min(520, maxHeight), maxHeight)}px`;
-    this.announce(
-      `Studio ${s.node.offsetWidth} by ${s.node.offsetHeight} pixels`,
-    );
+    if (!s?.node.isConnected) return this;
+    let box = s.node.parentElement;
+    while (box && box !== document.body && !(/(auto|scroll)/.test(getComputedStyle(box).overflowY) && box.scrollHeight > box.clientHeight)) box = box.parentElement;
+    if (!box || box === document.body) return this;
+    const b = box.getBoundingClientRect(), r = s.node.getBoundingClientRect();
+    if (r.top < b.top) box.scrollTop += r.top - b.top;
+    else if (r.bottom > b.bottom) box.scrollTop += Math.min(r.bottom - b.bottom, r.top - b.top);
+    return this;
   }
   keydown(e) {
     if (e.defaultPrevented) return;
@@ -1280,22 +1254,6 @@ export class Dials extends EventTarget {
       (s && e.target === s.toggle
         ? this.rows.get(s.schema.controls[0]?.id)
         : undefined);
-    if (
-      s &&
-      e.target === s.resize &&
-      ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)
-    ) {
-      e.preventDefault();
-      const step = e.shiftKey ? 64 : 16;
-      this.resizeStudio(
-        s.schema.id,
-        s.node.offsetWidth +
-          (e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0),
-        s.node.offsetHeight +
-          (e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0),
-      );
-      return;
-    }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
       e.preventDefault();
       this.palette();
@@ -1316,13 +1274,7 @@ export class Dials extends EventTarget {
     if (e.key === "Escape" && !editing && s?.depth === 3) {
       e.preventDefault();
       this.setDepth(s.schema.id, 2);
-      s.buttons[1].focus();
-      return;
-    }
-    if (e.target.closest(".d-depth") && /^[123]$/.test(e.key)) {
-      e.preventDefault();
-      this.setDepth(s.schema.id, Number(e.key));
-      s.buttons[Number(e.key) - 1].focus();
+      s.expand.focus();
       return;
     }
     if (!row || editing) return;
@@ -1480,10 +1432,10 @@ export class Dials extends EventTarget {
             text: `Studio ${label}`,
             hint: name,
             control: c,
-            what: "Opens the full pane for this control.",
+            what: "Opens this control's full editor in the panel.",
             run: () => {
               this.open(c.id);
-              s.buttons[2].focus();
+              s.expand.focus();
             },
           },
           {
@@ -1508,7 +1460,8 @@ export class Dials extends EventTarget {
           depthIndex: i,
           run: () => {
             this.setDepth(s.schema.id, i + 1);
-            s.buttons[i].focus();
+            this.reveal(s.schema.id);
+            (i === 2 ? s.expand : s.toggle).focus();
           },
         }),
       );

@@ -71,7 +71,7 @@
   --nk-ring-width: 2px; --nk-ring-offset: 2px;
   --nk-motion: 120ms; --nk-motion-panel: 180ms; --nk-ease: cubic-bezier(.2, 0, 0, 1);
   --nk-shadow-menu: 0 4px 16px rgb(0 0 0 / .18);
-  --nk-left-w: 240px; --nk-right-w: 320px;
+  --nk-left-w: 240px; --nk-right-w: 280px; /* the right width is set by right-panel.js (240 to the larger of 480 and half the window) */
   /* colour roles */
   --nk-panel: var(--nk-chrome);
   --nk-ink: var(--nk-text);
@@ -387,7 +387,17 @@ body[data-tool] #stage .cmp-head { cursor: grab; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* ---- right: the design panel ---- */
-#inspector { grid-area: insp; min-height: 0; overflow-y: auto; overflow-x: hidden; background: var(--nk-chrome); border-left: 1px solid var(--nk-line); }
+#inspector { grid-area: insp; min-width: 0; min-height: 0; overflow-y: auto; overflow-x: hidden; background: var(--nk-chrome); border-left: 1px solid var(--nk-line);
+  container: inspector / inline-size; /* its sections respond to the panel's width (container queries) */ }
+/* The panel's left edge: a separator 6 px wide laid over the panel's own first pixels (never over the canvas, no layout shift). The 2 px line
+   shows on hover, focus and while dragging. */
+#right-edge { grid-area: insp; justify-self: start; align-self: stretch; z-index: 5; width: 6px; cursor: col-resize; touch-action: none; position: relative; }
+#right-edge::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--nk-ring-width); background: transparent; transition: background-color var(--nk-motion) var(--nk-ease); }
+#right-edge:hover::after { background: var(--nk-line-2); }
+#right-edge:focus-visible { outline: 0; }
+#right-edge:focus-visible::after, #right-edge:active::after, body[data-resizing="right"] #right-edge::after { background: var(--nk-accent); }
+body[data-resizing="right"], body[data-resizing="right"] * { cursor: col-resize !important; user-select: none; }
+body[data-play] #right-edge, body[data-chrome="hidden"] #right-edge { display: none; }
 #panel { padding-bottom: 28px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .mono { font-family: var(--nk-mono); }
