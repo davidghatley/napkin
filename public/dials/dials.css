@@ -2973,3 +2973,89 @@
   align-items: center;
   gap: 4px;
 }
+
+/* ---------- Sampler studio ---------- */
+.kx-plot {
+  height: 300px;
+}
+.kx-ladder {
+  height: 130px;
+}
+.kx-skip {
+  fill: color-mix(in srgb, var(--d-text) 6%, transparent);
+}
+.kx-ghost {
+  fill: none;
+  stroke: var(--d-faint);
+  stroke-dasharray: 4 3;
+}
+.k-svg .kx-ghost-label {
+  fill: var(--d-muted);
+  paint-order: stroke;
+  stroke: var(--d-surface);
+  stroke-width: 4px;
+}
+.kx-curve {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 2;
+}
+.kx-dots {
+  stroke: var(--d-text);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.kx-bar {
+  fill: var(--d-accent);
+}
+.kx-bar.is-skipped {
+  fill: none;
+  stroke: var(--d-rule);
+}
+.kx-scheds {
+  grid-template-columns: repeat(3, minmax(0, 72px));
+}
+.dials .kx-btn {
+  height: 24px;
+  min-height: 0;
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--d-accent-text);
+}
+.dials .kx-btn:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.dials .kx-btn[aria-pressed="true"] {
+  color: var(--d-text);
+}
+.kx-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.kx-tile {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.kx-tile canvas {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  image-rendering: auto;
+}
+.kx-tile figcaption {
+  font-family: var(--d-pixel);
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.d-rail .k-stats {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+.d-rail .k-stat {
+  flex-direction: row;
+  justify-content: space-between;
+}

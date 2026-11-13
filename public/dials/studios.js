@@ -28,6 +28,7 @@ import {
 } from "./motion.js";
 import { schedule } from "./figures.js";
 import { imageStudio } from "./studio-image.js";
+import { samplerStudio as samplerLab } from "./studio-sampler.js";
 import { field as kField } from "./kit.js";
 import { motionStudio as motionLab } from "./studio-motion.js";
 const accent = (node) =>
@@ -2645,7 +2646,7 @@ export function createStudio(panel, section, host, rail = document.createElement
   else if (c.type === "typography") lab = typeStudio(ctx, host);
   else if (c.type === "image") lab = imageStudio(ctx, host);
   else if (c.type === "encoding") lab = encodingStudio(ctx, host);
-  else if (c.type === "sampler") lab = samplerStudio(ctx, host);
+  else if (c.type === "sampler") lab = samplerLab(ctx, host);
   else lab = generalStudio(ctx, host);
   // Two columns in a wide studio: the main figure and its direct tools on the left, the rest on the right.
   if (!["motion", "color"].includes(host.dataset.studio) && host.dataset.layout !== "own") {
