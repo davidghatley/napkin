@@ -119,6 +119,7 @@ export const ACTIONS = [
   ...['kind', 'folder', 'date', 'similarity', 'tag', 'status', 'run'].map((by, i) => command(`arrange-${by}`, `Arrange by ${by}`, `Arrange by ${by}`, `A ${'KFDSTUR'[i]}`, (c) => c.surface.arrange(by), { about: `Sort the canvas into groups by ${by}` })),
   command('arrange-meta', 'Arrange by meta', 'Arrange by meta.<column>', '', (c, a) => c.surface.arrange('meta.' + String(a || '').replace(/^meta\./, '')), { arg: 'text', about: 'Sort the canvas into groups by a metadata field or a data column' }),
   command('group', 'Group', 'Group <name>', '', (c, a) => c.surface.group(a), { arg: 'text', about: 'Put the selected cards in a named group' }),
+  command('make-component', 'Create component', 'Create component', 'Ctrl+Alt+K', (c) => c.makeComponent.run(), { about: 'The selected element of a frame becomes a component file beside it; the frame stays as it is', enabled: (c) => c.makeComponent.can() }),
   command('present', 'Present', 'Present', 'F5', (c) => c.surface.present(true), { about: 'Show the selection (or the whole canvas) full screen; Escape leaves' }),
   command('compare', 'Compare variants', 'Compare variants <path>', '', (c, a) => c.surface.compare(a), { arg: 'item', about: 'Show a component’s variants side by side' }),
   command('approve', 'Approve', 'Approve <proposal>', '', (c, a) => c.surface.resolve(a, 'accept'), { arg: 'proposal', about: 'Accept an agent’s proposal' }),

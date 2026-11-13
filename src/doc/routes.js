@@ -12,6 +12,7 @@
 //   GET  /api/styles  -> { undefinedVars, applied, ... }    POST /api/styles { applied }  (kept outside the folder)
 //   POST   /api/frames  { path?, x, y, width, height?, body? } -> { ok, path, name, revision, canvas }: a new frame file (next free
 //                   frame-N.html when no path), placed at x, y in the layout state; one undo step (undo removes the file)
+//   POST   /api/frames/component { from, node, name? }       -> { ok, path, name, dropped, canvas }: the element becomes <Name>.tsx beside the frame
 //   POST   /api/frames/rename { from, to }                  -> { ok, component, from }: the file renamed in its folder, never over another
 //   DELETE /api/frames/<path>?revision=R                    -> { ok }: removes the file if it is still at R; one undo step (undo writes it back)
 // Writes need an identity (POST /api/session), as every write in napkin does.
@@ -94,6 +95,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
           const n = (v) => (v === undefined || v === null ? undefined : Number(v));
           return json(res, 201, engine.createFrame({ path: m?.path ?? undefined, x: n(m?.x), y: n(m?.y), width: n(m?.width), height: n(m?.height), body: m?.body ?? '', by })), true;
         }
+        if (method === 'POST' && path === '/api/frames/component') { const m = await body(req); return json(res, 201, engine.componentFrom({ from: m?.from, node: m?.node, name: m?.name, by })), true; }
         if (method === 'POST' && path === '/api/frames/rename') { const m = await body(req); return json(res, 200, engine.renameFrame(m?.from, m?.to, { by })), true; }
         if (method === 'DELETE' && path.length > '/api/frames/'.length) return json(res, 200, engine.removeFrame(decodeURIComponent(path.slice('/api/frames/'.length)), { revision: url.searchParams.get('revision') ?? undefined, by })), true;
         return fail(res, 405, 'method not allowed: POST /api/frames, POST /api/frames/rename or DELETE /api/frames/<path>'), true;
