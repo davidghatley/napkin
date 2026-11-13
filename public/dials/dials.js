@@ -302,7 +302,7 @@ export class Dials extends EventTarget {
       head.insertBefore(tabs, resize);
       const subjectHost = el("div", { class: "d-subject" });
       subjectHost.hidden = true;
-      node.append(head, subjectHost, body);
+      node.append(head, body);
       const s = {
         schema: section,
         node,
@@ -340,7 +340,8 @@ export class Dials extends EventTarget {
           first?.id,
         false,
       );
-      fragment.append(node);
+      // The subject sits just before its section, outside it: a dial stays one 32 px row.
+      fragment.append(subjectHost, node);
       const given = this.options.subject?.(section.id, section);
       if (given) this.setSubject(section.id, given, false);
       this.setDepth(section.id, section.depth || 2, false);

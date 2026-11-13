@@ -514,3 +514,6 @@ footer output {
 .subject-note[hidden] {
   display: none;
 }
+.study-mount .d-subject {
+  padding: 6px 12px 10px;
+}

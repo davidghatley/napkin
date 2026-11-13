@@ -270,7 +270,7 @@
   isolation: isolate;
   background: var(--d-surface);
 }
-.d-section + .d-section {
+.d-section ~ .d-section {
   border-top: 1px solid var(--d-line);
 }
 /* The dial lines up with the rows beneath it: name over labels, figure over figures. */
@@ -4926,13 +4926,10 @@ ul.ki-tags {
 }
 /* The subject a section edits stays in view at every depth (Dials.setSubject). */
 .d-subject {
-  padding: 0 12px 8px;
+  padding: 0 0 8px;
 }
 .d-subject > * {
   max-width: 100%;
-}
-.d-section[data-depth="1"] .d-subject {
-  padding-bottom: 12px;
 }
 .d-rail > [data-anchored="studio"] {
   margin-bottom: 12px;
