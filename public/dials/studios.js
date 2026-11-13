@@ -187,6 +187,10 @@ function updateSwatches(host, label, colors, onPick, lines) {
     b.style.setProperty("--swatch", css);
     b.title = css;
     b.setAttribute("aria-label", `${label}: ${css}`);
+    try {
+      const L = (typeof color === "string" ? parseColor(color) : color)[0];
+      b.style.setProperty("--ink", L > 0.68 ? "#16181d" : "#ffffff");
+    } catch {}
     if (lines) {
       let lch;
       try {
@@ -202,92 +206,140 @@ function updateSwatches(host, label, colors, onPick, lines) {
   });
 }
 function colorStudio(ctx, host) {
-  host.append(heading("Color space"));
+  // One plane carries the colour: lightness up, chroma across, at the current hue.
+  // Readouts ride the axes at the point; the gamut edges and the contrast threshold are drawn where they fall.
+  const PW = 560,
+    PH = 300,
+    CMAX = 0.4;
   let space = "srgb",
     planeMode = "OKLCH",
     map = "Off",
-    background = "#ffffff",
+    background = String(ctx.control.background || "#ffffff"),
     harmony = "Complement",
+    format = "OKLCH",
     cacheKey = "",
-    pixels,
     history = [ctx.get()],
     frame = 0,
     dead = false;
+  const css = (name, fallback) =>
+    getComputedStyle(host).getPropertyValue(name).trim() || fallback;
   const plane = canvas(
-      "Color plane. Left and right change chroma; up and down change lightness. Shift fine.",
-      512,
-      320,
-    ),
-    proof = el("canvas", {
-      width: 200,
-      height: 100,
-      role: "img",
-      "aria-label": "Selected color on the contrast background",
-    }),
-    preview = el("div", { class: "d-color-preview" }, proof);
-  const wcag = metric("WCAG 2 · ratio"),
-    lc = metric("APCA · experimental Lc"),
-    gamut = metric("Gamut");
-  const code = el("output", { class: "d-color-code" }),
-    readout = el("div", { class: "d-readout" }, wcag.node, lc.node, gamut.node);
-  const toolbar = el(
+    "Color plane. Left and right change chroma; up and down change lightness. Shift fine.",
+    PW,
+    PH,
+  );
+  const tagL = el("span", { class: "d-cx-tag", "data-axis": "y" }),
+    tagC = el("span", { class: "d-cx-tag", "data-axis": "x" }),
+    tagG = el("span", { class: "d-cx-tag", "data-axis": "g" }),
+    planeWrap = el("div", { class: "d-cx-plane" }, plane, tagL, tagC, tagG),
+    axisY = el("div", { class: "d-cx-axis-y", "aria-hidden": "true" }),
+    axisX = el("div", { class: "d-cx-axis-x", "aria-hidden": "true" });
+  const field = el("div", { class: "d-cx-field" }, axisY, planeWrap, axisX);
+  const paintAxes = () => {
+    if (planeMode === "OKLCH") {
+      axisY.replaceChildren(
+        ...[100, 75, 50, 25, 0].map((n, i) =>
+          el("span", { text: i === 0 ? "L 100" : String(n), style: `top:${i * 25}%` }),
+        ),
+      );
+      axisX.replaceChildren(
+        ...[0, 0.1, 0.2, 0.3, 0.4].map((n, i) =>
+          el("span", { text: i === 4 ? "C 0.4" : String(n), style: `left:${i * 25}%` }),
+        ),
+      );
+    } else {
+      axisY.replaceChildren(
+        ...["+b", "", "0", "", "−b"].map((n, i) => el("span", { text: n, style: `top:${i * 25}%` })),
+      );
+      axisX.replaceChildren(
+        ...["−a", "", "0", "", "+a"].map((n, i) => el("span", { text: n, style: `left:${i * 25}%` })),
+      );
+    }
+  };
+  // Hue and alpha are strips under the plane, each its own direct surface.
+  const strip = (label, name, keyLabel) => {
+    const c = canvas(keyLabel, PW, name === "hue" ? 16 : 10);
+    c.setAttribute("role", "slider");
+    c.setAttribute("aria-valuemin", "0");
+    c.setAttribute("aria-valuemax", name === "hue" ? "360" : "100");
+    c.setAttribute("aria-valuenow", "0");
+    const out = el("output", { class: "d-cx-out" });
+    return { c, out, node: el("div", { class: "d-cx-strip" }, el("span", { text: label }), c, out) };
+  };
+  const hue = strip("Hue", "hue", "Hue strip. Left and right turn the hue; Shift fine, Alt coarse."),
+    alpha = strip("Alpha", "alpha", "Alpha strip. Left and right change opacity; Shift fine.");
+  const bar = el(
     "div",
-    { class: "d-tools d-studio-only" },
+    { class: "d-tools d-deep" },
     choice("Plane", ["OKLCH", "OKLab"], (v) => {
       planeMode = v;
       cacheKey = "";
+      paintAxes();
       update();
     }),
-    choice("Gamut", ["srgb", "p3"], (v) => {
-      space = v;
+    choice("Gamut", ["sRGB", "P3"], (v) => {
+      space = v === "P3" ? "p3" : "srgb";
       cacheKey = "";
       update();
     }),
-    choice(
-      "Contrast map",
-      ["Off", "AA 4.5", "AAA 7", "APCA 60", "APCA 75"],
-      (v) => {
-        map = v;
-        cacheKey = "";
-        update();
-      },
-    ),
+    choice("Contrast", ["Off", "AA 4.5", "AAA 7", "APCA 60", "APCA 75"], (v) => {
+      map = v;
+      cacheKey = "";
+      update();
+    }),
   );
-  const bg = el("input", {
-    value: background,
+  // Proof: the colour as text on its background, graded in the two systems.
+  const sampleBig = el("strong", { text: "Aa" }),
+    sampleSmall = el("p", { text: "Small text reads like this at twelve pixels." }),
+    sample = el("div", { class: "d-cx-sample", role: "img" }, sampleBig, sampleSmall);
+  const grade = (name) => {
+    const b = el("b"),
+      em = el("em"),
+      label = el("span", { text: name });
+    label.append(em);
+    return { node: el("div", { class: "d-cx-grade" }, b, label), b, em };
+  };
+  const wcag = grade("WCAG 2"),
+    lc = grade("APCA Lc");
+  const proof = el(
+    "div",
+    { class: "d-cx-proof" },
+    sample,
+    el("div", { class: "d-cx-grades" }, wcag.node, lc.node),
+  );
+  const backInput = el("input", {
     type: "text",
+    value: background,
     "aria-label": "Contrast background",
+    spellcheck: false,
   });
-  bg.addEventListener("change", () => {
+  const setBackground = (v) => {
+    parseColor(v, ctx.host);
+    background = v;
+    backInput.value = v;
+    backInput.removeAttribute("aria-invalid");
+    cacheKey = "";
+    update();
+  };
+  backInput.addEventListener("change", () => {
     try {
-      parseColor(bg.value, ctx.host);
-      background = bg.value;
-      bg.removeAttribute("aria-invalid");
-      cacheKey = "";
-      update();
+      setBackground(backInput.value.trim());
     } catch {
-      bg.setAttribute("aria-invalid", "true");
+      backInput.setAttribute("aria-invalid", "true");
     }
   });
-  toolbar.append(
-    el("label", { class: "d-tool" }, el("span", { text: "Against" }), bg),
-  );
-  const planeWrap = el(
+  const backChips = ["#ffffff", "#f3f4f6", "#1b1d23", "#000000"].map((v) => {
+    const b = button("", `Contrast against ${v}`, () => setBackground(v));
+    b.style.background = v;
+    b.dataset.color = v;
+    return b;
+  });
+  const backs = el(
     "div",
-    { class: "d-color-plane" },
-    plane,
-    el(
-      "div",
-      { class: "d-plot-key" },
-      el("span", { text: "0 ← chroma → .4" }),
-      el("span", { text: "— sRGB   ┄ P3" }),
-    ),
-  );
-  const main = el(
-    "div",
-    { class: "d-color-main" },
-    planeWrap,
-    el("div", { class: "d-color-proof" }, preview, readout, code),
+    { class: "d-cx-backs" },
+    el("span", { text: "Against" }),
+    ...backChips,
+    backInput,
   );
   const channelCtx = {
     ...ctx,
@@ -303,14 +355,62 @@ function colorStudio(ctx, host) {
     ["Hue", "h", 0, 360, 1, "deg"],
     ["Alpha", "a", 0, 1, 0.01],
   ]);
-  const palettes = el("div", { class: "d-palettes d-studio-only" }),
-    plates = el("div", { class: "d-color-plates d-studio-only" }),
-    rampHost = el("div"),
+  channels.node.classList.add("d-cx-channels");
+  const code = el("output", { class: "d-color-code", "aria-live": "off" }),
+    copyStatus = el("output", { class: "d-note" });
+  const copy = button("Copy", "Copy formatted color", async () => {
+    try {
+      await navigator.clipboard.writeText(code.value);
+      copyStatus.textContent = "Copied";
+    } catch {
+      copyStatus.textContent = "Select the value to copy it";
+    }
+    setTimeout(() => (copyStatus.textContent = ""), 1400);
+  });
+  const codeBlock = el(
+    "div",
+    { class: "d-cx-section d-cx-code d-deep" },
+    el(
+      "header",
+      {},
+      choiceBox("Copy format", ["OKLCH", "OKLab", "Hex", "RGB"], (v) => {
+        format = v;
+        update();
+      }),
+      copyStatus,
+      copy,
+    ),
+    code,
+  );
+  const section = (title, cls, ...kids) =>
+    el("div", { class: `d-cx-section ${cls === "d-cx-ramp" ? "" : "d-deep "}${cls}` }, ...kids);
+  const rampHost = el("div"),
     harmonyHost = el("div"),
     historyHost = el("div"),
     imageHost = el("div");
+  const ramps = section(
+    "Ramp",
+    "d-cx-ramp",
+    el("header", {}, el("h3", { text: "Ramp" }), el("span", { class: "d-note", text: "Lightness and contrast on the background" })),
+    rampHost,
+  );
+  const harmonies = section(
+    "Harmony",
+    "d-cx-harmony",
+    el(
+      "header",
+      {},
+      el("h3", { text: "Harmony" }),
+      choiceBox("Harmony", ["Complement", "Analogous", "Triad", "Split"], (v) => {
+        harmony = v;
+        update();
+      }),
+    ),
+    harmonyHost,
+  );
+  // Sampling, binding and history.
   const sampleStatus = el("output", { class: "d-note" }),
-    eye = canvas("Sampled image. Click a pixel to use its color.", 320, 120, true);
+    eye = canvas("Sampled image. Click a pixel to use its color.", 300, 110, true);
   eye.classList.add("d-eye");
   eye.hidden = true;
   let eyeData;
@@ -322,103 +422,90 @@ function colorStudio(ctx, host) {
       i = (clamp(y, 0, eyeData.height - 1) * eyeData.width + clamp(x, 0, eyeData.width - 1)) * 4;
     ctx.set(toHex([eyeData.data[i] / 255, eyeData.data[i + 1] / 255, eyeData.data[i + 2] / 255]));
   });
-  const image = filePick("Choose an image", "image/*", async (file) => {
-    try {
-      const bitmap = await createImageBitmap(file),
-        c = document.createElement("canvas");
-      c.width = 96;
-      c.height = 96;
-      const g = c.getContext("2d", { willReadFrequently: true });
-      g.drawImage(bitmap, 0, 0, 96, 96);
-      const view = eye.getContext("2d");
-      view.drawImage(bitmap, 0, 0, 320, 120);
-      eyeData = view.getImageData(0, 0, 320, 120);
-      eye.hidden = false;
-      bitmap.close();
-      const colors = paletteFromPixels(g.getImageData(0, 0, 96, 96).data);
-      imageHost.replaceChildren(
-        swatchRow("Image palette", colors, (v) => ctx.set(v)),
-      );
-      sampleStatus.textContent = `${colors.length} colors sampled from ${file.name}`;
-    } catch {
-      sampleStatus.textContent = "Could not read this image";
-    }
-  }, "or drop one here", "Sample palette from an image");
+  const image = filePick(
+    "Choose an image",
+    "image/*",
+    async (file) => {
+      try {
+        const bitmap = await createImageBitmap(file),
+          c = document.createElement("canvas");
+        c.width = 96;
+        c.height = 96;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.drawImage(bitmap, 0, 0, 96, 96);
+        const view = eye.getContext("2d");
+        view.drawImage(bitmap, 0, 0, 300, 110);
+        eyeData = view.getImageData(0, 0, 300, 110);
+        eye.hidden = false;
+        bitmap.close();
+        const colors = paletteFromPixels(g.getImageData(0, 0, 96, 96).data);
+        imageHost.replaceChildren(swatchRow("Image palette", colors, (v) => ctx.set(v)));
+        sampleStatus.textContent = `${colors.length} colours from ${file.name}`;
+      } catch {
+        sampleStatus.textContent = "Could not read this image";
+      }
+    },
+    "or drop one here",
+    "Sample palette from an image",
+  );
   const token = el("input", {
       placeholder: "--brand-accent",
       "aria-label": "CSS variable name",
+      spellcheck: false,
     }),
     tokenStatus = el("output", { class: "d-note" });
   const bind = button("Bind", "Bind to CSS variable", () => {
     if (!/^--[\w-]+$/.test(token.value)) {
-      tokenStatus.textContent = "Enter a CSS variable name starting with --";
+      tokenStatus.textContent = "A variable name starts with --";
       return;
     }
     try {
       ctx.set(`var(${token.value})`);
       tokenStatus.textContent = `Bound to ${token.value}`;
     } catch {
-      tokenStatus.textContent = "Variable is not a color in this panel";
+      tokenStatus.textContent = "That variable is not a colour here";
     }
   });
-  const formats = choice(
-    "Copy format",
-    ["OKLCH", "OKLab", "Hex", "RGB"],
-    (v) => {
-      format = v;
-      update();
-    },
-  );
-  let format = "OKLCH";
-  const copy = button("Copy color", "Copy formatted color", async () => {
-    try {
-      await navigator.clipboard.writeText(code.value);
-      tokenStatus.textContent = "Color copied";
-    } catch {
-      tokenStatus.textContent = "Select and copy the color readout";
-    }
-  });
-  plates.append(
-    el("div", {}, heading("Ramp", "Gamut fitted, nine stops"), rampHost),
-    el(
-      "div",
-      {},
-      heading("Harmony", "Hue relationships"),
-      choice(
-        "Relationship",
-        ["Complement", "Analogous", "Triad", "Split"],
-        (v) => {
-          harmony = v;
-          update();
-        },
-      ),
-      harmonyHost,
+  const side = el(
+    "div",
+    { class: "d-cx-side" },
+    proof,
+    el("div", { class: "d-deep" }, backs),
+    channels.node,
+    codeBlock,
+    section(
+      "Token",
+      "d-cx-tokens",
+      el("header", {}, el("h3", { text: "Token" }), tokenStatus),
+      el("div", { class: "d-cx-token" }, token, bind),
     ),
-  );
-  palettes.append(
-    el(
-      "div",
-      {},
-      heading("From an image", "Local files stay in this browser"),
+    section(
+      "Sample",
+      "d-cx-image",
+      el("header", {}, el("h3", { text: "From an image" }), sampleStatus),
       image,
       eye,
-      sampleStatus,
       imageHost,
     ),
-    el(
-      "div",
-      {},
-      heading(
-        "Token & history",
-        "Bind the value, or return to an earlier color",
-      ),
-      el("div", { class: "d-tools" }, token, bind),
-      tokenStatus,
+    section(
+      "History",
+      "d-cx-history",
+      el("header", {}, el("h3", { text: "History" })),
       historyHost,
-      el("div", { class: "d-tools" }, formats, copy),
     ),
   );
-  host.append(toolbar, main, plates, channels.node, palettes);
+  const main = el(
+    "div",
+    { class: "d-cx-main" },
+    bar,
+    field,
+    el("div", { class: "d-deep d-cx-strips" }, hue.node, alpha.node),
+    ramps,
+    harmonies,
+  );
+  host.append(el("div", { class: "d-cx" }, main, side));
+  paintAxes();
+  // Pointer and keys on the plane.
   const pick = (e) => {
     const r = plane.getBoundingClientRect(),
       x = clamp((e.clientX - r.left) / r.width, 0, 1),
@@ -426,7 +513,7 @@ function colorStudio(ctx, host) {
       v = parseColor(ctx.get(), ctx.host);
     ctx.change(
       planeMode === "OKLCH"
-        ? cssLch([1 - y, x * 0.4, v[2], v[3]])
+        ? cssLch([1 - y, x * CMAX, v[2], v[3]])
         : cssLab([v[0], (x - 0.5) * 0.8, (0.5 - y) * 0.8, v[3]]),
     );
   };
@@ -437,8 +524,7 @@ function colorStudio(ctx, host) {
     cancel: () => ctx.cancel(),
   });
   plane.addEventListener("keydown", (e) => {
-    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key))
-      return;
+    if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
     e.preventDefault();
     const v = parseColor(ctx.get(), ctx.host),
       f = e.shiftKey ? 0.1 : e.altKey ? 10 : 1;
@@ -448,7 +534,7 @@ function colorStudio(ctx, host) {
       if (e.key === "ArrowLeft") v[1] -= 0.005 * f;
       if (e.key === "ArrowRight") v[1] += 0.005 * f;
       v[0] = clamp(v[0], 0, 1);
-      v[1] = clamp(v[1], 0, 0.4);
+      v[1] = clamp(v[1], 0, CMAX);
       ctx.set(cssLch(v));
     } else {
       const lab = lchToLab(v);
@@ -457,101 +543,117 @@ function colorStudio(ctx, host) {
       ctx.set(cssLab(lab));
     }
   });
+  const stripDrag = (s, apply) => {
+    ctx.surface(s.c, {
+      start: () => ctx.begin("color-strip"),
+      move: (e) => {
+        const r = s.c.getBoundingClientRect(),
+          t = clamp((e.clientX - r.left) / r.width, 0, 1),
+          v = parseColor(ctx.get(), ctx.host);
+        ctx.change(cssLch(apply(v, t)));
+      },
+      end: () => ctx.commit(),
+      cancel: () => ctx.cancel(),
+    });
+  };
+  stripDrag(hue, (v, t) => [v[0], v[1], Number((t * 360).toFixed(1)), v[3]]);
+  stripDrag(alpha, (v, t) => [v[0], v[1], v[2], Number(t.toFixed(3))]);
+  const stripKeys = (s, step, apply) =>
+    s.c.addEventListener("keydown", (e) => {
+      const dir = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[e.key];
+      if (!dir) return;
+      e.preventDefault();
+      const v = parseColor(ctx.get(), ctx.host),
+        f = e.shiftKey ? 0.1 : e.altKey ? 10 : 1;
+      ctx.set(cssLch(apply(v, dir * step * f)));
+    });
+  stripKeys(hue, 1, (v, d) => [v[0], v[1], (((v[2] + d) % 360) + 360) % 360, v[3]]);
+  stripKeys(alpha, 0.01, (v, d) => [v[0], v[1], v[2], clamp(v[3] + d, 0, 1)]);
   const onCommit = () => {
     const v = ctx.get();
     if (history.at(-1) !== v) {
       history.push(v);
-      history = history.slice(-12);
+      history = history.slice(-16);
     }
     updateHistory();
   };
   const updateHistory = () =>
-    updateSwatches(historyHost, "Color history", history, (v) => ctx.set(v), (css) => [css.length > 18 ? css.slice(0, 18) : css]);
-  const raster = document.createElement("canvas");
-  raster.width = 192;
-  raster.height = 120;
+    updateSwatches(historyHost, "Color history", history, (v) => ctx.set(v));
+  const RW = 224,
+    RH = 120,
+    raster = document.createElement("canvas");
+  raster.width = RW;
+  raster.height = RH;
   const rasterContext = raster.getContext("2d");
-  plane.addEventListener("d-resize", () => update());
-  function draw() {
-    frame = 0;
-    if (dead || !visible(plane)) return;
-    const v = parseColor(ctx.get(), ctx.host),
-      back = parseColor(background, ctx.host),
-      key = [
+  for (const c of [plane, hue.c, alpha.c]) c.addEventListener("d-resize", () => update());
+  const passes = (lch, back) =>
+    map === "Off" ||
+    (map.startsWith("APCA")
+      ? Math.abs(apca(lch, back)) >= Number(map.slice(5))
+      : contrast(lch, back) >= (map === "AA 4.5" ? 4.5 : 7));
+  const surfaceRgb = () => {
+    try {
+      return rgb(parseColor(css("--d-surface", "#fbfbfc"), host));
+    } catch {
+      return [0.98, 0.98, 0.99];
+    }
+  };
+  function drawPlane(v, back) {
+    const key = [
         v[2].toFixed(2),
         planeMode,
         planeMode === "OKLab" ? v[0].toFixed(3) : "",
         map,
         background,
         space,
-        v[3],
+        css("--d-surface", ""),
       ].join("|"),
-      g = plane.getContext("2d", { willReadFrequently: true }),
+      g = plane.getContext("2d"),
       w = plane.width,
       h = plane.height;
     if (key !== cacheKey) {
-      const w = raster.width,
-        h = raster.height;
-      pixels = rasterContext.createImageData(w, h);
-      const threshold = map === "AA 4.5" ? 4.5 : 7;
-      for (let y = 0; y < h; y++)
-        for (let x = 0; x < w; x++) {
+      const img = rasterContext.createImageData(RW, RH),
+        paper = surfaceRgb();
+      for (let y = 0; y < RH; y++)
+        for (let x = 0; x < RW; x++) {
           const lch =
             planeMode === "OKLCH"
-              ? [1 - y / (h - 1), (x / (w - 1)) * 0.4, v[2], v[3]]
-              : labToLch([
-                  v[0],
-                  (x / (w - 1) - 0.5) * 0.8,
-                  (0.5 - y / (h - 1)) * 0.8,
-                  v[3],
-                ]);
+              ? [1 - y / (RH - 1), (x / (RW - 1)) * CMAX, v[2], 1]
+              : labToLch([v[0], (x / (RW - 1) - 0.5) * 0.8, (0.5 - y / (RH - 1)) * 0.8, 1]);
           const color = labToLinear(lchToLab(lch)).map(gamma),
             inside = inGamut(lch, space),
-            passes =
-              map === "Off" ||
-              (map.startsWith("APCA")
-                ? Math.abs(apca(lch, back)) >= Number(map.slice(5))
-                : contrast(lch, back) >= threshold),
-            i = (y * w + x) * 4;
+            pass = passes(lch, back),
+            i = (y * RW + x) * 4;
+          // Outside the gamut the colour fades into the paper; failing contrast fades further.
+          const keep = !inside ? 0.22 : pass ? 1 : 0.4;
           for (let k = 0; k < 3; k++)
-            pixels.data[i + k] = !passes
-              ? (x + y) % 8 < 2
-                ? 70
-                : clamp(color[k], 0, 1) * 100
-              : !inside
-                ? (x + y) % 8 < 2
-                  ? 145
-                  : clamp(color[k], 0, 1) * 180
-                : clamp(color[k], 0, 1) * 255;
-          pixels.data[i + 3] = 255;
+            img.data[i + k] = (clamp(color[k], 0, 1) * keep + paper[k] * (1 - keep)) * 255;
+          img.data[i + 3] = 255;
         }
+      rasterContext.putImageData(img, 0, 0);
       cacheKey = key;
-      rasterContext.putImageData(pixels, 0, 0);
     }
     g.clearRect(0, 0, w, h);
+    g.imageSmoothingEnabled = true;
     g.drawImage(raster, 0, 0, w, h);
-    if (planeMode === "OKLCH")
-      for (const [name, stroke, dash] of [
-        ["srgb", "#fff", []],
-        ["p3", "#111", [4, 3]],
-      ]) {
-        g.beginPath();
-        for (let y = 0; y < h; y += 2) {
-          const x = (gamutChroma(1 - y / (h - 1), v[2], name) / 0.4) * w;
+    const font = getComputedStyle(plane).fontFamily || "sans-serif";
+    g.font = `500 10.5px ${font}`;
+    g.lineWidth = 1.25;
+    // Gamut edges, labelled where they leave the top.
+    for (const [name, label, dash] of [
+      ["srgb", "sRGB", []],
+      ["p3", "P3", [3, 3]],
+    ]) {
+      g.beginPath();
+      let labelAt = null;
+      if (planeMode === "OKLCH")
+        for (let y = 0; y <= h; y += 2) {
+          const L = 1 - y / h,
+            x = Math.min(w, (gamutChroma(L, v[2], name) / CMAX) * w);
           y ? g.lineTo(x, y) : g.moveTo(x, y);
+          if (!labelAt || x > labelAt[0]) labelAt = [x, y];
         }
-        g.strokeStyle = stroke;
-        g.lineWidth = 1.5;
-        g.setLineDash(dash);
-        g.stroke();
-      }
-    else {
-      g.setLineDash([]);
-      for (const [name, stroke] of [
-        ["srgb", "#fff"],
-        ["p3", "#111"],
-      ]) {
-        g.beginPath();
+      else
         for (let i = 0; i <= 180; i++) {
           const H = i * 2,
             C = gamutChroma(v[0], H, name),
@@ -559,68 +661,185 @@ function colorStudio(ctx, host) {
             x = ((C * Math.cos(r)) / 0.8 + 0.5) * w,
             y = (0.5 - (C * Math.sin(r)) / 0.8) * h;
           i ? g.lineTo(x, y) : g.moveTo(x, y);
+          if (i === 45) labelAt = [x, y];
         }
-        g.strokeStyle = stroke;
-        g.stroke();
+      g.setLineDash(dash);
+      g.strokeStyle = "rgb(255 255 255 / .9)";
+      g.stroke();
+      g.setLineDash([]);
+      if (labelAt) {
+        g.fillStyle = css("--d-text", "#16181d");
+        g.shadowColor = css("--d-surface", "#fff");
+        g.shadowBlur = 4;
+        g.textBaseline = "middle";
+        const tx = Math.min(labelAt[0] + 8, w - 28);
+        g.fillText(label, tx, labelAt[1] + (name === "p3" ? 8 : -8));
+        g.shadowBlur = 0;
       }
     }
-    g.setLineDash([]);
+    // The contrast threshold, drawn as the line where text starts to pass.
+    if (map !== "Off" && planeMode === "OKLCH") {
+      g.beginPath();
+      let started = false;
+      for (let x = 0; x <= w; x += 4) {
+        const C = (x / w) * CMAX;
+        let prev = passes([1, C, v[2], 1], back),
+          yHit = null;
+        for (let y = 1; y <= h; y += 2) {
+          const now = passes([1 - y / h, C, v[2], 1], back);
+          if (now !== prev) {
+            yHit = y;
+            break;
+          }
+          prev = now;
+        }
+        if (yHit === null) continue;
+        started ? g.lineTo(x, yHit) : g.moveTo(x, yHit);
+        started = true;
+      }
+      g.strokeStyle = css("--d-text", "#111");
+      g.lineWidth = 1.5;
+      g.stroke();
+    }
+    // The point, with hairline guides back to its axes.
     const lab = lchToLab(v),
-      x = planeMode === "OKLCH" ? (v[1] / 0.4) * w : (lab[1] / 0.8 + 0.5) * w,
+      x = planeMode === "OKLCH" ? (v[1] / CMAX) * w : (lab[1] / 0.8 + 0.5) * w,
       y = planeMode === "OKLCH" ? (1 - v[0]) * h : (0.5 - lab[2] / 0.8) * h;
+    g.strokeStyle = "rgb(255 255 255 / .7)";
+    g.lineWidth = 1;
+    g.setLineDash([2, 3]);
     g.beginPath();
-    g.arc(x, y, 5, 0, Math.PI * 2);
-    g.strokeStyle = "#111";
-    g.lineWidth = 4;
+    g.moveTo(0, y);
+    g.lineTo(x - 9, y);
+    g.moveTo(x, y + 9);
+    g.lineTo(x, h);
     g.stroke();
-    g.strokeStyle = "#fff";
+    g.setLineDash([]);
+    g.beginPath();
+    g.arc(x, y, 7, 0, Math.PI * 2);
+    g.fillStyle = cssLch([v[0], v[1], v[2], 1]);
+    g.fill();
     g.lineWidth = 2;
+    g.strokeStyle = "#fff";
     g.stroke();
+    g.beginPath();
+    g.arc(x, y, 8.5, 0, Math.PI * 2);
+    g.lineWidth = 1;
+    g.strokeStyle = "rgb(0 0 0 / .45)";
+    g.stroke();
+    tagL.style.top = `${(y / h) * 100}%`;
+    tagC.style.left = `${(x / w) * 100}%`;
+    tagG.style.left = `${(x / w) * 100}%`;
+    tagG.style.top = `${(y / h) * 100}%`;
+    // An axis number under a moving readout steps aside.
+    const clear = (spans, at, prop) =>
+      [...spans].forEach((n) => {
+        n.style.visibility =
+          planeMode === "OKLCH" && Math.abs(parseFloat(n.style[prop]) - at) < 8 ? "hidden" : "";
+      });
+    clear(axisX.children, (x / w) * 100, "left");
+    clear(axisY.children, (y / h) * 100, "top");
   }
+  function drawStrips(v) {
+    const H = hue.c.getContext("2d"),
+      w = hue.c.width,
+      h = hue.c.height;
+    const hues = H.createLinearGradient(0, 0, w, 0);
+    for (let i = 0; i <= 72; i++) {
+      const hh = i * 5;
+      hues.addColorStop(i / 72, cssLch([v[0], Math.min(v[1], gamutChroma(v[0], hh, space)), hh, 1]));
+    }
+    H.fillStyle = hues;
+    H.fillRect(0, 0, w, h);
+    const hx = (v[2] / 360) * w;
+    H.fillStyle = "#fff";
+    H.fillRect(hx - 1.5, 0, 3, h);
+    H.fillStyle = "rgb(0 0 0 / .5)";
+    H.fillRect(hx - 2.5, 0, 1, h);
+    H.fillRect(hx + 1.5, 0, 1, h);
+    const A = alpha.c.getContext("2d"),
+      aw = alpha.c.width,
+      ah = alpha.c.height;
+    for (let x = 0; x < aw; x += 5)
+      for (let y = 0; y < ah; y += 5) {
+        A.fillStyle = (x / 5 + y / 5) % 2 ? "#c8cbd2" : "#ffffff";
+        A.fillRect(x, y, 5, 5);
+      }
+    const grad = A.createLinearGradient(0, 0, aw, 0);
+    grad.addColorStop(0, cssLch([v[0], v[1], v[2], 0]));
+    grad.addColorStop(1, cssLch([v[0], v[1], v[2], 1]));
+    A.fillStyle = grad;
+    A.fillRect(0, 0, aw, ah);
+    const ax = v[3] * aw;
+    A.fillStyle = "#fff";
+    A.fillRect(ax - 1.5, 0, 3, ah);
+    A.fillStyle = "rgb(0 0 0 / .5)";
+    A.fillRect(ax - 2.5, 0, 1, ah);
+    A.fillRect(ax + 1.5, 0, 1, ah);
+  }
+  function draw() {
+    frame = 0;
+    if (dead || !visible(plane)) return;
+    const v = parseColor(ctx.get(), ctx.host),
+      back = parseColor(background, ctx.host);
+    drawPlane(v, back);
+    if (visible(hue.c)) drawStrips(v);
+  }
+  const apcaGrade = (n) =>
+    n >= 75 ? "body" : n >= 60 ? "content" : n >= 45 ? "large" : n >= 30 ? "spot" : "fail";
   function update() {
     if (dead) return;
     // Nothing below is seen while the studio is collapsed or scrolled away; it runs once it comes into view.
     if (!visible(plane)) return;
-    const v = parseColor(ctx.get(), ctx.host),
+    const value = ctx.get(),
+      v = parseColor(value, ctx.host),
       back = parseColor(background, ctx.host),
-      ratio = contrast(v, back);
+      ratio = contrast(v, back),
+      Lc = apca(v, back);
     channels.update();
-    preview.style.color = ctx.get();
-    preview.style.background = background;
-    proof.setAttribute(
+    sample.style.background = background;
+    sample.style.color = cssLch(v);
+    sample.setAttribute(
       "aria-label",
-      `${ctx.get()} against ${background}. WCAG ratio ${ratio.toFixed(2)}; ${ratio >= 4.5 ? "passes" : "fails"} AA for small text.`,
+      `${value} on ${background}. WCAG ratio ${ratio.toFixed(2)}; ${ratio >= 4.5 ? "passes" : "fails"} AA for small text.`,
     );
-    const proofContext = proof.getContext("2d");
-    proofContext.clearRect(0, 0, 200, 100);
-    proofContext.fillStyle = cssLch(v);
-    proofContext.textAlign = "center";
-    proofContext.font = "650 64px sans-serif";
-    proofContext.fillText("Aa", 100, 69);
-    proofContext.font = "10px sans-serif";
-    proofContext.fillText("Small type / large type", 100, 93);
-    wcag.set(
-      `${ratio.toFixed(2)} : 1 · ${ratio >= 7 ? "AAA" : ratio >= 4.5 ? "AA" : "Fail"}`,
-    );
-    lc.set(apca(v, back).toFixed(1));
-    gamut.set(
-      inGamut(v) ? "sRGB" : inGamut(v, "p3") ? "P3 only" : "Outside P3",
-    );
+    wcag.b.textContent = `${ratio.toFixed(2)} : 1`;
+    const wg = ratio >= 7 ? "AAA" : ratio >= 4.5 ? "AA" : ratio >= 3 ? "AA large" : "Fail";
+    wcag.em.textContent = wg;
+    wcag.em.dataset.pass = String(wg !== "Fail");
+    lc.b.textContent = Math.abs(Lc).toFixed(1);
+    lc.em.textContent = apcaGrade(Math.abs(Lc));
+    lc.em.dataset.pass = String(Math.abs(Lc) >= 45);
+    tagL.textContent = planeMode === "OKLCH" ? `${Math.round(v[0] * 100)}` : "";
+    tagL.hidden = planeMode !== "OKLCH";
+    tagC.textContent = planeMode === "OKLCH" ? v[1].toFixed(3) : "";
+    tagC.hidden = planeMode !== "OKLCH";
+    tagG.textContent = inGamut(v) ? "" : inGamut(v, "p3") ? "P3 only" : "Outside P3";
+    tagG.hidden = !tagG.textContent;
+    hue.out.value = `${Math.round(v[2])}°`;
+    alpha.out.value = `${Math.round(v[3] * 100)}%`;
+    hue.c.setAttribute("aria-valuenow", String(Math.round(v[2])));
+    hue.c.setAttribute("aria-valuetext", `${Math.round(v[2])} degrees`);
+    alpha.c.setAttribute("aria-valuenow", String(Math.round(v[3] * 100)));
+    alpha.c.setAttribute("aria-valuetext", `${Math.round(v[3] * 100)} percent`);
+    backChips.forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.color === background)));
+    const n = (x, d) => String(Number(x.toFixed(d))),
+      a = v[3] < 1 ? ` / ${n(v[3], 2)}` : "",
+      lab = lchToLab(v);
     code.value =
       format === "Hex"
         ? toHex(v)
         : format === "OKLab"
-          ? cssLab(lchToLab(v))
+          ? `oklab(${n(lab[0], 3)} ${n(lab[1], 3)} ${n(lab[2], 3)}${a})`
           : format === "RGB"
             ? `rgb(${rgb(v)
-                .map((n) => Math.round(n * 255))
-                .join(" ")} / ${v[3].toFixed(3)})`
-            : cssLch(v);
-    const plateLines = (css, lch) => [
-      lch ? `L ${Math.round(lch[0] * 100)}` : css,
-      lch ? `${contrast(lch, back).toFixed(1)} : 1` : "",
-    ];
-    updateSwatches(rampHost, "Ramp", ramp(v), (color) => ctx.set(color), plateLines);
+                .map((x) => Math.round(clamp(x, 0, 1) * 255))
+                .join(" ")}${a})`
+            : `oklch(${n(v[0] * 100, 1)}% ${n(v[1], 3)} ${n(v[2], 1)}${a})`;
+    updateSwatches(rampHost, "Ramp", ramp(v), (color) => ctx.set(color), (c, lch) => [
+      lch ? `${Math.round(lch[0] * 100)}` : c,
+      lch ? `${contrast(lch, back).toFixed(1)}` : "",
+    ]);
     const offsets = {
       Complement: [0, 180],
       Analogous: [-30, 0, 30],
@@ -635,7 +854,7 @@ function colorStudio(ctx, host) {
         return [v[0], Math.min(v[1], gamutChroma(v[0], H)), H, 1];
       }),
       (color) => ctx.set(color),
-      (css, lch) => [lch ? `${Math.round(lch[2])}°` : css, lch ? `C ${lch[1].toFixed(2)}` : ""],
+      (c, lch) => [lch ? `${Math.round(lch[2])}°` : c, lch ? `C ${lch[1].toFixed(2)}` : ""],
     );
     if (!frame) frame = requestAnimationFrame(draw);
   }
@@ -643,6 +862,7 @@ function colorStudio(ctx, host) {
   return {
     update,
     commit: onCommit,
+    depth: () => requestAnimationFrame(() => update()),
     destroy: () => {
       dead = true;
       cancelAnimationFrame(frame);
@@ -666,23 +886,25 @@ function motionStudio(ctx, host) {
       ...rawContext.get(),
     }),
   };
-  host.append(heading("Motion study"));
+  const css = (node, name, fallback) =>
+    getComputedStyle(node).getPropertyValue(name).trim() || fallback;
+  const sans = () => getComputedStyle(host).fontFamily || "sans-serif";
+  // The curve is the studio: value up, time across, the delay drawn before it starts.
+  const GW = 600,
+    GH = 230,
+    BASE = 0.84,
+    SPAN = 0.62;
   const plot = canvas(
-      "Motion curve. Use the handle fields to edit the curve.",
-      600,
-      220,
+      "Motion curve. Drag a bezier handle to reshape it; the handle fields below hold the same numbers.",
+      GW,
+      GH,
       false,
     ),
+    velocity = canvas("Velocity of the response over time, in change per second", GW, 48, false),
     ghost = canvas(
-      "Ghost trail: the current response above, the pinned earlier response below",
-      300,
-      84,
-      false,
-    ),
-    velocity = canvas(
-      "Velocity of the response over time, in change per second",
-      300,
-      84,
+      "Ghost trail: where the moving element is at equal steps in time, now above and before below",
+      GW,
+      44,
       false,
     ),
     lanes = () => {
@@ -730,7 +952,7 @@ function motionStudio(ctx, host) {
       value: 0,
       "aria-label": "Timeline playhead",
     }),
-    time = el("output", { class: "d-note" });
+    time = el("output", { class: "d-mx-time" });
   const ease = (v) => ({
     ...v,
     mode: "bezier",
@@ -752,24 +974,52 @@ function motionStudio(ctx, host) {
     start = 0,
     raf = 0,
     dead = false,
-    dragHandle = 0;
-  const mode = choice("Response", ["bezier", "spring"], (value) =>
-    ctx.set({ ...ctx.get(), mode: value }),
+    dragHandle = 0,
+    exportTab = 0;
+  const tag = (tone) => {
+    const t = el("span", { class: "d-mx-tag", hidden: "" });
+    if (tone) t.dataset.tone = tone;
+    return t;
+  };
+  const tags = {
+      settle: tag(),
+      peak: tag(),
+      delay: tag("muted"),
+      ghost: tag("muted"),
+      speed: tag("muted"),
+    },
+    ruler = el("div", { class: "d-mx-ruler", "aria-hidden": "true" }),
+    graph = el(
+      "div",
+      { class: "d-mx-graph" },
+      plot,
+      el("div", { class: "d-mx-tags" }, tags.settle, tags.peak, tags.delay, tags.ghost),
+    );
+  const mode = choice(
+    "Response",
+    [
+      { value: "bezier", text: "Bezier" },
+      { value: "spring", text: "Spring" },
+    ],
+    (value) => ctx.set({ ...ctx.get(), mode: value }),
   );
-  const presets = el(
-    "div",
-    { class: "d-presets" },
-    ...Object.entries({
-      Ease: [0.25, 0.1, 0.25, 1],
-      Swift: [0.2, 0.8, 0.2, 1],
-      Linear: [0, 0, 1, 1],
-      Overshoot: [0.3, 1.5, 0.6, 1],
-    }).map(([label, bezier]) =>
-      button(label, `${label} curve`, () =>
-        ctx.set({ ...ctx.get(), mode: "bezier", bezier }),
-      ),
-    ),
-  );
+  const presetCurves = {
+    Ease: [0.25, 0.1, 0.25, 1],
+    Swift: [0.2, 0.8, 0.2, 1],
+    Linear: [0, 0, 1, 1],
+    Overshoot: [0.3, 1.5, 0.6, 1],
+  };
+  const presetButtons = Object.entries(presetCurves).map(([label, bezier]) => {
+    const pts = curvePoints({ mode: "bezier", bezier })
+      .filter((_, i, a) => i % 4 === 0 || i === a.length - 1)
+      .map(([x, y]) => `${(4 + x * 40).toFixed(1)},${(26 - y * 18).toFixed(1)}`)
+      .join(" ");
+    const b = button("", `${label} curve`, () => ctx.set({ ...ctx.get(), mode: "bezier", bezier }));
+    b.innerHTML = `<svg viewBox="0 0 48 32" width="48" height="32" aria-hidden="true"><path d="M4 26H44M4 8H44" stroke="var(--d-line)" fill="none"/><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>${label}</span>`;
+    b.dataset.curve = JSON.stringify(bezier);
+    return b;
+  });
+  const presets = el("div", { class: "d-mx-presets d-deep" }, ...presetButtons);
   const numbers = fields(ctx, [
     ["Duration", "duration", 1, 60000, 1, "ms"],
     ["Delay", "delay", 0, 60000, 1, "ms"],
@@ -784,20 +1034,24 @@ function motionStudio(ctx, host) {
     ["Handle 2 x", ["bezier", 2], 0, 1, 0.01],
     ["Handle 2 y", ["bezier", 3], -3, 3, 0.01],
   ]);
-  const play = button("Play", "Play motion preview", () => {
+  const playGlyph = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 1.5v9l7.5-4.5z" fill="currentColor"/></svg>',
+    pauseGlyph = '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M2.5 1.5h2.5v9H2.5zM7 1.5h2.5v9H7z" fill="currentColor"/></svg>';
+  const play = button("", "Play motion preview", () => {
     playing = !playing;
-    play.textContent = playing ? "Pause" : "Play";
+    play.innerHTML = playing ? pauseGlyph : playGlyph;
+    play.setAttribute("aria-pressed", String(playing));
     if (playing) {
       const v = ctx.get(),
         [r0, r1] = v.range || [0, 1];
       if (playhead < r0 || playhead >= r1) playhead = r0;
-      start =
-        performance.now() -
-        (playhead - r0) * ((v.duration || 1000) + (v.delay || 0));
+      start = performance.now() - (playhead - r0) * ((v.duration || 1000) + (v.delay || 0));
       raf = requestAnimationFrame(tick);
     } else cancelAnimationFrame(raf);
   });
-  const keyframes = el("div", { class: "d-keyframes d-studio-only" }),
+  play.classList.add("d-mx-play");
+  play.innerHTML = playGlyph;
+  play.setAttribute("aria-pressed", "false");
+  const keyframes = el("div", { class: "d-keyframes" }),
     add = button("Add key", "Add keyframe at playhead", () => {
       const v = ctx.get(),
         frames = [
@@ -813,16 +1067,12 @@ function motionStudio(ctx, host) {
       frames.sort((a, b) => a.time - b.time);
       ctx.set({ ...v, keyframes: frames });
     });
-  const pin = button(
-    "Pin as before",
-    "Keep the current response as the before ghost",
-    () => {
-      reference = clone(ctx.get());
-      pinned = true;
-      draw();
-      renderCompare(ctx.get());
-    },
-  );
+  const pin = button("Keep as before", "Keep the current response as the before ghost", () => {
+    reference = clone(ctx.get());
+    pinned = true;
+    draw();
+    renderCompare(ctx.get());
+  });
   const rangeFields = fields(ctx, [
     ["Loop in", ["range", 0], 0, 1, 0.01],
     ["Loop out", ["range", 1], 0, 1, 0.01],
@@ -832,14 +1082,10 @@ function motionStudio(ctx, host) {
     "Apply at playhead",
     "Set the other instruments to their values at the playhead",
     () => {
-      for (const lane of lanes().slice(1)) {
-        const at = keyframeAt(playhead, lane.keys);
-        ctx.panel.transact(lane.id, at);
-      }
+      for (const lane of lanes().slice(1)) ctx.panel.transact(lane.id, keyframeAt(playhead, lane.keys));
     },
   );
   const readouts = el("output", { class: "d-note d-lane-values" });
-  const outputs = el("div", { class: "d-studio-only d-exports" });
   const exportSpecs = [
     ["CSS easing", (v) => toEasing(v)],
     ["CSS transition", (v) => toTransition(v)],
@@ -848,7 +1094,7 @@ function motionStudio(ctx, host) {
       (v) => {
         const tracks = {};
         for (const lane of lanes().slice(1))
-          tracks[lane.id] = lane.keys.map((k) => ({ ...k, unit: lane.unit === "deg" ? "deg" : lane.unit }));
+          tracks[lane.id] = lane.keys.map((k) => ({ ...k, unit: lane.unit }));
         return toWaapi(v, v.tracks ? tracks : {}, "element");
       },
     ],
@@ -859,70 +1105,96 @@ function motionStudio(ctx, host) {
       role: "group",
       "aria-label": label + " code",
     });
-    const copy = button("Copy", "Copy " + label, async () => {
-      try {
-        await navigator.clipboard.writeText(code.textContent);
-        copy.textContent = "Copied";
-      } catch {
-        copy.textContent = "Select and copy";
-      }
-      setTimeout(() => (copy.textContent = "Copy"), 1400);
-    });
-    outputs.append(
-      el(
-        "div",
-        { class: "d-export-block" },
-        el("div", { class: "d-export-head" }, el("span", { text: label }), copy),
-        code,
-      ),
-    );
-    return { code, make };
+    const block = el("div", { class: "d-export-block" }, code);
+    return { label, code, make, block };
   });
+  const exportTabs = exportSpecs.map((x, i) => {
+    const b = button(["Easing", "Transition", "WAAPI"][i], `Show ${x.label}`, () => {
+      exportTab = i;
+      paintExports();
+    });
+    return b;
+  });
+  const copy = button("Copy", "Copy the code shown", async () => {
+    const text = exportSpecs[exportTab].code.textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      copy.textContent = "Copied";
+    } catch {
+      copy.textContent = "Select to copy";
+    }
+    setTimeout(() => (copy.textContent = "Copy"), 1400);
+  });
+  copy.classList.add("d-copy");
+  const paintExports = () =>
+    exportSpecs.forEach((x, i) => {
+      x.block.hidden = i !== exportTab;
+      exportTabs[i].setAttribute("aria-pressed", String(i === exportTab));
+    });
+  const outputs = el(
+    "div",
+    { class: "d-exports d-deep" },
+    el("header", { class: "d-mx-export-tabs" }, ...exportTabs, copy),
+    ...exportSpecs.map((x) => x.block),
+  );
+  paintExports();
+  const section = (title, cls, extra, ...kids) =>
+    el(
+      "div",
+      { class: `d-mx-section ${cls}` },
+      el("header", {}, el("h3", { text: title }), ...(extra ? [extra] : [])),
+      ...kids,
+    );
+  handles.node
+    .querySelectorAll(".d-field > span")
+    .forEach((n, i) => (n.textContent = ["x1", "y1", "x2", "y2"][i]));
+  const bezierOnly = section("Handles", "d-deep", null, handles.node);
+  const timelineWrap = el(
+    "div",
+    { class: "d-mx-timeline d-deep" },
+    el("div", { class: "d-mx-caption" }, el("h3", { text: "Timeline" }), readouts, rangeFields.node),
+    timeline,
+    el("div", { class: "d-track" }, track),
+  );
+  rangeFields.node.classList.add("d-mx-loop");
   const main = el(
     "div",
-    { class: "d-motion-main" },
-    el("div", { class: "d-motion-plots" }, plot, el("div", { class: "d-motion-pair" }, ghost, velocity)),
-    el("div", { class: "d-timeline-wrap d-studio-only" }, heading("Timeline", "Loop range, keys, one lane per instrument"), timeline),
+    { class: "d-mx-main" },
     el(
       "div",
-      { class: "d-track" },
-      el("span", { text: "0" }),
-      track,
-      el("span", { text: "1" }),
-      time,
+      { class: "d-mx-graph-wrap" },
+      graph,
+      ruler,
+      el("div", { class: "d-mx-band" }, velocity, tags.speed),
+      el("div", { class: "d-mx-band" }, ghost),
     ),
+    timelineWrap,
+    outputs,
   );
-  const bezierOnly = el(
-      "div",
-      { class: "d-motion-block" },
-      heading("Bezier handles", "The same handles as the curve"),
-      handles.node,
-    );
+  const keyHead = el(
+    "div",
+    { class: "d-keyframes-head", "aria-hidden": "true" },
+    el("i"),
+    el("span", { text: "Time" }),
+    el("span", { text: "Value" }),
+    el("i"),
+  );
   const side = el(
     "div",
-    { class: "d-motion-side" },
+    { class: "d-mx-side" },
+    el("div", { class: "d-mx-bar d-deep" }, play, time, mode),
     presets,
-    numbers.node,
-    el(
-      "div",
-      { class: "d-studio-only d-motion-details" },
-      el("div", { class: "d-compare-head" }, heading("Measured", "Settle within 2 percent of the end"), pin),
-      compare,
-      heading("Loop", "Playback repeats inside this range"),
-      rangeFields.node,
-      bezierOnly,
-      heading("Keyframes", "Time is normalized from 0 to 1"),
-      add,
-      keyframes,
-      readouts,
-      applyTracks,
-    ),
+    section("Timing", "d-mx-numbers", null, numbers.node),
+    section("Measured", "d-deep d-mx-measured", pin, compare),
+    bezierOnly,
+    section("Keys", "d-deep", el("div", { class: "d-mx-keyacts" }, add, applyTracks), keyHead, keyframes),
   );
-  host.append(el("div", { class: "d-tools" }, mode, play), main, side, outputs);
+  host.append(el("div", { class: "d-mx" }, main, side));
   track.addEventListener("input", () => {
     playhead = Number(track.value) / 1000;
     draw();
   });
+  const delayOf = (m) => (m.delay || 0) / ((m.duration || 1000) + (m.delay || 0));
   ctx.surface(plot, {
     start: (e) => {
       if (ctx.get().mode === "spring") return;
@@ -931,33 +1203,32 @@ function motionStudio(ctx, host) {
         r = plot.getBoundingClientRect(),
         x = (e.clientX - r.left) / r.width,
         y = (e.clientY - r.top) / r.height,
-        p = v.bezier;
-      const d0 = (v.delay || 0) / ((v.duration || 1000) + (v.delay || 0)),
+        p = v.bezier,
+        d0 = delayOf(v),
         hx = (n) => d0 + (1 - d0) * n;
       dragHandle =
-        Math.hypot(x - hx(p[0]), y - (0.84 - p[1] * 0.68)) <
-        Math.hypot(x - hx(p[2]), y - (0.84 - p[3] * 0.68))
+        Math.hypot(x - hx(p[0]), y - (BASE - p[1] * SPAN)) <
+        Math.hypot(x - hx(p[2]), y - (BASE - p[3] * SPAN))
           ? 0
           : 2;
     },
     move: (e) => {
       if (ctx.get().mode === "spring") return;
       const r = plot.getBoundingClientRect(),
-        v = ctx.get();
-      const d1 = (v.delay || 0) / ((v.duration || 1000) + (v.delay || 0));
+        v = ctx.get(),
+        d1 = delayOf(v);
       v.bezier[dragHandle] = Number(
         clamp(((e.clientX - r.left) / r.width - d1) / (1 - d1), 0, 1).toFixed(3),
       );
       v.bezier[dragHandle + 1] = Number(
-        clamp((0.84 - (e.clientY - r.top) / r.height) / 0.68, -3, 3).toFixed(3),
+        clamp((BASE - (e.clientY - r.top) / r.height) / SPAN, -3, 3).toFixed(3),
       );
       ctx.change(v);
     },
     end: () => ctx.commit(),
     cancel: () => ctx.cancel(),
   });
-  for (const cv of [plot, ghost, velocity, timeline])
-    cv.addEventListener("d-resize", () => draw());
+  for (const cv of [plot, ghost, velocity, timeline]) cv.addEventListener("d-resize", () => draw());
   function tick(now) {
     if (dead || !playing) return;
     const v = ctx.get(),
@@ -969,54 +1240,90 @@ function motionStudio(ctx, host) {
     draw();
     raf = requestAnimationFrame(tick);
   }
+  const place = (t, x, y, text) => {
+    t.hidden = !text;
+    if (!text) return;
+    t.textContent = text;
+    t.style.left = `${x * 100}%`;
+    t.style.top = `${y * 100}%`;
+  };
   function draw() {
     if (dead) return;
     const v = ctx.get(),
       g = plot.getContext("2d"),
       w = plot.width,
       h = plot.height,
-      a = accent(host);
-    grid(g, w, h);
-    const dl = (m) => (m.delay || 0) / ((m.duration || 1000) + (m.delay || 0)),
-      xyFor = (m) => ([x, y]) => [(dl(m) + (1 - dl(m)) * x) * w, h * (0.84 - y * 0.68)],
-      xy = xyFor(v);
+      a = accent(host),
+      line = css(plot, "--d-line", "#e3e5ea"),
+      rule = css(plot, "--d-rule", "#c9cdd6"),
+      muted = css(plot, "--d-muted", "#4f5663"),
+      faint = css(plot, "--d-faint", "#626a79"),
+      text = css(plot, "--d-text", "#1c1f27"),
+      surface = css(plot, "--d-surface", "#fbfbfc"),
+      font = sans(),
+      total = (v.duration || 1000) + (v.delay || 0);
+    g.clearRect(0, 0, w, h);
+    const Y = (y) => h * (BASE - y * SPAN),
+      xyFor = (m) => ([x, y]) => [(delayOf(m) + (1 - delayOf(m)) * x) * w, Y(y)],
+      xy = xyFor(v),
+      d = delayOf(v);
+    // Quiet scaffolding: tenths of the time span, and the start and end values.
+    g.lineWidth = 1;
+    g.strokeStyle = line;
     g.beginPath();
-    if (dl(reference)) g.moveTo(0, h * 0.84);
-    curvePoints(reference).forEach((p, i) => {
-      const [x, y] = xyFor(reference)(p);
-      i || dl(reference) ? g.lineTo(x, y) : g.moveTo(x, y);
-    });
-    g.strokeStyle = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
-    g.lineWidth = 1.5;
-    g.setLineDash([5, 4]);
+    for (let i = 1; i < 10; i++) {
+      const x = Math.round((i * w) / 10) + 0.5;
+      g.moveTo(x, 0);
+      g.lineTo(x, h);
+    }
     g.stroke();
-    g.setLineDash([]);
+    g.strokeStyle = rule;
     g.beginPath();
-    if (dl(v)) g.moveTo(0, h * 0.84);
-    curvePoints(v).forEach((p, i) => {
-      const [x, y] = xy(p);
-      i || dl(v) ? g.lineTo(x, y) : g.moveTo(x, y);
-    });
-    g.strokeStyle = a;
-    g.lineWidth = 2;
+    g.moveTo(0, Math.round(Y(0)) + 0.5);
+    g.lineTo(w, Math.round(Y(0)) + 0.5);
+    g.moveTo(0, Math.round(Y(1)) + 0.5);
+    g.lineTo(w, Math.round(Y(1)) + 0.5);
     g.stroke();
-    if (dl(v)) {
+    g.font = `500 10.5px ${font}`;
+    g.fillStyle = faint;
+    g.textBaseline = "bottom";
+    g.textAlign = "right";
+    if (plot.clientWidth > 420) {
+      g.fillText("end", w - 4, Y(1) - 3);
+      g.fillText("start", w - 4, Y(0) - 3);
+    }
+    if (d) {
       g.fillStyle = a;
-      g.globalAlpha = 0.1;
-      g.fillRect(0, 0, dl(v) * w, h);
+      g.globalAlpha = 0.07;
+      g.fillRect(0, 0, d * w, h);
       g.globalAlpha = 1;
     }
-    g.fillStyle = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
-    g.font = "10px ui-monospace, monospace";
-    g.textBaseline = "alphabetic";
-    g.textAlign = "left";
-    g.fillText("0", 4, h - 4);
-    if (dl(v)) {
-      g.textAlign = "left";
-      g.fillText(`starts at ${v.delay} ms`, dl(v) * w + 4, h - 4);
-    }
-    g.textAlign = "right";
-    g.fillText(`${(v.duration || 1000) + (v.delay || 0)} ms`, w - 4, h - 4);
+    // Before: dashed, in the muted ink.
+    g.beginPath();
+    if (delayOf(reference)) g.moveTo(0, Y(0));
+    curvePoints(reference).forEach((p, i) => {
+      const [x, y] = xyFor(reference)(p);
+      i || delayOf(reference) ? g.lineTo(x, y) : g.moveTo(x, y);
+    });
+    g.strokeStyle = muted;
+    g.globalAlpha = 0.7;
+    g.lineWidth = 1.25;
+    g.setLineDash([4, 4]);
+    g.stroke();
+    g.setLineDash([]);
+    g.globalAlpha = 1;
+    // Now: the response itself.
+    const pts = curvePoints(v);
+    g.beginPath();
+    if (d) g.moveTo(0, Y(0));
+    pts.forEach((p, i) => {
+      const [x, y] = xy(p);
+      i || d ? g.lineTo(x, y) : g.moveTo(x, y);
+    });
+    g.strokeStyle = a;
+    g.lineWidth = 2.25;
+    g.lineJoin = "round";
+    g.stroke();
     if (v.mode !== "spring") {
       const p = v.bezier || [0.25, 0.1, 0.25, 1];
       g.beginPath();
@@ -1024,71 +1331,98 @@ function motionStudio(ctx, host) {
       g.lineTo(...xy([p[0], p[1]]));
       g.moveTo(...xy([1, 1]));
       g.lineTo(...xy([p[2], p[3]]));
-      g.strokeStyle = a;
-      g.globalAlpha = 0.4;
+      g.strokeStyle = text;
+      g.lineWidth = 1;
       g.stroke();
-      g.globalAlpha = 1;
       for (let i = 0; i < 4; i += 2) {
         g.beginPath();
-        g.arc(...xy([p[i], p[i + 1]]), 5, 0, Math.PI * 2);
-        g.fillStyle = a;
+        g.arc(...xy([p[i], p[i + 1]]), 5.5, 0, Math.PI * 2);
+        g.fillStyle = surface;
         g.fill();
+        g.lineWidth = 1.5;
+        g.strokeStyle = text;
+        g.stroke();
       }
     }
-    const delay = dl(v),
-      t = clamp((playhead - delay) / (1 - delay), 0, 1),
+    // Measurements drawn where they happen.
+    const m = analyze(v),
+      at = (ms) => d + (1 - d) * clamp(ms / (v.duration || 1000), 0, 1);
+    if (Number.isFinite(m.settleMs)) {
+      const sx = at(m.settleMs) * w;
+      g.strokeStyle = text;
+      g.lineWidth = 1;
+      g.setLineDash([2, 3]);
+      g.beginPath();
+      g.moveTo(Math.round(sx) + 0.5, Y(1));
+      g.lineTo(Math.round(sx) + 0.5, h);
+      g.stroke();
+      g.setLineDash([]);
+      place(
+        tags.settle,
+        clamp(at(m.settleMs), 0.06, 0.94),
+        0.97,
+        m.fits ? `settles ${m.settleMs} ms` : `settles ${m.settleMs} ms, past the end`,
+      );
+    } else place(tags.settle, 0.9, 0.97, "never settles");
+    if (m.overshoot >= 0.5) {
+      const px = at(m.peakMs),
+        py = Y(1 + m.overshoot / 100);
+      g.beginPath();
+      g.arc(px * w, py, 3.5, 0, Math.PI * 2);
+      g.fillStyle = a;
+      g.fill();
+      place(tags.peak, clamp(px, 0.06, 0.94), py / h, `+${m.overshoot.toFixed(1)}%`);
+    } else place(tags.peak, 0, 0, "");
+    place(tags.delay, 0, 0.02, d ? `waits ${v.delay} ms` : "");
+    place(tags.ghost, 0.5, 0.02, "");
+    // Playhead with the value it reads.
+    const t = clamp((playhead - d) / (1 - d), 0, 1),
       value = motionAt(t, v),
-      key = keyframeAt(t, v.keyframes);
+      key = keyframeAt(t, v.keyframes),
+      phx = playhead * w;
+    g.fillStyle = text;
+    g.fillRect(Math.round(phx) - 0.5, 0, 1, h);
     g.beginPath();
-    g.moveTo(t * w, 0);
-    g.lineTo(t * w, h);
-    g.strokeStyle = a;
-    g.setLineDash([2, 3]);
-    g.stroke();
-    g.setLineDash([]);
-    const gg = ghost.getContext("2d");
-    grid(gg, ghost.width, ghost.height);
-    const gx = (p) => 14 + clamp(p, -0.1, 1.25) * (ghost.width - 56);
-    for (let i = 0; i <= 14; i++) {
-      gg.globalAlpha = 0.08 + (i / 14) * 0.22;
-      gg.fillStyle = a;
-      gg.fillRect(gx(motionAt(i / 14, v)), 16, 16, 24);
-    }
-    gg.globalAlpha = 1;
-    gg.fillStyle = a;
-    gg.fillRect(gx(value), 16, 16, 24);
-    gg.strokeStyle = a;
-    gg.strokeRect(gx(key), 6, 16, 8);
-    gg.strokeStyle = getComputedStyle(ghost).getPropertyValue("--d-muted").trim() || "#777";
-    gg.setLineDash([3, 3]);
-    for (let i = 0; i <= 14; i++)
-      gg.strokeRect(gx(motionAt(i / 14, reference)), 54, 16, 24);
-    gg.setLineDash([]);
-    gg.fillStyle = gg.strokeStyle;
-    gg.fillRect(gx(motionAt(t, reference)), 54, 16, 24);
+    g.arc(phx, Y(value), 4, 0, Math.PI * 2);
+    g.fillStyle = text;
+    g.fill();
+    ruler.replaceChildren(
+      ...[0, 0.25, 0.5, 0.75, 1].map((f) =>
+        el("span", { text: `${Math.round(f * total)}${f === 1 ? " ms" : ""}`, style: `left:${f * 100}%` }),
+      ),
+    );
     drawVelocity(v);
+    drawGhost(v, t);
     drawTimeline(v);
-    time.textContent = `${Math.round(playhead * ((v.duration || 1000) + (v.delay || 0)))} ms · response ${value.toFixed(3)} · keyframe ${key.toFixed(3)}`;
+    time.replaceChildren(
+      `${Math.round(playhead * total)}`,
+      el("small", { text: `of ${total} ms` }),
+    );
+    time.setAttribute(
+      "aria-label",
+      `${Math.round(playhead * total)} of ${total} ms; response ${value.toFixed(3)}, keyframe ${key.toFixed(3)}`,
+    );
   }
   function drawVelocity(v) {
     const g = velocity.getContext("2d"),
       w = velocity.width,
       h = velocity.height,
       a = accent(host),
-      N = 120,
-      duration = (v.duration || 1000) / 1000,
+      N = 160,
+      seconds = (v.duration || 1000) / 1000,
       sample = Array.from({ length: N + 1 }, (_, i) =>
-        i ? ((motionAt(i / N, v) - motionAt((i - 1) / N, v)) * N) / duration : 0,
+        i ? ((motionAt(i / N, v) - motionAt((i - 1) / N, v)) * N) / seconds : 0,
       ),
       peak = Math.max(0.001, ...sample.map(Math.abs)),
-      d = (v.delay || 0) / ((v.duration || 1000) + (v.delay || 0)),
+      d = delayOf(v),
       X = (i) => (d + (1 - d) * (i / N)) * w,
-      mid = h * 0.72;
-    grid(g, w, h);
-    g.strokeStyle = getComputedStyle(velocity).getPropertyValue("--d-muted").trim() || "#777";
+      mid = h * 0.7;
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = css(velocity, "--d-rule", "#c9cdd6");
+    g.lineWidth = 1;
     g.beginPath();
-    g.moveTo(0, mid + 0.5);
-    g.lineTo(w, mid + 0.5);
+    g.moveTo(0, Math.round(mid) + 0.5);
+    g.lineTo(w, Math.round(mid) + 0.5);
     g.stroke();
     g.beginPath();
     g.moveTo(X(0), mid);
@@ -1096,16 +1430,53 @@ function motionStudio(ctx, host) {
     g.lineTo(X(N), mid);
     g.closePath();
     g.fillStyle = a;
-    g.globalAlpha = 0.22;
+    g.globalAlpha = 0.16;
     g.fill();
     g.globalAlpha = 1;
     g.strokeStyle = a;
-    g.lineWidth = 1.5;
+    g.lineWidth = 1.25;
     g.stroke();
-    g.fillStyle = getComputedStyle(velocity).getPropertyValue("--d-muted").trim() || "#777";
-    g.font = "10px ui-monospace, monospace";
+    g.font = `500 10.5px ${sans()}`;
+    g.fillStyle = css(velocity, "--d-faint", "#626a79");
     g.textBaseline = "top";
-    g.fillText(`velocity, peak ${peak.toFixed(1)}/s`, 6, 4);
+    g.textAlign = "right";
+    g.fillText(`speed, peak ${peak.toFixed(1)} per second`, w - 4, h - 10);
+  }
+  // Spacing: the element's position at equal steps in time, like an animator's spacing chart.
+  function drawGhost(v, t) {
+    const g = ghost.getContext("2d"),
+      w = ghost.width,
+      h = ghost.height,
+      a = accent(host),
+      muted = css(ghost, "--d-muted", "#4f5663"),
+      text = css(ghost, "--d-text", "#1c1f27"),
+      N = 24,
+      X = (p) => 56 + clamp(p, -0.1, 1.2) * (w - 80);
+    g.clearRect(0, 0, w, h);
+    g.font = `500 10.5px ${sans()}`;
+    g.textBaseline = "middle";
+    for (const [m, y, color, label] of [
+      [v, 13, a, "now"],
+      [reference, 33, muted, "before"],
+    ]) {
+      g.strokeStyle = css(ghost, "--d-line", "#e3e5ea");
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(X(0), y + 0.5);
+      g.lineTo(X(1), y + 0.5);
+      g.stroke();
+      g.fillStyle = color;
+      for (let i = 0; i <= N; i++) {
+        g.fillRect(Math.round(X(motionAt(i / N, m))) - 0.5, y - 5, 1.5, 11);
+      }
+      g.textAlign = "left";
+      g.fillStyle = color;
+      g.fillText(label, 2, y);
+    }
+    g.beginPath();
+    g.arc(X(motionAt(t, v)), 13, 4.5, 0, Math.PI * 2);
+    g.fillStyle = text;
+    g.fill();
   }
   const W = 600,
     RULER = 24,
@@ -1119,44 +1490,53 @@ function motionStudio(ctx, host) {
   function drawTimeline(v) {
     const g = timeline.getContext("2d"),
       H = timeline.height,
-      css = getComputedStyle(timeline),
       a = accent(host),
-      muted = css.getPropertyValue("--d-muted").trim() || "#666",
-      line = css.getPropertyValue("--d-line").trim() || "#ccc",
-      text = css.getPropertyValue("--d-text").trim() || "#111",
+      muted = css(timeline, "--d-muted", "#4f5663"),
+      faint = css(timeline, "--d-faint", "#626a79"),
+      line = css(timeline, "--d-line", "#e3e5ea"),
+      text = css(timeline, "--d-text", "#1c1f27"),
+      surface = css(timeline, "--d-surface", "#fbfbfc"),
       total = (v.duration || 1000) + (v.delay || 0),
       [r0, r1] = v.range || [0, 1],
-      list = lanes();
+      list = lanes(),
+      font = sans();
     g.clearRect(0, 0, W, H);
-    g.font = "9px ui-monospace, monospace";
     g.textBaseline = "middle";
+    // Outside the loop the lanes dim; inside they keep full ink.
+    g.fillStyle = css(timeline, "--d-well", "#f3f4f6");
+    g.fillRect(0, RULER, tx(r0), H - RULER);
+    g.fillRect(tx(r1), RULER, W - tx(r1), H - RULER);
     g.fillStyle = a;
-    g.globalAlpha = 0.1;
-    g.fillRect(tx(r0), 0, tx(r1) - tx(r0), H);
+    g.globalAlpha = 0.14;
+    g.fillRect(tx(r0), 15, tx(r1) - tx(r0), 5);
     g.globalAlpha = 1;
     g.strokeStyle = line;
     g.lineWidth = 1;
-    for (let i = 0; i <= 10; i++) {
-      const x = Math.round(tx(i / 10)) + 0.5;
+    for (let i = 0; i <= 20; i++) {
+      const x = Math.round(tx(i / 20)) + 0.5;
       g.beginPath();
-      g.moveTo(x, i % 5 ? 16 : 10);
-      g.lineTo(x, H);
+      g.moveTo(x, i % 10 === 0 ? 4 : i % 2 ? 19 : 14);
+      g.lineTo(x, RULER);
       g.stroke();
-      if (i % 2 === 0) {
-        g.fillStyle = muted;
-        g.textAlign = i === 0 ? "left" : i === 10 ? "right" : "center";
-        g.fillText(`${Math.round((i / 10) * total)}`, x, 6);
-      }
+    }
+    g.font = `500 10px ${font}`;
+    g.fillStyle = faint;
+    for (let i = 0; i <= 4; i++) {
+      const x = tx(i / 4);
+      g.textAlign = i === 0 ? "left" : i === 4 ? "right" : "center";
+      g.fillText(`${Math.round((i / 4) * total)}`, x + (i === 0 ? 4 : i === 4 ? -4 : 0), 7);
     }
     g.fillStyle = a;
-    for (const [t, dir] of [[r0, 1], [r1, -1]]) {
+    for (const [t, dir] of [
+      [r0, 1],
+      [r1, -1],
+    ]) {
       g.beginPath();
-      g.moveTo(tx(t), 20);
-      g.lineTo(tx(t) + dir * 8, 20);
-      g.lineTo(tx(t), 12);
+      g.moveTo(tx(t), 21);
+      g.lineTo(tx(t) + dir * 7, 21);
+      g.lineTo(tx(t), 13);
       g.closePath();
       g.fill();
-      g.fillRect(tx(t) - 0.5, 12, 1.5, H);
     }
     list.forEach((lane, i) => {
       const top = laneY(i);
@@ -1165,41 +1545,50 @@ function motionStudio(ctx, host) {
       g.moveTo(0, top + 0.5);
       g.lineTo(W, top + 0.5);
       g.stroke();
-      g.fillStyle = css.getPropertyValue("--d-surface").trim() || "#fff";
-      g.globalAlpha = 0.85;
-      g.fillRect(PAD - 3, top + 2, lane.label.length * 5.6 + 8, 12);
-      g.globalAlpha = 1;
+      g.font = `600 10.5px ${font}`;
       g.fillStyle = muted;
       g.textAlign = "left";
-      g.fillText(lane.label, PAD, top + 8);
+      g.fillText(lane.label, PAD + 10, top + 10);
       const sorted = [...lane.keys].sort((p, q) => p.time - q.time);
       g.beginPath();
-      for (let k = 0; k <= 80; k++) {
-        const t = k / 80,
+      for (let k = 0; k <= 96; k++) {
+        const t = k / 96,
           y = laneValueY(lane, i, keyframeAt(t, sorted));
         k ? g.lineTo(tx(t), y) : g.moveTo(tx(t), y);
       }
       g.strokeStyle = a;
-      g.lineWidth = 1.5;
+      g.globalAlpha = 0.55;
+      g.lineWidth = 1.25;
       g.stroke();
-      g.lineWidth = 1;
+      g.globalAlpha = 1;
       for (const k of lane.keys) {
         const x = tx(k.time),
           y = laneValueY(lane, i, k.value);
         g.beginPath();
-        g.moveTo(x, y - 7);
-        g.lineTo(x + 7, y);
-        g.lineTo(x, y + 7);
-        g.lineTo(x - 7, y);
+        g.moveTo(x, y - 5.5);
+        g.lineTo(x + 5.5, y);
+        g.lineTo(x, y + 5.5);
+        g.lineTo(x - 5.5, y);
         g.closePath();
-        g.fillStyle = text;
+        g.fillStyle = surface;
         g.fill();
-        g.strokeStyle = a;
+        g.lineWidth = 1.5;
+        g.strokeStyle = text;
         g.stroke();
       }
     });
+    // Playhead: a small flag on the ruler and a hairline through the lanes.
+    const px = tx(playhead);
     g.fillStyle = text;
-    g.fillRect(tx(playhead) - 0.75, 0, 1.5, H);
+    g.fillRect(Math.round(px) - 0.5, RULER - 6, 1, H);
+    g.beginPath();
+    g.moveTo(px - 5, RULER - 12);
+    g.lineTo(px + 5, RULER - 12);
+    g.lineTo(px + 5, RULER - 7);
+    g.lineTo(px, RULER - 3);
+    g.lineTo(px - 5, RULER - 7);
+    g.closePath();
+    g.fill();
   }
   function hit(e) {
     const r = timeline.getBoundingClientRect(),
@@ -1218,10 +1607,10 @@ function motionStudio(ctx, host) {
     let best = -1,
       bestD = 15;
     lane.keys.forEach((k, j) => {
-      const d = Math.hypot(tx(k.time) - x, laneValueY(lane, i, k.value) - y);
-      if (d < bestD) {
+      const dist = Math.hypot(tx(k.time) - x, laneValueY(lane, i, k.value) - y);
+      if (dist < bestD) {
         best = j;
-        bestD = d;
+        bestD = dist;
       }
     });
     return best >= 0 ? { kind: "key", lane: i, index: best, x, y } : { kind: "scrub", lane: i, x, y };
@@ -1248,8 +1637,7 @@ function motionStudio(ctx, host) {
         range[gesture.index] = gesture.index ? Math.max(t, range[0] + 0.02) : Math.min(t, range[1] - 0.02);
         ctx.change({ ...v, range });
       } else {
-        const list = lanes(),
-          lane = list[gesture.lane],
+        const lane = lanes()[gesture.lane],
           keys = clone(lane.keys),
           key = keys[gesture.index],
           norm = clamp(1 - (y - laneY(gesture.lane) - 12) / (LANE - 21), 0, 1);
@@ -1279,8 +1667,7 @@ function motionStudio(ctx, host) {
   timeline.addEventListener("dblclick", (e) => {
     const h = hit(e);
     if (h.lane === undefined && h.kind !== "key") return;
-    const list = lanes(),
-      lane = list[h.lane];
+    const lane = lanes()[h.lane];
     if (h.kind === "key") {
       if (lane.keys.length > 2)
         ctx.set(laneWrite(lane, lane.keys.filter((_, j) => j !== h.index), ctx.get()));
@@ -1291,8 +1678,7 @@ function motionStudio(ctx, host) {
   function addKey(laneIndex, t) {
     const lane = lanes()[laneIndex],
       v = ctx.get(),
-      value =
-        laneIndex === 0 ? motionAt(t, v) : keyframeAt(t, lane.keys),
+      value = laneIndex === 0 ? motionAt(t, v) : keyframeAt(t, lane.keys),
       keys = [...lane.keys, { time: Number(t.toFixed(3)), value: Number(value.toFixed(3)) }].sort(
         (p, q) => p.time - q.time,
       );
@@ -1306,10 +1692,8 @@ function motionStudio(ctx, host) {
     else if (e.key === "ArrowRight") playhead = clamp(playhead + step, 0, 1);
     else if (e.key === "Home") playhead = 0;
     else if (e.key === "End") playhead = 1;
-    else if (e.key === "[")
-      ctx.set({ ...v, range: [Math.min(playhead, v.range[1] - 0.02), v.range[1]] });
-    else if (e.key === "]")
-      ctx.set({ ...v, range: [v.range[0], Math.max(playhead, v.range[0] + 0.02)] });
+    else if (e.key === "[") ctx.set({ ...v, range: [Math.min(playhead, v.range[1] - 0.02), v.range[1]] });
+    else if (e.key === "]") ctx.set({ ...v, range: [v.range[0], Math.max(playhead, v.range[0] + 0.02)] });
     else if (e.key === "\\") ctx.set({ ...v, range: [0, 1] });
     else if (e.key.toLowerCase() === "k") addKey(0, playhead);
     else handled = false;
@@ -1318,7 +1702,7 @@ function motionStudio(ctx, host) {
     track.value = playhead * 1000;
     draw();
   });
-  const fmt = (ms) => (Number.isFinite(ms) ? `${ms} ms` : "never settles");
+  const fmt = (ms) => (Number.isFinite(ms) ? `${ms} ms` : "never");
   function renderCompare(v) {
     const now = analyze(v),
       before = analyze(reference),
@@ -1326,11 +1710,7 @@ function motionStudio(ctx, host) {
         ["Settle", fmt(now.settleMs), fmt(before.settleMs)],
         ["Overshoot", `${now.overshoot.toFixed(1)}%`, `${before.overshoot.toFixed(1)}%`],
         ["Peak at", fmt(now.peakMs), fmt(before.peakMs)],
-        [
-          "Fits duration",
-          now.fits ? "yes" : `no, needs ${fmt(now.settleMs)}`,
-          before.fits ? "yes" : "no",
-        ],
+        ["Fits duration", now.fits ? "yes" : `no, ${fmt(now.settleMs)}`, before.fits ? "yes" : "no"],
       ];
     compare.replaceChildren(
       el(
@@ -1356,10 +1736,19 @@ function motionStudio(ctx, host) {
     if (dead) return;
     const v = ctx.get();
     mode.querySelector(".d-choice").value = v.mode || "bezier";
+    for (const b of presetButtons)
+      b.setAttribute(
+        "aria-pressed",
+        String(v.mode !== "spring" && b.dataset.curve === JSON.stringify(v.bezier)),
+      );
     numbers.update();
     handles.update();
     rangeFields.update();
     bezierOnly.hidden = v.mode === "spring";
+    const spring = v.mode === "spring";
+    numbers.node.querySelectorAll(".d-field").forEach((f, i) => {
+      f.dataset.inactive = String(spring ? i === 0 : i >= 2);
+    });
     const ks = JSON.stringify(v.keyframes);
     if (ks !== lastKeys) {
       lastKeys = ks;
@@ -1375,23 +1764,16 @@ function motionStudio(ctx, host) {
         });
       } else {
         keyframes.replaceChildren();
-        (
-          v.keyframes || [
-            { time: 0, value: 0 },
-            { time: 1, value: 1 },
-          ]
-        ).forEach((f, i) => {
+        frames.forEach((f, i) => {
           const timeInput = el("input", {
-              type: "number",
-              min: 0,
-              max: 1,
-              step: 0.01,
+              type: "text",
+              inputmode: "decimal",
               value: f.time,
               "aria-label": `Key ${i + 1} time`,
             }),
             valueInput = el("input", {
-              type: "number",
-              step: 0.01,
+              type: "text",
+              inputmode: "decimal",
               value: f.value,
               "aria-label": `Key ${i + 1} value`,
             });
@@ -1414,68 +1796,43 @@ function motionStudio(ctx, host) {
               }
             });
             input.addEventListener("input", () => {
-              const frames = clone(
+              const list = clone(
                   ctx.get().keyframes || [
                     { time: 0, value: 0 },
                     { time: 1, value: 1 },
                   ],
                 ),
                 n = Number(input.value);
-              if (!Number.isFinite(n)) return;
-              frames[i][key] = key === "time" ? clamp(n, 0, 1) : n;
-              ctx.change({ ...ctx.get(), keyframes: frames });
+              if (!input.value.trim() || !Number.isFinite(n)) return;
+              list[i][key] = key === "time" ? clamp(n, 0, 1) : n;
+              ctx.change({ ...ctx.get(), keyframes: list });
             });
           }
-          keyframes.append(
-            el(
-              "div",
-              { class: "d-key" },
-              el("span", { class: "d-key-fig", "aria-hidden": "true" }),
-              button("◇", `Scrub to key ${i + 1}`, () => {
-                playhead = ctx.get().keyframes?.[i]?.time ?? f.time;
-                track.value = playhead * 1000;
-                draw();
-              }),
-              timeInput,
-              valueInput,
-              button("×", `Remove key ${i + 1}`, () =>
-                ctx.set({
-                  ...ctx.get(),
-                  keyframes: (ctx.get().keyframes || []).filter(
-                    (_, j) => j !== i,
-                  ),
-                }),
-              ),
-            ),
+          const go = button("", `Scrub to key ${i + 1}`, () => {
+            playhead = ctx.get().keyframes?.[i]?.time ?? f.time;
+            track.value = playhead * 1000;
+            draw();
+          });
+          go.innerHTML =
+            '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M6 1.5L10.5 6L6 10.5L1.5 6Z" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>';
+          const remove = button("", `Remove key ${i + 1}`, () =>
+            ctx.set({
+              ...ctx.get(),
+              keyframes: (ctx.get().keyframes || []).filter((_, j) => j !== i),
+            }),
           );
+          remove.innerHTML =
+            '<svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.4"/></svg>';
+          keyframes.append(el("div", { class: "d-key" }, go, timeInput, valueInput, remove));
         });
       }
-    }
-    {
-      const frames = [...(v.keyframes || [{ time: 0, value: 0 }, { time: 1, value: 1 }])];
-      const sorted = [...frames].sort((p, q) => p.time - q.time),
-        ys = sorted.map((k) => k.value),
-        lo = Math.min(0, ...ys),
-        hi = Math.max(1, ...ys),
-        px = (t) => 2 + t * 56,
-        py = (n) => 26 - ((n - lo) / (hi - lo || 1)) * 22,
-        d = Array.from({ length: 29 }, (_, k) => {
-          const t = k / 28;
-          return `${k ? "L" : "M"}${px(t).toFixed(1)} ${py(keyframeAt(t, sorted)).toFixed(1)}`;
-        }).join("");
-      [...keyframes.children].forEach((row, i) => {
-        const fig = row.querySelector(".d-key-fig"),
-          k = frames[i];
-        if (fig && k)
-          fig.innerHTML = `<svg viewBox="0 0 60 30" width="60" height="30"><path d="M2 ${py(0)}H58" stroke="var(--d-line)" fill="none"/><path d="${d}" stroke="var(--d-accent)" fill="none" stroke-width="1.5"/><circle cx="${px(k.time)}" cy="${py(k.value)}" r="3" fill="var(--d-text)"/></svg>`;
-      });
     }
     for (const x of exportSpecs) x.code.textContent = x.make(v);
     renderCompare(v);
     readouts.value = lanes()
       .slice(1)
       .map((l) => `${l.label} ${Number(keyframeAt(playhead, l.keys).toFixed(2))}${l.unit}`)
-      .join(" · ");
+      .join("   ");
     draw();
   }
   const reduced = matchMedia("(prefers-reduced-motion: reduce)"),
@@ -1484,7 +1841,7 @@ function motionStudio(ctx, host) {
       if (reduced.matches) {
         playing = false;
         cancelAnimationFrame(raf);
-        play.textContent = "Play";
+        play.innerHTML = playGlyph;
         playhead = 1;
         track.value = 1000;
         draw();
@@ -2108,7 +2465,7 @@ function encodingStudio(ctx, host) {
         },
         muted = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
       g.fillStyle = muted;
-      g.font = "10px ui-monospace, monospace";
+      g.font = `500 10.5px ${getComputedStyle(host).fontFamily}`;
       g.textBaseline = "alphabetic";
       const xs = v.x && span(v.x),
         ys = v.y && span(v.y);
@@ -2228,7 +2585,7 @@ function samplerStudio(ctx, host) {
         });
         g.stroke();
         g.fillStyle = g.strokeStyle;
-        g.font = "10px monospace";
+        g.font = `500 10.5px ${getComputedStyle(host).fontFamily}`;
         g.fillText(other, 6, 150 - schedule(v.steps, other, v.shift)[Math.floor(v.steps / 2)] * (v.denoise ?? 1) * 140 - 4);
       }
       g.setLineDash([]);
@@ -2269,7 +2626,7 @@ function samplerStudio(ctx, host) {
       gg.lineTo(tip - 5, 28);
       gg.closePath();
       gg.fill();
-      gg.font = "10px monospace";
+      gg.font = `500 10.5px ${getComputedStyle(host).fontFamily}`;
       gg.fillText("u", 27, 42);
       gg.fillText("c", 38, 14);
       gg.fillText(String(v.cfg), Math.max(45, tip + 8), 27);
@@ -2594,7 +2951,7 @@ export function createStudio(panel, section, host) {
   else if (c.type === "sampler") lab = samplerStudio(ctx, host);
   else lab = generalStudio(ctx, host);
   // Two columns in a wide studio: the main figure and its direct tools on the left, the rest on the right.
-  if (host.dataset.studio !== "motion") {
+  if (!["motion", "color"].includes(host.dataset.studio)) {
     const kids = [...host.children].filter((k) => !k.matches(".d-lab-head")),
       heroSelector = ".d-plot, .d-stage, .d-color-main, .d-type-specimen, .d-type-ruler, .d-step-cells, .d-type-lab, .d-sched-table, .d-color-plates",
       main = el("div", { class: "d-col d-col-main" }),

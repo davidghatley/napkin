@@ -64,6 +64,14 @@ const keyBindings = (keys) => [
   [keys.help.join(" / "), "Show this key map"],
 ];
 export const bindings = keyBindings(defaultKeys);
+// Depth glyphs: one line, the lines opened, the pane.
+const depthGlyphs = [
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 4.5H13M3 8H13M3 11.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.75" y="3.25" width="10.5" height="9.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6.5 3.5V12.5" stroke="currentColor" stroke-width="1.5"/></svg>',
+];
+const sizeGlyph =
+  '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13 7V13H7M13 13L8.5 8.5M3 9V3H9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 export function render(schema, container, options = {}) {
   return new Dials(container, options).render(schema);
 }
@@ -168,14 +176,16 @@ export class Dials extends EventTarget {
         role: "group",
         "aria-label": `${section.label} depth`,
       });
-      const buttons = ["Dial", "Bench", "Studio"].map((name, i) =>
-        button(name, `${section.label}: ${name}`, () =>
+      const buttons = ["Dial", "Bench", "Studio"].map((name, i) => {
+        const b = button("", `${section.label}: ${name}`, () =>
           this.setDepth(section.id, i + 1),
-        ),
-      );
+        );
+        b.innerHTML = depthGlyphs[i];
+        return b;
+      });
       depth.append(...buttons);
       const resize = button(
-        "Size",
+        "",
         "Resize studio pane with arrow keys; click for compact size",
         () =>
           this.resizeStudio(
@@ -185,6 +195,7 @@ export class Dials extends EventTarget {
           ),
         "d-pane-size d-studio-only",
       );
+      resize.innerHTML = sizeGlyph;
       const head = el(
         "header",
         { class: "d-section-head" },
@@ -212,7 +223,8 @@ export class Dials extends EventTarget {
       );
       body.append(content);
       content.append(rowlist, labHost);
-      node.append(head, tabs, body);
+      head.insertBefore(tabs, resize);
+      node.append(head, body);
       const s = {
         schema: section,
         node,
@@ -283,6 +295,15 @@ export class Dials extends EventTarget {
     const node = el("div", {
       class: "d-row",
       "data-control": c.id,
+      "data-kind": controls.has(c.type)
+        ? "plugin"
+        : numeric(c) && c.type !== "seed"
+          ? "meter"
+          : ["segmented", "select"].includes(c.type)
+            ? "choice"
+            : c.type === "boolean"
+              ? "switch"
+              : "wide",
       "data-min-depth": c.depth || 1,
       title: c.description || "",
     });
@@ -396,8 +417,10 @@ export class Dials extends EventTarget {
     const row = { c, section, node, label, fig, input, plugin, context };
     this.rows.set(c.id, row);
     this.scrub(label, c.id);
-    this.scrub(fig, c.id);
+    this.scrub(fig, c.id, true);
     label.addEventListener("dblclick", () => this.reset(c.id));
+    if (c.type === "boolean")
+      fig.addEventListener("click", () => this.transact(c.id, !c.value));
     if (c.disabled) {
       node.inert = true;
       node.setAttribute("aria-disabled", "true");
@@ -744,9 +767,10 @@ export class Dials extends EventTarget {
       this.change(id, result);
     else this.transact(id, result);
   }
-  scrub(target, id) {
+  scrub(target, id, track = false) {
     let startX,
       base,
+      direct,
       moved = false;
     this.gestures.push(
       pointerSurface(target, {
@@ -754,12 +778,30 @@ export class Dials extends EventTarget {
           startX = e.clientX;
           base = this.get(id);
           moved = false;
+          const c = this.rows.get(id)?.c;
+          // On a meter the pointer sets the value where it points; Shift keeps the fine relative drag.
+          direct =
+            track &&
+            !e.shiftKey &&
+            c &&
+            numeric(c) &&
+            c.type !== "seed" &&
+            Number.isFinite(c.min) &&
+            Number.isFinite(c.max)
+              ? target.querySelector(".d-meter")
+              : null;
           this.begin(id, "scrub");
         },
         move: (e) => {
           const dx = e.clientX - startX;
           if (Math.abs(dx) > 2) moved = true;
-          if (moved) this.adjust(id, Math.round(dx / 2), e, 1, base);
+          if (direct) {
+            const c = this.rows.get(id).c,
+              r = direct.getBoundingClientRect(),
+              t = clamp((e.clientX - r.left) / (r.width || 1), 0, 1);
+            moved = moved || e.type === "pointermove";
+            this.change(id, quantize(c.min + t * (c.max - c.min), c));
+          } else if (moved) this.adjust(id, Math.round(dx / 2), e, 1, base);
         },
         end: () => {
           this.commit(id);

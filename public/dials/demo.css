@@ -5,24 +5,24 @@
   font-display: swap;
 }
 :root {
-  --page: #eeede7;
-  --surface: #f9f9f5;
-  --text: #16181d;
-  --muted: #555a61;
-  --line: #c9c9c0;
-  --accent: #2236b0;
-  --brand-accent: #2236b0;
-  --font: ui-sans-serif, system-ui, sans-serif;
-  --mono: ui-monospace, monospace;
+  --page: #eef0f3;
+  --surface: #fbfbfc;
+  --text: #1c1f27;
+  --muted: #4f5663;
+  --line: #dde0e6;
+  --accent: #3459e2;
+  --brand-accent: #3459e2;
+  --nk-sans: "Dials Inter", ui-sans-serif, system-ui, sans-serif;
+  --font: var(--nk-sans);
   color-scheme: light;
 }
 :root[data-theme="dark"] {
-  --page: #121417;
-  --surface: #1b1e22;
-  --text: #ecebe4;
-  --muted: #b4b9bf;
-  --line: #3a3e44;
-  --accent: #9fb0ff;
+  --page: #131418;
+  --surface: #1b1d23;
+  --text: #e8eaf0;
+  --muted: #b4bac7;
+  --line: #2c2f37;
+  --accent: #8fadff;
   color-scheme: dark;
 }
 * {
@@ -33,6 +33,7 @@ body {
   background: var(--page);
   color: var(--text);
   font: 13px/1.5 var(--font);
+  font-feature-settings: "cv11", "ss03";
   -webkit-font-smoothing: antialiased;
 }
 button,
@@ -44,22 +45,23 @@ select {
 button {
   cursor: pointer;
   color: inherit;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  background: transparent;
+}
+button:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
 }
 button:focus-visible,
 a:focus-visible,
 summary:focus-visible,
 select:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 a {
   color: inherit;
-}
-button {
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 5px 10px;
-  background: var(--surface);
 }
 .skip {
   position: absolute;
@@ -73,12 +75,10 @@ button {
   top: 4px;
 }
 .mast {
-  height: 58px;
+  height: 52px;
   padding: 0 32px;
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
   gap: 32px;
 }
 .wordmark {
@@ -86,105 +86,82 @@ button {
   align-items: center;
   gap: 8px;
   text-decoration: none;
-  font-weight: 650;
-  font-size: 16px;
+  font-weight: 600;
+  font-size: 14px;
 }
 .wordmark > span {
   font-weight: 400;
   color: var(--muted);
-  font-size: 13px;
-}
-.mast nav {
-  display: flex;
-  margin: auto;
-  gap: 8px;
-}
-.mast nav a {
-  padding: 5px 10px;
-  border: 1px solid transparent;
-  text-decoration: none;
-  border-radius: 5px;
-  font: 11px var(--mono);
-}
-.mast nav a span {
-  font: 11px var(--font);
-  margin-left: 6px;
-}
-.mast nav a[aria-current] {
-  border-color: var(--line);
-  background: var(--page);
-  color: var(--accent);
 }
 #theme {
   margin-left: auto;
-  font: 11px var(--mono);
+  color: var(--muted);
 }
 main {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 0 32px 70px;
+  padding: 0 32px 72px;
 }
 h1 {
-  font-size: 15px;
-  line-height: 1.2;
-  font-weight: 650;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   margin: 0;
 }
 kbd {
-  font: 10px var(--mono);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  padding: 1px 4px;
-  margin-left: 3px;
+  font: 500 11px var(--font);
+  color: var(--muted);
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: 4px;
 }
 .workspace-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 20px;
-  border-top: 1px solid var(--line);
-  padding: 10px 0;
-  font: 10px var(--mono);
+  gap: 16px;
+  padding: 12px 0 20px;
   color: var(--muted);
+}
+.workspace-bar h1 {
+  color: var(--text);
 }
 .depth-all {
   display: flex;
-  gap: 5px;
+  gap: 2px;
   margin-left: auto;
-  margin-right: 0;
-}
-.depth-all button {
-  font: 10px var(--mono);
-  padding: 3px 8px;
-  background: transparent;
 }
 .studies {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
+  gap: 16px;
   align-items: start;
 }
 .study {
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent),
+    0 1px 2px rgb(16 20 32 / 0.04);
   overflow: hidden;
 }
 .study-head {
   display: flex;
-  gap: 10px;
-  align-items: start;
-  padding: 14px 12px 12px;
+  gap: 8px;
+  align-items: baseline;
+  padding: 14px 16px 6px;
 }
 .study-head h2 {
   font-size: 13px;
   line-height: 18px;
   margin: 0;
-  font-weight: 650;
+  font-weight: 600;
 }
 .study-head p {
-  font: 10px/18px var(--mono);
+  font-size: 12px;
+  line-height: 18px;
   color: var(--muted);
   margin: 0;
 }
@@ -192,58 +169,59 @@ kbd {
   grid-column: 1/-1;
   scroll-margin-top: 12px;
 }
-.study.is-studio .study-head {
-  padding: 12px 18px;
-}
 .study.is-studio .d-section {
   max-width: 100%;
 }
 .catalog {
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 10px;
   margin-top: 24px;
   background: var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 7%, transparent);
 }
 .catalog > summary {
   cursor: pointer;
-  padding: 12px 16px;
-  font-size: 12px;
+  padding: 14px 16px;
+  font-weight: 600;
 }
 .catalog > summary > span {
   color: var(--muted);
-  margin-left: 20px;
-  font-size: 11px;
+  font-weight: 400;
+  margin-left: 12px;
 }
 .catalog-body {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  padding: 16px;
+  gap: 32px;
+  padding: 4px 16px 20px;
 }
 .catalog h2 {
-  font-size: 20px;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 8px 0 4px;
 }
 .catalog p {
   max-width: 440px;
   color: var(--muted);
+  margin: 0 0 12px;
 }
 pre {
-  font: 11px/1.6 var(--mono);
+  font: 11.5px/1.6 ui-monospace, "SF Mono", Menlo, monospace;
   max-height: 340px;
   overflow: auto;
-  border: 1px solid var(--line);
   padding: 12px;
+  border-radius: 8px;
   background: var(--page);
 }
 .catalog select {
   margin-left: 8px;
-  background: var(--surface);
+  background: var(--page);
   color: inherit;
-  border: 1px solid var(--line);
-  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 8px;
 }
 #performance-result {
-  font: 11px var(--mono);
+  font-variant-numeric: tabular-nums;
   display: block;
   margin-top: 8px;
 }
@@ -253,49 +231,20 @@ footer {
   bottom: 0;
   left: 0;
   right: 0;
-  min-height: 32px;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
+  min-height: 30px;
+  background: color-mix(in srgb, var(--page) 88%, transparent);
+  backdrop-filter: blur(8px);
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 16px;
-  padding: 5px 16px;
-  font: 10px var(--mono);
+  padding: 5px 32px;
+  font-size: 12px;
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
 }
 footer output {
-  color: var(--accent);
-}
-.sep {
-  padding: 0 5px;
-  color: var(--line);
-}
-.mast {
-  border-bottom-color: var(--text);
-}
-.study {
-  border-radius: 0;
-  border-color: var(--text);
-}
-.study-head {
-  background: var(--page);
-  border-bottom: 1px solid var(--text);
-  align-items: center;
-}
-.study-head h2 {
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font: 600 11px var(--mono);
-}
-:is(button, .mast nav a, .catalog) {
-  border-radius: 0;
-}
-.studies {
-  gap: 16px;
-}
-.dials {
-  --d-sans: var(--nk-mono);
+  color: var(--muted);
 }
 @media (min-width: 1700px) {
   .studies {
@@ -312,24 +261,14 @@ footer output {
   }
   .mast {
     padding: 0 20px;
-    gap: 10px;
-  }
-  .mast nav a span {
-    display: none;
   }
   main {
-    padding: 0 20px 70px;
-  }
-  footer > span:last-child {
-    display: none;
+    padding: 0 20px 72px;
   }
 }
 @media (max-width: 720px) {
   .studies {
     grid-template-columns: 1fr;
-  }
-  h1 {
-    font-size: 36px;
   }
   .catalog-body {
     grid-template-columns: 1fr;
@@ -348,22 +287,11 @@ footer output {
     margin-left: 0;
   }
   footer {
-    flex-direction: column;
-    gap: 4px;
     position: static;
+    padding: 5px 12px;
   }
   .mast {
     padding: 0 12px;
-    gap: 10px;
-  }
-  .wordmark {
-    font-size: 13px;
-  }
-  .mast nav {
-    gap: 0;
-  }
-  .mast nav a {
-    padding: 4px 6px;
   }
   .wordmark > span {
     display: none;
@@ -373,16 +301,4 @@ footer output {
   * {
     scroll-behavior: auto !important;
   }
-}
-@font-face {
-  font-family: "Dials Mono";
-  src: url("../fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
-  font-weight: 100 800;
-  font-display: swap;
-}
-:root {
-  --nk-sans: "Dials Inter", ui-sans-serif, system-ui, sans-serif;
-  --nk-mono: "Dials Mono", ui-monospace, monospace;
-  --font: var(--nk-sans);
-  --mono: var(--nk-mono);
 }
