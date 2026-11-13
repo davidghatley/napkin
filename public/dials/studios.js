@@ -28,6 +28,7 @@ import {
 } from "./motion.js";
 import { schedule } from "./figures.js";
 import { imageStudio } from "./studio-image.js";
+import { encodingStudio as dataLab } from "./studio-data.js";
 import { typeStudio as typeLab } from "./studio-type.js";
 import { samplerStudio as samplerLab } from "./studio-sampler.js";
 import { field as kField } from "./kit.js";
@@ -2646,7 +2647,7 @@ export function createStudio(panel, section, host, rail = document.createElement
     lab = motionStudio(ctx, host);
   else if (c.type === "typography") lab = typeLab(ctx, host);
   else if (c.type === "image") lab = imageStudio(ctx, host);
-  else if (c.type === "encoding") lab = encodingStudio(ctx, host);
+  else if (c.type === "encoding") lab = dataLab(ctx, host);
   else if (c.type === "sampler") lab = samplerLab(ctx, host);
   else lab = generalStudio(ctx, host);
   // Two columns in a wide studio: the main figure and its direct tools on the left, the rest on the right.
