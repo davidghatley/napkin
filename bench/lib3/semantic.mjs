@@ -41,7 +41,7 @@ export async function rectOf(b, selector) {
   );
 }
 // Vertical extent of non-background ink in a thin column of a rect.
-export function inkExtent(p, rect, frac) {
+export function inkExtent(p, rect, frac, halfWidth = null) {
   // Background = the most common colour on the rect's outer rim, never the shape inside it.
   const bins = new Map();
   const tally = (x, y) => {
@@ -62,7 +62,7 @@ export function inkExtent(p, rect, frac) {
     .split(",")
     .map(Number);
   const cx = Math.round(rect.x + rect.w * frac),
-    half = Math.max(2, Math.round(rect.w * 0.03));
+    half = halfWidth ?? Math.max(2, Math.round(rect.w * 0.03));
   let lo = Infinity,
     hi = -Infinity;
   for (let y = rect.y; y < rect.y + rect.h; y++)

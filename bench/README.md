@@ -466,13 +466,24 @@ markers are visible with their text, from navigation, with all items
 required and nearest-rank p95 strictly below 150 ms. Twelve random items of the 1,000 are also
 opened alone and must show the right kind and real content. The 1,000-item opening clock
 includes CLI readiness and canvas navigation. Pan/zoom uses real wheel events,
-requires real item geometry to move, samples frame intervals, then checks visible
-cards after 300 ms at rest. Frame intervals must have p95 below the frame budget (see Anti-gaming).
+requires real item geometry to move, then checks visible cards after 300 ms at rest.
+
+**D1 frame budget (16.7 ms, the dream's number).** requestAnimationFrame timestamps are
+vsync-quantised, so a p95 *interval* below 16.7 ms cannot be measured: a perfect 60 Hz page
+reads 16.6 to 16.9 ms. D1 therefore measures what decides whether a frame is made in time, at
+three viewport sizes (1100x700, 1600x1000, 1920x1080) over a 4 s, 240-event wheel gesture each:
+the main-thread work of every frame (from the frame's rAF timestamp to a message posted from
+inside rAF, which runs only after that frame's rendering task: callbacks, style, layout, paint)
+must have p95 < 16.7 ms, and at most 5% of frames may be dropped (an interval over 1.5 times
+the median vsync). Every viewport must pass. (`FRAME_BUDGET`, 17.2 ms on intervals, is still
+used by the board bench.)
 
 Large-file gates also seek the 2 GB video to a random distant offset (must settle in 3 s),
-scroll the 5 M-row table to a random fraction and require rows from there, and compare the
-Chromium process tree's RSS as well. They compare server-tree peak RSS (sampled from spawn every 10 ms) with
-an empty-folder process, and page heap + backing storage with an empty page. Each
+reach a random row (1 M to 4 M) and the last row of the 5 M-row Parquet file and require both
+cells of each exactly (id and value as written), and measure isolated peaks: each large file
+gets a fresh Chromium whose process tree is sampled every 10 ms from a baseline of the same
+viewer settled on a small file of the same kind (so the increase is what the file's size costs), plus server-tree peak RSS (sampled from spawn every 10 ms) against an empty-folder
+process, and page heap + backing storage against an empty page. Each
 increase must be below 60% of the input size, with a decoded video or a visible
 5-million-row count. This catches straightforward whole-file buffering on either
 side; it does not prove an allocator-independent upper bound or measure OS page cache.
@@ -496,6 +507,48 @@ re-read from files by a fresh server process; the control types must be at least
 distinct widget shapes; a numeric control must evaluate typed math (`12+7`), show a
 modified marker, step finer and coarser with Alt and Shift, and reset. Studios and the
 blind rubric are lead-attested (below).
+
+### D1 differential fidelity (`bench/fidelity3.js`)
+
+`kinds.js` proves each kind has a real viewer; `fidelity3.js` proves the viewer shows what the
+file holds. Each run a seeded generator (`lib3/fidelity-gen.mjs`, seed printed in
+`fidelity3.meta`, `--seed N` to replay) writes ordinary and awkward files of 16 families into
+a fresh folder (nothing committed), and a trusted reference reads the same bytes back. The bench
+then opens each file at `/view/<id>` like a person: scrolling (with proportional correction
+from the rows on screen), End and Ctrl+End, typing a key into a filter or a row number into a
+go-to input, last/next buttons (at most 40 presses), expanding disclosures, picking a table or
+an archive entry. A missing reference (library or command-line tool) FAILS its checks with
+"reference missing"; it never skips. Families, references and what must match:
+
+| Family | Cases | Reference | Judged |
+| --- | --- | --- | --- |
+| CSV/TSV | leading zeros, ints beyond 2^53, decimals with trailing zeros, duplicate and empty headers, quotes, embedded newlines, CRLF, UTF-8 BOM, UTF-16LE, Latin-1, TSV with stray quotes, 8.6 MiB CSV, 8.6 MiB UTF-16 TSV | csv-parse on the decoded bytes | header in order; first, random and last row reached, every cell exactly as text; row count; `/api/items` table preview, if served, must also be exact |
+| JSON/JSONL | 24-34 deep nesting, 1,200-1,800 element array (last and a middle element), big and precise numbers, 2,500+ line JSONL with unsafe ints | `JSON.parse` with source text | node reachable; numbers exactly as written; counts |
+| Arrow | file IPC, stream IPC (`.arrows` and inside `.arrow`), 3 record batches, dictionary strings, nulls, int64, bool | apache-arrow | rows at batch edges and the last row exact; total rows |
+| Parquet | 3+ row groups, UTF8, INT64, DOUBLE, BOOLEAN, optional UTF8 with nulls | parquetjs-lite | rows on both sides of each row-group boundary and EOF exact |
+| SQLite | 3 tables, INTEGER/REAL/TEXT, ints beyond 2^53, zero-padded text, NULLs | sqlite3 CLI | every table listed and openable; per-table count; sampled rows exact |
+| Markdown | GFM table, task list, fenced code, relative image | markdown-it | table cells, checkbox states, verbatim code, image loaded at its size |
+| Vega-Lite | layered line+point, stacked bar, column-faceted bar | vega-lite + vega scenegraph | point count and positions (r > 0.98); bar columns, segments per column, heights (r > 0.98) |
+| glTF/GLB | 3 instances of one mesh, a scaled node, a textured quad, unlit materials, external and embedded buffers | the file's own nodes (read back) | 3 separate red instances evenly spaced; scaled node area; both texture colours |
+| Lottie | nested precomp, relative image asset, a layer without `st` | lottie-web rendered in the bench's browser | each part's colour drawn |
+| PDF | 3-5 pages, page and block colours, text | pdfinfo, pdftocairo | page count; every page reached with the raster's block colour; reference text ink present |
+| Audio | wav, mp3, flac, ogg of a 16-step amplitude envelope | ffmpeg decode, ffprobe | duration; waveform ink follows decoded peaks (r > 0.9) |
+| Video | mp4, webm with 4 colour segments | ffmpeg frame extraction | frames at 4 jittered times |
+| Fonts | static OTF with a seeded non-ASCII coverage; installed variable TTF | opentype.js; fvar table + fc-scan | glyph count, every covered character, each axis with range and a control |
+| ZIP | nested folders, 18-19 MB stored entry, entries after it | unzip | every entry listed; large size; deep and trailing entries open |
+| Images | 3xN, 7x5, alpha with a loud colour at alpha 0, animated GIF/WebP/APNG | ffprobe | size shown; colours visible; alpha respected; every frame shown |
+| Sniffing | PNG without extension, PDF as .dat, ZIP as .txt, SQLite as .db, MP4 as .bin, WAV without extension, HTML as .bin | the source family | listed and viewed as the bytes' kind |
+
+Three canvas checks follow: a TSX module with no component export still gets a card showing
+its source; a folder holding only a kind registered through `NAPKIN_KIND_PLUGINS` shows each
+card's content and a Layers row per file on first load; and a CSV selected through Layers +
+Enter is on screen, opaque and hit-testable, and wheel (or its own next button) moves the
+card's rows without moving the canvas. Where a viewer draws inside a sandboxed frame the bench
+cannot read, it judges what is drawn instead (the sniffed page's red paragraph, the plugin
+viewer's paper colour). The Lottie reference writes in the spec default `st: 0` for the layer
+that omits it (lottie-web would skip that layer); the product gets the file as written. The
+whole bench takes 1.5 to 3.5 minutes; `dream3.js` adds
+its checks to D1's dream total.
 
 ### The twelve keyboard journeys and budgets
 
