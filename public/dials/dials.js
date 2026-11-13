@@ -1177,7 +1177,8 @@ export class Dials extends EventTarget {
     const now = performance.now();
     if (!this.leader || now - this.leader > 1500) {
       this.leader = 0;
-      if (e.key !== "g" || e.altKey) return false;
+      // A key rebound to another action wins over the leader.
+      if (e.key !== "g" || e.altKey || Object.values(this.keys).some((list) => list.includes("g"))) return false;
       e.preventDefault();
       this.leader = now;
       this.announce("g … h j k l move · g e first or last · s studio · 1 2 3 depth · r reset · u undo · / find");

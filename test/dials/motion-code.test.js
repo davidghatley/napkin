@@ -52,3 +52,19 @@ test("keyframes ease each segment, as CSS and WAAPI do", () => {
   assert.equal(end.x, 108);
   assert.equal(framesAt(frames, 0, bezier).opacity, 0);
 });
+
+test("hand-written WAAPI reads tolerantly; mistakes say where, in plain words", async () => {
+  const { looseJson } = await import("../../public/dials/values.js");
+  const read = readMotionCode(`el.animate([{ transform: 'translateX(0px)' }, { transform: 'translateX(80px)', opacity: 0.5, },], { duration: 400, easing: 'ease-out', iterations: Infinity /* forever */ })`);
+  assert.equal(read.frames.length, 2);
+  assert.equal(read.motion.duration, 400);
+  assert.equal(read.iterations, Infinity);
+  assert.equal(readMotionCode(`el.animate([{opacity:0},{opacity:1}], 250)`).motion.duration, 250);
+  assert.throws(() => readMotionCode(`el.animate([\n  { opacity: 0 },\n  { opacity: wobble }\n], 300)`), /^Error: Line 3, column 14: "wobble" is not a value/);
+  assert.throws(() => readMotionCode(`el.animate([\n  { opacity: 0 }\n, 300)`), /Line 1, .*never closed/);
+  assert.throws(() => readMotionCode(`el.animate([{opacity:0},{opacity:1}], {easing: "bouncy"})`), /not an easing this panel can read/);
+  // A hand-written linear() with no spring note still comes back as a spring.
+  assert.equal(readMotionCode(`.a { transition: transform 300ms linear(0, 0.3 20%, 1.1 60%, 1); }`).motion.mode, "spring");
+  assert.deepEqual(looseJson(`{a: 'x', b: [1, 2,], // note\n c: undefined}`), { a: "x", b: [1, 2], c: null });
+  assert.throws(() => looseJson(`{a: "x}`), /Line 1, column 5: a quote is never closed/);
+});

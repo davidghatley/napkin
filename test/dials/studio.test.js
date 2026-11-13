@@ -200,6 +200,79 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
       await q('document.querySelector("dialog.d-help").close()');
       await q('dialsDemo.panels[3].keys.studio=["s"]');
     });
+    await t.test("every tab of every studio is finished: a lab or an instrument with a drawn stage, nothing clipped", async () => {
+      // A cell clips when its text is wider than the box and it hides the overflow.
+      const audit = `(()=>{const s=document.querySelector('.d-section[data-depth="3"]')||document.querySelector("#t-host .d-section[data-depth='3']");if(!s)return "no studio";
+        const lab=s.querySelector(".k-studio, .d-lab");if(!lab)return "no lab";
+        const tall=Math.max(0,...[...lab.querySelectorAll(".k-main svg, .k-main canvas, .d-cx-main svg, .d-cx-main canvas, .k-main img, .k-main *")].filter(n=>n.matches("svg,canvas,img,.ki-card-pick")||getComputedStyle(n).backgroundImage!=="none").map(n=>n.getBoundingClientRect().height));
+        if(tall<80)return "blank stage "+tall;
+        const clipped=[...s.querySelectorAll("*")].filter(n=>{const c=getComputedStyle(n);return !n.matches(".d-sr")&&c.textOverflow==="ellipsis"&&n.scrollWidth>n.clientWidth+1}).map(n=>n.className);
+        return clipped.length?"clipped "+clipped.join(","):"ok"})()`;
+      for (const [i, name] of names.entries()) {
+        const ids = await q(`dialsDemo.panels[${i}].schema.sections[0].controls.map(c=>c.id)`);
+        for (const id of ids) {
+          await q(`dialsDemo.panels[${i}].open(${JSON.stringify(id)})`);
+          await sleep(120);
+          assert.equal(await q(audit), "ok", `${name} / ${id}`);
+        }
+        await open(i, 2);
+      }
+      // A panel the library was never written for, in a 560 px host: types it has never seen get an instrument.
+      await q(`(()=>{const h=document.createElement("div");h.id="t-host";h.style.cssText="position:fixed;left:0;top:0;width:560px;height:852px;overflow:auto;z-index:600";document.body.append(h);window.tPanel=new dialsDemo.Dials(h).render(dialsDemo.lampRig)})()`);
+      for (const id of await q(`dialsDemo.lampRig.sections[0].controls.map(c=>c.id)`)) {
+        await q(`tPanel.open(${JSON.stringify(id)})`);
+        await sleep(120);
+        assert.equal(await q(audit), "ok", `lamp / ${id}`);
+        assert.ok(await q(`!!document.querySelector("#t-host .ki")`), `lamp / ${id} uses an instrument`);
+        assert.ok(await q(`document.querySelector("#t-host .d-section-inner").scrollWidth<=document.querySelector("#t-host .d-section-inner").clientWidth+1`), `lamp / ${id} scrolls sideways`);
+      }
+      await q(`tPanel.open("dmx")`);
+      await sleep(120);
+      assert.match(await q(`document.querySelector("#t-host .ki .ki-declared").textContent`), /dmx-universe/);
+      assert.ok((await q(`document.querySelectorAll("#t-host .ki .ki-stage-block svg *").length`)) > 8, "the unknown type draws lanes");
+      await q(`document.querySelector("#t-host").remove()`);
+    });
+    await t.test("palette and key map are opaque dialogs with options and previews", async () => {
+      await q(`(()=>{const p=dialsDemo.panels[0];p.rows.get("opacity").label.focus();p.palette()})()`);
+      const m = JSON.parse(await q(`(()=>{const d=document.querySelector("dialog[open]");return JSON.stringify({role:d.getAttribute("role"),bg:getComputedStyle(d).backgroundColor,options:d.querySelectorAll("[role=option]").length,figs:d.querySelectorAll("[role=option] .d-palette-fig svg").length,preview:d.querySelector(".d-palette-preview")?.textContent.length||0})})()`));
+      assert.equal(m.role, "dialog");
+      assert.doesNotMatch(m.bg, /rgba|transparent/);
+      assert.ok(m.options > 10 && m.figs > 5 && m.preview > 3, JSON.stringify(m));
+      await q(`document.querySelector("dialog[open]").close()`);
+      await q("dialsDemo.panels[2].help()");
+      assert.equal(await q(`document.querySelector("dialog[open]").getAttribute("role")`), "dialog");
+      assert.doesNotMatch(await q(`getComputedStyle(document.querySelector("dialog[open]")).backgroundColor`), /rgba|transparent/);
+      assert.match(await q(`document.querySelector("dialog[open]").textContent`), /g then h j k l/);
+      await q(`document.querySelector("dialog[open]").close()`);
+    });
+    await t.test("keys: g leader moves focus spatially; digits typed on a studio handle set the value", async () => {
+      await q("dialsDemo.panels.forEach(p=>[...p.sections.keys()].forEach(id=>p.setDepth(id,2,false)))");
+      await q('dialsDemo.panels[0].rows.get("opacity").label.focus()');
+      await key("g", "KeyG");
+      await key("j", "KeyJ");
+      assert.equal(await q('document.activeElement.closest("[data-control]")?.dataset.control'), "gradient");
+      await key("g", "KeyG");
+      await key("l", "KeyL");
+      assert.match(await q('document.activeElement.className'), /d-figure/);
+      await q('dialsDemo.panels[0].open("opacity")');
+      await sleep(200);
+      await q(`document.querySelector("${S} .ki .k-handle").focus()`);
+      for (const [k, code] of [["0", "Digit0"], [".", "Period"], ["4", "Digit4"], ["Enter", "Enter"]]) await key(k, code);
+      assert.equal(await q('dialsDemo.panels[0].get("opacity")'), 0.4);
+      await q('dialsDemo.panels[0].reset("opacity")');
+      await open(0, 2);
+    });
+    await t.test("motion: a loop range shades the curve and track; the preview loops it", async () => {
+      await q(`(()=>{const p=dialsDemo.panels[2];p.open("path");const x=p.context("ease");x.set({...x.get(),loopRange:[0.2,0.6]})})()`);
+      await sleep(200);
+      assert.equal(await q(`[...document.querySelectorAll("${S} .km-loop")].filter(n=>n.style.display!=="none"&&Number(n.getAttribute("width"))>10).length`), 2);
+      assert.match(await q(`document.querySelector("${S} .km-loop-reset").textContent`), /^Loop \d+–\d+ ms/);
+      assert.ok((await q(`document.querySelectorAll("${S} .km-lane-svg").length`)) >= 1);
+      await q(`document.querySelector("${S} .km-loop-reset").click()`);
+      assert.equal(await q('dialsDemo.panels[2].get("ease").loopRange'), undefined);
+      await q('dialsDemo.panels[2].reset("ease")');
+      await open(2, 2);
+    });
     assert.deepEqual(errors, []);
   } finally {
     await browser.close();
