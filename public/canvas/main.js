@@ -64,6 +64,7 @@ import { initInstruments } from './surface-panel.js';
 import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
 import { initContextMenu } from './context-menu.js';
+import { initCreate } from './create.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -147,6 +148,7 @@ initLive(ctx); // M1: Space-P holds play mode (registered before play.js so it s
 initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
+initCreate(ctx); // basics pass 2: draw a frame, text or image on the canvas or into an HTML frame (create.js)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)

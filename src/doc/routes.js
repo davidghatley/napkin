@@ -10,6 +10,10 @@
 //                   + dryRun: true                          -> { ok, files: [{ path, text }] }: what the files would hold; nothing is written
 //   POST /api/undo | /api/redo  { component }               your last edit to that component
 //   GET  /api/styles  -> { undefinedVars, applied, ... }    POST /api/styles { applied }  (kept outside the folder)
+//   POST   /api/frames  { path?, x, y, width, height?, body? } -> { ok, path, name, revision, canvas }: a new frame file (next free
+//                   frame-N.html when no path), placed at x, y in the layout state; one undo step (undo removes the file)
+//   POST   /api/frames/rename { from, to }                  -> { ok, component, from }: the file renamed in its folder, never over another
+//   DELETE /api/frames/<path>?revision=R                    -> { ok }: removes the file if it is still at R; one undo step (undo writes it back)
 // Writes need an identity (POST /api/session), as every write in napkin does.
 import { readFileSync, statSync } from 'node:fs';
 import { extname } from 'node:path';
@@ -27,6 +31,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
   // (A TSX file's frame names the file only: parsing it on every dialect save would slow the dialect canvas for nothing.)
   engine.events.on('change', ({ component, ...c }) => broadcast({ type: 'doc-change', ...c, via: component ?? null, affects: /\.(html?|css)$/i.test(c.path) ? safe(() => engine.componentsUsing(c.path), []) : [] }));
   engine.events.on('files', () => broadcast({ type: 'doc-files' }));
+  engine.events.on('renamed', (r) => broadcast({ type: 'doc-renamed', from: r.from, to: r.to, by: r.by }));
   engine.events.on('styles', (s) => broadcast({ type: 'doc-styles', ...s }));
   const safe = (fn, d) => { try { return fn(); } catch { return d; } };
 
@@ -82,6 +87,17 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         const n = (v) => (v === undefined || v === null ? v : Number(v));
         return json(res, 200, engine.setLayout(m?.component, { x: n(m?.x), y: n(m?.y), width: n(m?.width) })), true;
       }
+      if (path === '/api/frames' || path.startsWith('/api/frames/')) {
+        const by = who(req);
+        if (method === 'POST' && path === '/api/frames') {
+          const m = await body(req);
+          const n = (v) => (v === undefined || v === null ? undefined : Number(v));
+          return json(res, 201, engine.createFrame({ path: m?.path ?? undefined, x: n(m?.x), y: n(m?.y), width: n(m?.width), height: n(m?.height), body: m?.body ?? '', by })), true;
+        }
+        if (method === 'POST' && path === '/api/frames/rename') { const m = await body(req); return json(res, 200, engine.renameFrame(m?.from, m?.to, { by })), true; }
+        if (method === 'DELETE' && path.length > '/api/frames/'.length) return json(res, 200, engine.removeFrame(decodeURIComponent(path.slice('/api/frames/'.length)), { revision: url.searchParams.get('revision') ?? undefined, by })), true;
+        return fail(res, 405, 'method not allowed: POST /api/frames, POST /api/frames/rename or DELETE /api/frames/<path>'), true;
+      }
       if (method === 'POST' && path === '/api/edit') {
         const m = await body(req);
         const by = who(req);
@@ -101,10 +117,10 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
           if (!mine || (legacyNewest(verb, name) ?? -1) > mine.at) return false;
           id = mine.component;
         }
-        if (typeof id !== 'string' || legacy(id) || !engine.has(id)) return false;
+        if (typeof id !== 'string' || legacy(id) || (!engine.has(id) && !engine.pendingStep(verb, id, identify(/^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1])))) return false; // (a frame file undone away is still redoable)
         const by = who(req);
         const r = verb === 'undo' ? engine.undo(id, by) : engine.redo(id, by);
-        return json(res, 200, { ...r, [verb === 'undo' ? 'undone' : 'redone']: { summary: engine.history(id)[0]?.summary?.replace(/^(undo|redo): /, '') } }), true;
+        return json(res, 200, { ...r, [verb === 'undo' ? 'undone' : 'redone']: { summary: engine.history(r.component ?? id)[0]?.summary?.replace(/^(undo|redo): /, '') } }), true;
       }
       if (method === 'GET' && path.startsWith('/view/')) {
         const id = decodeURIComponent(path.slice('/view/'.length));
