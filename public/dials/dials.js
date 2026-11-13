@@ -392,11 +392,12 @@ export class Dials extends EventTarget {
       });
     }
     if (input) wrap.append(input);
+    if (["segmented", "select"].includes(c.type)) node.classList.add("is-choice");
     node.append(reset, label, fig, wrap);
     const row = { c, section, node, label, fig, input, plugin, context };
     this.rows.set(c.id, row);
     this.scrub(label, c.id);
-    this.scrub(fig, c.id);
+    this.figureGesture(fig, c.id);
     label.addEventListener("dblclick", () => this.reset(c.id));
     if (c.disabled) {
       node.inert = true;
@@ -743,6 +744,100 @@ export class Dials extends EventTarget {
     if (event.type === "pointermove" || event.type === "pointerdown")
       this.change(id, result);
     else this.transact(id, result);
+  }
+  /** Figures are the grab surface: faders map the pointer to the value, knobs follow its turn, pads are two-axis. */
+  figureGesture(fig, id) {
+    const c = this.rows.get(id).c,
+      finite = Number.isFinite(c.min) && Number.isFinite(c.max),
+      span = finite ? c.max - c.min : 0;
+    if (c.type === "boolean") {
+      fig.addEventListener("click", () => this.transact(id, !this.rows.get(id).c.value));
+      return;
+    }
+    const flash = (on) => fig.classList.toggle("is-detent", on);
+    let pick;
+    if (finite && typeof c.value === "number" && c.type !== "seed") {
+      const turn = c.type === "angle";
+      let x0, base, grab, last, acc;
+      pick = {
+        start: (e) => {
+          x0 = e.clientX;
+          base = this.get(id);
+          const cap = fig.querySelector(".d-fader-cap");
+          grab = cap?.contains(e.target)
+            ? e.clientX - (cap.getBoundingClientRect().left + cap.offsetWidth / 2)
+            : 0;
+          const knob = fig.querySelector(".d-knob");
+          if (knob) {
+            const k = knob.getBoundingClientRect();
+            last = Math.atan2(e.clientX - k.left - k.width / 2, -(e.clientY - k.top - k.height / 2)) * 180 / Math.PI;
+            acc = 0;
+          }
+        },
+        move: (e) => {
+          let v;
+          if (turn) {
+            const knob = fig.querySelector(".d-knob");
+            if (!knob) return;
+            const k = knob.getBoundingClientRect(),
+              a = Math.atan2(e.clientX - k.left - k.width / 2, -(e.clientY - k.top - k.height / 2)) * 180 / Math.PI;
+            let d = a - last;
+            if (d > 180) d -= 360;
+            if (d < -180) d += 360;
+            last = a;
+            acc += d * (e.shiftKey ? 0.1 : 1);
+            const sweep = Number(knob.dataset.sweep) || 270;
+            v = base + (acc / sweep) * span;
+          } else {
+            const el = fig.querySelector(".d-fader");
+            if (!el) return;
+            const r = el.getBoundingClientRect(),
+              pad = 7;
+            v = e.shiftKey
+              ? base + ((e.clientX - x0) / (r.width - 2 * pad)) * span * 0.1
+              : c.min + clamp((e.clientX - grab - r.left - pad) / (r.width - 2 * pad), 0, 1) * span;
+          }
+          const home = Number(c.default);
+          const snapped = !e.shiftKey && Number.isFinite(home) && Math.abs(v - home) < span * 0.015;
+          flash(snapped);
+          this.change(id, quantize(snapped ? home : v, c));
+        },
+      };
+    } else if (finite && Array.isArray(c.value) && c.value.length === 2 && c.type === "vector") {
+      pick = {
+        start: () => {},
+        move: (e) => {
+          const el = fig.querySelector(".d-pad");
+          if (!el) return;
+          const r = el.getBoundingClientRect(),
+            px = clamp((e.clientX - r.left) / r.width, 0, 1),
+            py = clamp((e.clientY - r.top) / r.height, 0, 1),
+            home = c.default || [],
+            snap = (v, h) => (!e.shiftKey && Math.abs(v - h) < span * 0.03 ? h : v);
+          const v = [snap(c.min + px * span, home[0]), snap(c.max - py * span, home[1])];
+          flash(v[0] === home[0] && v[1] === home[1]);
+          this.change(id, v.map((n) => quantize(n, c)));
+        },
+      };
+    }
+    if (!pick) return this.scrub(fig, id);
+    this.gestures.push(
+      pointerSurface(fig, {
+        start: (e) => {
+          this.begin(id, "scrub");
+          pick.start(e);
+        },
+        move: pick.move,
+        end: () => {
+          flash(false);
+          this.commit(id);
+        },
+        cancel: () => {
+          flash(false);
+          this.cancel(id);
+        },
+      }),
+    );
   }
   scrub(target, id) {
     let startX,

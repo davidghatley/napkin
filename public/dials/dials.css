@@ -1,13 +1,35 @@
-/* Scoped instruments. Host napkin tokens win; fallbacks make the library standalone. */
+/*
+ * Dials: an instrument panel.
+ * Language: engraved labels, recessed grooves and displays, raised caps that can be grabbed.
+ * Flat where flat reads better; depth only marks what you can hold. Host napkin tokens win.
+ */
+@property --p { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --lo { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --hi { syntax: "<number>"; inherits: true; initial-value: 0; }
+@property --a { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
+@property --x { syntax: "<number>"; inherits: true; initial-value: 0.5; }
+@property --y { syntax: "<number>"; inherits: true; initial-value: 0.5; }
+
 .dials {
-  --d-native-surface: #f9f9f5;
-  --d-native-well: #eeede7;
-  --d-native-hover: #e3e2da;
-  --d-native-line: #c9c9c0;
-  --d-native-text: #16181d;
-  --d-native-muted: #555a61;
-  --d-native-accent: #2236b0;
+  /* Light: bone-grey anodised panel, graphite caps, one signal orange. */
+  --d-native-surface: #e9e7e1;
+  --d-native-well: #dcd9d0;
+  --d-native-hover: #e1dfd8;
+  --d-native-line: #c3bfb3;
+  --d-native-text: #1b1a18;
+  --d-native-muted: #4a4741;
+  --d-native-accent: #e8470c;
+  --d-native-ink: #a63307;
   --d-native-on: #fff;
+  --d-native-display: #1c1b19;
+  --d-native-display-ink: #f4f0e6;
+  --d-native-cap-hi: #fbfaf6;
+  --d-native-cap-lo: #d9d6cc;
+  --d-native-cap-edge: #a8a498;
+  --d-native-groove: #cbc8bd;
+  --d-native-hi: rgb(255 255 255 / 0.7);
+  --d-native-shade: rgb(40 34 20 / 0.34);
+  --d-native-lift: rgb(40 34 20 / 0.26);
   --d-surface: var(--nk-chrome, var(--d-native-surface));
   --d-well: var(--nk-chrome-2, var(--d-native-well));
   --d-hover: var(--nk-chrome-3, var(--d-native-hover));
@@ -15,52 +37,97 @@
   --d-text: var(--nk-text, var(--d-native-text));
   --d-muted: var(--nk-text-2, var(--d-native-muted));
   --d-accent: var(--nk-accent, var(--d-native-accent));
+  --d-ink: var(--nk-accent-ink, var(--d-native-ink));
   --d-on-accent: var(--nk-on-accent, var(--d-native-on));
-  --d-sans: var(--nk-sans, ui-monospace, SFMono-Regular, Consolas, monospace);
+  --d-display: var(--d-native-display);
+  --d-display-ink: var(--d-native-display-ink);
+  --d-cap-hi: var(--d-native-cap-hi);
+  --d-cap-lo: var(--d-native-cap-lo);
+  --d-cap-edge: var(--d-native-cap-edge);
+  --d-groove: var(--d-native-groove);
+  --d-hi: var(--d-native-hi);
+  --d-shade: var(--d-native-shade);
+  --d-lift: var(--d-native-lift);
+  --d-sans: var(--nk-sans, "Inter", ui-sans-serif, system-ui, sans-serif);
   --d-mono: var(--nk-mono, ui-monospace, SFMono-Regular, Consolas, monospace);
-  font: 12px/1.45 var(--d-sans);
+  --d-spring: cubic-bezier(0.3, 1.35, 0.5, 1);
+  --d-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --d-cap: linear-gradient(180deg, var(--d-cap-hi), var(--d-cap-lo));
+  font: 450 12px/1.4 var(--d-sans);
+  font-feature-settings: "tnum", "cv11", "ss03";
   color: var(--d-text);
   background: var(--d-surface);
   color-scheme: light;
   min-width: 0;
   accent-color: var(--d-accent);
   text-align: left;
+  -webkit-font-smoothing: antialiased;
 }
 @media (prefers-color-scheme: dark) {
   .dials:not([data-theme="light"]) {
-    --d-native-surface: #1b1e22;
-    --d-native-well: #121417;
-    --d-native-hover: #272b30;
-    --d-native-line: #3a3e44;
-    --d-native-text: #ecebe4;
-    --d-native-muted: #b4b9bf;
-    --d-native-accent: #9fb0ff;
-    --d-native-on: #0d1220;
+    --d-native-surface: #202123;
+    --d-native-well: #16171a;
+    --d-native-hover: #2a2b2e;
+    --d-native-line: #3a3b3f;
+    --d-native-text: #eceae4;
+    --d-native-muted: #a6a49c;
+    --d-native-accent: #ff6a2a;
+    --d-native-ink: #ff8b57;
+    --d-native-on: #1a0c04;
+    --d-native-display: #0b0c0d;
+    --d-native-display-ink: #f2efe6;
+    --d-native-cap-hi: #55565a;
+    --d-native-cap-lo: #323336;
+    --d-native-cap-edge: #101112;
+    --d-native-groove: #121315;
+    --d-native-hi: rgb(255 255 255 / 0.09);
+    --d-native-shade: rgb(0 0 0 / 0.75);
+    --d-native-lift: rgb(0 0 0 / 0.55);
     color-scheme: dark;
   }
 }
 .dials[data-theme="dark"],
 [data-theme="dark"] .dials {
-  --d-native-surface: #1b1e22;
-  --d-native-well: #121417;
-  --d-native-hover: #272b30;
-  --d-native-line: #3a3e44;
-  --d-native-text: #ecebe4;
-  --d-native-muted: #b4b9bf;
-  --d-native-accent: #9fb0ff;
-  --d-native-on: #0d1220;
+  --d-native-surface: #202123;
+  --d-native-well: #16171a;
+  --d-native-hover: #2a2b2e;
+  --d-native-line: #3a3b3f;
+  --d-native-text: #eceae4;
+  --d-native-muted: #a6a49c;
+  --d-native-accent: #ff6a2a;
+  --d-native-ink: #ff8b57;
+  --d-native-on: #1a0c04;
+  --d-native-display: #0b0c0d;
+  --d-native-display-ink: #f2efe6;
+  --d-native-cap-hi: #55565a;
+  --d-native-cap-lo: #323336;
+  --d-native-cap-edge: #101112;
+  --d-native-groove: #121315;
+  --d-native-hi: rgb(255 255 255 / 0.09);
+  --d-native-shade: rgb(0 0 0 / 0.75);
+  --d-native-lift: rgb(0 0 0 / 0.55);
   color-scheme: dark;
 }
 .dials[data-theme="light"],
 [data-theme="light"] .dials {
-  --d-native-surface: #f9f9f5;
-  --d-native-well: #eeede7;
-  --d-native-hover: #e3e2da;
-  --d-native-line: #c9c9c0;
-  --d-native-text: #16181d;
-  --d-native-muted: #555a61;
-  --d-native-accent: #2236b0;
+  --d-native-surface: #e9e7e1;
+  --d-native-well: #dcd9d0;
+  --d-native-hover: #e1dfd8;
+  --d-native-line: #c3bfb3;
+  --d-native-text: #1b1a18;
+  --d-native-muted: #4a4741;
+  --d-native-accent: #e8470c;
+  --d-native-ink: #a63307;
   --d-native-on: #fff;
+  --d-native-display: #1c1b19;
+  --d-native-display-ink: #f4f0e6;
+  --d-native-cap-hi: #fbfaf6;
+  --d-native-cap-lo: #d9d6cc;
+  --d-native-cap-edge: #a8a498;
+  --d-native-groove: #cbc8bd;
+  --d-native-hi: rgb(255 255 255 / 0.7);
+  --d-native-shade: rgb(40 34 20 / 0.34);
+  --d-native-lift: rgb(40 34 20 / 0.26);
   color-scheme: light;
 }
 .dials * {
@@ -70,6 +137,7 @@
 }
 .dials :is(button, input, select, textarea) {
   font: inherit;
+  font-feature-settings: inherit;
   color: inherit;
 }
 .dials :is(button, input, select, textarea):focus-visible,
@@ -80,40 +148,75 @@
   position: relative;
   z-index: 1;
 }
+
+/* Engraved text: the label is cut into the panel. */
+.dials .d-section-name,
+.dials .d-lab-head h3,
+.dials .d-field > span,
+.dials .d-tool > span,
+.dials .d-metric > span {
+  text-shadow: 0 1px 0 var(--d-hi);
+}
+
+/* Buttons are flat until they are real keys. */
 .dials button {
   border: 0;
   cursor: pointer;
   background: transparent;
-  padding: 4px 8px;
-  border-radius: 4px;
+  padding: 0 10px;
+  min-height: 26px;
+  border-radius: 5px;
+  transition: background-color 90ms, transform 140ms var(--d-spring), box-shadow 120ms;
 }
 .dials button:hover {
   background: var(--d-hover);
 }
 .dials button:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: default;
 }
+/* Keys: raised caps with travel. */
+.dials :is(.d-tools > button, .d-presets > button, .d-drop-button, .d-compare-head button, .d-export-head button, .d-tool > button, .d-motion-details > button) {
+  background: var(--d-cap);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 1px 2px var(--d-lift);
+  min-height: 28px;
+  padding: 0 12px;
+  font-weight: 550;
+}
+.dials :is(.d-tools > button, .d-presets > button, .d-drop-button, .d-compare-head button, .d-export-head button, .d-tool > button, .d-motion-details > button):hover {
+  background: var(--d-cap);
+  filter: brightness(1.04);
+}
+.dials :is(.d-tools > button, .d-presets > button, .d-drop-button, .d-compare-head button, .d-export-head button, .d-tool > button, .d-motion-details > button):active {
+  transform: translateY(1px);
+  box-shadow:
+    inset 0 1px 2px var(--d-shade),
+    0 0 0 1px var(--d-cap-edge);
+  filter: none;
+}
+
+/* Recessed wells for typed entry; displays for numbers. */
 .dials :is(input, select, textarea) {
   min-width: 0;
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
-  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  padding: 0 8px;
   background: var(--d-well);
-  height: 26px;
+  box-shadow:
+    inset 0 1px 2px var(--d-shade),
+    0 1px 0 var(--d-hi);
+  height: 28px;
 }
 .dials input[aria-invalid="true"] {
-  outline: 2px solid #c43d28;
+  outline: 2px solid #d4452c;
   outline-offset: 1px;
 }
-.dials input[type="range"] {
-  padding: 0;
-  cursor: ew-resize;
-  background: transparent;
-  border: 0;
-}
-.dials select {
-  cursor: pointer;
+.dials input::placeholder {
+  color: var(--d-muted);
+  opacity: 0.8;
 }
 .dials input[type="file"] {
   width: 100%;
@@ -129,79 +232,198 @@
   resize: vertical;
   width: 100%;
   height: 100px;
+  padding: 8px;
 }
+
+/* Sliders everywhere are faders: groove, tick scale, weighted cap. */
+.dials input[type="range"] {
+  --p: 0.5;
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  height: 30px;
+  background:
+    repeating-linear-gradient(90deg, var(--d-line) 0 1px, transparent 1px 7.4%) 7px calc(100% - 1px) / calc(100% - 14px) 5px no-repeat;
+  box-shadow: none;
+  border-radius: 0;
+  cursor: ew-resize;
+}
+.dials input[type="range"]::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--fill, var(--d-accent)), var(--fill, var(--d-accent))) 0 0 / calc(7px + var(--p) * (100% - 14px)) 100% no-repeat,
+    var(--groove, var(--d-groove));
+  box-shadow:
+    inset 0 1px 2px var(--d-shade),
+    0 1px 0 var(--d-hi);
+}
+.dials input[type="range"]::-moz-range-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--groove, var(--d-groove));
+  box-shadow: inset 0 1px 2px var(--d-shade), 0 1px 0 var(--d-hi);
+}
+.dials input[type="range"]::-moz-range-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--d-accent);
+}
+.dials input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 24px;
+  margin-top: -9px;
+  border-radius: 3px;
+  border: 0;
+  background:
+    linear-gradient(var(--d-accent), var(--d-accent)) 50% 50% / 2px 12px no-repeat,
+    var(--d-cap);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 2px 4px var(--d-lift);
+  transition: transform 140ms var(--d-spring), box-shadow 120ms;
+}
+.dials input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 24px;
+  border-radius: 3px;
+  border: 1px solid var(--d-cap-edge);
+  background:
+    linear-gradient(var(--d-accent), var(--d-accent)) 50% 50% / 2px 12px no-repeat,
+    var(--d-cap);
+}
+.dials input[type="range"]:hover::-webkit-slider-thumb {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 4px 8px var(--d-lift);
+}
+.dials input[type="range"]:active::-webkit-slider-thumb {
+  transform: translateY(0) scaleY(0.97);
+}
+.dials input[type="range"]:focus-visible {
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+/* ============ Module: header, depth selector ============ */
 .d-section {
-  border-bottom: 1px solid var(--d-line);
   position: relative;
   min-width: 0;
   isolation: isolate;
   background: var(--d-surface);
 }
 .d-section-head {
-  height: 32px;
+  height: 44px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px;
-  border-bottom: 1px solid transparent;
+  gap: 10px;
+  padding: 0 10px 0 6px;
   white-space: nowrap;
+  box-shadow: 0 1px 0 var(--d-line);
+}
+.d-section[data-depth="1"] .d-section-head {
+  box-shadow: none;
 }
 .d-section-name {
   font-weight: 650 !important;
-  padding: 0 4px !important;
-  height: 26px;
+  font-size: 13px !important;
+  letter-spacing: 0.005em;
+  padding: 0 8px 0 4px !important;
+  height: 32px;
   min-width: 0;
-  max-width: 140px;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
   user-select: none;
   touch-action: none;
   text-align: left;
+  display: flex !important;
+  align-items: center;
+  gap: 2px;
 }
 .d-section-name::before {
-  content: "›";
-  display: inline-block;
-  width: 13px;
-  color: var(--d-muted);
-  transform: rotate(90deg);
-  transition: transform 160ms;
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin: 0 8px 0 4px;
+  border: solid var(--d-muted);
+  border-width: 0 2px 2px 0;
+  transform: translateY(-2px) rotate(45deg);
+  transition: transform 140ms var(--d-ease);
 }
 .d-section[data-depth="1"] .d-section-name::before {
-  transform: rotate(0);
+  transform: translateX(-2px) rotate(-45deg);
 }
 .d-summary {
-  font: 10px var(--d-mono);
+  font-size: 12px;
+  font-weight: 500;
   color: var(--d-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+  min-width: 0;
+  order: 3;
+}
+.d-summary-figure {
+  width: 84px !important;
+  height: 28px !important;
+  flex: none;
+  order: 2;
+  cursor: default !important;
+}
+.d-section-head .d-depth {
+  order: 5;
+}
+.d-section-head .d-pane-size {
+  order: 4;
 }
 .d-depth {
   display: flex;
   align-items: center;
-  gap: 1px;
   margin-left: auto;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--d-groove);
+  box-shadow:
+    inset 0 1px 2px var(--d-shade),
+    0 1px 0 var(--d-hi);
+  gap: 2px;
 }
 .d-depth button {
-  font: 10px var(--d-sans);
-  padding: 3px 5px;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--d-muted);
+  padding: 0 8px;
+  min-height: 24px;
+  border-radius: 5px;
+}
+.d-depth button:hover {
+  background: transparent;
+  color: var(--d-text);
 }
 .d-depth button[aria-pressed="true"] {
-  background: var(--d-well);
-  color: var(--d-accent);
-  box-shadow: inset 0 0 0 1px var(--d-line);
+  color: var(--d-text);
+  background: var(--d-cap);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    inset 0 -2px 0 var(--d-accent),
+    0 0 0 1px var(--d-cap-edge),
+    0 1px 2px var(--d-lift);
 }
-.d-summary-figure {
-  width: 40px !important;
-  flex: none;
-}
-.d-summary-figure svg {
-  width: 40px !important;
+.d-pane-size {
+  font-size: 11px !important;
+  color: var(--d-muted);
 }
 .d-section-inner {
   display: grid;
   grid-template-rows: 1fr;
-  transition: grid-template-rows 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: grid-template-rows 160ms var(--d-ease);
 }
 .d-section-content {
   min-height: 0;
@@ -210,337 +432,1325 @@
 .d-section[data-depth="1"] .d-section-inner {
   grid-template-rows: 0fr;
 }
-.d-section[data-depth="1"] .d-section-head {
-  height: 31px;
+/* The bench is the dial row, opened: rows only, no lab. */
+.d-section[data-depth="2"] .d-lab {
+  display: none;
 }
-.d-section:not([data-depth="1"]) .d-section-head {
-  border-bottom-color: var(--d-line);
+
+/* ============ Rows ============ */
+.d-rows {
+  padding: 2px 0 6px;
 }
 .d-row {
-  height: 32px;
+  height: 44px;
   display: grid;
-  grid-template-columns: 12px minmax(76px, 1fr) 64px minmax(72px, 1.05fr);
+  grid-template-columns: 14px minmax(64px, 80px) minmax(80px, 1fr) 108px;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   padding: 0 10px 0 6px;
+  position: relative;
 }
-.d-row:hover {
-  background: var(--d-well);
+.d-row + .d-row::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 0;
+  height: 2px;
+  border-top: 1px solid var(--d-line);
+  border-bottom: 1px solid var(--d-hi);
+  opacity: 0.8;
+  pointer-events: none;
 }
 .d-row[hidden] {
   display: none;
 }
+.d-row:hover {
+  background: color-mix(in srgb, var(--d-text) 3%, transparent);
+}
 .d-label {
   min-width: 0;
   text-align: left;
-  font-size: 11px !important;
+  font-size: 12px !important;
+  font-weight: 560 !important;
   padding: 0 !important;
-  height: 26px;
+  height: 30px;
   white-space: nowrap;
   text-overflow: ellipsis;
   overflow: hidden;
-  color: var(--d-muted) !important;
+  color: var(--d-text) !important;
   cursor: ew-resize !important;
   user-select: none;
   touch-action: none;
+  background: transparent !important;
+  border-radius: 0 !important;
+  transition: color 90ms;
 }
 .d-label:hover {
-  color: var(--d-accent) !important;
-  text-decoration: underline dotted;
-  text-underline-offset: 4px;
-  background: transparent !important;
+  color: var(--d-ink) !important;
 }
-.d-figure {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 64px;
-  height: 24px;
-  overflow: hidden;
-  touch-action: none;
-  cursor: ew-resize;
-  border-radius: 3px;
-}
-.d-figure svg {
-  display: block;
-  flex: none;
-}
+/* The modified lamp doubles as reset. */
 .d-reset {
-  width: 12px;
+  width: 14px;
   height: 22px;
   padding: 0 !important;
   position: relative;
+  background: transparent !important;
 }
 .d-reset::after {
   content: "";
   position: absolute;
-  left: 4px;
-  top: 9px;
-  width: 4px;
-  height: 4px;
+  left: 3px;
+  top: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--d-line);
+  background: var(--d-groove);
+  box-shadow:
+    inset 0 1px 2px var(--d-shade),
+    0 1px 0 var(--d-hi);
+  transition: background-color 120ms, box-shadow 160ms;
 }
 .is-modified .d-reset::after {
   background: var(--d-accent);
-  width: 5px;
-  height: 5px;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--d-accent) 55%, black),
+    0 0 7px color-mix(in srgb, var(--d-accent) 65%, transparent);
 }
 .d-reset:hover::after {
-  width: 7px;
-  height: 7px;
-  left: 3px;
-  top: 8px;
-}
-.is-modified .d-label {
-  color: var(--d-accent) !important;
+  box-shadow: 0 0 0 2px var(--d-accent);
 }
 .is-editing {
-  background: color-mix(in srgb, var(--d-accent) 7%, var(--d-surface));
+  background: color-mix(in srgb, var(--d-accent) 8%, transparent);
 }
+
+/* Value display: the number is read, not decorated. */
 .d-value {
   display: flex;
   min-width: 0;
+  grid-column: 4;
 }
 .d-value :is(input, select) {
+  text-overflow: ellipsis;
   width: 100%;
-  height: 24px;
-  font: 10px var(--d-mono);
+  height: 28px;
+  font-size: 12px;
+  font-weight: 500;
 }
-.d-value input {
+.d-value input,
+.d-field input {
   text-align: right;
+  background: var(--d-display);
+  color: var(--d-display-ink);
+  box-shadow:
+    inset 0 1px 3px rgb(0 0 0 / 0.6),
+    0 1px 0 var(--d-hi);
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+  caret-color: var(--d-accent);
+}
+.d-value input:focus,
+.d-field input:focus {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 0;
 }
 .d-value .d-toggle {
-  height: 22px;
+  height: 28px;
   margin-left: auto;
-  min-width: 44px;
-  border: 1px solid var(--d-line);
-  font-size: 11px;
-  padding: 1px 6px;
+  width: 100%;
+  background: var(--d-display);
+  color: var(--d-display-ink);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.6), 0 1px 0 var(--d-hi);
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
-.d-toggle[aria-checked="true"] {
+.d-value .d-toggle::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4a4741;
+}
+.d-value .d-toggle[aria-checked="true"] {
+  color: var(--d-display-ink);
+}
+.d-value .d-toggle[aria-checked="true"]::before {
   background: var(--d-accent);
-  color: var(--d-on-accent);
+  box-shadow: 0 0 6px var(--d-accent);
 }
+.d-value .d-toggle:hover {
+  background: var(--d-display);
+}
+/* Choice rows give the figure's space to the control. */
+.d-row.is-choice .d-figure {
+  display: none;
+}
+.d-row.is-choice .d-value {
+  grid-column: 3 / 5;
+}
+
+/* ============ Figures: the grab surface ============ */
+.d-figure {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  touch-action: none;
+  cursor: ew-resize;
+  border-radius: 6px;
+  position: relative;
+}
+.d-figure > svg:not(.d-curve) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  flex: none;
+}
+.d-figure.is-plate {
+  background: var(--d-well);
+  box-shadow:
+    inset 0 1px 2px var(--d-shade),
+    0 1px 0 var(--d-hi);
+  overflow: hidden;
+}
+.d-figure > .d-curve {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.d-summary-figure.d-figure {
+  height: 28px;
+}
+
+/* Fader */
+.d-fader {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 34px;
+  transition:
+    --p 170ms var(--d-spring),
+    --lo 170ms var(--d-spring),
+    --hi 170ms var(--d-spring);
+}
+.d-figure:active .d-fader {
+  transition: none;
+}
+.d-fader-groove {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 14px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--d-groove);
+  box-shadow:
+    inset 0 1px 2px var(--d-shade),
+    0 1px 0 var(--d-hi);
+}
+.d-fader-alpha .d-fader-groove {
+  background:
+    linear-gradient(90deg, transparent, var(--d-text)),
+    repeating-conic-gradient(#0002 0 25%, transparent 0 50%) 0 0 / 6px 6px,
+    var(--d-groove);
+  opacity: 0.55;
+}
+.d-fader::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  right: 6px;
+  bottom: 1px;
+  height: 5px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--d-muted) 0 1px,
+    transparent 1px calc((100% - 1px) / var(--n, 20))
+  );
+  opacity: 0.55;
+}
+.d-fader-fill {
+  position: absolute;
+  top: 14px;
+  height: 6px;
+  left: calc(7px + var(--lo) * (100% - 14px));
+  width: calc((var(--hi) - var(--lo)) * (100% - 14px));
+  background: var(--d-accent);
+  border-radius: 3px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--d-accent) 40%, transparent);
+}
+.d-fader-cap {
+  position: absolute;
+  top: 5px;
+  width: 14px;
+  height: 24px;
+  left: calc(var(--p) * (100% - 14px));
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--d-accent), var(--d-accent)) 50% 50% / 2px 12px no-repeat,
+    var(--d-cap);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 2px 4px var(--d-lift);
+  transition: transform 150ms var(--d-spring), box-shadow 120ms;
+}
+.d-figure:hover .d-fader-cap {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 5px 9px var(--d-lift);
+}
+.d-figure:active .d-fader-cap {
+  transform: translateY(0) scaleY(0.96);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 1px 2px var(--d-lift);
+}
+.d-figure.is-detent .d-fader-cap {
+  background:
+    linear-gradient(var(--d-accent), var(--d-accent)) 50% 50% / 4px 14px no-repeat,
+    var(--d-cap);
+}
+
+/* Knob: 270 degrees of travel with a lit arc of ticks. */
+.d-knob {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: block;
+  transition: --a 170ms var(--d-spring);
+}
+.d-figure:active .d-knob {
+  transition: none;
+}
+.d-knob > i {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 1px;
+  height: 17px;
+  margin-left: -0.5px;
+  transform-origin: 50% 100%;
+  transform: rotate(var(--t));
+  pointer-events: none;
+}
+.d-knob > i::before {
+  content: "";
+  display: block;
+  width: 1.5px;
+  height: 3px;
+  margin-left: -0.25px;
+  background: var(--d-muted);
+  opacity: 0.6;
+}
+.d-knob > i.big::before {
+  height: 4px;
+}
+.d-knob > i.lit::before {
+  background: var(--d-accent);
+  opacity: 1;
+}
+.d-knob-cap {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background:
+    repeating-conic-gradient(from 0deg, rgb(0 0 0 / 0.07) 0 6deg, transparent 6deg 12deg),
+    radial-gradient(circle at 35% 25%, var(--d-cap-hi), var(--d-cap-lo) 80%);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 3px 6px var(--d-lift);
+  transform: rotate(var(--a));
+  transition: box-shadow 120ms;
+}
+.d-knob-cap > u {
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 2px;
+  height: 7px;
+  margin-left: -1px;
+  background: var(--d-accent);
+  border-radius: 1px;
+}
+.d-figure:hover .d-knob-cap {
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 5px 9px var(--d-lift);
+}
+.d-figure.is-knob {
+  cursor: grab;
+}
+
+/* Switch: a lever with a lamp. */
+.d-switch {
+  position: relative;
+  display: block;
+  width: 46px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--d-groove);
+  box-shadow:
+    inset 0 1px 3px var(--d-shade),
+    0 1px 0 var(--d-hi);
+  cursor: pointer;
+}
+.d-switch-cap {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 26px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--d-cap);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 2px 4px var(--d-lift);
+  transition: transform 170ms var(--d-spring);
+}
+.d-switch[data-on="true"] .d-switch-cap {
+  transform: translateX(16px);
+}
+.d-switch-led {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+  transition: background-color 120ms, box-shadow 160ms;
+}
+.d-switch[data-on="true"] .d-switch-led {
+  background: var(--d-accent);
+  box-shadow: 0 0 8px var(--d-accent);
+}
+.d-figure.is-switch {
+  cursor: pointer;
+}
+.d-figure:active .d-switch-cap {
+  transform: scaleX(1.06);
+}
+.d-figure:active .d-switch[data-on="true"] .d-switch-cap {
+  transform: translateX(14px) scaleX(1.06);
+}
+
+/* Pad: two axes, one puck. */
+.d-pad {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 120px;
+  height: 34px;
+  border-radius: 5px;
+  background: var(--d-groove);
+  box-shadow:
+    inset 0 1px 3px var(--d-shade),
+    0 1px 0 var(--d-hi);
+  transition: --x 170ms var(--d-spring), --y 170ms var(--d-spring);
+  cursor: crosshair;
+}
+.d-figure:active .d-pad {
+  transition: none;
+}
+.d-pad-h,
+.d-pad-v {
+  position: absolute;
+  background: color-mix(in srgb, var(--d-muted) 45%, transparent);
+}
+.d-pad-h {
+  left: 6px;
+  right: 6px;
+  top: calc(5px + var(--y) * 24px);
+  height: 1px;
+}
+.d-pad-v {
+  top: 5px;
+  bottom: 5px;
+  left: calc(8px + var(--x) * (100% - 16px));
+  width: 1px;
+}
+.d-puck {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  left: calc(8px + var(--x) * (100% - 16px));
+  top: calc(5px + var(--y) * 24px);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, var(--d-accent) 0 2px, transparent 2.5px),
+    radial-gradient(circle at 35% 25%, var(--d-cap-hi), var(--d-cap-lo) 80%);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 2px 4px var(--d-lift);
+}
+.d-figure.is-detent .d-puck {
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 2px var(--d-accent),
+    0 2px 4px var(--d-lift);
+}
+
+/* Chip: a color or gradient read at full size. */
+.d-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 5px;
+  background:
+    linear-gradient(var(--c), var(--c)),
+    repeating-conic-gradient(#9994 0 25%, transparent 0 50%) 0 0 / 8px 8px;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.18);
+}
+.d-chip b {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  /* Ink flips to white or black by the lightness of the color. */
+  color: oklch(from var(--c) calc((0.64 - l) * 100) 0 0);
+  line-height: 20px;
+}
+.d-card-demo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #f3f1ec;
+}
+.d-card-demo b {
+  display: block;
+  width: 44px;
+  height: 18px;
+  border-radius: 3px;
+  background: #fff;
+}
+
+/* ============ Lab (studio) shared ============ */
 .d-lab {
-  padding: 12px;
-  border-top: 1px solid var(--d-line);
+  padding: 16px 20px;
   display: grid;
-  gap: 10px;
+  gap: 14px;
   min-width: 0;
 }
 .d-lab-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
 }
 .d-lab h3 {
   margin: 0;
-  font-size: 11px;
-  letter-spacing: 0.01em;
+  font-size: 12px;
   font-weight: 650;
+  color: var(--d-muted);
+  white-space: nowrap;
+}
+.d-lab-head::after {
+  content: "";
+  flex: 1;
+  height: 2px;
+  border-top: 1px solid var(--d-line);
+  border-bottom: 1px solid var(--d-hi);
 }
 .d-lab-head > span {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--d-muted);
-  text-align: right;
+}
+/* The studio's first heading repeats the tab; the tab already says it. */
+.d-lab > .d-lab-head:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  margin: 0;
 }
 .d-plot {
   width: 100%;
   height: auto;
   display: block;
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
+  border-radius: 6px;
   touch-action: none;
   cursor: crosshair;
-}
-.d-color-plane .d-plot {
-  image-rendering: auto;
+  box-shadow:
+    inset 0 0 0 1px var(--d-line),
+    0 1px 0 var(--d-hi);
 }
 .d-plot-key {
   display: flex;
   justify-content: space-between;
-  font: 9px/18px var(--d-mono);
+  font-size: 11px;
   color: var(--d-muted);
-}
-.d-color-main {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr;
-  gap: 10px;
-  align-items: start;
-}
-.d-color-preview {
-  min-height: 62px;
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-}
-.d-color-preview > span {
-  font-size: 34px;
-  font-weight: 650;
-  line-height: 1.1;
-}
-.d-color-preview small {
-  font-size: 8px;
-}
-.d-readout {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-}
-.d-metric {
-  display: flex;
-  justify-content: space-between;
-  gap: 6px;
-  font: 9px var(--d-mono);
-}
-.d-metric > span {
-  color: var(--d-muted);
-}
-.d-metric strong {
-  font-weight: 500;
-}
-.d-color-code {
-  display: block;
-  font: 9px/1.5 var(--d-mono);
-  overflow-wrap: anywhere;
-  color: var(--d-muted);
-  margin-top: 6px;
+  padding-top: 4px;
 }
 .d-lab-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 12px;
+  gap: 8px 20px;
 }
 .d-field {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
-  font-size: 10px;
-  color: var(--d-muted);
+  font-size: 12px;
+  font-weight: 560;
+  white-space: nowrap;
 }
 .d-field input {
-  font: 10px var(--d-mono);
-  width: 65px;
-  height: 24px;
-  text-align: right;
-  color: var(--d-text);
+  font-size: 12px;
+  width: 76px;
+  height: 28px;
+  flex: none;
+}
+.d-field-slide {
+  grid-column: 1 / -1;
+  display: grid !important;
+  grid-template-columns: 84px minmax(0, 1fr) 80px;
+  align-items: center;
+  gap: 10px;
+}
+.d-field-slide input[type="range"] {
+  width: 100%;
+  min-width: 0;
+}
+.d-lab-sliders {
+  display: grid;
+  grid-template-columns: 1fr !important;
+  gap: 2px;
 }
 .d-tools {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 14px;
 }
 .d-tool {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
-  color: var(--d-muted);
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 560;
   min-width: 0;
+  flex-wrap: wrap;
 }
 .d-tool input {
-  max-width: 145px;
-}
-.d-tool select {
-  font-size: 10px;
+  max-width: 140px;
 }
 .d-tools > input {
   flex: 1;
   min-width: 80px;
 }
-.d-tools > button,
-.d-presets > button {
-  font-size: 10px;
-  border: 1px solid var(--d-line);
-  background: var(--d-well);
-  min-height: 24px;
-}
 .d-presets {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 8px;
 }
-.d-palettes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+.d-note {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--d-muted);
+  overflow-wrap: anywhere;
 }
-.d-palettes > div {
+.d-metric {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.d-metric > span {
+  color: var(--d-muted);
+  font-weight: 560;
+}
+.d-metric strong {
+  font-weight: 650;
+}
+.d-readout {
   display: grid;
-  gap: 10px;
-  align-content: start;
+  gap: 6px;
 }
 .d-swatches {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   min-height: 30px;
 }
 .d-swatches button {
   flex: 1;
   min-width: 12px;
   min-height: 30px;
-  border: 1px solid color-mix(in srgb, var(--d-text) 20%, transparent);
-  border-radius: 3px;
+  border-radius: 5px;
+  padding: 0;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.2), 0 1px 0 var(--d-hi);
+  transition: transform 150ms var(--d-spring);
 }
 .d-swatches button:hover {
   transform: translateY(-2px);
   background: var(--swatch) !important;
 }
-.d-note {
-  font: 10px/1.5 var(--d-mono);
+.d-swatches button:active {
+  transform: translateY(0);
+}
+.d-swatches button.d-plate {
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: 8px;
+  text-align: left;
+  gap: 1px;
+  overflow: hidden;
+}
+.d-plate b {
+  font-weight: 650;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.d-plate small {
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+.d-plate small:empty {
+  display: none;
+}
+.d-plate[data-ink="dark"] {
+  color: #12110f;
+}
+.d-plate[data-ink="light"] {
+  color: #fff;
+}
+.d-color-plates {
+  display: grid;
+  gap: 14px;
+}
+.d-color-plates > div {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.d-palettes {
+  display: grid;
+  gap: 14px;
+}
+.d-palettes > div {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+.d-studio-only {
+  display: none;
+}
+.d-section[data-depth="3"] .d-studio-only {
+  display: block;
+}
+.d-section[data-depth="3"] .d-studio-only.d-tools {
+  display: flex;
+}
+.d-section[data-depth="3"] :is(.d-motion-details, .d-color-plates, .d-palettes, .d-keyframes) {
+  display: grid;
+}
+
+/* Studio tabs: one key per instrument, a lit key for the open one. */
+.d-section[data-depth="3"] .d-studio-tabs,
+.d-section[data-depth="3"] > .d-studio-tabs.d-studio-only {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 8px 20px;
+  box-shadow: 0 1px 0 var(--d-line);
+}
+.d-studio-tabs button {
+  font-size: 12px;
+  font-weight: 550;
   color: var(--d-muted);
+  min-height: 28px;
+}
+.d-studio-tabs button[aria-pressed="true"] {
+  color: var(--d-text);
+  background: var(--d-cap);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    inset 0 -2px 0 var(--d-accent),
+    0 0 0 1px var(--d-cap-edge),
+    0 1px 2px var(--d-lift);
+}
+
+/* ============ Studio frame ============ */
+.d-section[data-depth="3"] {
+  resize: both;
+  overflow: auto;
+  min-width: min(100%, 360px);
+  min-height: 520px;
+  width: 100%;
+  height: 720px;
+  max-height: 90vh;
+  border-radius: 12px;
+  box-shadow:
+    0 0 0 1px var(--d-line),
+    0 20px 50px -12px var(--d-lift);
+}
+.d-section[data-depth="3"] > .d-section-head {
+  position: sticky;
+  top: 0;
+  background: var(--d-surface);
+  z-index: 3;
+}
+.d-section[data-depth="3"] .d-section-content {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  overflow: visible;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-rows {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: calc(100dvh - var(--d-studio-top, 56px) - var(--d-studio-bottom, 24px) - 92px);
+}
+.d-section[data-depth="3"] .d-rows {
+  padding: 6px 0 0;
+  background: var(--d-well);
+  box-shadow: inset -1px 0 0 var(--d-line);
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.d-section[data-depth="3"] .d-rows::after {
+  content: "Drag a cap or a label to scrub\A Shift for fine, Alt for coarse\A Double-click a label to reset\A Type a value or an expression";
+  white-space: pre;
+  margin: auto 16px 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--d-line);
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--d-muted);
+}
+.d-section[data-depth="3"] .d-row {
+  grid-template-columns: 14px 72px minmax(72px, 1fr) 100px;
+}
+.d-section[data-depth="3"] .d-lab {
+  padding: 20px 24px;
+  gap: 16px;
+  display: grid;
+  align-content: start;
+}
+
+/* Viewport studio: the module leaves the page flow and takes the window. */
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] {
+  position: fixed;
+  inset: var(--d-studio-top, 56px) var(--d-studio-side, 24px) var(--d-studio-bottom, 24px);
+  margin: auto;
+  z-index: 100;
+  width: auto;
+  height: auto;
+  max-height: none;
+  min-height: 0;
+  resize: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow:
+    0 0 0 1px var(--d-text),
+    0 0 0 100vmax color-mix(in srgb, #000 46%, transparent),
+    0 30px 80px rgb(0 0 0 / 0.4);
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] > .d-section-inner {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-section-content {
+  height: 100%;
+  min-height: min-content;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab[data-studio="motion"] {
+  height: 100%;
+  min-height: min-content;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"]) {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr);
+  grid-template-areas: "main side";
+  align-content: start;
+  gap: 18px 32px;
+  padding: 22px 28px;
+}
+.d-col {
+  display: contents;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+  min-width: 0;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col-main {
+  grid-area: main;
+}
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col-side {
+  grid-area: side;
+}
+.d-section[data-depth="1"] .d-row,
+.d-section[data-depth="2"] .d-row,
+.d-section[data-depth="3"] .d-rows .d-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
+}
+
+/* ============ Color studio ============ */
+.d-color-plane .d-plot {
+  cursor: crosshair;
+  box-shadow: 0 0 0 1px var(--d-cap-edge), 0 4px 12px -4px var(--d-lift);
+  border-radius: 8px;
+}
+.d-color-preview {
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 104px;
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  overflow: hidden;
+}
+.d-color-preview canvas {
+  width: 200px;
+  height: 100px;
+  display: block;
+}
+.d-color-proof {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.d-color-code {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 5px;
+  background: var(--d-well);
+  box-shadow: inset 0 1px 2px var(--d-shade), 0 1px 0 var(--d-hi);
+  color: var(--d-text);
+  font: 500 11px/1.4 var(--d-mono);
   overflow-wrap: anywhere;
+}
+.d-color-main {
+  display: grid;
+}
+.d-color-plates .d-swatches button.d-plate {
+  min-height: 62px;
+}
+.d-palettes .d-swatches button.d-plate {
+  min-height: 36px;
+  flex-direction: row;
+  align-items: center;
+}
+.d-color-plates .d-tool {
+  justify-self: start;
+}
+
+/* ============ Motion studio ============ */
+.d-motion-main,
+.d-motion-side {
+  display: contents;
+}
+.d-section[data-depth="3"] .d-lab[data-studio="motion"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(250px, 1fr) minmax(210px, 0.8fr);
+  grid-template-areas: "tools tools tools" "main side keys" "code code code";
+  grid-template-rows: auto auto minmax(96px, 1fr);
+  align-content: start;
+  column-gap: 26px;
+  row-gap: 12px;
+  padding: 16px 24px;
+}
+.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-tools {
+  grid-area: tools;
+  gap: 12px 24px;
+}
+.d-section[data-depth="3"] .d-motion-main {
+  grid-area: main;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+}
+.d-section[data-depth="3"] .d-motion-side {
+  grid-area: side;
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+}
+.d-section[data-depth="3"] .d-exports {
+  grid-area: code;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 26px;
+  align-content: stretch;
+  contain: size;
+  min-height: 96px;
+}
+.d-section[data-depth="3"] .d-exports .d-export-block {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.d-section[data-depth="3"] .d-exports code.d-export {
+  max-height: none;
+  min-height: 0;
+  flex: 1;
+}
+.d-section[data-depth="3"] .d-motion-keys {
+  grid-area: keys;
+  gap: 10px;
+  min-width: 0;
 }
 .d-motion-plots {
   display: grid;
-  gap: 6px;
+  gap: 10px;
+}
+/* Scopes: dark glass with phosphor traces. */
+.d-lab[data-studio="motion"] .d-plot {
+  --d-line: rgb(255 255 255 / 0.12);
+  --d-muted: rgb(244 240 230 / 0.62);
+  --d-text: #f4f0e6;
+  --d-surface: #1c1b19;
+  background: var(--d-display);
+  box-shadow:
+    inset 0 2px 8px rgb(0 0 0 / 0.55),
+    0 0 0 1px var(--d-cap-edge),
+    0 1px 0 var(--d-hi);
+  border-radius: 8px;
+  cursor: default;
+}
+.d-motion-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.d-motion-pair .d-plot {
+  min-width: 0;
 }
 .d-track {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font: 10px var(--d-mono);
+  gap: 10px;
+  font-size: 11px;
+  color: var(--d-muted);
 }
 .d-track input {
   width: 100%;
 }
+.d-track output {
+  white-space: nowrap;
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.d-section[data-depth="3"] .d-timeline-wrap {
+  display: grid;
+  gap: 8px;
+}
 .d-keyframes {
   display: grid;
   gap: 6px;
-  margin-top: 8px;
 }
 .d-key {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
 }
 .d-key input {
-  width: 80px;
-  font: 11px var(--d-mono);
+  width: 84px;
+  font-size: 12px;
 }
-.d-export {
-  font: 11px/1.5 var(--d-mono);
-  padding: 10px;
-  background: var(--d-well);
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
+.d-motion-details {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.d-motion-keys .d-field input,
+.d-motion-keys .d-key input {
+  width: 56px;
+}
+.d-motion-keys .d-lab-fields {
+  grid-template-columns: 1fr;
+}
+.d-motion-details > button {
+  justify-self: start;
+}
+.d-exports .d-export-block {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  align-content: start;
+}
+.d-exports .d-export-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 560;
+  color: var(--d-muted);
+}
+.d-exports .d-export-head button {
+  min-height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+.d-export,
+.d-exports code.d-export {
+  display: block;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 500 11px/1.55 var(--d-mono);
+  max-height: 64px;
+  overflow: auto;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--d-display);
+  color: var(--d-display-ink);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.6), 0 1px 0 var(--d-hi);
+}
+.d-compare {
+  display: grid;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.d-compare-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.d-compare-row {
+  display: grid;
+  grid-template-columns: 96px 1fr 1fr;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--d-line);
+}
+.d-compare-row > span:first-child {
+  font-weight: 560;
+}
+.d-compare-row > span:not(:first-child) {
+  color: var(--d-muted);
+}
+.d-compare-title {
+  color: var(--d-muted);
+  font-size: 11px;
+}
+.d-lane-values:empty {
+  display: none;
+}
+@media (max-width: 1100px) {
+  .d-section[data-depth="3"] .d-lab[data-studio="motion"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "tools" "main" "side" "keys" "code";
+  }
+  .d-section[data-depth="3"] .d-exports {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ============ Choice, drop, file ============ */
+.d-segmented,
+.d-choice-seg {
+  display: flex;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 7px;
+  background: var(--d-groove);
+  box-shadow: inset 0 1px 2px var(--d-shade), 0 1px 0 var(--d-hi);
+}
+.d-segmented {
+  width: 100%;
+}
+.d-segmented button,
+.d-choice-seg button {
+  flex: 1 0 auto;
+  min-width: 0;
+  min-height: 24px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--d-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 5px;
+}
+.d-segmented button:hover,
+.d-choice-seg button:hover {
+  background: transparent;
+  color: var(--d-text);
+}
+.d-segmented button[aria-checked="true"],
+.d-choice-seg button[aria-pressed="true"] {
+  color: var(--d-text);
+  background: var(--d-cap);
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    inset 0 -2px 0 var(--d-accent),
+    0 0 0 1px var(--d-cap-edge),
+    0 1px 2px var(--d-lift);
+}
+.d-choice {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+}
+.d-choice-trigger {
+  min-height: 28px;
+  min-width: 124px;
+  max-width: 100%;
+  padding: 0 28px 0 10px;
+  border-radius: 5px;
+  background: var(--d-cap) !important;
+  box-shadow:
+    inset 0 1px 0 var(--d-hi),
+    0 0 0 1px var(--d-cap-edge),
+    0 1px 2px var(--d-lift);
+  font-size: 12px;
+  font-weight: 550;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  position: relative;
+}
+.d-choice-trigger::after {
+  content: "";
+  position: absolute;
+  right: 11px;
+  top: 10px;
+  width: 6px;
+  height: 6px;
+  border: solid var(--d-muted);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.d-choice-pop {
+  position: fixed;
+  z-index: 300;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--d-surface);
+  border-radius: 8px;
+  box-shadow:
+    0 0 0 1px var(--d-text),
+    0 14px 34px rgb(0 0 0 / 0.32);
+  padding: 4px;
+}
+.d-choice-pop[hidden] {
+  display: none;
+}
+.d-choice-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 5px;
+  white-space: nowrap;
+}
+.d-choice-item:hover,
+.d-choice-item:focus-visible {
+  background: var(--d-hover);
+  outline: 2px solid var(--d-accent);
+  outline-offset: -2px;
+}
+.d-choice-item[aria-selected="true"] {
+  color: var(--d-ink);
+  font-weight: 650;
+}
+.d-shelf-slot .d-choice,
+.d-value > .d-choice {
+  flex: 1;
+  width: 100%;
+}
+.d-shelf-slot .d-choice-trigger,
+.d-value .d-choice-trigger {
+  width: 100%;
+  min-width: 0;
+}
+.d-tool > .d-choice {
+  flex: 0 1 auto;
+}
+.d-drop {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 60px;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1.5px var(--d-line);
+  background: repeating-linear-gradient(135deg, transparent 0 6px, color-mix(in srgb, var(--d-line) 30%, transparent) 6px 7px);
+  font-size: 12px;
+  color: var(--d-muted);
+}
+.d-drop.is-over {
+  box-shadow: inset 0 0 0 2px var(--d-accent);
+}
+.d-drop-hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.d-eye {
+  width: 100%;
+  cursor: crosshair;
+}
+.d-eye[hidden] {
+  display: none;
+}
+
+/* ============ Type, image, data, sampler, general (adopting the basics) ============ */
+.d-type-lab {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.d-type-lab h4,
+.d-type-side h4 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--d-muted);
 }
 .d-type-specimen {
   font-size: 32px;
   line-height: 1.2;
-  min-height: 135px;
+  min-height: min(250px, 30vh);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  padding: 20px;
+  border-radius: 8px;
+  background: var(--d-well);
+  box-shadow: inset 0 1px 3px var(--d-shade), 0 1px 0 var(--d-hi);
   outline-offset: 4px;
-  padding: 10px 0;
 }
 .d-type-ruler {
   border-top: 1px solid var(--d-line);
@@ -548,30 +1758,83 @@
   font: 14px/1.5 var(--d-sans);
   letter-spacing: 0.15em;
 }
+.d-axis-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  gap: 6px;
+}
+.d-axis-strip button {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: 8px 2px 6px;
+  border-radius: 6px;
+  background: var(--d-cap);
+  box-shadow: inset 0 1px 0 var(--d-hi), 0 0 0 1px var(--d-cap-edge), 0 1px 2px var(--d-lift);
+}
+.d-axis-strip button span {
+  font-size: 26px;
+  line-height: 1;
+}
+.d-axis-strip button small {
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.d-axis-strip button[aria-pressed="true"] {
+  box-shadow: inset 0 1px 0 var(--d-hi), inset 0 -2px 0 var(--d-accent), 0 0 0 1px var(--d-cap-edge), 0 1px 2px var(--d-lift);
+}
+.d-glyphs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  border-left: 1px solid var(--d-line);
+  border-top: 1px solid var(--d-line);
+}
+.d-glyphs span {
+  display: grid;
+  place-items: center;
+  height: 34px;
+  font-size: 18px;
+  border-right: 1px solid var(--d-line);
+  border-bottom: 1px solid var(--d-line);
+}
+.d-waterfall {
+  display: grid;
+  gap: 4px;
+}
+.d-waterfall > div {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.d-waterfall small {
+  font-size: 10px;
+  color: var(--d-muted);
+}
+.d-type-side {
+  display: grid;
+  gap: 16px;
+}
 .d-encoding {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
 }
 .d-shelf-slot {
   display: flex;
   align-items: center;
-  gap: 6px;
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
+  gap: 8px;
+  border-radius: 6px;
   padding: 4px 6px;
   background: var(--d-well);
+  box-shadow: inset 0 1px 2px var(--d-shade), 0 1px 0 var(--d-hi);
 }
 .d-shelf-slot b {
-  font: 12px var(--d-mono);
-  color: var(--d-accent);
+  font-size: 12px;
+  color: var(--d-ink);
   width: 32px;
-}
-.d-shelf-slot select {
-  width: 100%;
-  border: 0;
-  height: 24px;
-  font: 10px var(--d-mono);
 }
 .d-step-cells {
   display: flex;
@@ -583,14 +1846,17 @@
   height: 12px;
   display: block;
   background: var(--d-accent);
+  border-radius: 1px;
 }
 .d-general-preview {
-  min-height: 120px;
+  min-height: 280px;
   padding: 20px;
   display: grid;
   place-items: center;
   background: var(--d-well);
-  font: 28px var(--d-mono);
+  box-shadow: inset 0 1px 3px var(--d-shade);
+  border-radius: 8px;
+  font: 28px var(--d-sans);
   overflow: hidden;
   background-size: contain;
   background-repeat: no-repeat;
@@ -599,7 +1865,7 @@
 .d-box-model {
   border: 1px dashed var(--d-accent);
   background: color-mix(in srgb, var(--d-accent) 15%, var(--d-well));
-  font: 13px var(--d-mono);
+  font-size: 13px;
 }
 .d-box-model > div {
   padding: 20px;
@@ -609,251 +1875,12 @@
 .d-shadow-object {
   width: 130px;
   height: 70px;
-  border: 1px solid var(--d-line);
-  background: var(--d-surface);
+  background: #fff;
+  color: #111;
   display: grid;
   place-items: center;
   border-radius: 6px;
   font: 16px var(--d-sans);
-}
-.d-studio-only {
-  display: none;
-}
-.d-section[data-depth="3"] .d-studio-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--d-line);
-}
-.d-studio-tabs button {
-  font-size: 11px;
-}
-.d-studio-tabs button[aria-pressed="true"] {
-  color: var(--d-accent);
-  background: var(--d-well);
-}
-.d-section[data-depth="2"] .d-motion-plots .d-plot:first-child {
-  height: 120px;
-}
-.d-section[data-depth="2"] .d-motion-plots .d-plot:last-child {
-  height: 42px;
-}
-.d-section[data-depth="3"] {
-  resize: both;
-  overflow: auto;
-  min-width: min(100%, 360px);
-  min-height: 520px;
-  width: 100%;
-  height: 720px;
-  max-height: 90vh;
-  border: 1px solid var(--d-line);
-  border-radius: 6px;
-}
-.d-section[data-depth="3"] > .d-section-head {
-  position: sticky;
-  top: 0;
-  background: var(--d-surface);
-  z-index: 3;
-}
-.d-section[data-depth="3"] .d-studio-only {
-  display: block;
-}
-.d-section[data-depth="3"] .d-studio-only.d-tools {
-  display: flex;
-}
-.d-section[data-depth="3"] .d-palettes {
-  display: grid;
-}
-.d-section[data-depth="3"] .d-section-content {
-  display: grid;
-  grid-template-columns: 330px minmax(0, 1fr);
-  overflow: visible;
-}
-.d-section[data-depth="3"] .d-rows .d-row {
-  grid-template-columns: 12px minmax(64px, 0.8fr) 60px minmax(120px, 1.5fr);
-}
-.d-section[data-depth="3"] .d-rows {
-  padding-top: 12px;
-  border-right: 1px solid var(--d-line);
-}
-.d-section[data-depth="3"] .d-lab {
-  border-top: 0;
-  padding: 20px;
-  gap: 16px;
-}
-.d-section[data-depth="3"] .d-color-preview {
-  min-height: 130px;
-}
-.d-section[data-depth="3"] .d-color-preview > span {
-  font-size: 64px;
-}
-.d-section[data-depth="3"] .d-color-preview small {
-  font-size: 11px;
-}
-.d-section[data-depth="3"] .d-metric,
-.d-section[data-depth="3"] .d-color-code {
-  font-size: 11px;
-}
-.d-section[data-depth="3"] .d-lab-fields {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-.d-section[data-depth="3"] .d-type-specimen {
-  min-height: min(420px, 48vh);
-  padding: 20px;
-  background: var(--d-well);
-}
-.d-section[data-depth="3"] .d-general-preview {
-  min-height: 280px;
-}
-.d-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.d-help {
-  border: 1px solid var(--d-line);
-  border-radius: 10px;
-  box-shadow: 0 12px 50px #0004;
-  max-width: 620px;
-  padding: 24px;
-}
-.d-help::backdrop {
-  background: #10152066;
-}
-.d-help h2 {
-  margin-top: 0;
-}
-.d-help p {
-  display: grid;
-  grid-template-columns: 190px 1fr;
-  gap: 16px;
-}
-.d-help kbd {
-  font: 11px var(--d-mono);
-  color: var(--d-accent);
-}
-/* Workshop plates: square geometry, ruled headers, plated figures. */
-.dials
-  :is(
-    input,
-    select,
-    textarea,
-    button,
-    .d-plot,
-    .d-shelf-slot,
-    .d-section,
-    .d-color-preview,
-    .d-export
-  ) {
-  border-radius: 0;
-}
-.dials .d-section-head {
-  border-bottom: 1px solid var(--d-text);
-}
-.dials .d-section-name {
-  font: 600 12px var(--d-sans) !important;
-}
-.dials .d-row {
-  height: 36px;
-  grid-template-columns: 12px minmax(82px, 1fr) 72px minmax(60px, 1fr);
-  gap: 4px;
-}
-.dials .d-figure {
-  width: 72px;
-  border-left: 1px solid var(--d-line);
-  border-right: 1px solid var(--d-line);
-  background: repeating-linear-gradient(
-    135deg,
-    transparent 0 4px,
-    color-mix(in srgb, var(--d-line) 20%, transparent) 4px 5px
-  );
-}
-.dials .d-figure svg {
-  shape-rendering: crispEdges;
-}
-.dials .d-lab {
-  padding: 16px;
-  border-top: 1px solid var(--d-text);
-}
-.dials .d-lab h3 {
-  font: 600 12px var(--d-sans);
-}
-.dials .d-plot {
-  border-color: var(--d-text);
-}
-.dials .d-value :is(input, select) {
-  border-color: var(--d-line);
-  background: var(--d-surface);
-}
-.dials .d-reset::after {
-  border-radius: 0;
-}
-@media (max-width: 720px) {
-  .d-section[data-depth="3"] .d-section-content {
-    grid-template-columns: 1fr;
-  }
-  .d-section[data-depth="3"] .d-rows {
-    border-right: 0;
-  }
-  .d-section[data-depth="3"] .d-lab-fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .d-palettes {
-    grid-template-columns: 1fr !important;
-  }
-  .d-section[data-depth="3"] .d-lab {
-    padding: 12px;
-  }
-  .d-help p {
-    grid-template-columns: 1fr;
-    gap: 3px;
-  }
-  .d-row {
-    grid-template-columns: 10px minmax(70px, 1fr) 54px minmax(60px, 1fr);
-  }
-  .d-figure {
-    width: 54px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dials *,
-  .dials *::before {
-    transition: none !important;
-    animation: none !important;
-    scroll-behavior: auto !important;
-  }
-  .d-swatches button:hover {
-    transform: none;
-  }
-}
-.d-segmented {
-  display: flex;
-  width: 100%;
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
-  overflow: visible;
-}
-.d-segmented button {
-  flex: 1;
-  min-width: 0;
-  padding: 2px 2px;
-  font-size: 9px;
-  border-radius: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.d-segmented button[aria-checked="true"] {
-  background: var(--d-accent);
-  color: var(--d-on-accent);
-}
-.dials .d-segmented,
-.dials .d-segmented button {
-  border-radius: 0;
 }
 .d-seed-strip {
   display: flex;
@@ -865,228 +1892,213 @@
   flex: 1;
   background: var(--d-accent);
 }
-.d-pane-size {
-  font-size: 10px !important;
-}
-.d-section[data-depth="3"] > .d-studio-tabs.d-studio-only {
-  display: flex;
-}
-/* Motion studio: response and timeline on the left, numbers and measurements on the right, code across the bottom. */
-.d-motion-main,
-.d-motion-side {
-  display: contents;
-}
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 1fr);
-  grid-template-areas: "head head" "tools tools" "main side" "code code";
-  align-content: start;
-  column-gap: 28px;
-  row-gap: 12px;
-  columns: auto;
-}
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-lab-head {
-  grid-area: head;
-}
-.d-section[data-depth="3"] .d-lab[data-studio="motion"] > .d-tools {
-  grid-area: tools;
-}
-.d-section[data-depth="3"] .d-motion-main {
-  grid-area: main;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  min-width: 0;
-}
-.d-section[data-depth="3"] .d-motion-side {
-  grid-area: side;
-  display: grid;
-  gap: 10px;
-  align-content: start;
-  min-width: 0;
-}
-.d-section[data-depth="3"] .d-exports {
-  grid-area: code;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 20px;
-}
-.d-export-block {
+.d-sched-table {
   display: grid;
   gap: 4px;
-  min-width: 0;
-  align-content: start;
+  font-size: 11px;
 }
-.d-exports .d-export-head {
-  display: flex;
-  justify-content: space-between;
+.d-sched-table > div {
+  display: grid;
+  grid-template-columns: 34px 58px minmax(0, 1fr);
+  gap: 8px;
   align-items: center;
-  font-size: 10px;
-  color: var(--d-muted);
 }
-.d-exports .d-export-head button {
-  padding: 1px 8px;
-  font-size: 10px;
-}
-.d-exports code.d-export {
+.d-sched-table i {
   display: block;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: 10px/1.5 var(--d-mono);
-  max-height: 84px;
-  overflow: auto;
-  padding: 6px 8px;
-  border: 1px solid var(--d-line);
-  background: var(--d-well);
+  height: 8px;
+  background: var(--d-accent);
+  border-radius: 2px;
 }
-.d-section[data-depth="3"] .d-timeline-wrap {
+.d-seed-grid {
   display: grid;
-  gap: 6px;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 2px;
 }
-.d-compare {
+.d-seed-grid i {
+  aspect-ratio: 1;
+  background: var(--d-accent);
+  border-radius: 2px;
+}
+.d-data-table {
   display: grid;
-  gap: 0;
-  font: 11px/1.4 var(--d-mono);
+  font-size: 11px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1px var(--d-line);
+  overflow: hidden;
 }
-.d-compare-head {
+.d-data-table > div {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-.d-compare-head button {
-  font-size: 10px;
-  padding: 2px 8px;
-}
-.d-compare-row {
-  display: grid;
-  grid-template-columns: 110px 1fr 1fr;
-  gap: 8px;
-  padding: 3px 0;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
   border-bottom: 1px solid var(--d-line);
 }
-.d-compare-row > span:not(:first-child) {
+.d-data-table span {
+  padding: 5px 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.d-data-table .is-used {
+  color: var(--d-ink);
+}
+.d-data-head {
+  position: sticky;
+  top: 0;
+  background: var(--d-well);
+  font-weight: 650;
+}
+.d-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 11px;
   color: var(--d-muted);
+  min-height: 16px;
 }
-.d-compare-title {
-  color: var(--d-muted);
-  font-size: 10px;
+.d-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
-.d-lane-values:empty {
-  display: none;
+.d-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
-@media (max-width: 1100px) {
-  .d-section[data-depth="3"] .d-lab[data-studio="motion"] {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "head" "tools" "main" "side" "code";
-  }
-  .d-section[data-depth="3"] .d-exports {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.d-key-fig {
+  display: inline-flex;
 }
-/* The chosen color is a diagnostic figure; every surrounding label stays readable. */
-.d-color-preview canvas {
-  width: 120px;
-  height: 60px;
+.d-key-fig svg {
   display: block;
 }
-.d-section[data-depth="3"] .d-color-preview canvas {
-  width: 200px;
-  height: 100px;
+
+/* Image stage with crop and mask handles on the picture. */
+.d-stage {
+  position: relative;
+  line-height: 0;
 }
-/* Viewport studio: the section leaves the page flow and takes the window. */
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] {
-  position: fixed;
-  inset: var(--d-studio-top, 56px) var(--d-studio-side, 24px)
-    var(--d-studio-bottom, 24px);
-  margin: auto;
-  z-index: 100;
-  width: auto;
-  height: auto;
-  max-height: none;
+.d-stage .d-plot {
+  width: 100%;
+}
+.d-crop-box {
+  position: absolute;
+  outline: 1px solid #fff;
+  box-shadow: 0 0 0 1px #111;
+  pointer-events: none;
+  z-index: 1;
+}
+.dials button.d-crop-h {
+  position: absolute;
+  width: 14px;
+  height: 14px;
   min-height: 0;
-  resize: none;
+  padding: 0;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #111;
+  background: #fff;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px #fff;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: move;
+}
+.d-crop-nw { left: 0; top: 0; cursor: nwse-resize !important; }
+.d-crop-n { left: 50%; top: 0; cursor: ns-resize !important; }
+.d-crop-ne { left: 100%; top: 0; cursor: nesw-resize !important; }
+.d-crop-e { left: 100%; top: 50%; cursor: ew-resize !important; }
+.d-crop-se { left: 100%; top: 100%; cursor: nwse-resize !important; }
+.d-crop-s { left: 50%; top: 100%; cursor: ns-resize !important; }
+.d-crop-sw { left: 0; top: 100%; cursor: nesw-resize !important; }
+.d-crop-w { left: 0; top: 50%; cursor: ew-resize !important; }
+.d-mask-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px dashed #fff;
+  border-radius: 50%;
+  outline: 1px dashed #111;
+  pointer-events: none;
+  z-index: 1;
+}
+.d-mask-ring.is-off {
+  border-color: transparent;
+  outline-color: transparent;
+}
+.dials button.d-mask-h {
+  left: 100%;
+  top: 50%;
+  border-radius: 50%;
+  cursor: ew-resize;
+}
+
+/* ============ Dialogs ============ */
+.d-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  border-color: var(--d-text);
-  box-shadow:
-    0 0 0 100vmax color-mix(in srgb, #000 42%, transparent),
-    0 24px 64px rgb(0 0 0 / 0.32);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] > .d-section-inner {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+.d-help {
+  border: 0;
+  border-radius: 12px;
+  box-shadow: 0 0 0 1px var(--d-text), 0 24px 70px rgb(0 0 0 / 0.4);
+  max-width: 620px;
+  padding: 24px;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-section-content {
-  min-height: 100%;
+.d-help::backdrop {
+  background: rgb(10 12 18 / 0.45);
 }
-/* A studio is a workbench: the main figure on the left, everything that tunes it on the right. */
-.d-col {
-  display: contents;
+.d-help h2 {
+  margin-top: 0;
+  font-size: 15px;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"]) {
+.d-help p {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
-  grid-template-areas: "head head" "main side";
-  align-content: start;
-  gap: 14px 28px;
-  padding: 16px 20px;
+  grid-template-columns: 190px 1fr;
+  gap: 16px;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"]) > .d-lab-head {
-  grid-area: head;
-}
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col {
-  display: grid;
-  gap: 14px;
-  align-content: start;
-  min-width: 0;
-}
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col-main {
-  grid-area: main;
-}
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col-side {
-  grid-area: side;
-}
-/* Rows outside the visible area are not styled, laid out or painted until they scroll in. */
-.d-section[data-depth="1"] .d-row,
-.d-section[data-depth="2"] .d-row,
-.d-section[data-depth="3"] .d-rows .d-row {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 36px;
+.d-help kbd {
+  font: 500 11px var(--d-mono);
+  color: var(--d-ink);
 }
 .d-palette {
-  width: min(520px, 92vw);
+  width: min(540px, 92vw);
   padding: 0;
-  border: 1px solid var(--d-text);
+  border: 0;
+  border-radius: 12px;
   background: var(--d-surface);
   color: var(--d-text);
+  box-shadow: 0 0 0 1px var(--d-text), 0 24px 70px rgb(0 0 0 / 0.4);
+  overflow: hidden;
 }
 .d-palette::backdrop {
   background: rgb(0 0 0 / 0.4);
 }
 .d-palette > input {
   width: 100%;
-  height: 40px;
-  padding: 0 14px;
-  border: 0;
-  border-bottom: 1px solid var(--d-line);
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 0;
+  box-shadow: 0 1px 0 var(--d-line);
   background: var(--d-surface);
-  font-size: 13px;
+  font-size: 14px;
 }
 .d-palette-list {
   max-height: 320px;
   overflow: auto;
+  padding: 4px;
 }
 .d-palette-item {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  height: 32px;
+  height: 34px;
   align-items: center;
-  padding: 0 14px;
+  padding: 0 12px;
   cursor: pointer;
+  border-radius: 6px;
 }
 .d-palette-item[aria-selected="true"] {
   background: var(--d-accent);
@@ -1095,7 +2107,7 @@
 .d-palette-item kbd,
 .d-palette-empty,
 .d-palette-note {
-  font: 10px var(--d-mono);
+  font: 500 11px var(--d-mono);
   opacity: 0.75;
 }
 .d-palette-empty,
@@ -1114,482 +2126,46 @@
   gap: 12px;
   align-items: center;
 }
-.d-section[data-depth="2"] .d-lab {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 340px;
-}
 
-/* Drawn choice control (replaces the browser select). */
-.d-choice {
-  position: relative;
-  display: inline-flex;
-  min-width: 0;
-}
-.d-choice-seg {
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
-}
-.d-choice-seg button {
-  border: 0;
-  background: transparent;
-  font-size: 10px;
-  padding: 0 9px;
-  min-height: 24px;
-  color: var(--d-muted);
-}
-.d-choice-seg button[aria-pressed="true"] {
-  background: var(--d-accent);
-  color: var(--d-on-accent);
-}
-.d-choice-trigger {
-  min-height: 24px;
-  min-width: 96px;
-  max-width: 100%;
-  padding: 0 24px 0 8px;
-  border: 1px solid var(--d-line);
-  border-radius: 4px;
-  background: var(--d-well) !important;
-  font: 10px var(--d-mono);
-  text-align: left;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  position: relative;
-}
-.d-choice-trigger::after {
-  content: "";
-  position: absolute;
-  right: 8px;
-  top: 9px;
-  width: 5px;
-  height: 5px;
-  border: solid var(--d-muted);
-  border-width: 0 1px 1px 0;
-  transform: rotate(45deg);
-}
-.d-choice-pop {
-  position: fixed;
-  z-index: 300;
-  max-height: 240px;
-  overflow: auto;
-  background: var(--d-surface);
-  border: 1px solid var(--d-text);
-  border-radius: 4px;
-  box-shadow: 0 10px 30px rgb(0 0 0 / 0.28);
-  padding: 2px;
-}
-.d-choice-pop[hidden] {
-  display: none;
-}
-.d-choice-item {
-  padding: 5px 10px;
-  font: 10px var(--d-mono);
-  cursor: pointer;
-  border-radius: 2px;
-  white-space: nowrap;
-}
-.d-choice-item:hover,
-.d-choice-item:focus-visible {
-  background: var(--d-hover);
-  outline: 2px solid var(--d-accent);
-  outline-offset: -2px;
-}
-.d-choice-item[aria-selected="true"] {
-  color: var(--d-accent);
-  font-weight: 600;
-}
-.d-shelf-slot .d-choice {
-  flex: 1;
-}
-.d-shelf-slot .d-choice-trigger {
-  width: 100%;
-}
-.d-tool > .d-choice {
-  flex: 0 1 auto;
-}
-/* Drawn file chooser with a drop target. */
-.d-drop {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 56px;
-  padding: 10px;
-  border: 1px dashed var(--d-line);
-  border-radius: 4px;
-  font-size: 10px;
-  color: var(--d-muted);
-}
-.d-drop.is-over {
-  border-color: var(--d-accent);
-  background: var(--d-well);
-}
-.d-drop-button {
-  font-size: 11px;
-  min-height: 28px;
-  padding: 0 12px;
-  border: 1px solid var(--d-text);
-  background: var(--d-surface);
-}
-.d-drop-hint {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-.d-eye {
-  width: 100%;
-  cursor: crosshair;
-}
-/* Plated swatches: each carries what the color is and how it reads. */
-.d-swatches button.d-plate {
-  min-height: 72px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: flex-start;
-  padding: 6px 7px;
-  text-align: left;
-  font: 10px/1.3 var(--d-mono);
-  overflow: hidden;
-}
-.d-plate b {
-  font-weight: 650;
-  font-size: 11px;
-}
-.d-plate[data-ink="dark"] {
-  color: #111;
-}
-.d-plate[data-ink="light"] {
-  color: #fff;
-}
-.d-color-plates {
-  display: grid;
-  gap: 14px;
-}
-.d-color-plates > div {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-}
-.d-color-plates .d-swatches button.d-plate {
-  min-height: 84px;
-}
-/* Image stage with crop and mask handles drawn on the image. */
-.d-stage {
-  position: relative;
-  line-height: 0;
-}
-.d-stage .d-plot {
-  width: 100%;
-}
-.d-crop-box {
-  position: absolute;
-  outline: 1px solid #fff;
-  box-shadow:
-    0 0 0 1px #111,
-    0 0 0 100vmax rgb(0 0 0 / 0.0);
-  pointer-events: none;
-}
-.d-crop-h {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  margin: -7px 0 0 -7px;
-  border: 2px solid #111;
-  background: #fff;
-  border-radius: 0;
-  pointer-events: auto;
-  touch-action: none;
-  cursor: move;
-}
-.d-crop-nw { left: 0; top: 0; cursor: nwse-resize; }
-.d-crop-n { left: 50%; top: 0; cursor: ns-resize; }
-.d-crop-ne { left: 100%; top: 0; cursor: nesw-resize; }
-.d-crop-e { left: 100%; top: 50%; cursor: ew-resize; }
-.d-crop-se { left: 100%; top: 100%; cursor: nwse-resize; }
-.d-crop-s { left: 50%; top: 100%; cursor: ns-resize; }
-.d-crop-sw { left: 0; top: 100%; cursor: nesw-resize; }
-.d-crop-w { left: 0; top: 50%; cursor: ew-resize; }
-.d-mask-ring {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border: 1px dashed #fff;
-  border-radius: 50%;
-  outline: 1px dashed #111;
-  pointer-events: none;
-}
-.d-mask-ring.is-off {
-  border-color: transparent;
-  outline-color: transparent;
-}
-.d-mask-h {
-  left: 100%;
-  top: 50%;
-  border-radius: 50%;
-  margin: -7px 0 0 -7px;
-  cursor: ew-resize;
-}
-.d-crop-h:focus-visible {
-  outline: 2px solid var(--d-accent);
-  outline-offset: 2px;
-}
-/* Typography lab. */
-.d-type-lab {
-  display: grid;
-  gap: 18px;
-  min-width: 0;
-}
-.d-type-lab h4,
-.d-type-side h4 {
-  margin: 0 0 6px;
-  font: 600 11px var(--d-sans);
-  color: var(--d-muted);
-}
-.d-axis-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
-  gap: 4px;
-}
-.d-axis-strip button {
-  display: grid;
-  gap: 2px;
-  justify-items: center;
-  padding: 8px 2px 4px;
-  border: 1px solid var(--d-line);
-  border-radius: 3px;
-  background: var(--d-well);
-}
-.d-axis-strip button span {
-  font-size: 26px;
-  line-height: 1;
-}
-.d-axis-strip button small {
-  font: 9px var(--d-mono);
-  color: var(--d-muted);
-}
-.d-axis-strip button[aria-pressed="true"] {
-  border-color: var(--d-accent);
-  box-shadow: inset 0 0 0 1px var(--d-accent);
-}
-.d-glyphs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(34px, 1fr));
-  border-left: 1px solid var(--d-line);
-  border-top: 1px solid var(--d-line);
-}
-.d-glyphs span {
-  display: grid;
-  place-items: center;
-  height: 40px;
-  font-size: 22px;
-  border-right: 1px solid var(--d-line);
-  border-bottom: 1px solid var(--d-line);
-}
-.d-waterfall {
-  display: grid;
-  gap: 4px;
-}
-.d-waterfall > div {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
-  gap: 10px;
-  align-items: baseline;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.d-waterfall small {
-  font: 9px var(--d-mono);
-  color: var(--d-muted);
-}
-.d-type-side {
-  display: grid;
-  gap: 16px;
-}
-/* Slider inside a studio field. */
-.d-field-slide {
-  grid-column: 1 / -1;
-}
-.d-field-slide input[type="range"] {
-  width: 100%;
-  min-width: 0;
-}
-/* Sampler schedule table and previews. */
-.d-sched-table {
-  display: grid;
-  gap: 3px;
-  font: 10px var(--d-mono);
-}
-.d-sched-table > div {
-  display: grid;
-  grid-template-columns: 34px 58px minmax(0, 1fr);
-  gap: 8px;
-  align-items: center;
-}
-.d-sched-table i {
-  display: block;
-  height: 8px;
-  background: var(--d-accent);
-}
-.d-seed-grid {
-  display: grid;
-  grid-template-columns: repeat(16, 1fr);
-  gap: 2px;
-}
-.d-seed-grid i {
-  aspect-ratio: 1;
-  background: var(--d-accent);
-}
-.d-data-table {
-  display: grid;
-  font: 10px var(--d-mono);
-  border: 1px solid var(--d-line);
-}
-.d-data-table > div {
-  display: grid;
-  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
-  border-bottom: 1px solid var(--d-line);
-}
-.d-data-table span {
-  padding: 3px 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.d-data-table .is-used {
-  color: var(--d-accent);
-}
-.d-data-head {
-  position: sticky;
-  top: 0;
-  background: var(--d-well);
-  font-weight: 600;
-}
-.d-key-fig {
-  display: inline-flex;
-}
-.d-key-fig svg {
-  display: block;
-}
-.d-motion-details {
-  display: grid;
-  gap: 14px;
-  align-content: start;
-}
-.d-motion-details .d-lab-head {
-  margin-top: 6px;
-}
-.d-exports code.d-export {
-  max-height: 150px;
-}
-.d-field-slide {
-  display: grid;
-  grid-template-columns: 78px minmax(0, 1fr) 76px;
-  align-items: center;
-  gap: 10px;
-}
-.d-lab-sliders {
-  display: grid;
-  grid-template-columns: 1fr !important;
-  gap: 4px;
-}
-.d-section[data-depth="3"] .d-type-specimen {
-  min-height: min(250px, 30vh);
-}
-.d-eye[hidden] {
-  display: none;
-}
-.d-tool {
-  flex-wrap: wrap;
-}
-.d-color-plates {
-  gap: 24px;
-}
-.d-drop {
-  flex-wrap: wrap;
-}
-.d-motion-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-.d-motion-pair .d-plot {
-  min-width: 0;
-}
-.d-exports code.d-export {
-  max-height: 64px;
-}
-.d-glyphs {
-  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
-}
-.d-glyphs span {
-  height: 34px;
-  font-size: 18px;
-}
-.d-track output {
-  white-space: nowrap;
-  flex: none;
-}
-.d-section[data-depth="2"] .d-motion-pair .d-plot {
-  height: 42px;
-}
-.d-value > .d-choice {
-  width: 100%;
-}
-.d-value .d-choice-trigger {
-  width: 100%;
-  min-width: 0;
-  height: 24px;
-}
-.d-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 16px;
-  font: 10px var(--d-mono);
-  color: var(--d-muted);
-  min-height: 16px;
-}
-.d-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.d-legend i {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.d-color-plates > div + div {
-  margin-top: 24px;
-}
-.d-plate b,
-.d-plate small {
-  background: var(--d-surface);
-  color: var(--d-text);
-  padding: 0 4px;
-  line-height: 1.5;
-}
-.d-plate small:empty {
-  display: none;
-}
-.dials button.d-crop-h {
-  width: 14px;
-  height: 14px;
-  min-height: 0;
-  padding: 0;
-  background: #fff;
-  border: 2px solid #111;
-  border-radius: 0;
-  box-shadow: 0 0 0 1px #fff;
-}
-.dials button.d-mask-h {
-  border-radius: 50%;
-}
-.d-crop-box {
-  z-index: 1;
-}
-.d-mask-ring {
-  z-index: 1;
+@media (max-width: 720px) {
+  .d-section[data-depth="3"] .d-section-content {
+    grid-template-columns: 1fr;
+  }
+  .d-section[data-depth="3"] .d-rows {
+    box-shadow: inset 0 -1px 0 var(--d-line);
+  }
+  .d-section[data-depth="3"] .d-rows::after {
+    display: none;
+  }
+  .d-section[data-depth="3"] .d-lab-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .d-section[data-depth="3"] .d-lab {
+    padding: 14px;
+  }
+  .dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"]) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "main" "side";
+    padding: 14px;
+  }
+  .d-help p {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+  .d-summary,
+  .d-section-head .d-pane-size {
+    display: none;
+  }
+  .d-summary-figure {
+    width: 64px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dials *,
+  .dials *::before,
+  .dials *::after {
+    transition: none !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
 }

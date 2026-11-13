@@ -159,14 +159,22 @@ export function grid(ctx, w, h) {
     getComputedStyle(ctx.canvas).getPropertyValue("--d-line").trim() ||
     "#ccd0da";
   ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let i = 0; i <= 10; i++) {
-    ctx.moveTo((i * w) / 10, 0);
-    ctx.lineTo((i * w) / 10, h);
-    ctx.moveTo(0, (i * h) / 10);
-    ctx.lineTo(w, (i * h) / 10);
+  // A graticule: faint minor lines every tenth, a firmer line every half.
+  for (const [step, alpha] of [[10, 0.45], [2, 1]]) {
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    for (let i = 0; i <= 10; i += step === 2 ? 5 : 1) {
+      if (step === 10 && i % 5 === 0) continue;
+      const x = Math.round((i * w) / 10) + 0.5,
+        y = Math.round((i * h) / 10) + 0.5;
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.moveTo(0, y);
+      ctx.lineTo(w, y);
+    }
+    ctx.stroke();
   }
-  ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 /**
  * A drawn replacement for the browser select. Few short options become a segmented control;

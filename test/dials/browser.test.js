@@ -267,7 +267,7 @@ test(
             await q(
               'document.querySelector("[data-section=pigment]").getBoundingClientRect().height',
             ),
-            32,
+            44,
           );
           await q("window.scrollTo(0,0)");
           await shot("light-dials");
@@ -379,6 +379,7 @@ test(
       await t.test(
         "compound studios edit real values and retain focused controls",
         async () => {
+          await q('dialsDemo.panels[1].setDepth("type",3,false)');
           await browser.type('#sample-typography [aria-label="Size"]', "42px");
           assert.equal(await q('dialsDemo.panels[1].get("typeface").size'), 42);
           await browser.type('#sample-typography [aria-label="Weight"]', "700");
@@ -386,6 +387,7 @@ test(
             await q('dialsDemo.panels[1].get("typeface").axes.wght'),
             700,
           );
+          await q('dialsDemo.panels[1].setDepth("type",2,false);dialsDemo.panels[3].setDepth("darkroom",3,false)');
           const before = await q(
             'Array.from(document.querySelector("#sample-image canvas").getContext("2d").getImageData(170,90,1,1).data)',
           );
@@ -395,6 +397,7 @@ test(
             'Array.from(document.querySelector("#sample-image canvas").getContext("2d").getImageData(170,90,1,1).data)',
           );
           assert.notDeepEqual(after, before);
+          await q('dialsDemo.panels[3].setDepth("darkroom",2,false);dialsDemo.panels[5].setDepth("sampler",3,false)');
           await browser.type('#sample-generation [aria-label="Steps"]', "31");
           assert.equal(
             await q('dialsDemo.panels[5].get("sampling").steps'),
@@ -406,6 +409,7 @@ test(
             await q('dialsDemo.panels[5].get("sampling").locked'),
             false,
           );
+          await q('dialsDemo.panels[5].setDepth("sampler",2,false);dialsDemo.panels[4].setDepth("shelf",3,false)');
           await focus('#sample-data [aria-label="x field"] button');
           await key("Enter");
           await key("End");
@@ -414,6 +418,7 @@ test(
             await q('dialsDemo.panels[4].get("channels").x'),
             "mass",
           );
+          await q('dialsDemo.panels[4].setDepth("shelf",2,false)');
           await q(
             'dialsDemo.panels[0].open("ink");document.querySelector("#sample-color").scrollIntoView()',
           );

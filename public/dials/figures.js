@@ -25,6 +25,61 @@ export function schedule(steps = 24, curve = "karras", shift = 1) {
     return (s * shift) / (1 + (shift - 1) * s);
   });
 }
+const px = (n) => Number(n.toFixed(3));
+const span = (c) => ((c.max ?? 100) - (c.min || 0) || 1);
+export const fraction = (c, n) => clamp((n - (c.min || 0)) / span(c), 0, 1);
+/** Hardware figures are HTML so their caps, grooves and ticks can use real depth. They are the grab surface. */
+function hardware(c, v, kind) {
+  const n = typeof v === "number" ? v : 0;
+  if (c.type === "angle" || kind === "angle") {
+    const full = span(c) >= 359,
+      p = fraction(c, n),
+      sweep = full ? 360 : 270,
+      a = full ? (n - (c.min || 0)) / span(c) * 360 + ((c.min || 0) < 0 ? 180 : 0) : -135 + p * 270,
+      count = full ? 24 : 19,
+      ticks = Array.from({ length: count }, (_, i) => {
+        const t = full ? (i / count) * 360 : -135 + (i / (count - 1)) * 270,
+          big = full ? i % 6 === 0 : i % 3 === 0,
+          lit = full ? false : t <= a + 0.01;
+        return `<i class="${big ? "big" : ""}${lit ? " lit" : ""}" style="--t:${px(t)}deg"></i>`;
+      }).join("");
+    return `<span class="d-knob" data-sweep="${sweep}" style="--a:${px(a)}deg">${ticks}<b class="d-knob-cap"><u></u></b></span>`;
+  }
+  if (kind === "boolean")
+    return `<span class="d-switch" data-on="${!!v}"><i class="d-switch-led"></i><b class="d-switch-cap"></b></span>`;
+  if (kind === "vector") {
+    const lo = c.min ?? -1,
+      hi = c.max ?? 1,
+      x = clamp((v[0] - lo) / (hi - lo), 0, 1),
+      y = clamp((v[1] - lo) / (hi - lo), 0, 1);
+    return `<span class="d-pad" style="--x:${px(x)};--y:${px(1 - y)}"><i class="d-pad-h"></i><i class="d-pad-v"></i><b class="d-puck"></b></span>`;
+  }
+  if (kind === "color") {
+    return `<span class="d-chip" style="--c:${esc(v)}"><b>Aa</b></span>`;
+  }
+  if (kind === "gradient")
+    return `<span class="d-chip d-chip-grad" style="background:${esc(v)}"></span>`;
+  if (kind === "shadow") {
+    const s = (k) => px((v[k] || 0) / 3);
+    return `<span class="d-card-demo"><b style="box-shadow:${s("x")}px ${s("y")}px ${px((v.blur || 0) / 3)}px ${px((v.spread || 0) / 3)}px ${esc(v.color || "#0004")}"></b></span>`;
+  }
+  const finite = Number.isFinite(c.min) && Number.isFinite(c.max);
+  if (
+    finite &&
+    typeof v === "number" &&
+    (["range", "number", "default", "opacity", "seed", "unit"].includes(kind) || kind === c.type) &&
+    !["seed", "motion", "spring", "bezier", "color", "text", "boolean"].includes(c.type)
+  ) {
+    const p = fraction(c, n),
+      zero = (c.min ?? 0) < 0 && (c.max ?? 1) > 0 ? fraction(c, 0) : 0,
+      lo = Math.min(p, zero),
+      hi = Math.max(p, zero),
+      steps = finite && c.step ? Math.round(span(c) / c.step) : 0,
+      detents = steps > 1 && steps <= 24 ? steps : 20;
+    return `<span class="d-fader${kind === "opacity" ? " d-fader-alpha" : ""}" style="--p:${px(p)};--lo:${px(lo)};--hi:${px(hi)};--n:${detents}"><i class="d-fader-groove"></i><i class="d-fader-fill"></i><b class="d-fader-cap"></b></span>`;
+  }
+  return null;
+}
 export function figureMarkup(c, v) {
   const n = typeof v === "number" ? v : 0,
     norm = clamp(
@@ -40,13 +95,13 @@ export function figureMarkup(c, v) {
   let b = "";
   const kind =
     typeof c.figure === "string" ? c.figure : c.figure?.type || c.type;
-  if (kind === "color" || kind === "gradient") {
-    b = `<rect x="2" y="3" width="60" height="18" rx="3" fill="${kind === "color" ? esc(v) : "var(--d-accent)"}"/>`;
-  } else if (["motion", "spring", "bezier"].includes(kind))
-    b =
-      P("M2 3V22H62", line) +
-      P(path(curvePoints(v, 30).map(([x, y]) => [2 + x * 60, 21 - y * 17])));
-  else if (kind === "angle")
+  const hw = hardware(c, v, kind);
+  if (hw) return hw;
+  if (["motion", "spring", "bezier"].includes(kind)) {
+    const pts = curvePoints(v, 48).map(([x, y]) => [6 + x * 92, clamp(25 - y * 20, 1.5, 28.5)]),
+      last = pts.at(-1);
+    return `<svg class="d-curve" viewBox="0 0 104 30" preserveAspectRatio="none" aria-hidden="true"><path d="M6 25H98M6 5H98" stroke="${line}" stroke-width="1" stroke-dasharray="1 3" vector-effect="non-scaling-stroke" fill="none"/><path d="${path(pts)}" stroke="${a}" fill="none" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/><path d="M${last[0]} ${last[1]}h.01" stroke="${a}" stroke-width="5" stroke-linecap="round" vector-effect="non-scaling-stroke"/></svg>`;
+  } else if (kind === "angle")
     b =
       `<circle cx="30" cy="12" r="10" fill="none" stroke="${line}"/>` +
       P(
@@ -200,13 +255,33 @@ export function figureMarkup(c, v) {
       ticks[i / 15 <= norm ? 1 : 0] += `M${i * 4 + 2} ${i % 4 ? 12 : 7}V21`;
     b = `<path d="${ticks[0]}" stroke="${line}" stroke-width="2"/><path d="${ticks[1]}" stroke="${a}" stroke-width="2"/>`;
   }
-  return `<svg viewBox="0 0 64 24" width="64" height="24" aria-hidden="true">${b}</svg>`;
+  return `<svg viewBox="0 0 64 24" preserveAspectRatio="xMidYMid meet" aria-hidden="true">${b}</svg>`;
 }
-export function drawFigure(el, c, v) {
-  el.innerHTML = figureMarkup(c, v);
-  if (c.type === "gradient") {
-    el.querySelector("rect")?.setAttribute("fill", "transparent");
-    el.style.background = v;
-    el.style.borderRadius = "3px";
+// Update in place when the figure keeps its shape, so caps and needles can travel instead of jump.
+function morph(a, b) {
+  if (a.nodeType !== b.nodeType || a.nodeName !== b.nodeName) return a.replaceWith(b);
+  if (a.nodeType === 3) {
+    if (a.data !== b.data) a.data = b.data;
+    return;
   }
+  for (const { name } of [...a.attributes]) if (!b.hasAttribute(name)) a.removeAttribute(name);
+  for (const { name, value } of b.attributes) if (a.getAttribute(name) !== value) a.setAttribute(name, value);
+  if (a.childNodes.length !== b.childNodes.length) return a.replaceChildren(...b.childNodes);
+  const from = [...a.childNodes],
+    to = [...b.childNodes];
+  from.forEach((child, i) => morph(child, to[i]));
+}
+let scratch;
+export function drawFigure(el, c, v) {
+  scratch ||= document.createElement("template");
+  scratch.innerHTML = figureMarkup(c, v);
+  const next = scratch.content,
+    first = next.firstElementChild;
+  el.classList.toggle("is-plate", !!first?.matches("svg,.d-chip,.d-card-demo"));
+  el.classList.toggle("is-knob", !!first?.matches(".d-knob"));
+  el.classList.toggle("is-switch", !!first?.matches(".d-switch"));
+  if (el.childNodes.length !== next.childNodes.length) return el.replaceChildren(next);
+  const from = [...el.childNodes],
+    to = [...next.childNodes];
+  from.forEach((child, i) => morph(child, to[i]));
 }
