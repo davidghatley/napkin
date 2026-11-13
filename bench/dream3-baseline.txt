@@ -1,61 +1,115 @@
-D1 | beat 8/8 | dream 55/55
+D1 | beat 5/8 | dream 51/55
 Check | Result | Value | Target
-viewer.orbit.html | PASS | {"kind":"html","paint":24,"variance":270.4129297138279,"colors":45} | kind html, semantic markers, content and pixel variance
-viewer.Orbit.tsx | PASS | {"kind":"tsx","paint":108,"variance":380.3177438478597,"colors":16} | kind tsx, semantic markers, content and pixel variance
-viewer.Orbit.jsx | PASS | {"kind":"jsx","paint":100,"variance":380.3177438478597,"colors":16} | kind jsx, semantic markers, content and pixel variance
-viewer.palette.css | PASS | {"kind":"css","paint":52,"variance":9090.143255048957,"colors":70} | kind css, semantic markers, content and pixel variance
-viewer.orbit.svg | PASS | {"kind":"svg","paint":24,"variance":2622.955542555298,"colors":58} | kind svg, semantic markers, content and pixel variance
-viewer.spectrum.png | PASS | {"kind":"png","paint":40,"variance":1970.2722316337758,"colors":42} | kind png, semantic markers, content and pixel variance
-viewer.spectrum.jpg | PASS | {"kind":"jpg","paint":22.5,"variance":1992.7458602102797,"colors":51} | kind jpg, semantic markers, content and pixel variance
-viewer.spectrum.webp | PASS | {"kind":"webp","paint":22,"variance":2017.956462640976,"colors":61} | kind webp, semantic markers, content and pixel variance
-viewer.spectrum.avif | PASS | {"kind":"avif","paint":28,"variance":2010.8676603385265,"colors":56} | kind avif, semantic markers, content and pixel variance
-viewer.spectrum.gif | PASS | {"kind":"gif","paint":21.800000190734863,"variance":275.61504605761365,"colors":39} | kind gif, semantic markers, content and pixel variance
-viewer.spectrum.apng | PASS | {"kind":"apng","paint":26.700000286102295,"variance":276.76853762847304,"colors":40} | kind apng, semantic markers, content and pixel variance
-viewer.orbit.mp4 | PASS | {"kind":"mp4","paint":28,"variance":408.707943802553,"colors":71} | kind mp4, semantic markers, content and pixel variance
-viewer.orbit.webm | PASS | {"kind":"webm","paint":20,"variance":409.188452319956,"colors":75} | kind webm, semantic markers, content and pixel variance
-viewer.orbit.mov | PASS | {"kind":"mov","paint":24,"variance":409.188452319956,"colors":75} | kind mov, semantic markers, content and pixel variance
-viewer.tone.wav | PASS | {"kind":"wav","paint":44,"variance":973.3333699566933,"colors":51} | kind wav, semantic markers, content and pixel variance
-viewer.tone.mp3 | PASS | {"kind":"mp3","paint":36,"variance":930.6190930237549,"colors":50} | kind mp3, semantic markers, content and pixel variance
-viewer.tone.flac | PASS | {"kind":"flac","paint":28.700000286102295,"variance":968.154998532761,"colors":51} | kind flac, semantic markers, content and pixel variance
-viewer.tone.ogg | PASS | {"kind":"ogg","paint":24,"variance":974.4712925673907,"colors":51} | kind ogg, semantic markers, content and pixel variance
-viewer.orbit.lottie.json | PASS | {"kind":"lottie","paint":24,"variance":71.4803929170705,"colors":49} | kind lottie, semantic markers, content and pixel variance
-viewer.orbit.animation.html | PASS | {"kind":"css-animation","paint":16,"variance":269.9441377319963,"colors":51} | kind css-animation, semantic markers, content and pixel variance
-viewer.orbit.waapi.html | PASS | {"kind":"waapi","paint":16,"variance":269.58627468893246,"colors":48} | kind waapi, semantic markers, content and pixel variance
-viewer.table.csv | PASS | {"kind":"csv","paint":39.5,"variance":412.14724598414455,"colors":44} | kind csv, semantic markers, content and pixel variance
-viewer.table.tsv | PASS | {"kind":"tsv","paint":30.899999618530273,"variance":412.00886009386727,"colors":44} | kind tsv, semantic markers, content and pixel variance
-viewer.table.json | PASS | {"kind":"json","paint":24,"variance":403.9266369202319,"colors":44} | kind json, semantic markers, content and pixel variance
-viewer.table.jsonl | PASS | {"kind":"jsonl","paint":24,"variance":413.6839039562276,"colors":44} | kind jsonl, semantic markers, content and pixel variance
-viewer.table.parquet | PASS | {"kind":"parquet","paint":24,"variance":210.40093211606063,"colors":43} | kind parquet, semantic markers, content and pixel variance
-viewer.table.sqlite | PASS | {"kind":"sqlite","paint":24,"variance":405.59908139101117,"colors":44} | kind sqlite, semantic markers, content and pixel variance
-viewer.table.arrow | PASS | {"kind":"arrow","paint":20,"variance":208.9294657860421,"colors":41} | kind arrow, semantic markers, content and pixel variance
-viewer.chart.vl.json | PASS | {"kind":"vega-lite","paint":20,"variance":1426.478879866199,"colors":55} | kind vega-lite, semantic markers, content and pixel variance
-viewer.chart.data.json | PASS | {"kind":"chart","paint":24,"variance":1427.9151055928119,"colors":55} | kind chart, semantic markers, content and pixel variance
-viewer.notes.md | PASS | {"kind":"md","paint":28,"variance":87.93314276702995,"colors":35} | kind md, semantic markers, content and pixel variance
-viewer.notes.txt | PASS | {"kind":"txt","paint":26,"variance":41.1866995468215,"colors":38} | kind txt, semantic markers, content and pixel variance
-viewer.orbit.rs | PASS | {"kind":"code","paint":23.800000190734863,"variance":34.66374449155478,"colors":59} | kind code, semantic markers, content and pixel variance
-viewer.orbit.diff | PASS | {"kind":"diff","paint":24,"variance":135.28745316808568,"colors":127} | kind diff, semantic markers, content and pixel variance
-viewer.orbit.patch | PASS | {"kind":"patch","paint":24.700000286102295,"variance":55.6616276104337,"colors":47} | kind patch, semantic markers, content and pixel variance
-viewer.orbit.ipynb | PASS | {"kind":"ipynb","paint":24.5,"variance":114.8917794513286,"colors":48} | kind ipynb, semantic markers, content and pixel variance
-viewer.orbit.pdf | PASS | {"kind":"pdf","paint":55,"variance":7601.229088104781,"colors":82} | kind pdf, semantic markers, content and pixel variance
-viewer.triangle.gltf | PASS | {"kind":"gltf","paint":28,"variance":8068.714561710771,"colors":57} | kind gltf, semantic markers, content and pixel variance
-viewer.triangle.glb | PASS | {"kind":"glb","paint":36,"variance":8068.791548820818,"colors":57} | kind glb, semantic markers, content and pixel variance
-viewer.triangle.obj | PASS | {"kind":"obj","paint":36,"variance":8068.883749108312,"colors":56} | kind obj, semantic markers, content and pixel variance
-viewer.orbit.otf | PASS | {"kind":"otf","paint":36,"variance":668.6021389163079,"colors":38} | kind otf, semantic markers, content and pixel variance
-viewer.orbit.ttf | PASS | {"kind":"ttf","paint":24,"variance":1525.1731914738727,"colors":37} | kind ttf, semantic markers, content and pixel variance
-viewer.orbit.woff2 | PASS | {"kind":"woff2","paint":24,"variance":1528.2772800602872,"colors":38} | kind woff2, semantic markers, content and pixel variance
-viewer.workflow.api.json | PASS | {"kind":"comfyui","paint":28,"variance":217.19786562540185,"colors":61} | kind comfyui, semantic markers, content and pixel variance
-viewer.workflow.ui.json | PASS | {"kind":"comfyui","paint":28,"variance":149.1348913834197,"colors":59} | kind comfyui, semantic markers, content and pixel variance
-viewer.orbit.run.jsonl | PASS | {"kind":"agent-run","paint":28,"variance":195.80386875907857,"colors":45} | kind agent-run, semantic markers, content and pixel variance
-viewer.orbit.zip | PASS | {"kind":"zip","paint":24,"variance":58.786288766110374,"colors":39} | kind zip, semantic markers, content and pixel variance
-viewer.unknown.bin | PASS | {"kind":"binary","paint":24,"variance":243.53262812426215,"colors":38} | kind binary, semantic markers, content and pixel variance
-coverage.beat | PASS | 47 | 25 kinds render
-paint.p95 | PASS | {"samples":48,"p95":55} | all corpus items measured; first paint p95 < 150 ms
-mixed.open | PASS | {"ms":900.8710879999999,"cards":{"n":1000,"blank":0,"judged":5,"matched":5,"pixelJudged":4,"pixelMatched":4}} | 1000 items; complete visible cards (real content from the file, not just the name) < 2 s from CLI start
+viewer.orbit.html | PASS | {"kind":"html","paint":28,"variance":312.8897858588316,"colors":56} | kind html, semantic markers, content and pixel variance
+viewer.Orbit.tsx | PASS | {"kind":"tsx","paint":148,"variance":266.6900547179248,"colors":14} | kind tsx, semantic markers, content and pixel variance
+viewer.Orbit.jsx | PASS | {"kind":"jsx","paint":108,"variance":266.6900547179248,"colors":14} | kind jsx, semantic markers, content and pixel variance
+viewer.palette.css | PASS | {"kind":"css","paint":36,"variance":9014.30366288973,"colors":68} | kind css, semantic markers, content and pixel variance
+viewer.orbit.svg | PASS | {"kind":"svg","paint":27.399999618530273,"variance":351.47467084719074,"colors":58} | kind svg, semantic markers, content and pixel variance
+viewer.spectrum.png | PASS | {"kind":"png","paint":36,"variance":467.11017773710137,"colors":42} | kind png, semantic markers, content and pixel variance
+viewer.spectrum.jpg | PASS | {"kind":"jpg","paint":28,"variance":476.99504421547044,"colors":50} | kind jpg, semantic markers, content and pixel variance
+viewer.spectrum.webp | PASS | {"kind":"webp","paint":28,"variance":489.3406320117397,"colors":61} | kind webp, semantic markers, content and pixel variance
+viewer.spectrum.avif | PASS | {"kind":"avif","paint":28,"variance":488.8015415271998,"colors":57} | kind avif, semantic markers, content and pixel variance
+viewer.spectrum.gif | PASS | {"kind":"gif","paint":28,"variance":815.8171062812694,"colors":39} | kind gif, semantic markers, content and pixel variance
+viewer.spectrum.apng | PASS | {"kind":"apng","paint":25.09999990463257,"variance":816.9034739526674,"colors":40} | kind apng, semantic markers, content and pixel variance
+viewer.orbit.mp4 | PASS | {"kind":"mp4","paint":30.09999990463257,"variance":828.3363170612224,"colors":63} | kind mp4, semantic markers, content and pixel variance
+viewer.orbit.webm | PASS | {"kind":"webm","paint":32,"variance":829.0909243899796,"colors":70} | kind webm, semantic markers, content and pixel variance
+viewer.orbit.mov | PASS | {"kind":"mov","paint":40,"variance":829.0909243899796,"colors":70} | kind mov, semantic markers, content and pixel variance
+viewer.tone.wav | PASS | {"kind":"wav","paint":44,"variance":979.8989811005231,"colors":51} | kind wav, semantic markers, content and pixel variance
+viewer.tone.mp3 | PASS | {"kind":"mp3","paint":20,"variance":936.65197996906,"colors":51} | kind mp3, semantic markers, content and pixel variance
+viewer.tone.flac | PASS | {"kind":"flac","paint":29.700000286102295,"variance":974.6070888693171,"colors":51} | kind flac, semantic markers, content and pixel variance
+viewer.tone.ogg | PASS | {"kind":"ogg","paint":20,"variance":981.4493062228103,"colors":51} | kind ogg, semantic markers, content and pixel variance
+viewer.orbit.lottie.json | PASS | {"kind":"lottie","paint":20,"variance":103.59691473774046,"colors":53} | kind lottie, semantic markers, content and pixel variance
+viewer.orbit.animation.html | PASS | {"kind":"css-animation","paint":36,"variance":312.88713109950913,"colors":56} | kind css-animation, semantic markers, content and pixel variance
+viewer.orbit.waapi.html | PASS | {"kind":"waapi","paint":16,"variance":312.05454917109455,"colors":60} | kind waapi, semantic markers, content and pixel variance
+viewer.table.csv | PASS | {"kind":"csv","paint":39,"variance":409.35331875834345,"colors":42} | kind csv, semantic markers, content and pixel variance
+viewer.table.tsv | PASS | {"kind":"tsv","paint":20,"variance":409.26261308304197,"colors":42} | kind tsv, semantic markers, content and pixel variance
+viewer.table.json | PASS | {"kind":"json","paint":28.200000286102295,"variance":401.15355599535906,"colors":42} | kind json, semantic markers, content and pixel variance
+viewer.table.jsonl | PASS | {"kind":"jsonl","paint":24,"variance":410.902194952723,"colors":42} | kind jsonl, semantic markers, content and pixel variance
+viewer.table.parquet | PASS | {"kind":"parquet","paint":29.09999990463257,"variance":202.16440488495277,"colors":41} | kind parquet, semantic markers, content and pixel variance
+viewer.table.sqlite | PASS | {"kind":"sqlite","paint":24,"variance":402.8358876892323,"colors":42} | kind sqlite, semantic markers, content and pixel variance
+viewer.table.arrow | PASS | {"kind":"arrow","paint":20,"variance":208.9116516223005,"colors":41} | kind arrow, semantic markers, content and pixel variance
+viewer.chart.vl.json | PASS | {"kind":"vega-lite","paint":24,"variance":1940.6983486015015,"colors":54} | kind vega-lite, semantic markers, content and pixel variance
+viewer.chart.data.json | PASS | {"kind":"chart","paint":24,"variance":1942.249558897462,"colors":54} | kind chart, semantic markers, content and pixel variance
+viewer.notes.md | PASS | {"kind":"md","paint":31.300000190734863,"variance":86.119053247495,"colors":35} | kind md, semantic markers, content and pixel variance
+viewer.notes.txt | PASS | {"kind":"txt","paint":23.200000286102295,"variance":41.02148374321041,"colors":38} | kind txt, semantic markers, content and pixel variance
+viewer.orbit.rs | PASS | {"kind":"code","paint":24,"variance":34.64034883115323,"colors":58} | kind code, semantic markers, content and pixel variance
+viewer.orbit.diff | PASS | {"kind":"diff","paint":24,"variance":135.01979393119927,"colors":128} | kind diff, semantic markers, content and pixel variance
+viewer.orbit.patch | PASS | {"kind":"patch","paint":22.300000190734863,"variance":55.67060073988955,"colors":47} | kind patch, semantic markers, content and pixel variance
+viewer.orbit.ipynb | PASS | {"kind":"ipynb","paint":23.90000009536743,"variance":113.04425139508226,"colors":48} | kind ipynb, semantic markers, content and pixel variance
+viewer.orbit.pdf | PASS | {"kind":"pdf","paint":54.09999990463257,"variance":7205.411019787956,"colors":58} | kind pdf, semantic markers, content and pixel variance
+viewer.triangle.gltf | PASS | {"kind":"gltf","paint":28,"variance":8068.96210055775,"colors":57} | kind gltf, semantic markers, content and pixel variance
+viewer.triangle.glb | PASS | {"kind":"glb","paint":26.5,"variance":8068.930636126517,"colors":57} | kind glb, semantic markers, content and pixel variance
+viewer.triangle.obj | PASS | {"kind":"obj","paint":25.199999809265137,"variance":8068.831145547983,"colors":57} | kind obj, semantic markers, content and pixel variance
+viewer.orbit.otf | PASS | {"kind":"otf","paint":40,"variance":668.6188644004542,"colors":38} | kind otf, semantic markers, content and pixel variance
+viewer.orbit.ttf | PASS | {"kind":"ttf","paint":20,"variance":1525.0886487994478,"colors":38} | kind ttf, semantic markers, content and pixel variance
+viewer.orbit.woff2 | FAIL | {"error":"Unsupported OpenType signature wOF2"} | kind woff2, semantic markers, content and pixel variance
+viewer.workflow.api.json | PASS | {"kind":"comfyui","paint":37,"variance":217.15617391450837,"colors":61} | kind comfyui, semantic markers, content and pixel variance
+viewer.workflow.ui.json | PASS | {"kind":"comfyui","paint":22.800000190734863,"variance":149.06134650059903,"colors":59} | kind comfyui, semantic markers, content and pixel variance
+viewer.orbit.run.jsonl | PASS | {"kind":"agent-run","paint":23.40000009536743,"variance":195.1118118058357,"colors":45} | kind agent-run, semantic markers, content and pixel variance
+viewer.orbit.zip | PASS | {"kind":"zip","paint":24,"variance":58.23292748870654,"colors":39} | kind zip, semantic markers, content and pixel variance
+viewer.unknown.bin | PASS | {"kind":"binary","paint":28,"variance":241.61373444347078,"colors":38} | kind binary, semantic markers, content and pixel variance
+coverage.beat | PASS | 46 | 25 kinds render
+paint.p95 | PASS | {"samples":48,"p95":54.09999990463257} | all corpus items measured; first paint p95 < 150 ms
+mixed.open | PASS | {"ms":955.9268409999968,"cards":{"n":1000,"blank":0,"judged":5,"matched":5,"pixelJudged":4,"pixelMatched":4}} | 1000 items; complete visible cards (real content from the file, not just the name) < 2 s from CLI start
 mixed.sample | PASS | {"sampled":12,"bad":[]} | 12 random items across the folder open alone with the right kind, real content, non-blank
-mixed.pan | PASS | {"p95":16.799999999999727,"samples":297,"visible":{"n":35,"blank":0}} | p95 frame < 16.7 ms; no blank cards after 300 ms
-mixed.zoom | PASS | {"p95":16.800000000000182,"samples":382,"visible":{"n":35,"blank":0}} | p95 frame < 16.7 ms; no blank cards after 300 ms
-large.video | PASS | {"fileBytes":2105977329,"baseline":166256640,"peak":211386368,"increase":45129728,"browserBaseline":5787477,"browserPeak":7359284,"browserIncrease":1571807,"browserProcessIncrease":59334656} | real content, exact metadata; peak RSS increase < 60% of file bytes
-large.parquet | PASS | {"fileBytes":40010544,"baseline":166756352,"peak":185663488,"increase":18907136,"browserBaseline":5295274,"browserPeak":15447102,"browserIncrease":10151828,"browserProcessIncrease":12312576} | real content, exact metadata; peak RSS increase < 60% of file bytes
+mixed.pan | FAIL | [{"viewport":"1100x700","workP95":7,"frames":710,"dropped":0,"droppedShare":0,"intervalP95":16.8,"visible":{"n":25,"blank":0,"blankIds":[]}},{"viewport":"1600x1000","workP95":13.2,"frames":674,"dropped":0,"droppedShare":0,"intervalP95":16.8,"visible":{"n":56,"blank":0,"blankIds":[]}},{"viewport":"1920x1080","workP95":26.9,"frames":629,"dropped":6,"droppedShare":0.01,"intervalP95":16.7,"visible":{"n":80,"blank":0,"blankIds":[]}}] | at 1100x700, 1600x1000 and 1920x1080: p95 main-thread work per frame < 16.7 ms, <= 5% dropped frames over a 4 s gesture; no blank cards after 300 ms
+mixed.zoom | FAIL | [{"viewport":"1100x700","workP95":8.5,"frames":707,"dropped":0,"droppedShare":0,"intervalP95":16.7,"visible":{"n":25,"blank":0,"blankIds":[]}},{"viewport":"1600x1000","workP95":32.2,"frames":676,"dropped":9,"droppedShare":0.013,"intervalP95":16.7,"visible":{"n":56,"blank":0,"blankIds":[]}},{"viewport":"1920x1080","workP95":49.4,"frames":656,"dropped":43,"droppedShare":0.066,"intervalP95":33.3,"visible":{"n":80,"blank":0,"blankIds":[]}}] | at 1100x700, 1600x1000 and 1920x1080: p95 main-thread work per frame < 16.7 ms, <= 5% dropped frames over a 4 s gesture; no blank cards after 300 ms
+large.video | PASS | {"fileBytes":2105509275,"baseline":166297600,"peak":209821696,"increase":43524096,"browserBaseline":1698355,"browserPeak":3707193,"browserIncrease":2008838,"browserProcessBaseline":1284956160,"browserProcessPeak":1672957952,"browserProcessIncrease":388001792,"seekMs":89.09999990463257} | real content, exact metadata (Parquet: a random row and the last row exact); isolated peak RSS increase (server, fresh browser heap and process tree) < 60% of file bytes
+large.parquet | FAIL | {"error":"row 1487715 of 5 M never reachable"} | real content, exact metadata (Parquet: a random row and the last row exact); isolated peak RSS increase (server, fresh browser heap and process tree) < 60% of file bytes
+D1 | beat 0/0 | dream 23/51
+Check | Result | Value | Target
+fidelity3.csv.zeros | FAIL | {"error":"row 0: code: file \"00703\", shown \"703\"; big: file \"9007199256445803\", shown \"9007199256445804\"; amount: file \"621.00\", shown \"621\" | row 70: code: file \"00927\", shown \"927\"; big: file \"9007199256260225\", shown \"9007199256260224\"; amount: file \"136.10\", shown \"136.1\" | row 82: code: file \"00287\", shown \"287\"; big: file \"9007199256640121\", shown \"9007199256640120\" | served meta row 0: code \"00703\"→703; big \"9007199256445803\"→9007199256445804; amount \"621.00\"→621"} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.csv.dupes | FAIL | {"error":"row 0: value: file \"444\", shown \"775\" | row 1: value: file \"105\", shown \"597\" | row 55: value: file \"441\", shown \"743\" | served meta row 0: value \"444\"→775"} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.csv.quotes | PASS | {"rows":[0,23,43],"total":44,"routes":{"0":"shown","23":"shown","43":"shown"}} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.csv.bom | PASS | {"rows":[0,12,29],"total":30,"routes":{"0":"shown","12":"shown","29":"shown"}} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.csv.utf16 | PASS | {"rows":[0,26,29],"total":30,"routes":{"0":"shown","26":"shown","29":"shown"}} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.csv.latin1 | PASS | {"rows":[0,7,29],"total":30,"routes":{"0":"shown","7":"shown","29":"shown"}} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.tsv.tabs | FAIL | {"error":"row count 40 not shown | row 18: note: file \"\\\"xenon\", shown \"xenon tspbg19 yarrow it's zephyr tspbg20 amber juniper\" | row 39 (tspbg39) of 40 never reachable (rows on screen none matched the file's header [\"id\",\"name\",\"note\"])"} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.csv.big | FAIL | {"error":"row count 159310 not shown | row 81356 (gspbg81356) of 159310 never reachable (rows on screen 3040–3119) | row 159309 (gspbg159309) of 159310 never reachable (rows on screen 5920–5999)"} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.tsv.big16 | FAIL | {"error":"row count 116818 not shown | row 15863 (wspbg15863) of 116818 never reachable (rows on screen 3200–3279) | row 116817 (wspbg116817) of 116818 never reachable (rows on screen 6400–6479)"} | every sampled row (first, random, last; row-group/batch edges) reachable; header and cells exactly as the reference parser reads the bytes
+fidelity3.json.deep | FAIL | {"error":"value deepydgpvthh never reachable"} | deepest node and last array element reachable; numbers exactly as written
+fidelity3.json.wide | FAIL | {"error":"value wydgpx1696 never reachable | value wydgpx868 never reachable"} | deepest node and last array element reachable; numbers exactly as written
+fidelity3.json.bignum | FAIL | {"error":"number 70700187281215846857 not shown exactly (numbers on screen: 70700187281215850000, 9007199254741180, -9007199254741180, 9007199254741180, 70700187281215850000) | number 9007199254741179 not shown exactly (numbers on screen: 70700187281215850000, 9007199254741180, -9007199254741180, 9007199254741180, 70700187281215850000) | number -9007199254741179 not shown exactly (numbers on screen: 70700187281215850000, 9007199254741180, -9007199254741180, 9007199254741180, 70700187281215850000) | number 0.1000000000000000055511151231257827 not shown exactly (numbers on screen: 70700187281215850000, 9007199254741180, -9007199254741180, 9007199254741180, 70700187281215850000)"} | deepest node and last array element reachable; numbers exactly as written
+fidelity3.jsonl.rows | FAIL | {"error":"number 9007199254746401 not shown exactly (numbers on screen: none)"} | deepest node and last array element reachable; numbers exactly as written
+fidelity3.arrow.file | FAIL | {"error":"row count 895 not shown | row 0: city: file \"Aspen\", shown \"∅\"; value: file \"0\", shown \"∅\"; score: file \"0\", shown \"∅\"; big: file \"9007199254740993\", shown \"-7905747460161236000\"; ok: file \"true\", shown \"∅\" | row 346: city: file \"Boise\", shown \"∅\"; value: file \"802\", shown \"∅\"; score: file \"1124.5\", shown \"∅\"; big: file \"9007199254741685\", shown \"∅\"; ok: file \"false\", shown \"∅\" | row 347 (ayzwc347) of 895 never reachable (rows on screen 400–479) | row 415: city: file \"Aspen\", shown \"∅\"; value: file \"355\", shown \"0\"; score: file \"1348.75\", shown \"∅\"; big: file \"9007199254741823\", shown \"171798691872\"; ok: file \"false\", shown \"∅\" | row 894 (ayzwc894) of 895 never reachable (rows on screen 0–79) | served meta row 0: city \"Aspen\"→\"\\u0000\"; value \"0\"→null; score \"0\"→null; big \"9007199254740993\"→-7905747460161236000; ok \"true\"→null"} | rows of every record batch exact (dictionary values, nulls, int64) as apache-arrow reads them
+fidelity3.arrow.stream | FAIL | {"error":"listed as binary, the bytes are arrow"} | rows of every record batch exact (dictionary values, nulls, int64) as apache-arrow reads them
+fidelity3.arrow.stream-in-.arrow | FAIL | {"error":"row count 895 not shown | row 0 (ayzwc0) of 895 never reachable (rows on screen none matched the file's header [\"id\",\"city\",\"value\",\"score\",\"big\",\"ok\"]) | row 133 (ayzwc133) of 895 never reachable (rows on screen none matched the file's header [\"id\",\"city\",\"value\",\"score\",\"big\",\"ok\"]) | row 346 (ayzwc346) of 895 never reachable (rows on screen none matched the file's header [\"id\",\"city\",\"value\",\"score\",\"big\",\"ok\"]) | row 347 (ayzwc347) of 895 never reachable (rows on screen none matched the file's header [\"id\",\"city\",\"value\",\"score\",\"big\",\"ok\"]) | row 894 (ayzwc894) of 895 never reachable (rows on screen none matched the file's header [\"id\",\"city\",\"value\",\"score\",\"big\",\"ok\"])"} | rows of every record batch exact (dictionary values, nulls, int64) as apache-arrow reads them
+fidelity3.parquet.groups | FAIL | {"error":"row 739 (pcggz739) of 2798 never reachable (rows on screen 0–119) | row 1347 (pcggz1347) of 2798 never reachable (rows on screen 0–119) | row 2797 (pcggz2797) of 2798 never reachable (rows on screen 0–119)"} | rows at row-group boundaries and EOF exact as parquetjs-lite reads them
+fidelity3.sqlite.tables | FAIL | {"error":"orders: row count 1243 not shown | orders row 0 of 1243 never reachable | orders row 379 of 1243 never reachable | orders row 1242 of 1243 never reachable"} | every table listed and openable; sampled rows exact as the sqlite3 CLI reads them
+fidelity3.md.gfm | FAIL | {"error":"table not rendered as a table (cells shown: 0; literal pipes on screen: true) | task list: file [true,false,false,false,true], checkboxes [] (literal [x] on screen)"} | tables, task checkboxes, verbatim code and the relative image as markdown-it reads them
+fidelity3.vegalite.layered | FAIL | {"error":"0 point marks, reference 11 | 0 line marks, reference 1"} | mark counts and geometry match the vega reference scenegraph
+fidelity3.vegalite.stacked | FAIL | {"error":"stacked: reference has 12 bars in 4 columns (3/3/3/3 segments); shown 12 bars in 12 columns (1/1/1/1/1/1/1/1/1/1/1/1)"} | mark counts and geometry match the vega reference scenegraph
+fidelity3.vegalite.faceted | FAIL | {"error":"faceted: reference has 12 bars in 12 columns (1/1/1/1/1/1/1/1/1/1/1/1 segments); shown 12 bars in 12 columns (1/1/1/1/1/1/1/1/1/1/1/1), heights r=0.219"} | mark counts and geometry match the vega reference scenegraph
+fidelity3.gltf.external | FAIL | {"error":"0 instances of the red mesh drawn, file places 3 | scaled node area ratio 0, file scale 1.7 (area ≈ 2.89×) | texture colours missing (blue 0, yellow 0)"} | instances, node transforms and texture colours drawn as the file states
+fidelity3.glb.embedded | FAIL | {"error":"0 instances of the red mesh drawn, file places 3 | scaled node area ratio 0, file scale 1.7 (area ≈ 2.89×) | texture colours missing (blue 0, yellow 0)"} | instances, node transforms and texture colours drawn as the file states
+fidelity3.lottie.nested | FAIL | {"error":"nested precomp not drawn (colour #14bec8 covers 0.00% of the stage; reference 6.96%) | relative image asset not drawn (colour #e62828 covers 0.00% of the stage; reference 5.79%)"} | nested precomp, relative image asset and a layer without st all drawn, as lottie-web draws them
+fidelity3.pdf.pages | PASS | {"pages":4,"seen":[true,true,true,true]} | page count; each page reachable with the reference raster's colours and text ink
+fidelity3.audio.wav | PASS | {"duration":4} | playable duration and waveform envelope follow the samples ffmpeg decodes
+fidelity3.audio.mp3 | PASS | {"duration":4} | playable duration and waveform envelope follow the samples ffmpeg decodes
+fidelity3.audio.flac | PASS | {"duration":4} | playable duration and waveform envelope follow the samples ffmpeg decodes
+fidelity3.audio.ogg | PASS | {"duration":4} | playable duration and waveform envelope follow the samples ffmpeg decodes
+fidelity3.video.mp4 | PASS | {"frames":4} | frames at four times match the frames ffmpeg extracts
+fidelity3.video.webm | PASS | {"frames":4} | frames at four times match the frames ffmpeg extracts
+fidelity3.font.coverage | FAIL | {"error":"covered characters not shown: Æ ñ Δ Σ Я"} | glyph count, covered characters, variable axes with ranges
+fidelity3.font.axes | FAIL | {"error":"axis opsz 14–32 not shown | axis wght 100–900 not shown | 0 axis controls for 2 axes"} | glyph count, covered characters, variable axes with ranges
+fidelity3.zip.nested | PASS | {"entries":9} | nested entries listed and openable; large entry size exact
+fidelity3.image.tall | FAIL | {"error":"colour #2850e6 covers 0.026% of the view (a 3×691 image must be visible) | colour #14bec8 covers 0.026% of the view (a 3×691 image must be visible)"} | size shown; pixels visible; alpha respected; every animation frame shown
+fidelity3.image.tiny | PASS | {"size":"7×5"} | size shown; pixels visible; alpha respected; every animation frame shown
+fidelity3.image.alpha | PASS | {"size":"200×120"} | size shown; pixels visible; alpha respected; every animation frame shown
+fidelity3.image.animated-gif | PASS | {"size":"160×100"} | size shown; pixels visible; alpha respected; every animation frame shown
+fidelity3.image.animated-webp | PASS | {"size":"160×100"} | size shown; pixels visible; alpha respected; every animation frame shown
+fidelity3.image.animated-apng | PASS | {"size":"160×100"} | size shown; pixels visible; alpha respected; every animation frame shown
+fidelity3.sniff.png | PASS | {"kind":"png"} | kind decided by the bytes when the extension is wrong or missing
+fidelity3.sniff.pdf | PASS | {"kind":"pdf"} | kind decided by the bytes when the extension is wrong or missing
+fidelity3.sniff.zip | PASS | {"kind":"zip"} | kind decided by the bytes when the extension is wrong or missing
+fidelity3.sniff.sqlite | PASS | {"kind":"sqlite"} | kind decided by the bytes when the extension is wrong or missing
+fidelity3.sniff.mp4 | PASS | {"kind":"mp4"} | kind decided by the bytes when the extension is wrong or missing
+fidelity3.sniff.wav | PASS | {"kind":"wav"} | kind decided by the bytes when the extension is wrong or missing
+fidelity3.sniff.html | FAIL | {"error":"page-znjy.bin holds html bytes; listed as binary"} | kind decided by the bytes when the extension is wrong or missing
+fidelity3.canvas.tsx-without-component | FAIL | {"error":"no canvas card for config-qqfc.tsx (2 cards: Badge-qqfc.tsx#Badge, log-qqfc.csv)"} | a TSX file with no component export still gets a canvas card showing its source
+fidelity3.canvas.layers-enter-interact | FAIL | {"error":"card opacity 0.16 after Enter"} | select a card through Layers, press Enter: the card is on screen, opaque, hit-testable, and pointer input scrolls its own content
+fidelity3.canvas.plugin-only-folder | FAIL | {"error":"no Layers tree on screen"} | a folder of only a plugin kind: first load shows each card's own content and a Layers row per file, no interaction needed
+fidelity3.meta | PASS | {"seed":662452,"generateMs":2564,"totalMs":197822} | run facts (not a gate)
 D2 | beat 2/10 | dream 2/56 | lead-attested pending 2
 Check | Result | Value | Target
 instruments.orbit.html | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
@@ -66,7 +120,7 @@ instruments.orbit.svg | FAIL | {"error":"control focus not visible"} | ≥1 sect
 instruments.spectrum.png | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.spectrum.jpg | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.spectrum.webp | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
-instruments.spectrum.avif | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
+instruments.spectrum.avif | FAIL | {"error":"control shows no live figure (an svg/canvas/[data-figure] of at least 12x8 px)"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.spectrum.gif | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.spectrum.apng | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.orbit.mp4 | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
@@ -102,18 +156,18 @@ instruments.orbit.otf | FAIL | {"error":"control focus not visible"} | ≥1 sect
 instruments.orbit.ttf | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.orbit.woff2 | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.workflow.api.json | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
-instruments.workflow.ui.json | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
+instruments.workflow.ui.json | FAIL | {"error":"control shows no live figure (an svg/canvas/[data-figure] of at least 12x8 px)"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.orbit.run.jsonl | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.orbit.zip | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 instruments.unknown.bin | FAIL | {"error":"control focus not visible"} | ≥1 section; each control mutates disk, undo exact, keys and three depths
 coverage.beat | FAIL | {"types":[],"kinds":47,"depths":[["textarea",[]],["color",[]],["text",[]],["number",[]]]} | 12 control types at all three depths; 10 kinds
 keyboard.all | FAIL | {"total":48,"driven":0} | every declared control keyboard-operable
-panel.swap | FAIL | {"samples":48,"max":"NaN"} | selection → panel < 50 ms
+panel.swap | FAIL | {"samples":48,"max":"Infinity","median":"Infinity","timedOut":48} | selection → panel < 50 ms
 scrub.pixel | FAIL | {"samples":0,"p95":"Infinity"} | p95 scrub event → changed pixels < 16.7 ms
-effects.visible | PASS | {"sampled":41,"changed":34,"flat":["tone.wav/view:gain","tone.mp3/view:gain","tone.ogg/view:gain","table.parquet/view:rowOffset","orbit.ipynb/json:[\"nbformat\"]","orbit.pdf/view:page","workflow.ui.json/json:[\"last_node_id\"]"]} | changing a control changes the rendered item (>= 70% of sampled controls on visual kinds)
+effects.visible | PASS | {"sampled":41,"changed":34,"flat":["tone.wav/view:gain","tone.flac/view:gain","table.parquet/view:rowOffset","orbit.ipynb/json:[\"nbformat\"]","orbit.pdf/view:page","triangle.gltf/json:[\"asset\",\"version\"]","workflow.ui.json/json:[\"last_node_id\"]"]} | changing a control changes the rendered item (>= 70% of sampled controls on visual kinds)
 widgets.distinct | FAIL | {"types":0,"shapes":[]} | control types are distinct widgets, not one box with 12 names (>= 8 distinct widget shapes)
 persist.fresh-process | PASS | {"checked":3} | committed control values are re-read from files by a fresh server process
-affordances.auto | FAIL | {"error":"neither the palette phrase nor clicking the card selects 23b5d0c0ddcb-orbit.html"} | modified marker, reset, typed math with units, fine/coarse scrub, copy and paste on a real numeric control
+affordances.auto | FAIL | {"error":"neither the palette phrase nor clicking the card selects 29900690a504-orbit.html"} | modified marker, reset, typed math with units, fine/coarse scrub, copy and paste on a real numeric control
 studios.color-motion | FAIL | {"error":"PENDING LEAD ATTESTATION (studios): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | full color and motion studios at depth 3 (OKLCH planes, gamut and contrast maps, palettes, ramps, harmony, sampled palettes, token binding, history; curve and spring editors with ghost) [lead-attested]
 blind.rubric | FAIL | {"error":"PENDING LEAD ATTESTATION (instruments): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | >= 8/10 blind against Tweakpane, Leva and DialKit, A/B order swapped [lead-attested]
 D3 | beat 1/14 | dream 1/14
@@ -182,7 +236,7 @@ real.codex-opencode | FAIL | {"error":"PENDING LEAD ATTESTATION (agents): set NA
 D6 | beat 1/7 | dream 1/8 | lead-attested pending 1
 Check | Result | Value | Target
 workflow.instruments | FAIL | {"error":"backend schema never discovered"} | workflow inputs derived from discovered ComfyUI node schemas
-workflow.schema-random | FAIL | {"error":"strength control does not mirror the schema ({\"id\":\"json:[\\\"1\\\",\\\"inputs\\\",\\\"strength_925f71\\\"]\",\"label\":\"1 › inputs › strength_925f71\",\"value\":14,\"type\":\"number\",\"depth\":1,\"figure\":{\"type\":\"meter\"}})"} | a custom node invented at bench time becomes instruments with exactly its min, max, step, default and options
+workflow.schema-random | FAIL | {"error":"strength control does not mirror the schema ({\"id\":\"json:[\\\"1\\\",\\\"inputs\\\",\\\"strength_badf2c\\\"]\",\"label\":\"1 › inputs › strength_badf2c\",\"value\":18,\"type\":\"number\",\"depth\":1,\"figure\":{\"type\":\"meter\"}})"} | a custom node invented at bench time becomes instruments with exactly its min, max, step, default and options
 negative.invalid-prompt | PASS | {"rejected":true} | a workflow the backend rejects shows an error and queues nothing
 queue.placeholder-progress | FAIL | {"error":"POST /api/generate: HTTP 404: {\"ok\":false,\"error\":\"not found. Next: list the available components, proposals or tools again and use a current name or id.\"}"} | queued placeholder, multiple stage events, then exact result bytes
 provenance.reopen | FAIL | {"error":"no generation output"} | output retains exact workflow + inputs; reopen generates identical backend prompt
@@ -211,17 +265,17 @@ keyframe.svg | FAIL | {"error":"keyframe instrument absent"} | random keyframe p
 interface.motion | FAIL | {"error":"no observable interruptible interface transitions"} | interruptible UI transitions <200 ms; reduced motion disables nonessential motion
 D8 | beat 0/0 | dream 2/6 | lead-attested pending 2
 Check | Result | Value | Target
-cold.start | PASS | {"server":224.27318400000001,"canvas":210.025895,"total":434.2739459999999} | CLI start to a canvas of >= 5 cards with real content in < 1 s (fresh process, populated folder)
-axe.light | FAIL | {"error":"neither the palette phrase nor clicking the card selects 71a3ade223de-orbit.html"} | 0 axe violations in light: canvas, palette, selected-item panel, studio, key map
-axe.dark | FAIL | {"error":"neither the palette phrase nor clicking the card selects 71a3ade223de-orbit.html"} | 0 axe violations in dark: canvas, palette, selected-item panel, studio, key map
-themes.differ | PASS | {"light":236.70699913440134,"dark":67.90454545464198} | light and dark are real themes: the canvas is clearly darker in dark
+cold.start | PASS | {"server":229.59908600000006,"canvas":194.29906700000015,"total":423.86953500000016} | CLI start to a canvas of >= 5 cards with real content in < 1 s (fresh process, populated folder)
+axe.light | FAIL | {"error":"neither the palette phrase nor clicking the card selects 95609bb43b34-orbit.html"} | 0 axe violations in light: canvas, palette, selected-item panel, studio, key map
+axe.dark | FAIL | {"error":"neither the palette phrase nor clicking the card selects 95609bb43b34-orbit.html"} | 0 axe violations in dark: canvas, palette, selected-item panel, studio, key map
+themes.differ | PASS | {"light":234.83713073612526,"dark":67.32077922087458} | light and dark are real themes: the canvas is clearly darker in dark
 rubric.critics | FAIL | {"error":"PENDING LEAD ATTESTATION (craft): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | two fresh critics >= 8/10 blind against the floor products' screenshots, A/B swapped [lead-attested]
 slop.audit | FAIL | {"error":"PENDING LEAD ATTESTATION (slop): set NAPKIN_LEAD_ATTEST and NAPKIN_LEAD_PUBKEY; see bench/README.md"} | slop audit reports 0 tells on canvas, panel, studio and key map [lead-attested]
 
 DREAM 3 scoreboard — CPU Chromium, isolated folders and free ports
-Measured: 2026-11-13T03:52:34.513Z | Node v26.8.2 | product 36053e5933132a757f67244be06d63f388efff0f744dc2f5049bd133cc837748
+Measured: 2026-11-13T07:38:36.973Z | Node v26.8.2 | product 36053e5933132a757f67244be06d63f388efff0f744dc2f5049bd133cc837748
 Dimension | Beat-the-best met/total | Dream met/total | Lead-attested pending
-D1 | 8/8 | 55/55 | 0
+D1 | 5/8 | 74/106 | 0
 D2 | 2/10 | 2/56 | 2
 D3 | 1/14 | 1/14 | 0
 D4 | 0/11 | 0/14 | 0
@@ -234,4 +288,4 @@ fidelity | NOT RUN
 edits | NOT RUN
 imposed | NOT RUN
 test suite | NOT RUN
-ACCEPTANCE: NOT MET — D2: 56 check(s) failing; D2: 2 lead-attested gate(s) pending; D3: 13 check(s) failing; D4: 14 check(s) failing; D5: 29 check(s) failing; D5: 1 lead-attested gate(s) pending; D6: 7 check(s) failing; D6: 1 lead-attested gate(s) pending; D7: 18 check(s) failing; D8: 4 check(s) failing; D8: 2 lead-attested gate(s) pending; fidelity not run; edits not run; imposed not run; test suite not run
+ACCEPTANCE: NOT MET — D1: 32 check(s) failing; D2: 56 check(s) failing; D2: 2 lead-attested gate(s) pending; D3: 13 check(s) failing; D4: 14 check(s) failing; D5: 29 check(s) failing; D5: 1 lead-attested gate(s) pending; D6: 7 check(s) failing; D6: 1 lead-attested gate(s) pending; D7: 18 check(s) failing; D8: 4 check(s) failing; D8: 2 lead-attested gate(s) pending; fidelity not run; edits not run; imposed not run; test suite not run
