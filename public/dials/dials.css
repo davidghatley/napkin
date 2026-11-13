@@ -4588,3 +4588,48 @@ ul.ki-tags {
 .d-keymap {
   gap: 6px;
 }
+/* Motion lanes: the name and the value at the playhead sit on their own line above the lane,
+   so nothing overlaps the first diamond; keyed section controls can be added and removed. */
+.km-lane-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 8px 0 2px 52px;
+  min-height: 18px;
+}
+.km-lane-head .km-lane-name {
+  position: static;
+  color: var(--d-text);
+  font: 600 11.5px var(--d-sans);
+}
+.km-lane-now {
+  font: 500 11px var(--d-mono);
+  color: var(--d-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dials .km-unkey {
+  margin-left: auto;
+  height: 22px;
+  font-size: 11px;
+}
+.km-lane-row.is-control .km-lane-name::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 2px;
+  background: var(--d-accent);
+}
+.km-key-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 0 2px 52px;
+}
+.km-key-label {
+  font-size: 11px;
+  color: var(--d-muted);
+  margin-right: 4px;
+}

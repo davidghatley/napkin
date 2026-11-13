@@ -68,3 +68,15 @@ test("hand-written WAAPI reads tolerantly; mistakes say where, in plain words", 
   assert.deepEqual(looseJson(`{a: 'x', b: [1, 2,], // note\n c: undefined}`), { a: "x", b: [1, 2], c: null });
   assert.throws(() => looseJson(`{a: "x}`), /Line 1, column 5: a quote is never closed/);
 });
+
+test("keyed section values travel as custom properties through CSS and WAAPI code", async () => {
+  const m = await import("../../public/dials/motion.js");
+  const frames = [{ offset: 0, opacity: 0, "--rotation": 30 }, { offset: 1, opacity: 1, "--rotation": 90 }],
+    v = { mode: "bezier", bezier: [0.2, 0.8, 0.2, 1], duration: 400 };
+  const css = m.toKeyframesCSS(frames, v);
+  assert.match(css, /--rotation: 30;/);
+  assert.deepEqual(m.readMotionCode(css).frames, frames);
+  const waapi = m.toWaapiKeyframes(frames, v);
+  assert.doesNotThrow(() => new Function("element", waapi), "WAAPI code parses as JavaScript");
+  assert.deepEqual(m.readMotionCode(waapi).frames, frames);
+});

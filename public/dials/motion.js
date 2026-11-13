@@ -213,7 +213,7 @@ export function toWaapiKeyframes(frames, v = {}, { name = "element", iterations 
   const rows = f.map((k) => {
     const props = Object.entries(k)
       .filter(([key]) => key !== "easing")
-      .map(([key, val]) => `${key}: ${typeof val === "number" ? val : JSON.stringify(val)}`);
+      .map(([key, val]) => `${/^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)}: ${typeof val === "number" ? val : JSON.stringify(val)}`);
     return `  { ${props.join(", ")}, easing: "${easing}" },`;
   });
   return `${name}.animate([\n${rows.join("\n")}\n], { duration: ${v.duration || 1000}, delay: ${v.delay || 0}, iterations: ${iterations === Infinity ? "Infinity" : iterations}, fill: "both" });`;
@@ -366,7 +366,9 @@ export function parseMotionCSS(text) {
       for (const d of m[2].split(";")) {
         const i = d.indexOf(":");
         if (i < 0) continue;
-        const key = d.slice(0, i).trim().replace(/-([a-z])/g, (_, c) => c.toUpperCase()),
+        const name = d.slice(0, i).trim(),
+          // Custom properties (--rotation) keep their name; others read back in camel case.
+          key = name.startsWith("--") ? name : name.replace(/-([a-z])/g, (_, c) => c.toUpperCase()),
           raw = d.slice(i + 1).trim();
         if (!key) continue;
         frame[key] = /^-?[\d.]+$/.test(raw) ? Number(raw) : raw;

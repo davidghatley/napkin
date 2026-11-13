@@ -66,7 +66,13 @@ export function motionStudio(ctx, host) {
   cleanup.push(fitSvg(rsvg, (w, h) => ((rs = { w, h }), draw())).destroy);
   const showChip = (x, y, text) => {
     chipText.textContent = text;
-    const w = text.length * 6.3 + 14;
+    rsvg.append(chip);
+    // Measured, not estimated: the chip always holds its whole text.
+    let tw = 0;
+    try {
+      tw = chipText.getComputedTextLength();
+    } catch {}
+    const w = Math.ceil(tw || text.length * 7) + 16;
     const cx = clamp(x + 12, 2, rs.w - w - 2),
       cy = clamp(y - 30, 2, rs.h - 24);
     chip.setAttribute("transform", `translate(${fx(cx)} ${fx(cy)})`);
@@ -321,6 +327,14 @@ export function motionStudio(ctx, host) {
     // Any other number a keyframe carries gets a lane too, scaled to the values it holds.
     const keys = [...new Set(f.flatMap((k) => Object.keys(k)))].filter((k) => !["offset", "opacity", "transform", "easing", "composite"].includes(k) && f.some((x) => Number.isFinite(x[k])));
     for (const key of keys) {
+      const sc = keyable().find((c) => cssKey(c) === key);
+      if (sc) {
+        const lo = Number.isFinite(sc.min) ? sc.min : Math.min(0, ...f.map((k) => k[key]).filter(Number.isFinite)),
+          hi = Number.isFinite(sc.max) ? sc.max : Math.max(1, ...f.map((k) => k[key]).filter(Number.isFinite)) * 1.25,
+          unit = sc.unit === "deg" ? "°" : sc.unit || "";
+        out.push({ key, control: sc, label: sc.label || sc.id, lo, hi, get: (k) => (Number.isFinite(k[key]) ? k[key] : panel.get(sc.id)), put: (k, v) => ({ ...k, [key]: Number(v.toFixed(sc.step && sc.step >= 1 ? 0 : 2)) }), fmt: (v) => `${fx(v, sc.step && sc.step >= 1 ? 0 : 2)}${unit}`, step: sc.step || (hi - lo) / 100 });
+        continue;
+      }
       const vals = f.map((k) => k[key]).filter(Number.isFinite),
         lo = Math.min(0, ...vals),
         hi = Math.max(1, ...vals) * 1.25;
@@ -342,6 +356,38 @@ export function motionStudio(ctx, host) {
     return lane.get(f.at(-1));
   };
   const lanesBox = el("div", { class: "km-lanes" });
+  // Any number in this section can be keyed on the timeline: its value is stored in each keyframe
+  // under the control's id, drawn as a lane with the control's own range, and read out as it plays.
+  // Stored as a custom property (--rotation), valid in CSS @keyframes and in WAAPI keyframes.
+  const cssKey = (c) => "--" + String(c.id).replace(/[^\w-]/g, "-");
+  const keyable = () => section.controls.filter((c) => c !== kc && ["number", "range", "angle"].includes(c.type));
+  const keyRow = el("div", { class: "km-key-row" });
+  const paintKeyRow = () => {
+    const f = frames(),
+      free = keyable().filter((c) => !f.some((k) => Number.isFinite(k[cssKey(c)])));
+    keyRow.replaceChildren(
+      ...(free.length ? [el("span", { class: "km-key-label", text: "Key a value on this timeline" })] : []),
+      ...free.map((c) =>
+        el("button", {
+          type: "button",
+          class: "kx-btn",
+          text: `+ ${c.label || c.id}`,
+          "aria-label": `Key ${c.label || c.id} on the timeline, starting from its value now`,
+          onclick: () => {
+            const now = panel.get(c.id);
+            K.begin("studio-key-control");
+            K.change(frames().map((k) => ({ ...k, [cssKey(c)]: now })));
+            K.commit();
+          },
+        }),
+      ),
+    );
+  };
+  const unkey = (id) => {
+    K.begin("studio-unkey-control");
+    K.change(frames().map(({ [id]: _drop, ...k }) => k));
+    K.commit();
+  };
   let lanes = [],
     laneSig = "";
   const buildLanes = () => {
@@ -376,7 +422,13 @@ export function motionStudio(ctx, host) {
       });
       return lane;
     });
-    lanesBox.replaceChildren(...lanes.map((l) => el("div", { class: "km-lane-row" }, el("span", { class: "km-lane-name", text: l.def.label }), l.svg)));
+    lanesBox.replaceChildren(
+      ...lanes.map((l) => {
+        l.readout = el("output", { class: "km-lane-now" });
+        return el("div", { class: "km-lane-row" + (l.def.control ? " is-control" : "") }, el("div", { class: "km-lane-head" }, el("span", { class: "km-lane-name", text: l.def.label }), l.readout, l.def.control ? el("button", { type: "button", class: "kx-btn km-unkey", text: "Remove lane", "aria-label": `Stop keying ${l.def.label}`, onclick: () => unkey(l.def.key) }) : null), l.svg);
+      }),
+      keyRow,
+    );
   };
   cleanup.push(() => lanes.forEach((l) => (l.diamonds.forEach((d) => d.destroy()), l.fit())));
 
@@ -436,6 +488,8 @@ export function motionStudio(ctx, host) {
     gNow.style.opacity = String(0.25 + 0.75 * at.opacity);
     const f = frames(),
       rot = f.some((k) => /rotate\(/.test(k.transform || "")) ? laneAt({ get: fnOf("rotate") }, f, u, v) : 0;
+    // Every lane reads out its value at the playhead: keyed controls show what they would be now.
+    for (const l of lanes) if (l.readout) l.readout.textContent = `${l.def.fmt(laneAt(l.def, f, u, v))} at ${Math.round(ms)} ms`;
     gNow.setAttribute("transform", rot ? `rotate(${fx(rot, 1)} ${fx(GX(at.x))} ${fx(gs.h / 2)})` : "");
     const nx = X(Math.min(ms, span));
     rNow.setAttribute("x1", nx);
@@ -684,6 +738,7 @@ export function motionStudio(ctx, host) {
         laneSig = sig;
         buildLanes();
       }
+      paintKeyRow();
       for (const lane of lanes) {
         const { def, size } = lane;
         if (size.w < 10) continue;
