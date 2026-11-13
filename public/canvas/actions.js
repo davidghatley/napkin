@@ -111,7 +111,7 @@ export const ACTIONS = [
   command('control', 'Control', 'Control <label>', '', (c, a) => c.surface.control(a), { arg: 'control', about: 'Go to a control of the selection, ready to type a value' }),
   command('dial', 'Dial', 'Dial <label>', '', (c, a) => c.surface.depth(a, 1), { arg: 'control', about: 'Fold the control’s section to one row' }),
   command('bench', 'Bench', 'Bench <label>', '', (c, a) => c.surface.depth(a, 2), { arg: 'control', about: 'Open the control’s section with every related control' }),
-  command('studio', 'Studio', 'Studio <label>', '', (c, a) => c.surface.depth(a, 3), { arg: 'control', about: 'Open the control in its studio' }),
+  command('studio', 'Studio', 'Studio <label>', '', (c, a) => c.surface.depth(a, 3), { arg: 'control', about: 'Open the control’s full editor in the panel' }),
   command('reset', 'Reset', 'Reset <label>', '', (c, a) => c.surface.reset(a), { arg: 'control', about: 'Put a control back to its default' }),
   ...['kind', 'folder', 'date', 'similarity', 'tag', 'status', 'run'].map((by, i) => command(`arrange-${by}`, `Arrange by ${by}`, `Arrange by ${by}`, `A ${'KFDSTUR'[i]}`, (c) => c.surface.arrange(by), { about: `Sort the canvas into groups by ${by}` })),
   command('arrange-meta', 'Arrange by meta', 'Arrange by meta.<column>', '', (c, a) => c.surface.arrange('meta.' + String(a || '').replace(/^meta\./, '')), { arg: 'text', about: 'Sort the canvas into groups by a metadata field or a data column' }),

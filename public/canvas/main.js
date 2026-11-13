@@ -62,6 +62,7 @@ import { initKinds } from './kinds.js';
 import { initInstruments } from './surface-panel.js';
 import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
+import { initRightPanel } from './right-panel.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -145,6 +146,7 @@ initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
+initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));

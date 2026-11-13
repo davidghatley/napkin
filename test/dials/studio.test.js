@@ -20,7 +20,8 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
   };
   const mouse = (type, x, y, extra = {}) => browser.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
   const drag = async (sel, dx, dy) => {
-    const b = JSON.parse(await q(`(()=>{const r=document.querySelector("${sel}").getBoundingClientRect();return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2})})()`));
+    // the editor is in the page flow now, so the handle is scrolled into view first
+    const b = JSON.parse(await q(`(()=>{const n=document.querySelector("${sel}");n.scrollIntoView({block:"center",inline:"nearest"});const r=n.getBoundingClientRect();return JSON.stringify({x:r.x+r.width/2,y:r.y+r.height/2})})()`));
     await mouse("mouseMoved", b.x, b.y);
     await mouse("mousePressed", b.x, b.y, { buttons: 1, clickCount: 1 });
     for (let i = 1; i <= 4; i++) await mouse("mouseMoved", b.x + (dx * i) / 4, b.y + (dy * i) / 4, { buttons: 1 });
@@ -37,19 +38,18 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
   try {
     await browser.goto(server.url);
     await browser.waitFor("window.dialsDemo?.panels.length===6");
-    await t.test("each studio fills the window, marks itself, and needs no sideways scroll", async () => {
+    await t.test("each full editor opens in place inside its panel, marks itself, and needs no sideways scroll", async () => {
       for (const [i, name] of names.entries()) {
         await open(i);
         await sleep(300);
         const m = JSON.parse(
-          await q(`(()=>{const s=document.querySelector('.d-section[data-depth="3"]'),inner=s.querySelector('.d-section-inner'),r=s.getBoundingClientRect();
-            return JSON.stringify({top:r.top,bottom:r.bottom,w:r.width,h:r.height,fixed:getComputedStyle(s).position,
-              studioFor:s.dataset.studioFor,overflowX:inner.scrollWidth-inner.clientWidth,vw:innerWidth,vh:innerHeight,
+          await q(`(()=>{const s=document.querySelector('.d-section[data-depth="3"]'),inner=s.querySelector('.d-section-inner'),r=s.getBoundingClientRect(),h=s.closest('.study-mount').getBoundingClientRect();
+            return JSON.stringify({l:r.left,r:r.right,t:r.top,b:r.bottom,hl:h.left,hr:h.right,ht:h.top,hb:h.bottom,pos:getComputedStyle(s).position,
+              studioFor:s.dataset.studioFor,overflowX:inner.scrollWidth-inner.clientWidth,
               blanks:[...s.querySelectorAll('.k-main,.k-side,.d-cx-main,.d-cx-side')].filter(n=>n.getBoundingClientRect().height<40).length})})()`),
         );
-        assert.equal(m.fixed, "fixed", name);
-        assert.ok(m.top >= 0 && m.bottom <= m.vh, `${name} inside viewport`);
-        assert.ok(m.w * m.h > m.vw * m.vh * 0.3, `${name} covers 30%`);
+        assert.notEqual(m.pos, "fixed", `${name} is not a fixed overlay`);
+        assert.ok(m.l >= m.hl - 0.5 && m.r <= m.hr + 0.5 && m.t >= m.ht - 0.5 && m.b <= m.hb + 0.5, `${name} stays inside its panel: ${JSON.stringify(m)}`);
         assert.ok(m.studioFor, `${name} has data-studio-for`);
         assert.ok(m.overflowX <= 0, `${name} scrolls sideways`);
         assert.equal(m.blanks, 0, `${name} has an empty column`);
@@ -159,7 +159,7 @@ test("studios: drawn, dragged, typed and read back", { timeout: 240000 }, async 
       await q(`[...document.querySelectorAll(".d-rail .kd-field")].find(f=>f.textContent.startsWith("mass")).focus()`);
       await key("x", "KeyX");
       assert.equal((await q('dialsDemo.panels[4].get("channels")')).x, "mass");
-      const row = JSON.parse(await q(`(()=>{const r=document.querySelector("${S} .kd-table tr[data-i='3']").getBoundingClientRect();return JSON.stringify({x:r.x+20,y:r.y+r.height/2})})()`));
+      const row = JSON.parse(await q(`(()=>{const n=document.querySelector("${S} .kd-table tr[data-i='3']");n.scrollIntoView({block:"center"});const r=n.getBoundingClientRect();return JSON.stringify({x:r.x+20,y:r.y+r.height/2})})()`));
       await mouse("mouseMoved", row.x, row.y);
       await sleep(50);
       assert.equal(await q(`document.querySelector("${S} .kd-mark.is-hot")?.dataset.i`), "3");

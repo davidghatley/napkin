@@ -1,6 +1,6 @@
 # Dials
 
-A standalone instrument panel. Declare values in JSON; tune them at three depths. Browser ES modules, scoped CSS, no runtime dependencies. MIT licensed. Nothing has been published.
+A standalone instrument panel. Declare values in JSON; each section opens in place, up to its full editor, inside the host (never a full-window overlay). Browser ES modules, scoped CSS, no runtime dependencies. MIT licensed. Nothing has been published.
 
 ```html
 <link rel="stylesheet" href="./dials/dials.css">
@@ -24,8 +24,8 @@ A standalone instrument panel. Declare values in JSON; tune them at three depths
 Copy this folder and serve it with any static HTTP server. The demo's font is optional; it falls back to system fonts. See [the integration guide](../../docs/dials.md), [schema](../../docs/dials-schema.md), and [demo](./demo.html).
 
 - Drag labels; Shift is fine and Alt is coarse. Type `12px*1.5`, `1.2s`, or `50%`.
-- Focus a label and use arrows or `3` then `l`. `R` resets; `S` opens that control's studio.
-- Enter on a figure opens its studio. All editable plots have fields or keys as alternatives.
+- Focus a label and use arrows or `3` then `l`. `R` resets; `S` opens that control's full editor in place.
+- Enter on a figure opens its full editor. All editable plots have fields or keys as alternatives.
 - `Ctrl K` finds any control or command. `?` opens the keyboard map, where keys can be rebound. `Ctrl Z` / `Ctrl Shift Z` undo and redo local edits.
 - Custom controls and figures register through `registerControl` and `registerFigure`.
 

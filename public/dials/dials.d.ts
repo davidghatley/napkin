@@ -80,7 +80,7 @@ export interface Options {
     Record<"increase" | "decrease" | "reset" | "studio" | "help", string[]>
   >;
   label?: string;
-  /** "viewport": a studio takes over the window; "inline": it stays in the host (default). */
+  /** Ignored: a section's full editor always opens in place, inside the host (there is no full-window studio). Kept so old hosts still type-check. */
   studio?: "viewport" | "inline";
   theme?: "light" | "dark";
   history?: boolean;
@@ -157,11 +157,14 @@ export class Dials extends EventTarget {
   ): this;
   get(id: string): JSONValue;
   values(): Record<string, JSONValue>;
+  /** Reveal a control's section in the panel: 3 (default) opens its full editor in place, 2 opens the section, 1 folds it; the panel scrolls it into view. */
   open(id: string, depth?: Depth): this;
   /** Keep the element a section edits in view at every depth: under the head at dial and bench, atop the studio rail in the studio. null lets go. */
   setSubject(section: string, node: HTMLElement | null, animate?: boolean): this;
+  /** 1 folds the section, 2 opens it, 3 opens it with its full editor; always inside the host. */
   setDepth(section: string, depth: Depth, animate?: boolean): void;
-  resizeStudio(section: string, width: number, height: number): void;
+  /** Scroll the nearest scrolling box (never the page) so the section is in view. */
+  reveal(section: string): this;
   begin(id: string, source?: string): void;
   change(id: string, value: JSONValue): void;
   commit(id: string): void;
