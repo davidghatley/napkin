@@ -9,7 +9,7 @@ test('viewers execute the format: layered charts use real scales, glTF scenes ke
   const dir = mkdtempSync(join(tmpdir(), 'napkin-kinds-viewers-')),
     files = join(dir, 'files');
   mkdirSync(files);
-  for (const n of ['scene.gltf', 'layers.vl.json', 'tone.flac'])
+  for (const n of ['scene.gltf', 'textured.gltf', 'layers.vl.json', 'tone.flac'])
     copyFileSync(resolve('test/kinds/samples', n), join(files, n));
   const server = await startServer(files, { env: { NAPKIN_STATE_DIR: join(dir, 'state') } }),
     browser = await launchChromium({ width: 1100, height: 800 });
@@ -35,7 +35,7 @@ test('viewers execute the format: layered charts use real scales, glTF scenes ke
   await browser.goto(server.url + 'view/scene.gltf');
   await browser.waitFor('document.querySelector("canvas.model")?.dataset.triangles > 0', 10000);
   const pixels = `(() => {
-    const c = document.querySelector('canvas.model'), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+    const c = document.querySelector('canvas.model'), s = Object.assign(document.createElement('canvas'), { width: c.width, height: c.height }), g = s.getContext('2d'); g.drawImage(c, 0, 0); const d = g.getImageData(0, 0, c.width, c.height).data;
     let red = 0, green = 0, rx0 = 1e9, rx1 = -1;
     const cols = new Array(c.width).fill(0);
     for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
@@ -68,4 +68,22 @@ test('viewers execute the format: layered charts use real scales, glTF scenes ke
   await browser.waitFor('document.querySelector("canvas.model").dataset.camera === "0"');
   const cam = await browser.eval(pixels);
   assert.ok(cam.red > 500 && cam.green > 500, JSON.stringify(cam));
+  // A texture is drawn: the quad's colour exists only in its embedded image (magenta, cyan, yellow, blue).
+  await browser.goto(server.url + 'view/textured.gltf');
+  await browser.waitFor('document.querySelector("canvas.model")?.dataset.triangles > 0', 10000);
+  await browser.eval('document.querySelector("canvas").napkinModel.spin=false; document.querySelector("canvas").napkinModel.yaw=0; document.querySelector("canvas").napkinModel.pitch=0; document.querySelector("canvas").napkinModel.dirty=true; new Promise(r => setTimeout(r, 400))');
+  const tex = await browser.eval(`(() => {
+    const c = document.querySelector('canvas.model'), s = Object.assign(document.createElement('canvas'), { width: c.width, height: c.height }), g = s.getContext('2d'); g.drawImage(c, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height).data, n = { magenta: 0, cyan: 0, yellow: 0, blue: 0 };
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 200) continue;
+      const [r, gr, b] = [d[i], d[i + 1], d[i + 2]];
+      if (r > 150 && b > 150 && gr < 90) n.magenta++;
+      else if (gr > 150 && b > 150 && r < 90) n.cyan++;
+      else if (r > 150 && gr > 150 && b < 90) n.yellow++;
+      else if (b > 150 && r < 70 && gr < 70) n.blue++;
+    }
+    return n;
+  })()`);
+  for (const k of Object.keys(tex)) assert.ok(tex[k] > 1500, 'texture colour ' + k + ': ' + JSON.stringify(tex));
 });

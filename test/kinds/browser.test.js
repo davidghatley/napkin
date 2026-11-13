@@ -36,7 +36,7 @@ test('live viewers draw their contents and mixed items join the canvas and panel
     ['inter.woff2', 'document.fonts.check("16px specimen")'],
     [
       'pyramid.obj',
-      'document.querySelector("canvas")?.getContext("2d").getImageData(300,150,300,300).data.some(v=>v>0)',
+      '(()=>{const c=document.querySelector("canvas.model");if(!c)return false;const s=Object.assign(document.createElement("canvas"),{width:c.width,height:c.height}),g=s.getContext("2d");g.drawImage(c,0,0);return g.getImageData(300,150,300,300).data.some(v=>v>0)})()',
     ],
     ['study.ipynb', 'document.querySelectorAll(".nb-cell").length===2'],
     ['garden.zip', 'document.querySelectorAll(".archive nav button").length===3'],

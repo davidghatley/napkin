@@ -2,6 +2,7 @@ import { plain } from './words.js';
 import { renderVegaLite } from './vega-lite.js';
 import { chartSpec } from './chart-spec.js';
 import { modelView } from './model-view.js';
+import { modelThree } from './model-three.js';
 // The same live surface is used in /view and in canvas frames. No remote scripts or GPU renderer.
 const item = JSON.parse(document.querySelector('#item').textContent),
   root = document.querySelector('#viewer'),
@@ -537,7 +538,18 @@ async function run() {
   }
   if (item.family === 'pdf') return pdfViewer();
   if (item.family === 'zip') return archive();
-  if (item.family === 'model') return modelView({ root, scene: await data(), recipe: r, label, bar, note, fmt, isReduced, esc });
+  if (item.family === 'model') {
+    const args = { root, recipe: r, label, bar, note, fmt, isReduced, esc };
+    const soft = async () => modelView({ ...args, scene: await data() });
+    // The real 3D runtime first; the software viewer only when WebGL or the file's loader fails.
+    try {
+      const buffer = await (await fetch(raw)).arrayBuffer();
+      return await modelThree({ ...args, buffer, kind: item.kind === 'obj' ? 'obj' : 'gltf', itemId: item.id, fallback: soft });
+    } catch (e) {
+      console.warn('3D runtime unavailable, using the software viewer:', e.message);
+      return soft();
+    }
+  }
   const d = await data();
   if (item.family === 'binary') {
     const b = d.hex.match(/.{1,2}/g) || [],

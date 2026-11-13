@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, readFileSync, copyFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
+import zlib from 'node:zlib';
 import { DatabaseSync } from 'node:sqlite';
 import { arrowBytes } from './arrow-writer.js';
 import { sceneGltf } from './scene.js';
@@ -529,6 +530,55 @@ export function generateSamples(dir = here, { media = true } = {}) {
     scene: 0,
   };
   put('triangle.gltf', 'gltf', JSON.stringify(gltf));
+  // A quad whose only colour comes from an embedded 2 x 2 texture (magenta, cyan / yellow, blue).
+  {
+    const { deflateSync, crc32 } = zlib;
+    const chunk = (type, data) => {
+      const head = Buffer.alloc(8);
+      head.writeUInt32BE(data.length, 0);
+      head.write(type, 4, 'latin1');
+      const crc = Buffer.alloc(4);
+      crc.writeUInt32BE(crc32(Buffer.concat([head.subarray(4), data])) >>> 0, 0);
+      return Buffer.concat([head, data, crc]);
+    };
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(2, 0);
+    ihdr.writeUInt32BE(2, 4);
+    ihdr[8] = 8;
+    ihdr[9] = 2;
+    const px = [[255, 0, 255], [0, 255, 255], [255, 255, 0], [0, 0, 255]];
+    const raw = Buffer.from([0, ...px[0], ...px[1], 0, ...px[2], ...px[3]]);
+    const png = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+    const pos = [-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0],
+      uv = [0, 1, 1, 1, 1, 0, 0, 0],
+      idx = [0, 1, 2, 0, 2, 3],
+      bin = Buffer.alloc(48 + 32 + 12);
+    pos.forEach((v, i) => bin.writeFloatLE(v, i * 4));
+    uv.forEach((v, i) => bin.writeFloatLE(v, 48 + i * 4));
+    idx.forEach((v, i) => bin.writeUInt16LE(v, 80 + i * 2));
+    put(
+      'textured.gltf',
+      'gltf',
+      JSON.stringify({
+        asset: { version: '2.0' },
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+        nodes: [{ mesh: 0 }],
+        meshes: [{ primitives: [{ attributes: { POSITION: 0, TEXCOORD_0: 1 }, indices: 2, material: 0 }] }],
+        materials: [{ pbrMetallicRoughness: { baseColorTexture: { index: 0 }, metallicFactor: 0, roughnessFactor: 1 } }],
+        textures: [{ source: 0, sampler: 0 }],
+        samplers: [{ magFilter: 9728, minFilter: 9728 }],
+        images: [{ uri: 'data:image/png;base64,' + png.toString('base64') }],
+        buffers: [{ byteLength: bin.length, uri: 'data:application/octet-stream;base64,' + bin.toString('base64') }],
+        bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 48 }, { buffer: 0, byteOffset: 48, byteLength: 32 }, { buffer: 0, byteOffset: 80, byteLength: 12 }],
+        accessors: [
+          { bufferView: 0, componentType: 5126, count: 4, type: 'VEC3', min: [-1, -1, 0], max: [1, 1, 0] },
+          { bufferView: 1, componentType: 5126, count: 4, type: 'VEC2' },
+          { bufferView: 2, componentType: 5123, count: 6, type: 'SCALAR' },
+        ],
+      }),
+    );
+  }
   put('scene.gltf', 'gltf', JSON.stringify(sceneGltf()));
   delete gltf.buffers[0].uri;
   let gj = Buffer.from(JSON.stringify(gltf));
