@@ -182,8 +182,9 @@ test('data readers produce typed rows, real distributions, meshes, zip contents 
   assert.match(entry.text, /fern,12/);
   for (const name of ['pyramid.obj', 'triangle.gltf', 'triangle.glb']) {
     const [, model] = await get('api/item-data/' + name);
-    assert.ok(model.vertices.length >= 3);
-    assert.ok(model.faces.length >= 1);
+    const prims = model.meshes.flatMap((m) => m.prims);
+    assert.ok(prims.length >= 1 && prims[0].pos.length >= 9, name);
+    assert.ok(prims[0].idx.length >= 3 && model.roots.length >= 1, name);
   }
   for (const name of ['tone.wav', 'tone.mp3', 'tone.flac', 'tone.ogg', 'tone.m4a']) {
     const [status, wave] = await get('api/item-data/' + name);

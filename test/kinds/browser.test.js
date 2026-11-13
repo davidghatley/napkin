@@ -24,7 +24,7 @@ test('live viewers draw their contents and mixed items join the canvas and panel
         e.params.exceptionDetails.exception?.description || e.params.exceptionDetails.text,
       );
   });
-  const evidence = resolve('test/kinds/evidence');
+  const evidence = process.env.KINDS_EVIDENCE ? resolve(process.env.KINDS_EVIDENCE) : join(dir, 'evidence');
   mkdirSync(evidence, { recursive: true });
   const checks = [
     ['color.png', 'document.querySelector("img")?.naturalWidth>0'],

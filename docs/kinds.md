@@ -206,14 +206,14 @@ The contract tests check all generated samples, source edits, exact undo, confli
 permission refusals, real data and waveform values, a 2 GiB MP4 with a valid padding box,
 a 5,000,000-row Parquet file, and a 1,000-file mixed index. The plugin test adds a complete
 kind without changing core. The browser tests check actual content and save screenshots
-under `test/kinds/evidence/`. The performance test reports opening and pan frame timings;
+under `$KINDS_EVIDENCE` (default: a temporary folder, so test runs leave the tree clean; the figures below are kept in `docs/kinds-figures/`). The performance test reports opening and pan frame timings;
 its open-time assertion does not establish the separate frame-time target.
 
-![Typed data with column distributions](../test/kinds/evidence/observations.png)
+![Typed data with column distributions](kinds-figures/observations.png)
 
-![Workflow graph](../test/kinds/evidence/garden.png)
+![Workflow graph](kinds-figures/garden.png)
 
-![Mixed files on the canvas](../test/kinds/evidence/canvas.png)
+![Mixed files on the canvas](kinds-figures/canvas.png)
 
 ## Round 2 notes
 
