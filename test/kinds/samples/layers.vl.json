@@ -1,0 +1,13 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Two plots, one scale",
+  "data": { "values": [
+    { "t": 1, "v": 3, "g": "north" }, { "t": 2, "v": 5, "g": "north" }, { "t": 4, "v": 4, "g": "north" },
+    { "t": 1, "v": 2, "g": "south" }, { "t": 2.5, "v": 6, "g": "south" }, { "t": 5, "v": 7, "g": "south" }
+  ] },
+  "layer": [
+    { "mark": "line", "encoding": { "x": { "field": "t", "type": "quantitative" }, "y": { "field": "v", "type": "quantitative" }, "color": { "field": "g", "type": "nominal" } } },
+    { "mark": { "type": "point", "filled": true }, "encoding": { "x": { "field": "t", "type": "quantitative" }, "y": { "field": "v", "type": "quantitative" }, "color": { "field": "g", "type": "nominal" } } },
+    { "mark": "rule", "encoding": { "y": { "datum": 4.5 } } }
+  ]
+}

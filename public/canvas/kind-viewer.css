@@ -344,6 +344,14 @@ th small {
   fill: var(--muted);
   font: 10px system-ui;
 }
+.chart.vl {
+  height: auto;
+  max-height: 78vh;
+  color: var(--ink);
+}
+.chart.vl text {
+  fill: currentColor;
+}
 .chart .axis {
   stroke: var(--line);
 }

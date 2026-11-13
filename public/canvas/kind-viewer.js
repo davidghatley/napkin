@@ -1,4 +1,5 @@
 import { plain } from './words.js';
+import { renderVegaLite } from './vega-lite.js';
 // The same live surface is used in /view and in canvas frames. No remote scripts or GPU renderer.
 const item = JSON.parse(document.querySelector('#item').textContent),
   root = document.querySelector('#viewer'),
@@ -215,48 +216,51 @@ function jsonTree(v, key = 'root', depth = 0) {
       : note('Expand this value in the source')
   }${entries.length > 200 ? note('Showing 200 entries') : ''}</details>`;
 }
-function chart(j) {
-  let rows =
-      (Array.isArray(j.data) ? j.data : null) || j.data?.values || j.values || j.series?.[0]?.values || j.series?.[0]?.data || j.series || [],
-    encs = j.encoding || {},
-    xkey = encs.x?.field || (typeof j.x === 'string' ? j.x : undefined),
-    ykey = encs.y?.field || (typeof j.y === 'string' ? j.y : undefined);
-  if (!Array.isArray(rows)) rows = [];
-  if (!xkey && rows[0] && typeof rows[0] === 'object') xkey = Object.keys(rows[0])[0];
-  if (!ykey && rows[0] && typeof rows[0] === 'object')
-    ykey = Object.keys(rows[0]).find((k) => k !== xkey && typeof rows[0][k] === 'number');
-  const points = rows
-    .slice(0, 200)
-    .map((v, i) => ({ x: v[xkey] ?? v.x ?? i, y: Number(v[ykey] ?? v.y ?? v.value ?? v) }))
-    .filter((p) => Number.isFinite(p.y));
-  if (!points.length)
-    return (
-      note('No inline numeric series found. External data sources need an adapter.') +
-      `<div class="json-tree">${jsonTree(j)}</div>`
-    );
-  const max = Math.max(0, ...points.map((p) => p.y)),
-    min = Math.min(0, ...points.map((p) => p.y)),
-    range = max - min || 1,
-    w = 600,
-    h = 260,
-    px = (i) => 50 + (i * (w - 75)) / Math.max(1, points.length - 1),
-    py = (v) => h - 25 - ((v - min) / range) * (h - 55),
-    mark = typeof j.mark === 'object' ? j.mark.type : j.mark || j.type || 'bar';
-  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(j.title || label)}"><line class="axis" x1="45" x2="585" y1="${py(0)}" y2="${py(0)}"/>${Array.from(
-    { length: 5 },
-    (_, i) => {
-      const v = min + (range * i) / 4;
-      return `<line class="axis" x1="45" x2="585" y1="${py(v)}" y2="${py(v)}"/><text x="38" text-anchor="end" y="${py(v) + 3}">${Number(v.toPrecision(3))}</text>`;
-    },
-  ).join(
-    '',
-  )}${mark === 'line' || mark === 'area' ? `<path class="series" d="${points.map((p, i) => `${i ? 'L' : 'M'}${px(i)},${py(p.y)}`).join(' ')}"/>` : points.map((p, i) => (mark === 'point' || mark === 'circle' ? `<circle class="mark" cx="${px(i)}" cy="${py(p.y)}" r="4"><title>${esc(p.x)}: ${p.y}</title></circle>` : `<rect class="mark" x="${45 + (i * 540) / points.length + 3}" y="${Math.min(py(0), py(p.y))}" width="${Math.max(1, 540 / points.length - 6)}" height="${Math.abs(py(p.y) - py(0))}"><title>${esc(p.x)}: ${p.y}</title></rect>`)).join('')}${points
-    .filter((_, i) => i % Math.max(1, Math.ceil(points.length / 8)) === 0)
-    .map(
-      (p) =>
-        `<text x="${px(points.indexOf(p))}" y="255" text-anchor="middle">${esc(String(p.x).slice(0, 12))}</text>`,
-    )
-    .join('')}</svg>`;
+// The small chart shapes napkin has always accepted become the same specification the interpreter runs.
+function chartSpec(j) {
+  if (j.mark || j.layer || j.hconcat || j.vconcat || j.concat || j.facet || j.repeat) return j;
+  const flat = (v) => (Array.isArray(v) ? v : Array.isArray(v?.values) ? v.values : []);
+  const series = Array.isArray(j.series) ? j.series : null;
+  let rows = [];
+  const named = series && series.length && series.every((x) => x && typeof x === 'object' && (Array.isArray(x.values) || Array.isArray(x.data)));
+  if (named) series.forEach((x, k) => flat(x.values ?? x.data).forEach((v, i) => rows.push(typeof v === 'object' ? { series: x.name ?? 'Series ' + (k + 1), ...v } : { x: i + 1, y: v, series: x.name ?? 'Series ' + (k + 1) })));
+  else rows = flat(series || j.data || j.values).map((v, i) => (v && typeof v === 'object' ? { ...v } : { x: i + 1, y: v }));
+  const sample = rows[0] && typeof rows[0] === 'object' ? rows[0] : {};
+  const xf = typeof j.x === 'string' ? j.x : j.encoding?.x?.field || (sample.x !== undefined ? 'x' : Object.keys(sample)[0]);
+  const yf = typeof j.y === 'string' ? j.y : j.encoding?.y?.field || (sample.y !== undefined ? 'y' : Object.keys(sample).find((k) => k !== xf && typeof sample[k] === 'number'));
+  const mark = typeof j.type === 'string' ? j.type : 'bar';
+  const continuous = rows.length > 0 && rows.every((r) => typeof r[xf] === 'number') && mark !== 'bar';
+  return {
+    title: j.title,
+    data: { values: rows },
+    mark: mark === 'scatter' ? 'point' : mark === 'pie' ? 'arc' : mark,
+    encoding:
+      mark === 'pie'
+        ? { theta: { field: yf, type: 'quantitative' }, color: { field: xf, type: 'nominal' } }
+        : {
+            x: { field: xf, type: continuous ? 'quantitative' : 'nominal' },
+            y: { field: yf, type: 'quantitative' },
+            ...(named ? { color: { field: 'series', type: 'nominal' } } : {}),
+          },
+  };
+}
+async function chartView(j) {
+  const rel = (u) => {
+    if (/^[a-z][a-z0-9+.-]*:|^\/\//i.test(u)) throw new Error('only files in this folder can be read');
+    return safeUrl(u);
+  };
+  const load = async (u) => {
+    const res = await fetch(rel(u));
+    if (!res.ok) throw new Error('not found');
+    return res.text();
+  };
+  const spec = chartSpec(j);
+  const { svg, notes, empty } = await renderVegaLite(spec, { load });
+  return (
+    svg +
+    (empty ? note('This chart has no rows to draw.') : '') +
+    (notes.length ? note('Not drawn: ' + notes.join('. ') + '.') : '')
+  );
 }
 function graph(j) {
   let nodes = Array.isArray(j.nodes)
@@ -723,7 +727,7 @@ async function run() {
     return;
   }
   if (item.family === 'chart') {
-    root.innerHTML = bar(d.data.title || label, item.kind) + chart(d.data);
+    root.innerHTML = bar(typeof d.data.title === 'object' ? d.data.title?.text || label : d.data.title || label, item.kind) + (await chartView(d.data));
     return;
   }
   if (item.family === 'graph') {
