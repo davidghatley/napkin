@@ -59,13 +59,19 @@ export function walk(dir, prefix = "") {
     .sort();
 }
 export function snapshot(dir) {
+  // A file the product removes between listing and reading (an undo deleting a recipe) is
+  // simply absent from the snapshot.
   return Object.fromEntries(
-    walk(dir).map((p) => [
-      p,
-      createHash("sha256")
-        .update(readFileSync(join(dir, p)))
-        .digest("hex"),
-    ]),
+    walk(dir).flatMap((p) => {
+      let bytes;
+      try {
+        bytes = readFileSync(join(dir, p));
+      } catch (e) {
+        if (e.code === "ENOENT") return [];
+        throw e;
+      }
+      return [[p, createHash("sha256").update(bytes).digest("hex")]];
+    }),
   );
 }
 export function git(dir, ...args) {
@@ -618,8 +624,10 @@ export async function selectItem(b, s, item) {
       `!![...document.querySelectorAll('[data-controls-for]')].find(e=>e.dataset.controlsFor===${JSON.stringify(item.id)}&&e.getBoundingClientRect().width>0)`,
     );
   };
+  // Selection speed is judged by panel.swap; here the bench only needs the selection, so it
+  // waits up to 2 s (a first selection after load can take several hundred ms).
   await palette(b, "Select " + item.path);
-  for (let n = 0; n < 6; n++) {
+  for (let n = 0; n < 20; n++) {
     if (await selected()) return "palette";
     await sleep(100);
   }
