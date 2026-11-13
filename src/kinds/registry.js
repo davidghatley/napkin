@@ -43,7 +43,12 @@ export function detectKind(ctx) {
   throw new Error('No binary fallback registered. Next: fix the kind definition and register it again.');
 }
 const textMime = 'text/plain; charset=utf-8';
+// Back to basics (decision 0023): only the design-core families are switched on. The other kinds stay in this file, on hold;
+// their files show as plain file cards. NAPKIN_ALL_KINDS=1 switches every kind back on.
+const CORE_FAMILIES = new Set(['binary', 'component', 'css', 'image', 'markdown', 'text']);
+export const allKinds = () => process.env.NAPKIN_ALL_KINDS === '1';
 function define(id, extensions, mime, family, magic) {
+  if (!CORE_FAMILIES.has(family) && !allKinds()) return null;
   return registerKind({
     id,
     extensions,

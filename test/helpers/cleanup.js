@@ -3,6 +3,9 @@
 // 2. A child whose parent has died (killed test runner) exits instead of running on, so nothing leaks.
 // Leaks used to fill /tmp's inode limit and break every program on the machine (2026-10-21).
 import fs from 'node:fs';
+
+// The existing suite covers every kind, including those on hold (decision 0023); a test of the default product sets '0'.
+process.env.NAPKIN_ALL_KINDS ??= '1';
 import { syncBuiltinESMExports } from 'node:module';
 
 const made = new Set();
