@@ -31,7 +31,9 @@ import {
 import { randomInt } from "node:crypto";
 import { launchChromium } from "../test/helpers/cdp.js";
 import { join } from "node:path";
-import { readFileSync, statSync, mkdirSync, copyFileSync } from "node:fs";
+import { readFileSync, statSync, mkdirSync, copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 // Accepted kind names per canonical kind: a small alias table in corpus3/manifest.json for
 // specialised kinds whose reasonable names differ (a diff is a patch). Generic kinds are never
@@ -212,9 +214,24 @@ async function oracle(b, file, item, r, f, s) {
       } catch (e) {
         throw Error("reference missing: opentype.js (npm ci in bench/tools): " + e.message.split("\n")[0]);
       }
-      const font = ot.parse(
-        Uint8Array.from(readFileSync(join(f.folder, file.path))).buffer,
-      );
+      // opentype.js reads TTF/OTF/WOFF only; WOFF2 is decoded first by the woff2 reference
+      // CLI (woff2_decompress, the same project that made the corpus file). Missing = fail.
+      let bytes = readFileSync(join(f.folder, file.path));
+      if (file.kind === "woff2") {
+        const tmp = mkdtempSync(join(tmpdir(), "napkin-woff2-"));
+        try {
+          copyFileSync(join(f.folder, file.path), join(tmp, "f.woff2"));
+          try {
+            execFileSync("woff2_decompress", [join(tmp, "f.woff2")], { stdio: "pipe" });
+          } catch (e) {
+            throw Error("reference missing or failed: woff2_decompress: " + String(e.message).split("\n")[0]);
+          }
+          bytes = readFileSync(join(tmp, "f.ttf"));
+        } finally {
+          rmSync(tmp, { recursive: true, force: true });
+        }
+      }
+      const font = ot.parse(Uint8Array.from(bytes).buffer);
       const want = font.getAdvanceWidth(probe.text, probe.px);
       assert(
         want > 0 && Math.abs(probe.measured - want) / want < 0.03,
