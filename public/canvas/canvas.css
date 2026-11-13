@@ -81,6 +81,10 @@
   --nk-armed: light-dark(rgb(52 89 226 / .12), rgb(123 155 255 / .18));
   --nk-armed-ink: light-dark(#2c52d2, #a9bfff);  /* icon on --nk-armed: 5:1 and 7:1 */
   --nk-danger: var(--nk-measure);
+  --nk-danger-ink: light-dark(#ce2c31, #ff8589);  /* danger as small text: 5.2:1 on white, 4.5:1+ on the dark chrome */
+  /* cards on the canvas (standards 3, 5): one surface for every kind, a hairline edge and no shadow; the label's quieter half */
+  --nk-card-edge: 0 0 0 1px light-dark(rgb(28 31 39 / .14), rgb(232 234 240 / .16));
+  --nk-ink-faint: light-dark(#626a79, #959cab);  /* 4.5:1 and 5:1 on the canvas */
 }
 @media (prefers-reduced-motion: reduce) { :root { --nk-motion: 0ms; --nk-motion-panel: 0ms; } }
 
@@ -247,10 +251,11 @@ body[data-focus] .cmp:not([data-focused]) { opacity: .16; pointer-events: none; 
 .cmp[data-presence] .frame { outline: 2px dashed var(--nk-ok); outline-offset: 8px; }
 
 /* (A title is scaled by transform: layout never moves, so nothing shifts when the scale changes. Titles of frames that are not drawn have none: 200 scaled titles were 200 paint layers, 7 to 9 ms of layerizing per pan event, PRF-04.) */
-.cmp-head { position: absolute; left: 0; bottom: 100%; margin-bottom: 8px; transform: scale(var(--nk-lf, 1)); transform-origin: 0 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: grab; white-space: nowrap; width: max-content; }
-.cmp-title { display: inline-flex; align-items: center; gap: 8px; }
-.cmp-title h3 { margin: 0; font: 600 13px/1 var(--nk-sans); color: var(--nk-text); letter-spacing: -.01em; }
-.cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
+.cmp-head { position: absolute; left: 0; bottom: 100%; margin-bottom: calc(var(--nk-s1) * var(--nk-lf, 1)); transform: scale(var(--nk-lf, 1)); transform-origin: 0 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; cursor: grab; white-space: nowrap; width: max-content; }
+.cmp-title { display: inline-flex; align-items: baseline; gap: var(--nk-s1); }
+/* The card label (standards 3.2): 11 px Inter, muted at rest, ink when the card is hovered or selected; the extension after it, quieter, same type */
+.cmp-title h3 { margin: 0; font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); letter-spacing: 0; color: var(--nk-ink-muted); transition: color var(--nk-motion) var(--nk-ease); }
+:is(.cmp, .item-card):is([data-sel], :hover) .cmp-title h3 { color: var(--nk-ink); }
 .cmp .rev { font: 10.5px var(--nk-mono); color: var(--nk-text-3); }
 .badge { font: 600 10px/1 var(--nk-mono); padding: 3px 6px; border-radius: 4px; background: var(--nk-chrome-3); color: var(--nk-text-2); }
 .badge[hidden] { display: none; }
@@ -287,8 +292,8 @@ body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n],
 /* ---- overlays (screen space) ---- */
 #overlays { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
 #overlay-select, #overlay-hover, .overlay-extra { position: absolute; left: 0; top: 0; display: none; pointer-events: none; }
-#overlay-select, .overlay-extra { outline: 1.5px solid var(--nk-select); outline-offset: 0; }
-#overlay-hover { outline: 1px solid color-mix(in srgb, var(--nk-select) 55%, transparent); }
+#overlay-select, .overlay-extra { outline: 2px solid var(--nk-accent); outline-offset: 0; } /* selected: 2 px accent; hover: 1 px accent (standards 5.9, 10) */
+#overlay-hover { outline: 1px solid var(--nk-accent); }
 #overlay-select::before, .overlay-extra::before {
   content: ""; position: absolute; inset: -4px; pointer-events: none;
   --nk-h: linear-gradient(var(--nk-frame), var(--nk-frame));
@@ -615,9 +620,6 @@ details.sec { margin-top: 2px; }
 
 /* Repository previews reserve their full error bounds inside the frame. */
 .cmp .badge:not([hidden]) { display:inline-block; max-width:260px; overflow:hidden; text-overflow:ellipsis; vertical-align:middle; white-space:nowrap; }
-.cmp-head { max-width:var(--nk-w); }
-.cmp-title { max-width:100%; overflow:hidden; }
-.cmp-title h3 { overflow:hidden; text-overflow:ellipsis; }
 .frame > .build-error { box-sizing:border-box; width:420px; height:200px; max-height:200px; margin:0; padding:16px; overflow:hidden; white-space:normal; }
 .build-error summary { cursor:pointer; overflow-wrap:anywhere; max-height:70px; overflow:auto; font:12px/1.5 var(--nk-sans); }
 .build-error pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:95px; overflow:auto; margin:10px 0 0; font:11px/1.4 var(--nk-mono); }
@@ -627,8 +629,6 @@ details.sec { margin-top: 2px; }
 #scan-progress:empty { display:none; }
 body[data-empty="1"] #statusbar .hints { visibility:hidden; }
 
-.cmp-title h3 { flex-shrink:0; max-width:max(calc(var(--nk-w) - 96px), 10ch); }
-.cmp-head { max-width:max(var(--nk-w), 10ch); } /* (a narrow frame, a line of text: its name still reads) */
 .cmp .badge:not([hidden]) { flex-shrink:1; min-width:60px; }
 .frame .build-error, .mount .error { color:#9f2633; }
 
