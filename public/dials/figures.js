@@ -469,12 +469,26 @@ export function figureMarkup(c, v) {
 /** translateX amount of a keyframe record, in px. */
 export const translateOf = (f) =>
   Number(/translateX\(\s*(-?[\d.]+)/.exec(f?.transform || "")?.[1] || 0);
+// Parsed figure markup, by its text: a swap back to a panel, or rows that share a figure, clone the
+// parsed nodes instead of parsing the same SVG again. Bounded; the oldest entry goes first.
+const parsed = new Map(),
+  PARSED_MAX = 256;
+function parse(node, html) {
+  let t = parsed.get(html);
+  if (!t) {
+    t = node.ownerDocument.createElement("template");
+    t.innerHTML = html;
+    if (parsed.size >= PARSED_MAX) parsed.delete(parsed.keys().next().value);
+    parsed.set(html, t);
+  }
+  return t.content.cloneNode(true);
+}
 export function drawFigure(node, c, v) {
   const kind = kindOf(c),
     html = figureMarkup(c, v);
   node.dataset.kind = kind;
   if (node._html !== html) {
     node._html = html;
-    node.innerHTML = html;
+    node.replaceChildren(parse(node, html));
   }
 }
