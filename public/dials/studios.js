@@ -1443,6 +1443,10 @@ function motionStudio(ctx, host) {
     const v = ctx.get();
     mode.querySelector(".d-choice").value = v.mode || "bezier";
     numbers.update();
+    for (const f of numbers.node.querySelectorAll(".d-field")) {
+      const name = f.querySelector("span")?.textContent;
+      f.hidden = ["Stiffness", "Damping", "Mass", "Velocity"].includes(name) && v.mode !== "spring";
+    }
     handles.update();
     bezierOnly.hidden = v.mode === "spring";
     const ks = JSON.stringify(v.keyframes);

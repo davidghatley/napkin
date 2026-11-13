@@ -2007,3 +2007,11 @@
 .d-lab:not([data-studio="color"]):not([data-studio="motion"]) .d-lab-head {
   padding-top: 6px;
 }
+
+.d-field[hidden] {
+  display: none;
+}
+.d-section[data-depth="3"] .d-rows .d-segmented button {
+  padding: 0 2px;
+  font-size: 10px;
+}
