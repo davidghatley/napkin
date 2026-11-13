@@ -53,6 +53,11 @@ const keyBindings = (keys) => [
     "Change a focused label or figure",
   ],
   ["3 then l", "Change by a count (on a label)"],
+  ["g then h j k l / arrows", "Move focus to the nearest instrument that way"],
+  ["g g / g e", "First / last row of the section"],
+  ["g s / g r / g u", "Studio / reset / undo"],
+  ["g 1 / g 2 / g 3", "Dial / bench / studio for this section"],
+  ["Digits while dragging", "Type a number; Enter applies it (rows and studio handles)"],
   ["Shift / Alt", "Fine / coarse adjustment"],
   ["Home / End", "Minimum / maximum"],
   ["Arrows on Size", "Resize the studio pane; Shift for larger steps"],
@@ -1096,6 +1101,7 @@ export class Dials extends EventTarget {
       return;
     }
     if (e.ctrlKey || e.metaKey) return;
+    if (!editing && this.leaderKey(e, s, row)) return;
     if (this.keys.help.includes(e.key) && !editing) {
       e.preventDefault();
       this.help();
@@ -1160,6 +1166,67 @@ export class Dials extends EventTarget {
       e.preventDefault();
       this.open(row.c.id);
     }
+  }
+  /**
+   * The leader: press g, then a key. g h/j/k/l (or arrows) moves focus to the nearest
+   * instrument in that direction (labels, figures, values, studio handles alike); g g and
+   * g e go to the first and last row; g s opens the studio, g 1/2/3 sets the section's
+   * depth, g r resets the focused control, g u undoes, g / finds anything.
+   */
+  leaderKey(e, s, row) {
+    const now = performance.now();
+    if (!this.leader || now - this.leader > 1500) {
+      this.leader = 0;
+      if (e.key !== "g" || e.altKey) return false;
+      e.preventDefault();
+      this.leader = now;
+      this.announce("g … h j k l move · g e first or last · s studio · 1 2 3 depth · r reset · u undo · / find");
+      return true;
+    }
+    this.leader = 0;
+    e.preventDefault();
+    const dir = { h: [-1, 0], ArrowLeft: [-1, 0], l: [1, 0], ArrowRight: [1, 0], k: [0, -1], ArrowUp: [0, -1], j: [0, 1], ArrowDown: [0, 1] }[e.key];
+    const rowsHere = [...this.rows.values()].filter((r) => !s || r.section === s);
+    if (dir) this.spatialFocus(e.target, dir);
+    else if (e.key === "g") rowsHere[0]?.label.focus();
+    else if (e.key === "e") rowsHere.at(-1)?.label.focus();
+    else if (e.key === "s" && row) this.open(row.c.id);
+    else if (/^[123]$/.test(e.key) && s) this.setDepth(s.schema.id, Number(e.key));
+    else if (e.key === "r" && row) this.reset(row.c.id);
+    else if (e.key === "u") this.undo(false);
+    else if (e.key === "/") this.palette();
+    else if (e.key !== "Escape") {
+      this.announce(`g ${e.key} does nothing; press ? for the key map`);
+      return true;
+    }
+    this.announce("");
+    return true;
+  }
+  /** Move focus to the nearest focusable thing in a direction, by on-screen position. */
+  spatialFocus(from, [dx, dy]) {
+    const a = from.getBoundingClientRect(),
+      ax = a.left + a.width / 2,
+      ay = a.top + a.height / 2;
+    let best = null,
+      score = Infinity;
+    for (const node of this.root.querySelectorAll('[tabindex="0"], button:not([disabled]), input:not([type=hidden]), textarea, select, a[href]')) {
+      if (node === from || node.closest("[hidden], dialog:not([open])")) continue;
+      const r = node.getBoundingClientRect();
+      if (!r.width || !r.height) continue;
+      const ox = r.left + r.width / 2 - ax,
+        oy = r.top + r.height / 2 - ay,
+        along = ox * dx + oy * dy,
+        across = Math.abs(ox * dy - oy * dx);
+      // In the direction, within a 60-degree-ish cone; nearer and straighter wins.
+      if (along <= 4 || across > along * 1.8) continue;
+      const d = along + across * 2.5;
+      if (d < score) (score = d), (best = node);
+    }
+    if (best) {
+      best.focus();
+      best.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    } else this.announce("Nothing further that way");
+    return best;
   }
   undo(redo = false) {
     if (this.options.history === false) {

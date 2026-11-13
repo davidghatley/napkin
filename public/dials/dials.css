@@ -2481,6 +2481,14 @@
 .k-handle-hit {
   fill: transparent;
 }
+.k-typed rect {
+  fill: var(--d-text);
+}
+.k-typed text {
+  fill: var(--d-surface);
+  font: 600 11px var(--d-sans);
+  font-variant-numeric: tabular-nums;
+}
 .k-handle-dot {
   fill: var(--d-surface);
   stroke: var(--d-text);

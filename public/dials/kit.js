@@ -267,7 +267,7 @@ export function chips(label, options, onPick, { glyph } = {}) {
  * A draggable point inside an SVG drawing. It is a focusable slider: arrows move it by
  * `step` user units (Shift fine, Alt coarse). `move(x, y, e)` receives user units.
  */
-export function handle(svg, { label, r = 6, cls = "", move, start, end, cancel, keys }) {
+export function handle(svg, { label, r = 6, cls = "", move, start, end, cancel, keys, typed }) {
   const g = s("g", {
     class: "k-handle " + cls,
     tabindex: 0,
@@ -276,16 +276,55 @@ export function handle(svg, { label, r = 6, cls = "", move, start, end, cancel, 
   });
   g.append(s("circle", { class: "k-handle-hit", r: r + 7 }), s("circle", { class: "k-handle-dot", r }));
   svg.append(g);
+  // Typed numbers: with the handle focused or held, digits build a number that Enter applies.
+  let buffer = "",
+    held = false;
+  const bubble = s("g", { class: "k-typed", visibility: "hidden" }),
+    bubbleBox = s("rect", { rx: 3, height: 18, y: -r - 26 }),
+    bubbleText = s("text", { y: -r - 13, "text-anchor": "middle" });
+  bubble.append(bubbleBox, bubbleText);
+  g.append(bubble);
+  const showBuffer = () => {
+    bubble.setAttribute("visibility", buffer ? "visible" : "hidden");
+    bubbleText.textContent = buffer;
+    const w = buffer.length * 7 + 12;
+    bubbleBox.setAttribute("x", -w / 2);
+    bubbleBox.setAttribute("width", w);
+  };
   const dispose = pointerSurface(g, {
-    start: (e) => start?.(e),
+    start: (e) => {
+      held = true;
+      if (typed) g.focus({ preventScroll: true });
+      start?.(e);
+    },
     move: (e) => {
       const p = svgPoint(svg, e);
       move(p.x, p.y, e);
     },
-    end: (e) => end?.(e),
-    cancel: () => cancel?.(),
+    end: (e) => {
+      held = false;
+      end?.(e);
+    },
+    cancel: () => {
+      held = false;
+      cancel?.();
+    },
   });
+  g.addEventListener("blur", () => ((buffer = ""), showBuffer()));
   g.addEventListener("keydown", (e) => {
+    if (typed && !e.ctrlKey && !e.metaKey && (/^[0-9.]$/.test(e.key) || (e.key === "-" && !buffer) || (buffer && ["Backspace", "Enter", "Escape"].includes(e.key)))) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Backspace") buffer = buffer.slice(0, -1);
+      else if (e.key === "Escape") buffer = "";
+      else if (e.key === "Enter") {
+        const n = parseFloat(buffer);
+        buffer = "";
+        if (Number.isFinite(n)) typed(n, held);
+      } else buffer += e.key;
+      showBuffer();
+      return;
+    }
     const k = (e.shiftKey ? 0.1 : 1) * (e.altKey ? 10 : 1),
       d = {
         ArrowLeft: [-1, 0],

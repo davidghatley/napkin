@@ -285,6 +285,11 @@ function ruler(api, svg, { label, range, get, put, unit = "", y0 = () => 0, heig
     label,
     r: 8,
     move: (x, _y, e) => api.ctx.change(put(api.get(), fine(e, x))),
+    typed: (n, held) => {
+      const { min, max } = range(),
+        next = put(api.get(), clamp(n, min, max));
+      held ? api.ctx.change(next) : api.edit(next, "studio-typed");
+    },
     keys: (dx, dy, e) => {
       const { min, max, step } = range(),
         k = e.key === "PageUp" || e.key === "PageDown" ? 10 : 1;
@@ -407,6 +412,7 @@ const stages = {
               const b = box();
               api.ctx.change(clamp(Math.round(Math.min(x - b.x, y - b.y)), range().min, Math.min(range().max, b.h / 2)));
             },
+            typed: (n, held) => (held ? api.ctx.change(clamp(n, range().min, range().max)) : api.edit(clamp(n, range().min, range().max), "studio-typed")),
             keys: (dx, dy) => api.edit(clamp(api.get() + dx - dy, range().min, range().max), "studio-key"),
           })
         : null;
@@ -558,6 +564,7 @@ const stages = {
         if (e.shiftKey) deg = Math.round(deg / 15) * 15;
         api.ctx.change(clamp(Math.round(deg / step) * step, min, max));
       },
+      typed: (n, held) => (held ? api.ctx.change(clamp(n, min, max)) : api.edit(clamp(n, min, max), "studio-typed")),
       keys: (dx, dy) => api.edit(clamp(api.get() + (dx - dy) * step, min, max), "studio-key"),
     });
     api.fit(svg, (w, h) => ((size = { w, h }), draw(api.get())));
