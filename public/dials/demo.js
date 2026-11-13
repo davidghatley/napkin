@@ -1,10 +1,10 @@
 import { Dials, registerControl, registerFigure } from "./dials.js";
 import { samples, gallery, lampRig } from "./schemas.js";
 import { el } from "./dom.js";
-import { stillLife, adjust } from "./kit.js";
-import { framesAt, motionAt } from "./motion.js";
+import { adjust } from "./kit.js";
+import { sectionPicture, coverCanvas, missingWords } from "./sources.js";
 import { contrast, parseColor } from "./color.js";
-import { schedule, hash } from "./figures.js";
+import { schedule } from "./figures.js";
 const panels = [],
   events = [];
 window.dialsDemo = { panels, samples, events, Dials, registerControl, registerFigure, gallery, lampRig };
@@ -18,6 +18,48 @@ const svgEl = (tag, attrs = {}) => {
 };
 
 /* Subjects: the thing each panel's values make, drawn live above the instrument. */
+/**
+ * The demo's own picture file. The demo is the host here: it hands the panel these bytes through
+ * the schema's source contract, as napkin hands over a file's bytes.
+ */
+function stillLife(w = 320, h = 180) {
+  const c = Object.assign(document.createElement("canvas"), { width: w, height: h }),
+    g = c.getContext("2d", { willReadFrequently: true }),
+    k = w / 320;
+  g.scale(k, h / 180);
+  const back = g.createLinearGradient(0, 0, 320, 180);
+  back.addColorStop(0, "#17266c");
+  back.addColorStop(1, "#526bca");
+  g.fillStyle = back;
+  g.fillRect(0, 0, 320, 180);
+  g.fillStyle = "#e5ddbf";
+  g.fillRect(0, 135, 320, 45);
+  g.fillStyle = "#11214f";
+  g.beginPath();
+  g.ellipse(180, 142, 88, 12, 0, 0, Math.PI * 2);
+  g.fill();
+  const orange = g.createRadialGradient(145, 76, 1, 179, 100, 65);
+  orange.addColorStop(0, "#ffcc56");
+  orange.addColorStop(0.6, "#ed7d21");
+  orange.addColorStop(1, "#792e16");
+  g.fillStyle = orange;
+  g.beginPath();
+  g.arc(177, 95, 53, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#749b42";
+  g.beginPath();
+  g.ellipse(181, 39, 22, 7, -0.4, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = "#f2eee0";
+  g.fillRect(34, 70, 45, 65);
+  g.fillStyle = "#c9c5b6";
+  g.fillRect(73, 70, 8, 65);
+  return c;
+}
+// still-life.png, as the demo host serves it.
+const stillLifeFile = { url: stillLife(640, 360).toDataURL("image/png"), name: "still-life.png", type: "image/png" };
+for (const sample of samples)
+  for (const s of sample.schema.sections) for (const c of s.controls) if (c.type === "asset" && c.value === "still-life.png") c.source = stillLifeFile;
 const subjects = {
   color(node, get) {
     node.classList.add("subject-color");
@@ -71,99 +113,89 @@ const subjects = {
       inner.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
     };
   },
-  motion(node, get) {
+  // The motion subject runs the CSS the panel writes, on a real element: what plays here is the
+  // file's code. The faint trail is panel.motionAt(), the same model the studio's ghost uses.
+  motion(node, get, panel) {
     node.classList.add("subject-motion");
-    const svg = svgEl("svg", { "aria-hidden": "true" }),
-      track = svgEl("path", { stroke: "var(--frame)", "stroke-dasharray": "2 4" }),
-      ghosts = svgEl("g"),
-      block = svgEl("rect", { width: 28, height: 28, rx: 3, fill: "var(--accent)" }),
-      clock = svgEl("text", { x: 12, y: 20, "font-size": 11, fill: "var(--muted)" });
-    svg.append(track, ghosts, block, clock);
-    node.append(svg);
-    let start = performance.now(),
-      raf = 0,
-      visible = true;
-    const geometry = () => {
-      const w = node.clientWidth || 400,
-        h = node.clientHeight || 152,
-        frames = get("path"),
-        reach = Math.max(1, ...frames.map((f) => Math.abs(Number(/translateX\((-?[\d.]+)/.exec(f.transform)?.[1] || 0)))),
-        k = Math.min(1, (w - 96) / reach);
-      return { w, h, k, x0: 34, y: h / 2 + 6 };
-    };
-    const place = (g, t) => {
-      const v = get("ease"),
-        p = framesAt(get("path"), t, v);
-      return { x: g.x0 + p.x * g.k, opacity: p.opacity };
-    };
-    const ghost = () => {
-      const g = geometry();
-      track.setAttribute("d", `M${g.x0} ${g.y + 22}H${g.w - 24}`);
-      ghosts.replaceChildren();
-      for (let i = 0; i <= 10; i++) {
-        const p = place(g, i / 10);
-        ghosts.append(
-          svgEl("rect", {
-            x: p.x - 14,
-            y: g.y - 14,
-            width: 28,
-            height: 28,
-            rx: 3,
-            fill: "none",
-            stroke: "var(--accent)",
-            "stroke-opacity": 0.12 + (i / 10) * 0.3,
-            "stroke-dasharray": "2 2",
-            transform: `rotate(${get("rotation")} ${p.x} ${g.y})`,
-          }),
-          svgEl("path", { d: `M${p.x} ${g.y + 19}V${g.y + 25}`, stroke: "var(--muted)", "stroke-width": i % 5 ? 1 : 1.5 }),
-        );
-      }
-    };
-    const frame = (now) => {
+    const style = el("style"),
+      stage = el("div", { class: "motion-stage" }),
+      rail = el("div", { class: "motion-rail" }),
+      trail = el("div", { class: "motion-trail" }),
+      clock = el("output", { class: "motion-clock" });
+    let box = el("div", { class: "motion-box" });
+    stage.append(rail, trail, box);
+    node.append(style, stage, clock);
+    let raf = 0,
+      visible = true,
+      shown = "";
+    // The running animation is looked up once per new code (getAnimations() flushes style); the
+    // clock then only reads its time, ten times a second.
+    let last = 0,
+      anim = null;
+    const tick = (now) => {
       raf = 0;
-      const v = get("ease"),
-        total = (v.duration || 1000) + (v.delay || 0) + 500,
-        loop = get("loop");
-      let ms = now - start;
-      if (loop) ms %= total;
-      const t = reduced.matches ? 1 : Math.min(1, Math.max(0, ms - (v.delay || 0)) / (v.duration || 1000));
-      const g = geometry(),
-        p = place(g, t);
-      block.setAttribute("x", p.x - 14);
-      block.setAttribute("y", g.y - 14);
-      block.setAttribute("opacity", p.opacity);
-      block.setAttribute("transform", `rotate(${get("rotation") * motionAt(t, { mode: "bezier", bezier: [0.4, 0, 0.2, 1] })} ${p.x} ${g.y})`);
-      clock.textContent = `${Math.round(t * (v.duration || 1000))} ms`;
-      if (visible && !reduced.matches && (loop || ms < total)) raf = requestAnimationFrame(frame);
+      const a = now - last > 100 && anim;
+      if (a) last = now;
+      if (a) clock.textContent = `${Math.round(Math.max(0, Number(a.currentTime) || 0) % 100000)} ms`;
+      if (visible && !reduced.matches) raf = requestAnimationFrame(tick);
     };
-    // The subject grows when its panel folds to a dial; redraw the ghost at the new size.
-    new ResizeObserver(() => ghost()).observe(node);
+    const apply = () => {
+      const css = panel.motionCode("time").keyframes.replace(/\.element \{/, ".subject-motion .motion-box {");
+      if (css === shown) return;
+      shown = css;
+      style.textContent = css;
+      // A fresh element starts the animation from its beginning.
+      const next = box.cloneNode();
+      box.replaceWith(next);
+      box = next;
+      const m = panel.motionModel("time").motion;
+      const running = box.getAnimations();
+      anim = running[0] || null;
+      if (reduced.matches) for (const an of running) (an.pause(), (an.currentTime = (m.delay || 0) + (m.duration || 1000)));
+      trail.replaceChildren(
+        ...Array.from({ length: 11 }, (_, i) => {
+          const at = panel.motionAt("time", (m.delay || 0) + (i / 10) * (m.duration || 1000)),
+            g = el("i");
+          Object.assign(g.style, at.style, { opacity: String(0.15 + 0.35 * at.opacity) });
+          return g;
+        }),
+      );
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
     new IntersectionObserver(([e]) => {
       visible = e.isIntersecting;
-      if (visible && !raf) raf = requestAnimationFrame(frame);
+      if (visible && !raf) raf = requestAnimationFrame(tick);
     }).observe(node);
-    return (control) => {
-      ghost();
-      if (control !== "loop" || get("loop")) start = performance.now();
-      if (!raf) raf = requestAnimationFrame(frame);
-    };
+    return () => apply();
   },
-  image(node, get) {
+  // The picture the section names, through the same source contract the panel uses.
+  image(node, get, panel) {
     node.classList.add("subject-image");
-    const src = stillLife(320, 180),
-      original = src.getContext("2d").getImageData(0, 0, 320, 180),
-      canvas = Object.assign(document.createElement("canvas"), { width: 320, height: 180 }),
+    const canvas = Object.assign(document.createElement("canvas"), { width: 320, height: 180 }),
       g = canvas.getContext("2d"),
-      out = g.createImageData(320, 180);
+      out = g.createImageData(320, 180),
+      note = el("p", { class: "subject-note" });
     canvas.setAttribute("aria-hidden", "true");
-    node.append(canvas);
-    return () => {
+    node.append(canvas, note);
+    let original = null,
+      name = null;
+    const draw = () => {
+      const pic = sectionPicture(panel, panel.schema.sections[0], () => draw());
+      if (pic?.image && pic.name !== name) (name = pic.name), (original = coverCanvas(pic, 320, 180).getContext("2d").getImageData(0, 0, 320, 180));
+      if (!pic?.image) (original = null), (name = null);
+      note.hidden = !!original;
+      canvas.hidden = !original;
+      if (!original) {
+        note.textContent = pic === undefined ? "Reading the picture…" : missingWords(get("asset"));
+        return;
+      }
       const v = get("levels");
       adjust(original, out, v, get("enabled"));
       g.putImageData(out, 0, 0);
       const crop = [v.cropTop || 0, v.cropRight || 0, v.cropBottom || 0, v.cropLeft || 0];
       canvas.style.clipPath = `inset(${crop.map((n) => `${n * 100}%`).join(" ")} round ${get("radius")}px)`;
     };
+    return draw;
   },
   data(node, get) {
     node.classList.add("subject-data");
@@ -222,49 +254,30 @@ const subjects = {
     const tiles = el("div", { class: "tiles", "aria-hidden": "true" }),
       line = el("p");
     node.append(tiles, line);
-    // A stand-in for a sampler's output: the seed's noise, smoothed by steps and pushed by guidance.
-    const paint = (canvas, seed, steps, cfg) => {
-      const n = 32,
-        g = canvas.getContext("2d"),
-        img = g.createImageData(n, n),
-        r = hash(seed),
-        field = Array.from({ length: n * n }, () => r()),
-        passes = Math.round(Math.min(14, steps / 2.5));
-      for (let p = 0; p < passes; p++)
-        for (let i = 0; i < n * n; i++) {
-          const x = i % n,
-            y = (i / n) | 0,
-            at = (dx, dy) => field[((y + dy + n) % n) * n + ((x + dx + n) % n)];
-          field[i] = (at(0, 0) * 2 + at(1, 0) + at(-1, 0) + at(0, 1) + at(0, -1)) / 6;
-        }
-      const lo = Math.min(...field),
-        hi = Math.max(...field),
-        k = 0.6 + cfg / 12;
-      const ink = [31, 69, 211],
-        paper = [244, 241, 232],
-        deep = [14, 18, 48];
-      for (let i = 0; i < n * n; i++) {
-        let t = (field[i] - lo) / (hi - lo || 1);
-        t = Math.min(1, Math.max(0, 0.5 + (t - 0.5) * k * 1.6));
-        const c = t < 0.5 ? deep.map((d, j) => d + (ink[j] - d) * t * 2) : ink.map((d, j) => d + (paper[j] - d) * (t - 0.5) * 2);
-        img.data.set([...c, 255], i * 4);
-      }
+    // Nothing is generated on this page, so the subject shows what the batch would run: each image's
+    // seed, drawn as its own 32 bits (8 across, 4 down, high bit first), and the settings it runs with.
+    const bits = (canvas, seed) => {
+      const g = canvas.getContext("2d"),
+        img = g.createImageData(8, 4),
+        on = [74, 108, 238],
+        off = [32, 36, 48];
+      for (let i = 0; i < 32; i++) img.data.set([...((seed >>> (31 - i)) & 1 ? on : off), 255], i * 4);
       g.putImageData(img, 0, 0);
     };
     return () => {
       const s = get("sampling"),
         count = Math.min(6, get("batch")),
-        seed = get("seed");
+        seed = get("seed") >>> 0;
       while (tiles.children.length > count) tiles.lastElementChild.remove();
       while (tiles.children.length < count)
-        tiles.append(Object.assign(document.createElement("canvas"), { width: 32, height: 32 }));
-      [...tiles.children].forEach((c, i) => {
-        c.style.imageRendering = s.steps < 12 ? "pixelated" : "auto";
-        paint(c, seed + i * 7919, s.steps * (s.denoise ?? 1), s.cfg);
+        tiles.append(el("figure", {}, Object.assign(document.createElement("canvas"), { width: 8, height: 4 }), el("figcaption")));
+      [...tiles.children].forEach((t, i) => {
+        bits(t.firstChild, (seed + i) >>> 0);
+        t.lastChild.textContent = `seed ${(seed + i) >>> 0}`;
       });
       line.replaceChildren(
         el("b", { text: `${get("batch")} × ${s.steps} steps` }),
-        ` · ${s.scheduler} · cfg ${s.cfg} · “${get("prompt")}”`,
+        ` · ${s.scheduler} · cfg ${s.cfg} · no images made here · “${get("prompt")}”`,
       );
       void schedule;
     };
@@ -291,7 +304,16 @@ for (const sample of samples) {
     theme: "light",
     studio: "viewport",
     label: sample.title,
-    onDepth: (id, depth) => card.classList.toggle("is-studio", depth === 3),
+    // The result stays in sight at every depth: above the rows at dial and bench, at the top of the
+    // studio's rail (beside the rows it came with) when the studio covers the page.
+    onDepth: (id, depth) => {
+      card.classList.toggle("is-studio", depth === 3);
+      const rail = depth === 3 && mount.querySelector(`.d-section[data-section="${CSS.escape(id)}"] .d-rail`);
+      if (rail) rail.prepend(subject);
+      else if (subject.parentElement !== card) card.insertBefore(subject, mount);
+      subject.classList.toggle("is-anchored", !!rail);
+      requestAnimationFrame(() => draw());
+    },
     onChange: (event) => {
       events.push(event);
       if (events.length > 200) events.shift();
@@ -300,7 +322,7 @@ for (const sample of samples) {
   });
   panel.addEventListener("paint", (e) => draw(e.detail.control));
   panel.render(sample.schema);
-  draw = subjects[sample.id]?.(subject, (id) => panel.get(id)) || (() => {});
+  draw = subjects[sample.id]?.(subject, (id) => panel.get(id), panel) || (() => {});
   requestAnimationFrame(() => draw());
   // Subjects drawn to their box redraw when the box changes size (a folded panel gives them room).
   if (sample.id === "data") new ResizeObserver(() => draw()).observe(subject);

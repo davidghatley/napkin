@@ -322,8 +322,17 @@ test(
           );
           await focus('[aria-label^="Color plane"]');
           await key("ArrowRight");
+          // A bound colour stays bound through edits: the edit is written to the token itself.
+          assert.equal(
+            await q('dialsDemo.panels[0].get("ink")'),
+            "var(--brand-accent)",
+          );
           assert.ok(
-            (await q('dialsDemo.panels[0].get("ink")')).startsWith("oklch"),
+            (
+              await q(
+                'document.documentElement.style.getPropertyValue("--brand-accent")',
+              )
+            ).startsWith("oklch"),
           );
           await shot("flow-color-studio-light");
           await q('document.querySelector("#theme").click()');

@@ -292,13 +292,10 @@ export function figureMarkup(c, v) {
           i = Math.min(3, Math.floor(t * 4)),
           f = t * 4 - i;
         return curve[i] + (curve[i + 1] - curve[i]) * f;
-      },
-      r = hash(7);
-    let bars = "";
-    for (let i = 0; i < 24; i++) {
-      const h = 2 + (Math.sin(i * 0.55) * 0.5 + 0.5) * 9 + r() * 4;
-      bars += `<rect x="${f1(3 + i * 3)}" y="${f1(22 - h)}" width="2" height="${f1(h)}" fill="${SOFT}" opacity=".4"/>`;
-    }
+      };
+    // The tone mapping itself, input across and output up; the band marks the black and white points.
+    // (No histogram here: a row has no pixels to count. The studio draws the real one.)
+    const bars = `<rect x="${f1(3 + black * (W - 6))}" y="2" width="${f1(Math.max(0.5, (white - black) * (W - 6)))}" height="20" fill="${SOFT}" opacity=".16"/><path d="M3 22L${W - 3} 2" stroke="${LINE}" stroke-dasharray="1 2"/>`;
     const pts = Array.from({ length: 33 }, (_, i) => [
       3 + (i / 32) * (W - 6),
       22 - tone(i / 32) * 20,
@@ -306,16 +303,24 @@ export function figureMarkup(c, v) {
     return svg(bars + line(path(pts), A, 1.5));
   }
   if (kind === "encoding") {
-    const pts = [
-        [0.06, 0.78],
-        [0.18, 0.55],
-        [0.3, 0.66],
-        [0.42, 0.38],
-        [0.55, 0.47],
-        [0.68, 0.22],
-        [0.8, 0.3],
-        [0.93, 0.1],
-      ],
+    // The control's own rows (c.data), at most 24 of them, placed by the bound fields.
+    const rows = Array.isArray(c.data) ? c.data.slice(0, 24) : [],
+      num = (f) => rows.map((r) => Number(r[f])),
+      norm = (a) => {
+        const lo = Math.min(...a),
+          hi = Math.max(...a);
+        return a.map((x) => (x - lo) / (hi - lo || 1));
+      },
+      xs = v.x && rows.length ? norm(num(v.x)) : [],
+      ys = v.y && rows.length ? norm(num(v.y)) : [],
+      groups = [...new Set(rows.map((r) => r[v.color]))],
+      sizes = v.size && rows.length ? norm(num(v.size)) : [];
+    if (!rows.length || !xs.every(Number.isFinite) || !ys.every(Number.isFinite))
+      return svg(
+        `<path d="M2.5 1V21.5H${W - 1}" stroke="${LINE}" fill="none"/>` +
+          ["x", "y", "color", "size"].map((k, i) => `<rect x="${8 + i * 16}" y="8" width="12" height="8" rx="2" fill="${v[k] ? A : "none"}" stroke="${v[k] ? A : SOFT}"/>`).join(""),
+      );
+    const pts = rows.map((_, i) => [xs[i] ?? 0.5, 1 - (ys[i] ?? 0.5)]),
       px = (q) => (v.x ? 6 + q[0] * (W - 10) : W / 2),
       py = (q) => (v.y ? 3 + q[1] * 16 : 12),
       series = [A, INK, SOFT];
@@ -324,7 +329,7 @@ export function figureMarkup(c, v) {
         pts
           .map(
             (q, i) =>
-              `<circle cx="${f1(px(q))}" cy="${f1(py(q))}" r="${v.size ? f1(1.3 + ((i * 5) % 7) * 0.33) : 1.9}" fill="${v.color ? series[i % 3] : A}" opacity="${v.x || v.y ? 1 : 0.35}"/>`,
+              `<circle cx="${f1(px(q))}" cy="${f1(py(q))}" r="${v.size ? f1(1.1 + (sizes[i] ?? 0.5) * 2.2) : 1.7}" fill="${v.color ? series[Math.max(0, groups.indexOf(rows[i][v.color])) % 3] : A}" opacity="${v.x || v.y ? 1 : 0.35}"/>`,
           )
           .join(""),
     );
@@ -345,12 +350,11 @@ export function figureMarkup(c, v) {
     );
   }
   if (kind === "seed") {
-    // The seed as the noise it starts from: the same seed always draws the same field.
-    const r = hash(n);
+    // The seed's 32 bits, most significant first: the value itself, not a picture of noise.
+    const bits = (Math.max(0, Math.floor(n)) >>> 0).toString(2).padStart(32, "0");
     let cells = "";
-    for (let y = 0; y < 4; y++)
-      for (let x = 0; x < 12; x++)
-        cells += `<rect x="${2 + x * 6}" y="${1 + y * 5.5}" width="5" height="4.5" fill="${INK}" opacity="${f1(0.06 + r() * 0.7)}"/>`;
+    for (let i = 0; i < 32; i++)
+      cells += `<rect x="${f1(2 + (i % 16) * 4.6 + (i % 16 >= 8 ? 2 : 0))}" y="${4 + Math.floor(i / 16) * 9}" width="3.6" height="7" rx=".6" fill="${bits[i] === "1" ? INK : "none"}" stroke="${bits[i] === "1" ? INK : SOFT}" stroke-width=".6"/>`;
     return svg(cells);
   }
   if (kind === "count") {
@@ -373,7 +377,7 @@ export function figureMarkup(c, v) {
     return svg(
       `<path d="M4.5 2.5H14L18.5 7V21.5H4.5ZM14 2.5V7H18.5" fill="${PAPER}" stroke="${name ? INK : SOFT}"/>` +
         (name
-          ? `<text x="25" y="16" class="d-pixel-text" fill="${A}">${esc(ext || "FILE")}</text>`
+          ? `<text x="25" y="16" class="d-pixel-text" fill="${INK}">${esc(ext || "FILE")}</text>`
           : `<path d="M25 12H${W - 4}" stroke="${LINE}" stroke-dasharray="2 3"/>`),
     );
   }
@@ -465,12 +469,26 @@ export function figureMarkup(c, v) {
 /** translateX amount of a keyframe record, in px. */
 export const translateOf = (f) =>
   Number(/translateX\(\s*(-?[\d.]+)/.exec(f?.transform || "")?.[1] || 0);
+// Parsed figure markup, by its text: a swap back to a panel, or rows that share a figure, clone the
+// parsed nodes instead of parsing the same SVG again. Bounded; the oldest entry goes first.
+const parsed = new Map(),
+  PARSED_MAX = 256;
+function parse(node, html) {
+  let t = parsed.get(html);
+  if (!t) {
+    t = node.ownerDocument.createElement("template");
+    t.innerHTML = html;
+    if (parsed.size >= PARSED_MAX) parsed.delete(parsed.keys().next().value);
+    parsed.set(html, t);
+  }
+  return t.content.cloneNode(true);
+}
 export function drawFigure(node, c, v) {
   const kind = kindOf(c),
     html = figureMarkup(c, v);
   node.dataset.kind = kind;
   if (node._html !== html) {
     node._html = html;
-    node.innerHTML = html;
+    node.replaceChildren(parse(node, html));
   }
 }

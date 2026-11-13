@@ -3,6 +3,9 @@
 const refs = (file, ...events) => events.map((e) => `${file}.js:${e}`);
 const action = (id, label, key, codes, handlers, run, hint = 'view') => ({ id, kind: 'action', label, key, codes, handlers, run, hint });
 const key = (k) => document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true }));
+// A canvas command: `phrase` is what the palette runs when typed exactly ("Arrange by kind", "Select <path>"); `keys` is its
+// default, rebindable binding (commands.js dispatches it). `key` stays the human line the key map shows next to it.
+const command = (id, label, phrase, keys, run, extra = {}) => ({ id, kind: 'action', label, phrase, keys, key: keys || `Ctrl/Cmd+K, "${phrase}"`, codes: [], handlers: [], run, hint: 'command', palette: true, command: true, ...extra });
 export const ACTIONS = [
   action('fit', 'Fit all', 'Shift+1', ['Digit1', '!', '1'], refs('view', 'keydown'), (c) => c.view.fitAll({ animate: true })),
   action('fit-selection', 'Fit selection', 'Shift+2', ['Digit2', '@', '2'], refs('view', 'keydown'), (c) => c.view.fitSelection({ animate: true })),
@@ -98,10 +101,45 @@ export const ACTIONS = [
   action('paste-code', 'Paste copied code into the selected element', 'Ctrl/Cmd+V', [], [], (c) => c.copyCode?.pasteFromClipboard(), 'edit'),
   action('help', 'Keyboard shortcuts', '?', ['?', 'Escape'], refs('shortcuts', 'keydown'), (c) => c.shortcuts.open()),
   action('theme', 'Switch light or dark chrome', 'Click the theme button', [], [], () => document.querySelector('#theme-toggle').click(), 'theme'),
+  // The canvas commands (DREAM 3). Each has a palette phrase; an <argument> is completed in the palette (items, controls,
+  // proposals, commands). `keys` is the default binding the dispatcher (commands.js) runs and the key map shows; each can be
+  // rebound ("Rebind <command> to <keys>", or in the key map). A key sequence is written with spaces ("A K": A, then K).
+  command('select-item', 'Select', 'Select <path>', '', (c, a) => c.surface.selectPath(a), { arg: 'item', about: 'Select a file on the canvas and open its instruments' }),
+  command('control', 'Control', 'Control <label>', '', (c, a) => c.surface.control(a), { arg: 'control', about: 'Go to a control of the selection, ready to type a value' }),
+  command('dial', 'Dial', 'Dial <label>', '', (c, a) => c.surface.depth(a, 1), { arg: 'control', about: 'Fold the control’s section to one row' }),
+  command('bench', 'Bench', 'Bench <label>', '', (c, a) => c.surface.depth(a, 2), { arg: 'control', about: 'Open the control’s section with every related control' }),
+  command('studio', 'Studio', 'Studio <label>', '', (c, a) => c.surface.depth(a, 3), { arg: 'control', about: 'Open the control in its studio' }),
+  command('reset', 'Reset', 'Reset <label>', '', (c, a) => c.surface.reset(a), { arg: 'control', about: 'Put a control back to its default' }),
+  ...['kind', 'folder', 'date', 'similarity', 'tag', 'status', 'run'].map((by, i) => command(`arrange-${by}`, `Arrange by ${by}`, `Arrange by ${by}`, `A ${'KFDSTUR'[i]}`, (c) => c.surface.arrange(by), { about: `Sort the canvas into groups by ${by}` })),
+  command('arrange-meta', 'Arrange by meta', 'Arrange by meta.<column>', '', (c, a) => c.surface.arrange('meta.' + String(a || '').replace(/^meta\./, '')), { arg: 'text', about: 'Sort the canvas into groups by a metadata field or a data column' }),
+  command('group', 'Group', 'Group <name>', '', (c, a) => c.surface.group(a), { arg: 'text', about: 'Put the selected cards in a named group' }),
+  command('present', 'Present', 'Present', 'F5', (c) => c.surface.present(true), { about: 'Show the selection (or the whole canvas) full screen; Escape leaves' }),
+  command('compare', 'Compare variants', 'Compare variants <path>', '', (c, a) => c.surface.compare(a), { arg: 'item', about: 'Show a component’s variants side by side' }),
+  command('approve', 'Approve', 'Approve <proposal>', '', (c, a) => c.surface.resolve(a, 'accept'), { arg: 'proposal', about: 'Accept an agent’s proposal' }),
+  command('reject', 'Reject', 'Reject <proposal>', '', (c, a) => c.surface.resolve(a, 'reject'), { arg: 'proposal', about: 'Turn an agent’s proposal down' }),
+  command('generate', 'Generate', 'Generate <workflow>', '', (c, a) => c.surface.generate(a), { arg: 'item', about: 'Queue a ComfyUI workflow; the result lands on the canvas' }),
+  command('open-folder', 'Open folder', 'Open folder <path>', '', (c, a) => c.surface.openFolder(a), { arg: 'text', about: 'Open another folder on this canvas' }),
+  command('rebind', 'Rebind', 'Rebind <command> to <keys>', '', (c, a) => c.surface.rebind(a), { arg: 'rebind', about: 'Give a command other keys' }),
+  command('focus-right', 'Focus the card to the right', 'Focus the card to the right', 'ArrowRight', (c, n) => c.surface.walk(1, 0, false, n), { about: 'Spatial focus: the nearest card that way, by position' }),
+  command('focus-left', 'Focus the card to the left', 'Focus the card to the left', 'ArrowLeft', (c, n) => c.surface.walk(-1, 0, false, n)),
+  command('focus-down', 'Focus the card below', 'Focus the card below', 'ArrowDown', (c, n) => c.surface.walk(0, 1, false, n)),
+  command('focus-up', 'Focus the card above', 'Focus the card above', 'ArrowUp', (c, n) => c.surface.walk(0, -1, false, n)),
+  command('extend-right', 'Add the card to the right to the selection', 'Add the card to the right', 'Shift+ArrowRight', (c, n) => c.surface.walk(1, 0, true, n)),
+  command('extend-left', 'Add the card to the left to the selection', 'Add the card to the left', 'Shift+ArrowLeft', (c, n) => c.surface.walk(-1, 0, true, n)),
+  command('extend-down', 'Add the card below to the selection', 'Add the card below', 'Shift+ArrowDown', (c, n) => c.surface.walk(0, 1, true, n)),
+  command('extend-up', 'Add the card above to the selection', 'Add the card above', 'Shift+ArrowUp', (c, n) => c.surface.walk(0, -1, true, n)),
+  command('panel', 'Go to the instruments of the selection', 'Go to the instruments', 'G I', (c) => c.surface.focusPanel(), { about: 'Move focus into the instrument panel' }),
+  command('canvas', 'Back to the canvas', 'Back to the canvas', 'G C', (c) => c.surface.focusCanvas(), { about: 'Move focus from the panel back to the selected card' }),
+  command('select-all', 'Select every card', 'Select every card', 'G A', (c) => c.surface.selectAll()),
+  command('item-undo', 'Undo the last instrument change', 'Undo the last instrument change', 'G U', (c) => c.surface.undo()),
+  command('count', 'Repeat a move: type a number first (3, then ArrowRight)', 'Repeat a move', '', null, { handlers: refs('commands', 'keydown'), palette: false, codes: ['Escape', 'Shift', 'Control', 'Alt', 'Meta'] }),
+  command('early-keys', 'Keys typed while the page is still waking are kept and played back; a typed character sent with an editing key\'s code replaces the selection', 'Early keys', '', null, { handlers: refs('early', 'keydown'), palette: false, key: 'any key' }),
+  command('instrument-keys', 'Instruments: step a value (Shift coarse, Alt fine), type a value and Enter, type the first letters of a choice', 'Instrument keys', '', null, { handlers: refs('surface-panel', 'keydown'), palette: false, key: '← → · Shift ×10 · Alt ×0.1 · Enter · letters', codes: ['Enter', ' '] }),
 ];
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
+  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'panel.js:keydown': 5, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1,
 };
-export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run).map((a) => ({ ...a, run: () => a.run(ctx) }));
+// A command that takes an argument ("Select <path>") puts its verb in the palette, where the argument is completed.
+export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run && a.palette !== false).map((a) => ({ ...a, boost: a.command ? -25 : a.boost, run: a.arg ? () => ctx.quick.prefill(a.phrase.replace(/\s*<.*$/, '') + ' ') : () => a.run(ctx) }));

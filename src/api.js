@@ -43,8 +43,7 @@ export const agentPermission = (dir, name) => { const c = agentsConfig(dir); ret
 const res = (status, json) => ({ status, json });
 const fail = (status, error, extra) => res(status, { ok: false, error: explainError(error), ...extra });
 
-export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}), inFolder = true } = {}) {
-  const sessions = new Map(); // token -> name
+export function createApi(ws, { broadcast: emitFrame = () => {}, dir = ws.dir, canPropose = true, colorOf = () => ({}), inFolder = true, sessions = new Map() } = {}) { // sessions: token -> name (the server shares one map across the folders it opens)
   const renderer = createRenderer();
 
   // Proposals survive a restart (WPC-20): they are kept in <dir>/.napkin/proposals.json (private, self-ignoring, written atomically,

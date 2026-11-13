@@ -99,7 +99,7 @@ class Guard extends Component { constructor(p) { super(p); this.state = { e: nul
   componentDidCatch(e) { window.__napkinError = String(e && e.message || e); }
   render() { return this.state.e ? createElement('pre', { 'data-napkin-error': '', style: { whiteSpace: 'pre-wrap', font: '12px/1.5 ui-monospace,monospace', color: '#b42318', background: '#fff', margin: 0, padding: 12, overflowWrap: 'anywhere' } }, 'napkin could not run ' + ${JSON.stringify(comp.path)} + ': ' + String(this.state.e && this.state.e.message || this.state.e)) : this.props.children; } }
 if (typeof C !== 'function' && !(C && typeof C === 'object' && C.$$typeof)) window.__napkinError = 'no export named ' + ${JSON.stringify(exportName)};
-else createRoot(document.getElementById('root')).render(createElement(Guard, null, createElement(C)));
+else createRoot(document.getElementById('root')).render(createElement(Guard, null, createElement(C, window.__napkinProps || null)));
 `;
     let out;
     try {
@@ -117,7 +117,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
     if (!over) cache.set(key, out);
     return out;
   }
-  async function view(comp, over = null) {
+  async function view(comp, over = null, props = null) {
     const links = engine.applied().map((p) => `<link rel="stylesheet" href="${href(p)}">`).join('');
     const b = comp.broken && !over ? { error: explainError(comp.broken, { next: 'fix the syntax error, then save; napkin reads it again.' }) } : await bundle(comp, over);
     if (b.error) {
@@ -127,7 +127,7 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
     const code = b.code.replace(/<\/script/gi, '<\\/script');
     // a throw while the module loads (nothing to catch it): say so in the frame too
     const onerr = `addEventListener('error',function(e){if(/ResizeObserver loop/.test(e.message||''))return;var p=document.createElement('pre');p.setAttribute('data-napkin-error','');p.style.cssText='white-space:pre-wrap;font:12px/1.5 ui-monospace,monospace;color:#b42318;background:#fff;margin:0;padding:12px;overflow-wrap:anywhere';p.textContent='napkin could not run '+${JSON.stringify(comp.path)}+': '+(e.message||e);document.body.append(p)});`.replace(/<\//g, '<\\/');
-    return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${onerr}</script><script>${code}</script><script>${EMPTY_NOTE}</script></body></html>`) };
+    return { type: 'text/html; charset=utf-8', status: 200, body: Buffer.from(`<!doctype html><html><head><meta charset="utf-8">${links}</head><body><div id="root"></div><script>${onerr}</script>${props ? `<script>window.__napkinProps=${JSON.stringify(props).replace(/</g, '\\u003c')}</script>` : ''}<script>${code}</script><script>${EMPTY_NOTE}</script></body></html>`) };
   }
   return { view, bundle };
 }

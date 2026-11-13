@@ -109,7 +109,9 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
       if (method === 'GET' && path.startsWith('/view/')) {
         const id = decodeURIComponent(path.slice('/view/'.length));
         const comp = engine.component(id);
-        const v = comp.kind === 'html' ? htmlView(engine, comp) : await tsx.view(comp);
+        // ?props={...} draws a component with those props (Compare variants shows one frame per declared variant).
+        let props = null; try { const q = url.searchParams.get('props'); props = q ? JSON.parse(q) : null; } catch {}
+        const v = comp.kind === 'html' ? htmlView(engine, comp) : await tsx.view(comp, null, props && typeof props === 'object' && !Array.isArray(props) ? props : null);
         // The item contract identifies the document root without changing its source file.
         const source = Buffer.isBuffer(v.body) ? v.body : Buffer.from(v.body);
         const at = /<html\b/i.exec(source.toString('latin1'));

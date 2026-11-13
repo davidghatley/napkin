@@ -65,7 +65,8 @@ test('the panel at default width: no truncated labels, clear hierarchy, quiet in
       assert.match(await q(`document.querySelector('#gap-auto').title`), /^Space between/);
     });
     await t.test('common nodes scan in one screen; the richest stay within 1.2 screens; the order follows the node kind', async () => {
-      const fit = async (c, n, v = {}) => { await L.select(c, n, v); await sleep(120); return JSON.parse(await q(`JSON.stringify({ h: document.querySelector('#inspector').scrollHeight, c: document.querySelector('#inspector').clientHeight, first: [...document.querySelectorAll('#panel details.sec, #panel .sec.empty')].map((d) => d.dataset.sec).slice(0, 3), open: [...document.querySelectorAll('#panel details.sec[open]')].map((d) => d.dataset.sec) })`)); };
+      // Migrated: the element panel's own height is judged (#panel); the file's instrument panel now sits under it in the same column.
+      const fit = async (c, n, v = {}) => { await L.select(c, n, v); await sleep(120); return JSON.parse(await q(`JSON.stringify({ h: document.querySelector('#panel').scrollHeight, c: document.querySelector('#inspector').clientHeight, first: [...document.querySelectorAll('#panel details.sec, #panel .sec.empty')].map((d) => d.dataset.sec).slice(0, 3), open: [...document.querySelectorAll('#panel details.sec[open]')].map((d) => d.dataset.sec) })`)); };
       for (const [c, n] of [['Card', 'title'], ['Card', 'image'], ['Flow', 'stage'], ['Flow', 'a']]) { const r = await fit(c, n); assert.ok(r.h <= r.c, `${c}.${n}: ${r.h} > ${r.c}`); }
       for (const [c, n, v] of [['Card', 'card'], ['Button', 'root', { size: 'md', state: 'default' }]]) { const r = await fit(c, n, v); assert.ok(r.h <= r.c * 1.2, `${c}.${n}: ${r.h} vs ${r.c}`); }
       assert.equal((await fit('Card', 'title')).first[0], 'type', 'text first');

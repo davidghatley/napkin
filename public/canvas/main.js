@@ -59,6 +59,8 @@ import { initChrome } from './stage-chrome.js';
 import { initBreakpoints } from './stage-breakpoints.js';
 import { initInspector } from './doc-panel.js';
 import { initKinds } from './kinds.js';
+import { initInstruments } from './surface-panel.js';
+import { initSurface } from './commands.js';
 
 const $ = (s) => document.querySelector(s);
 const client = await connectCanvas(location.origin + '/');
@@ -66,6 +68,8 @@ const client = await connectCanvas(location.origin + '/');
 const handlers = new Map();
 // The toast says it in plain words; the raw store message stays in the panel's inline errors.
 const keyOf = (s) => `${s.component}|${s.node}`;
+// A whole card (a file item, or a component picked as one card) can be selected together with other cards; elements stay within one component.
+const isCard = (s) => s.card || s.node === "item";
 const nameCounts = new Map(), nameById = new Map(), idsByName = new Map();
 // Components are the files napkin has always drawn (the TSX dialect and the document engine). File items (any other kind,
 // public/canvas/kinds.js) live in the same map for get/has/set/delete, but iteration and size see components only, so every
@@ -85,7 +89,7 @@ const ctx = {
   selectMany(list) {
     const seen = new Set();
     list = list.filter((s) => !seen.has(keyOf(s)) && seen.add(keyOf(s)));
-    if (list.length && list.some((s) => s.component !== list[0].component)) list = list.filter((s) => s.component === list.at(-1).component);
+    if (list.length && !list.every(isCard) && list.some((s) => s.component !== list[0].component)) list = list.filter((s) => s.component === list.at(-1).component);
     ctx.state.selections = list;
     ctx.state.selection = list.at(-1) ?? null;
     ctx.emit('select', ctx.state.selection);
@@ -93,11 +97,12 @@ const ctx = {
   toggle(sel) {
     const cur = ctx.state.selections;
     if (cur.some((s) => keyOf(s) === keyOf(sel))) ctx.selectMany(cur.filter((s) => keyOf(s) !== keyOf(sel)));
-    else if (cur.length && cur[0].component !== sel.component) { ctx.selectMany([sel]); ctx.hint('Selection stays within one component'); }
+    else if (cur.length && cur[0].component !== sel.component && !(isCard(sel) && cur.every(isCard))) { ctx.selectMany([sel]); ctx.hint('Selection stays within one component'); }
     else ctx.selectMany([...cur, sel]);
   },
   fetch: (path, init) => client.fetch(path, init), // fetch with this page's session (identity "you"); use for any /api write
   async sendEdits(component, edits, opts = {}) {
+    ctx.lastEditAt = performance.now(); // an edit through the element panel is newer than any instrument change before it
     const c = ctx.state.components.get(component);
     const r = await client.sendEdits(component, ctx.clash?.base(component) ?? c.revision, edits); // clash.js: the revision you saw when you began on the field
     ctx.clash?.sent(component, r);
@@ -109,6 +114,8 @@ const ctx = {
   // two components with one name show their paths (the dialect's names are counted as they arrive; the engine's are counted here)
   title(c) { return c.path && (nameCounts.get(c.name) > 1 || (c.kind === 'html' && [...ctx.state.components.values()].filter((x) => x.name === c.name).length > 1)) ? `${c.name} · ${c.path.replace(/#.*$/, '')}` : c.name; },
   named(name) { return [...(idsByName.get(name) || [])].map(id => ctx.state.components.get(id)).filter(Boolean); },
+  // The file a canvas card stands for, as /api/items names it (its id is its path): what the instruments and the board speak of.
+  itemOf(id) { const c = ctx.state.components.get(id); if (!c) return null; if (c.item) return id; const p = String(c.path || "").replace(/#.*$/, ""); if (!p) return id; const m = [...(ctx.docs?.enginePaths || [])].find((e) => e === p || e.endsWith("/" + p)); return m || p; },
   find(idOrName) { return ctx.state.components.get(idOrName) ?? ctx.state.components.all().find((c) => c.name === idOrName); },
   on(event, cb) { if (!handlers.has(event)) handlers.set(event, new Set()); handlers.get(event).add(cb); return () => handlers.get(event).delete(cb); },
   emit(event, payload) { for (const cb of handlers.get(event) || []) cb(payload); },
@@ -141,7 +148,10 @@ initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
+initInstruments(ctx); // the one instrument panel (dials) for whatever is selected
+initSurface(ctx); // commands, bindings, spatial focus, board state (commands.js)
 initShortcuts(ctx);
+window.napkinEarly?.replay(); // keys pressed before this point (early.js) now reach the palette and the key map
 initReadOnly(ctx);
 const nav = initNav(ctx);
 initHandles(ctx);
@@ -214,6 +224,7 @@ client.onChange((f) => {
   else if (f.type === 'slots') { stage.render(f.component, true).catch(console.error); }
   else if (f.type === 'build') { if (f.cause && f.ok) stage.render(f.component, true).catch(console.error); } // a component this one shows was edited: draw it again
   else if (f.type === 'canvas') { const p = stage.position(f.component); if (!p || p.x !== f.canvas.x || p.y !== f.canvas.y) { stage.moveTo(f.component, f.canvas.x, f.canvas.y); stage.refreshOverlays(); } }
+  else if (f.type === 'folder') { location.reload(); } // another folder was opened in this napkin
   else if (f.type === 'agents') { $('#agent-status').hidden = !f.count; $('#agent-status').textContent = f.count > 1 ? `${f.count} agents connected` : 'agent connected'; ctx.emit('agents', f); }
   else if (f.type === 'presence') ctx.emit('presence', f); // presence.js
   else if (f.type === 'proposal' || f.type === 'proposal-resolved') ctx.emit(f.type, f); // proposals.js
@@ -237,4 +248,5 @@ counts();
 initEmpty(ctx, $('#stage'));
 $('#revision').parentElement.hidden = !ctx.state.selection;
 document.body.dataset.ready = '1';
+try { if (sessionStorage.getItem('napkin.focusFirst')) { sessionStorage.removeItem('napkin.focusFirst'); const c = document.querySelector('#world [data-item-id]'); if (c) { if (!c.hasAttribute('tabindex')) c.tabIndex = -1; c.focus({ preventScroll: true, focusVisible: true }); } } } catch {} // after Open folder, focus starts on the first card
 docs.ask();

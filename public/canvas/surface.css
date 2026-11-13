@@ -1,0 +1,95 @@
+/* The DREAM 3 surface: the instrument panel host, the palette, the key map, card focus, board groups, compare and present.
+   It takes the dials design language (docs/dials.md): Inter for every word, one cobalt accent, hairline rules, 32 px rows,
+   Stem 7 only for hero numerals. Light and dark follow the chrome tokens of canvas.css. */
+/* The chrome's text is set in Inter from the first paint: the face is preloaded and blocks briefly instead of swapping in late (a late swap moves every line). */
+@font-face { font-family: "Dials Inter"; src: url("/dials/fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: block; }
+:root {
+  --nk-sans: "Dials Inter", "Inter Var", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --nk-accent: #1f45d3; --nk-accent-text: #1c3fc4; --nk-select: #1f45d3;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --nk-accent: #7b9bff; --nk-accent-text: #9db5ff; --nk-select: #7b9bff; } }
+:root[data-theme="dark"] { --nk-accent: #7b9bff; --nk-accent-text: #9db5ff; --nk-select: #7b9bff; }
+body { font-family: var(--nk-sans); }
+
+/* ------------------------------------------------------------------ instruments (one panel, drawn by dials) */
+#instruments[hidden], #panel[hidden] { display: none; }
+/* One column: the element panel, then the instrument panel under it. Drawing this one never moves the element panel; when the element panel
+   changes, this one is out of sight for two frames (surface-panel.js), so it is never a layout shift. */
+#inspector > #instruments { border-top: 1px solid var(--nk-line); scrollbar-gutter: stable; }
+#inspector > #panel:empty + #instruments, #inspector > #panel[hidden] + #instruments { border-top: 0; }
+#inspector { scrollbar-gutter: stable; }
+#instruments .instruments { display: block; }
+#instruments .inst-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 14px 10px; }
+#instruments .inst-head h2 { margin: 0; font: 600 14px/20px var(--nk-sans); color: var(--nk-text); overflow-wrap: anywhere; }
+#instruments .inst-head p { margin: 2px 0 0; font: 12px/16px var(--nk-sans); color: var(--nk-text-2); }
+#instruments .inst-tools { display: flex; gap: 6px; flex: none; }
+#instruments .inst-tools > * { font: 500 12px/1 var(--nk-sans); padding: 7px 10px; border-radius: 6px; border: 1px solid var(--nk-line); background: var(--nk-chrome-2); color: var(--nk-text); text-decoration: none; cursor: pointer; }
+#instruments .inst-tools > *:hover { background: var(--nk-chrome-3); }
+#instruments .inst-status:empty { display: none; }
+#instruments .inst-status { margin: 0 14px 8px; font: 12px/16px var(--nk-sans); color: var(--nk-text-2); }
+#instruments .inst-empty { margin: 0; padding: 12px 14px 16px; font: 12px/18px var(--nk-sans); color: var(--nk-text-2); }
+/* Bench depth: the open section gives each row room for its figure and value. */
+#instruments .d-section[data-depth="2"] .d-row:not([hidden]) { min-height: 40px; }
+
+/* ------------------------------------------------------------------ cards: spatial focus is visible */
+#world [data-item-id]:focus { outline: none; }
+/* The ring is three screen pixels at any zoom (--nk-lf is 1/zoom when zoomed out) and sits on the card edge. */
+#world [data-item-id]:focus-visible { outline: calc(3px * var(--nk-lf, 1)) solid var(--nk-accent); outline-offset: 0; }
+
+/* ------------------------------------------------------------------ board groups (arrange, Group <name>) */
+#board-groups { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
+.board-group { position: absolute; border: 1px solid color-mix(in srgb, var(--nk-text) 16%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--nk-text) 3%, transparent); }
+.board-group.manual { border-color: color-mix(in srgb, var(--nk-accent) 55%, transparent); background: color-mix(in srgb, var(--nk-accent) 5%, transparent); }
+.board-group .bg-name { position: absolute; left: 16px; top: 12px; font: 600 20px/24px var(--nk-sans); color: var(--nk-text); white-space: nowrap; }
+.board-group .bg-count { position: absolute; right: 16px; top: 14px; font: 500 14px/20px var(--nk-sans); color: var(--nk-text-2); font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------------ palette */
+#quick .q-panel { font-family: var(--nk-sans); }
+#quick .q-preview { margin: 0; padding: 8px 14px; min-height: 32px; box-sizing: border-box; border-top: 1px solid var(--nk-line); font: 12px/16px var(--nk-sans); color: var(--nk-text-2); }
+#quick .q-preview:empty { display: none; }
+
+/* ------------------------------------------------------------------ key map */
+#shortcuts { color: var(--nk-text); background: var(--nk-chrome); border: 1px solid var(--nk-line); border-radius: 12px; padding: 20px 24px; width: min(820px, calc(100vw - 32px)); max-height: 85vh; box-shadow: var(--nk-shadow-pop); font: 13px/1.5 var(--nk-sans); }
+#shortcuts::backdrop { background: #0006; }
+#shortcuts .km-head { display: flex; justify-content: space-between; align-items: center; }
+#shortcuts h2 { font: 600 17px/24px var(--nk-sans); margin: 0; }
+#shortcuts h3 { font: 600 12px/16px var(--nk-sans); color: var(--nk-text-2); margin: 18px 0 6px; }
+#shortcuts .km-note { color: var(--nk-text-2); margin: 6px 0 0; }
+#shortcuts .km-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+#shortcuts .km-list .shortcut { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; min-height: 32px; border-top: 1px solid var(--nk-line); }
+#shortcuts kbd { font: 500 12px/1 var(--nk-mono); padding: 4px 6px; border-radius: 4px; background: var(--nk-chrome-2); border: 1px solid var(--nk-line); color: var(--nk-text); white-space: nowrap; }
+#shortcuts .km-more { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; margin: 0; }
+#shortcuts .km-more .shortcut { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--nk-line); padding: 7px 0; }
+#shortcuts dt { max-width: 55%; }
+#shortcuts dd { margin: 0; text-align: right; font: 11px/1.4 var(--nk-mono); color: var(--nk-text-2); }
+#shortcuts button { font: 500 12px/1 var(--nk-sans); border: 1px solid var(--nk-line); background: var(--nk-chrome-2); color: var(--nk-text); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+#shortcuts button:focus-visible, #instruments .inst-tools > *:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
+#shortcuts .km-status:empty { display: none; }
+@media (max-width: 650px) { #shortcuts .km-list, #shortcuts .km-more { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------------------------ present and compare */
+#presentation { position: fixed; inset: 0; z-index: 1000; background: var(--nk-bg); display: grid; grid-template-rows: 1fr auto; padding: 24px; box-sizing: border-box; }
+#presentation:focus { outline: none; }
+#presentation .pr-grid { display: grid; gap: 16px; min-height: 0; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+#presentation figure, #compare figure { margin: 0; display: grid; grid-template-rows: 1fr auto; min-height: 0; background: var(--nk-chrome); border: 1px solid var(--nk-line); border-radius: 10px; overflow: hidden; }
+#presentation iframe, #compare iframe { width: 100%; height: 100%; border: 0; background: #fff; }
+#presentation figcaption, #compare figcaption { padding: 8px 12px; font: 500 12px/16px var(--nk-sans); color: var(--nk-text-2); }
+#presentation .pr-hint { margin: 12px 0 0; text-align: center; font: 12px/16px var(--nk-sans); color: var(--nk-text-2); }
+#compare { position: fixed; left: 50%; top: 72px; transform: translateX(-50%); z-index: 900; width: min(960px, calc(100vw - 32px)); background: var(--nk-chrome); border: 1px solid var(--nk-line); border-radius: 12px; box-shadow: var(--nk-shadow-pop); padding: 16px; box-sizing: border-box; }
+#compare:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
+#compare header h2 { margin: 0; font: 600 14px/20px var(--nk-sans); color: var(--nk-text); }
+#compare header p { margin: 2px 0 12px; font: 12px/16px var(--nk-sans); color: var(--nk-text-2); }
+#compare .cv-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; height: 240px; }
+@media (prefers-reduced-motion: reduce) { #instruments * { transition: none !important; animation: none !important; } }
+
+/* ------------------------------------------------------------------ rows: dial depth is exactly one 32 px row; focus is a ring */
+/* A long text, JSON or source value stays on one line at dial depth; bench and studio depths open it up. */
+#instruments .d-section[data-depth="1"] .d-row { height: 32px; min-height: 0; overflow: hidden; }
+#instruments .d-section[data-depth="1"] .d-row .d-value textarea { height: 22px; min-height: 0; field-sizing: fixed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The dials library draws a field's focus as an underline only; the canvas adds a ring so the focused value is plain to see. */
+#instruments .dials :is(input, textarea, select):focus-visible,
+#instruments .dials :is(button, [tabindex]):focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 0; position: relative; z-index: 1; }
+/* A long value (a file's source, JSON, a paragraph) gets the full width under its label, not a sliver beside the figure. */
+#instruments .d-section:not([data-depth="1"]) .d-row:has(> .d-value > textarea) { grid-template-columns: 12px minmax(0, 1fr) var(--d-fig-w); row-gap: 4px; padding-bottom: 6px; }
+#instruments .d-section:not([data-depth="1"]) .d-row:has(> .d-value > textarea) > .d-value { grid-column: 1 / -1; }
+#instruments .d-section:not([data-depth="1"]) .d-row > .d-value > textarea { max-height: 72px; overflow: auto; }

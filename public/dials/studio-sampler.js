@@ -1,5 +1,5 @@
 // The sampler studio: the noise schedule drawn with the other schedulers behind it, the steps a
-// partial denoise skips, how much noise each step removes, and the seed's starting noise.
+// partial denoise skips, how much noise each step removes, and the seeds a batch will use.
 import { el } from "./dom.js";
 import { clamp } from "./values.js";
 import { schedule } from "./figures.js";
@@ -8,46 +8,28 @@ import { s, fx, block, hero, field, chips, handle, fitSvg, keyHint } from "./kit
 const CURVES = ["karras", "linear", "cosine"];
 const P = { l: 40, r: 16, t: 14, b: 26 };
 
-/** Deterministic noise for a seed (mulberry32). */
-function rng(seed) {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-/** A stand-in render: the seed's noise, smoothed by the steps that run, pushed by guidance. */
-export function paintSeed(canvas, seed, steps, cfg) {
+/**
+ * A seed drawn as itself: its 32 bits, most significant first, as a 4 × 8 grid of filled and empty
+ * cells in the canvas's text colour. It is not a picture of the image the seed would make; that
+ * needs the generator (a host shows real outputs).
+ */
+export function paintSeed(canvas, seed) {
   const n = canvas.width,
     g = canvas.getContext("2d"),
-    img = g.createImageData(n, n),
-    r = rng(seed),
-    f = Array.from({ length: n * n }, () => r()),
-    passes = Math.round(Math.min(16, steps / 2.2));
-  for (let p = 0; p < passes; p++)
-    for (let i = 0; i < n * n; i++) {
-      const x = i % n,
-        y = (i / n) | 0,
-        at = (dx, dy) => f[((y + dy + n) % n) * n + ((x + dx + n) % n)];
-      f[i] = (at(0, 0) * 2 + at(1, 0) + at(-1, 0) + at(0, 1) + at(0, -1)) / 6;
-    }
-  let lo = Infinity,
-    hi = -Infinity;
-  for (const v of f) (lo = Math.min(lo, v)), (hi = Math.max(hi, v));
-  const k = 0.6 + cfg / 12,
-    ink = [31, 69, 211],
-    paper = [244, 241, 232],
-    deep = [14, 18, 48];
-  for (let i = 0; i < n * n; i++) {
-    let t = (f[i] - lo) / (hi - lo || 1);
-    t = clamp(0.5 + (t - 0.5) * k * 1.6, 0, 1);
-    const c = t < 0.5 ? deep.map((d, j) => d + (ink[j] - d) * t * 2) : ink.map((d, j) => d + (paper[j] - d) * (t - 0.5) * 2);
-    img.data.set([...c, 255], i * 4);
+    bits = ((Math.max(0, Math.floor(Number(seed) || 0)) >>> 0).toString(2)).padStart(32, "0"),
+    ink = (canvas.isConnected && getComputedStyle(canvas).color) || "#222",
+    cell = n / 8;
+  g.clearRect(0, 0, n, n);
+  for (let i = 0; i < 32; i++) {
+    const x = (i % 8) * cell,
+      y = Math.floor(i / 8) * cell * 2 + cell / 2;
+    g.fillStyle = ink;
+    g.strokeStyle = ink;
+    g.globalAlpha = bits[i] === "1" ? 0.9 : 0.35;
+    if (bits[i] === "1") g.fillRect(x + 1, y, cell - 2, cell);
+    else g.strokeRect(x + 1.5, y + 0.5, cell - 3, cell - 1);
   }
-  g.putImageData(img, 0, 0);
+  g.globalAlpha = 1;
 }
 
 export function samplerStudio(ctx, host) {
@@ -249,7 +231,7 @@ export function samplerStudio(ctx, host) {
     }
     [...tiles.children].forEach((f, i) => {
       const seed = (v.seed + i) >>> 0;
-      paintSeed(f.firstChild, seed, (n - start) || 1, v.cfg);
+      paintSeed(f.firstChild, seed);
       f.lastChild.textContent = String(seed);
     });
     stats.replaceChildren(
