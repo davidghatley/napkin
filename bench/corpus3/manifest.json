@@ -1,6 +1,14 @@
 {
   "license": "CC0-1.0",
   "generator": "tools/make-corpus3.mjs",
+  "kindAliases": {
+    "patch": [
+      "diff"
+    ],
+    "agent-run": [
+      "agent-log"
+    ]
+  },
   "files": [
     {
       "path": "orbit.html",
@@ -701,9 +709,7 @@
       "path": "orbit.otf",
       "kind": "otf",
       "markers": {
-        "selectors": [
-          "[contenteditable],canvas,[aria-label*=\"specimen\" i]"
-        ],
+        "selectors": [],
         "text": []
       },
       "meta": {
@@ -717,9 +723,7 @@
       "path": "orbit.ttf",
       "kind": "ttf",
       "markers": {
-        "selectors": [
-          "[contenteditable],canvas,[aria-label*=\"specimen\" i]"
-        ],
+        "selectors": [],
         "text": []
       },
       "meta": {
@@ -733,9 +737,7 @@
       "path": "orbit.woff2",
       "kind": "woff2",
       "markers": {
-        "selectors": [
-          "[contenteditable],canvas,[aria-label*=\"specimen\" i]"
-        ],
+        "selectors": [],
         "text": []
       },
       "meta": {
@@ -803,9 +805,7 @@
       "path": "orbit.zip",
       "kind": "zip",
       "markers": {
-        "selectors": [
-          "[role=\"tree\"],ul,table"
-        ],
+        "selectors": [],
         "text": [
           "notes.txt",
           "spectrum.png"
@@ -822,9 +822,7 @@
       "path": "unknown.bin",
       "kind": "binary",
       "markers": {
-        "selectors": [
-          "pre,code,table"
-        ],
+        "selectors": [],
         "text": [
           "ORBIT_731_USEFUL_STRING"
         ]

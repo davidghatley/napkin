@@ -353,6 +353,14 @@ conventions make those observations concrete before builders implement them:
   must be visible. Typed table headers expose `data-type` or `data-column-type`;
   distributions expose `data-distribution`, or an SVG/canvas labelled “distribution”.
   Each column needs both. Counts must be visible, not only hidden metadata.
+  Kind names: the viewer reports the canonical kind, or an alias from `kindAliases` in
+  `corpus3/manifest.json` (`patch` may be `diff`, `agent-run` may be `agent-log`). Generic kinds
+  (`txt`, `json`, `code`) are never aliases for a specialised file.
+  Fonts, archives and binaries have no required tag names: a font passes when visible text is set
+  in a loaded non-generic FontFace and its measured advance width equals the font file's own
+  (read with opentype.js) and paints ink; an archive when its entry names are visible and clicking
+  one shows its body; a binary when the file's first 8 bytes appear as hex and its embedded string
+  is visible.
 - Timeline controls are accessible range inputs/sliders with “time” in their label.
   Standalone animated viewers must offer a keyboard path to that timeline. Their
   dials schema includes loop/range and, for editable CSS/WAAPI/SVG, keyframe controls.
