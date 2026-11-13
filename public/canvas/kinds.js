@@ -1,4 +1,5 @@
 import { plain } from './words.js';
+import { installCardStates, setCardState } from './card-state.js';
 // Folder items join the existing stage. Document components keep their original frames and editing paths.
 const enc = encodeURIComponent,
   esc = (s) =>
@@ -13,6 +14,7 @@ export function glanceCard(ctx, c) {
 }
 export function initKinds(ctx) {
   ctx.glances = new Map();
+  installCardStates(ctx);
   const style = document.createElement('link');
   style.rel = 'stylesheet';
   style.href = '/canvas/kind-canvas.css';
@@ -136,7 +138,59 @@ function headline(c) {
   if (!bits.length) bits.push(c.bytes.toLocaleString() + ' bytes');
   return `<span class="kind-headline"><b>${esc(c.kind.toUpperCase())}</b><i>${esc(bits.slice(0, 2).join(' · '))}</i></span>`;
 }
+// The design-core file kinds (decision 0023) show their content as a clean card: no kind strip or byte stamp (the label and the Layers glyph say the kind).
+const CORE = new Set(['text', 'markdown', 'css', 'image']);
+const isCore = (c) => CORE.has(c?.meta?.family) && !c.meta.table && !c.meta.animation;
+// A page of text: 16 px above and below, 20 px at the sides, 20 px lines (13 px type), at most 480 x 340. Estimated from the text, so no layout read.
+const PAGE = { padX: 20, padY: 16, line: 20, minW: 240, maxW: 480, minH: 72, maxH: 340 };
+function pageSize(text, charW, headings = false) {
+  const lines = String(text).replace(/\n+$/, '').split('\n');
+  const longest = Math.max(1, ...lines.map((l) => l.length));
+  const w = Math.max(PAGE.minW, Math.min(PAGE.maxW, Math.ceil(longest * charW + 2 * PAGE.padX)));
+  const per = Math.max(1, Math.floor((w - 2 * PAGE.padX) / charW));
+  let h = 2 * PAGE.padY;
+  for (const l of lines) {
+    if (headings && !l.trim()) continue; // markdown: blank lines are paragraph breaks, given as margins below
+    const big = headings && /^#\s/.test(l);
+    h += Math.max(1, Math.ceil(l.length / per)) * (big ? 24 : PAGE.line) + (headings ? 8 : 0);
+  }
+  return { w, h: Math.max(PAGE.minH, Math.min(PAGE.maxH, Math.round(h))) };
+}
+// What a file card measures on the canvas, by kind. `natural` is a picture's decoded size, when it is known.
+export function cardSize(c, natural) {
+  if (!isCore(c)) return { w: 480, h: 340 };
+  const m = c.meta, family = m.family;
+  if (family === 'image') {
+    if (natural?.broken) return { w: 320, h: 80 }; // it did not decode: the card is the error card (card-state.js), not a picture-sized blank
+    const w = natural?.w || m.width, h = natural?.h || m.height;
+    if (!w || !h) return { w: 320, h: 240 };
+    // the picture's proportions; a small one is drawn larger, up to 240 px on its long side, a large one fits 480 x 340
+    const s = Math.min(480 / w, 340 / h, Math.max(1, 240 / Math.max(w, h)));
+    return { w: Math.max(48, Math.round(w * s)), h: Math.max(32, Math.round(h * s)) };
+  }
+  const text = m.preview || '';
+  if (family === 'markdown') return pageSize(text, 6.4, true);
+  return pageSize(text, family === 'css' ? 7.3 : 6.4);
+}
+// **strong**, *em*, `code` in a markdown line (escaped first: nothing in the file becomes markup but these)
+const inline = (s) => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>');
+function corePage(c) {
+  const text = c.meta.preview || '', family = c.meta.family, clip = cardSize(c).h >= PAGE.maxH ? ' kind-clip' : '';
+  if (family === 'markdown') {
+    const blocks = text.split('\n').filter((l) => l.trim()).slice(0, 24).map((l) => {
+      const h = l.match(/^(#{1,6})\s+(.*)/);
+      if (h) return `<h${Math.min(3, h[1].length)}>${inline(h[2])}</h${Math.min(3, h[1].length)}>`;
+      const li = l.match(/^\s*[-*+]\s+(.*)/);
+      return li ? `<p class="li">${inline(li[1])}</p>` : `<p>${inline(l)}</p>`;
+    });
+    return `<article class="kind-page kind-prose${clip}">${blocks.join('')}</article>`;
+  }
+  if (family === 'css') return `<pre class="kind-page kind-code${clip}">${esc(text.slice(0, 2000))}</pre>`;
+  return `<div class="kind-page kind-text${clip}">${esc(text.slice(0, 2000))}</div>`;
+}
 export function compactItem(c) {
+  if (isCore(c) && c.meta.family !== 'image') return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}">${corePage(c)}</div>`;
+  if (isCore(c)) return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}"><img decoding="async" alt="${esc(c.name)}" src="/file/${enc(c.id)}"></div>`;
   const family = c.meta.family,
     raw = '/file/' + enc(c.id),
     text = c.meta.preview || '';
@@ -363,14 +417,20 @@ export function createItemFrame(ctx, id) {
     pick: () => cell,
     async load(revision) {
       if (rev === revision && frame) return true;
+      const now = ctx.state.components.get(id) || c;
+      if (isCore(now)) { // a design-core card is its content (text, a picture): no viewer page is loaded over it; an edit redraws it
+        if (rev !== null && rev !== revision) { cell.querySelector('.kind-compact')?.remove(); setCardState(cell, null); cell.insertAdjacentHTML('afterbegin', compactItem(now)); }
+        rev = revision;
+        return true;
+      }
       const mine = ++generation;
       rev = revision;
       const next = document.createElement('iframe');
       next.className = 'doc-frame kind-frame doc-next';
       next.title = c.name + ' (live)';
       next.tabIndex = -1;
-      next.style.width = width + 'px';
-      next.style.height = '340px';
+      next.style.width = '100%'; // the card's size (cardSize), set on the section
+      next.style.height = '100%';
       next.src = '/view/' + enc(id) + '?rev=' + enc(revision || '');
       let done;
       const loaded = new Promise((resolve) => {

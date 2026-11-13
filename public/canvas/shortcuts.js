@@ -23,7 +23,7 @@ export function initShortcuts(ctx) {
     const bindings = ctx.surface?.bindings() ?? [];
     list.innerHTML = bindings.map((b) => `<li class="shortcut" data-command="${esc(b.command)}"><span class="km-label">${esc(name(b.command))}</span><kbd class="km-keys">${esc(b.keys)}</kbd><button type="button" class="km-rebind" data-rebind="${esc(b.command)}" aria-label="Rebind ${esc(name(b.command))}">Rebind</button></li>`).join('');
     const bound = new Set(bindings.map((b) => b.command));
-    more.innerHTML = ACTIONS.filter((a) => !bound.has(a.id) && !a.command).map((a) => `<div class="shortcut"><dt>${esc(a.label)}</dt><dd>${esc(a.key)}</dd></div>`).join('');
+    more.innerHTML = ACTIONS.filter((a) => !bound.has(a.id) && !a.command && a.sheet !== false).map((a) => `<div class="shortcut"><dt>${esc(a.label)}</dt><dd>${esc(a.key)}</dd></div>`).join('');
   }
   let previous, recording = null;
   const close = () => dialog.close();
