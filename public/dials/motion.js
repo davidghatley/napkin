@@ -183,6 +183,103 @@ export function framesAt(frames, t, v = {}) {
   const last = f.at(-1);
   return { x: translate(last), opacity: last.opacity ?? 1, segment: f.length - 2 };
 }
+/* ---------- One timeline model: the ghost, the panel and the written code all read this ---------- */
+/** The CSS custom property a section control is keyed under in each keyframe: rotation → --rotation. */
+export const keyName = (id) => "--" + String(id).replace(/[^\w-]/g, "-");
+/**
+ * What a keyed control drives once the code runs: its `property` (from the schema), or `rotate` for
+ * an angle. `null` means the value is animated and readable as var(--id) but bound to nothing.
+ */
+export function keyedOf(control, initial) {
+  const property = control.property || (control.type === "angle" ? "rotate" : null),
+    unit = control.type === "angle" ? "deg" : control.unit || "";
+  return { key: keyName(control.id), id: control.id, label: control.label || control.id, property, unit, initial: Number(initial ?? control.value ?? 0) };
+}
+const IDENTITY = { scale: 1, scaleX: 1, scaleY: 1, scaleZ: 1 };
+const UNIT_OF = { translateX: "px", translateY: "px", translateZ: "px", translate: "px", rotate: "deg", rotateX: "deg", rotateY: "deg", rotateZ: "deg", skewX: "deg", skewY: "deg", skew: "deg", scale: "", scaleX: "", scaleY: "" };
+/** A transform as [name, number, unit] parts: "translateX(12px) rotate(30deg)". */
+export function transformParts(t = "") {
+  const out = [];
+  for (const m of String(t || "").matchAll(/([a-zA-Z0-9]+)\(\s*(-?[\d.]+(?:e-?\d+)?)\s*([a-z%]*)[^)]*\)/g)) out.push([m[1], Number(m[2]), m[3] || UNIT_OF[m[1]] || ""]);
+  return out;
+}
+const n4 = (x) => Number(Number(x).toFixed(4));
+/**
+ * Every animated value at u (0 to 1 of one iteration), eased per segment as CSS @keyframes and
+ * per-frame WAAPI easing do: transform functions by name (a missing one is its identity, as in
+ * CSS), opacity, and any keyed custom property. `keyed` names the controls on the timeline;
+ * `statics` holds section values that apply without being keyed (an angle's rotate).
+ */
+export function evaluate(frames, u, v = {}, { keyed = [], statics = {} } = {}) {
+  const f = sortFrames(frames);
+  const names = [],
+    units = {};
+  for (const k of f)
+    for (const [name, , unit] of transformParts(k.transform)) {
+      if (!names.includes(name)) names.push(name);
+      units[name] ??= unit;
+    }
+  const vars = [...new Set(f.flatMap((k) => Object.keys(k).filter((x) => x.startsWith("--") && Number.isFinite(k[x]))))];
+  const read = (k) => {
+    const parts = Object.fromEntries(transformParts(k.transform).map(([n, x]) => [n, x])),
+      out = { opacity: k.opacity ?? 1 };
+    for (const n of names) out[n] = parts[n] ?? IDENTITY[n] ?? 0;
+    for (const x of vars) out[x] = Number.isFinite(k[x]) ? k[x] : (keyed.find((c) => c.key === x)?.initial ?? 0);
+    return out;
+  };
+  let values,
+    segment = 0;
+  if (!f.length) values = { opacity: 1 };
+  else if (u <= f[0].offset) values = read(f[0]);
+  else if (u >= f.at(-1).offset) (values = read(f.at(-1))), (segment = Math.max(0, f.length - 2));
+  else
+    for (let i = 1; i < f.length; i++)
+      if (u <= f[i].offset) {
+        const a = read(f[i - 1]),
+          b = read(f[i]),
+          e = motionAt((u - f[i - 1].offset) / (f[i].offset - f[i - 1].offset || 1), v);
+        values = Object.fromEntries(Object.keys(a).map((key) => [key, a[key] + (b[key] - a[key]) * e]));
+        values.opacity = clamp(values.opacity, 0, 1);
+        segment = i - 1;
+        break;
+      }
+  const transform = names.map((n) => `${n}(${n4(values[n])}${units[n]})`).join(" ");
+  // What the element shows: the transform, opacity, and each keyed or static property.
+  const style = { transform: transform || "none", opacity: n4(values.opacity) },
+    props = {};
+  for (const c of keyed) if (c.property && Number.isFinite(values[c.key])) props[c.property] = [values[c.key], c.unit];
+  for (const [p, x] of Object.entries(statics)) if (!(p in props) && Number.isFinite(x)) props[p] = [x, p === "rotate" ? "deg" : ""];
+  for (const [p, [x, unit]] of Object.entries(props)) style[p] = `${n4(x)}${unit}`;
+  return {
+    u,
+    segment,
+    values,
+    style,
+    x: values.translateX ?? 0,
+    opacity: values.opacity,
+    // The total turn on screen: rotate() in the transform plus the rotate property.
+    rotate: (values.rotate ?? 0) + (props.rotate?.[0] ?? 0),
+    scale: values.scale ?? 1,
+    vars: Object.fromEntries(vars.map((x) => [x, values[x]])),
+  };
+}
+/** The frames a loop range plays, sampled every 1/60 s (at least 8 steps), run with linear easing. */
+export function bakeRange(frames, v, [a, b], opts = {}) {
+  const ms = (b - a) * (v.duration || 1000),
+    n = Math.max(8, Math.ceil(ms / (1000 / 60)));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const e = evaluate(frames, a + ((b - a) * i) / n, v, opts),
+      frame = { offset: n4(i / n) };
+    if (e.style.transform !== "none") frame.transform = e.style.transform;
+    frame.opacity = n4(e.opacity);
+    for (const [k, x] of Object.entries(e.vars)) frame[k] = n4(x);
+    return frame;
+  });
+}
+/** A loop range that is a real part of the iteration, or null for the whole. */
+export const loopRangeOf = (v = {}) =>
+  Array.isArray(v.loopRange) && v.loopRange[1] > v.loopRange[0] && !(v.loopRange[0] <= 0 && v.loopRange[1] >= 1) ? v.loopRange : null;
+const consumer = (c) => (c.property ? `${c.property}: calc(var(${c.key}) * 1${c.unit || ""});` : `/* ${c.key} (${c.label}) is animated; read it with var(${c.key}) */`);
 const declarations = (f) =>
   Object.entries(f)
     .filter(([k]) => !["offset", "easing", "composite"].includes(k))
@@ -194,29 +291,60 @@ const springNote = (v) =>
   v.mode === "spring"
     ? `\n  --dials-spring: ${v.stiffness ?? 170} ${v.damping ?? 20} ${v.mass ?? 1} ${v.velocity ?? 0};`
     : "";
-/** CSS: an @keyframes block and the rule that runs it. */
-export function toKeyframesCSS(frames, v = {}, { name = "dials-motion", selector = ".element", iterations = 1, rotate } = {}) {
-  const f = sortFrames(frames);
+/**
+ * CSS: an @keyframes block and the rule that runs it. Keyed section values are registered with
+ * @property (so they interpolate) and drive their CSS property through var(); a loop range plays
+ * the motion up to the range's end and then repeats that part, baked as its own @keyframes.
+ */
+export function toKeyframesCSS(frames, v = {}, { name = "dials-motion", selector = ".element", iterations = 1, rotate, keyed = [] } = {}) {
+  const f = sortFrames(frames),
+    on = keyed.filter((c) => f.some((k) => Number.isFinite(k[c.key]))),
+    range = loopRangeOf(v),
+    D = v.duration || 1000,
+    delay = v.delay || 0,
+    turns = on.some((c) => c.property === "rotate");
+  const loop = range ? bakeRange(f, v, range, { keyed: on }) : null;
   return [
+    ...on.map((c) => `@property ${c.key} { syntax: "<number>"; inherits: false; initial-value: ${c.initial}; }`),
     `@keyframes ${name} {`,
     ...f.map((k) => `  ${pct(k.offset)} { ${declarations(k)} }`),
     `}`,
+    ...(loop ? [`@keyframes ${name}-loop {`, ...loop.map((k) => `  ${pct(k.offset)} { ${declarations(k)} }`), `}`] : []),
     `${selector} {`,
-    `  animation: ${name} ${v.duration || 1000}ms ${toEasing(v)} ${v.delay || 0}ms ${iterations === Infinity ? "infinite" : iterations} both;${springNote(v)}${rotate !== undefined ? `\n  rotate: ${rotate}deg;` : ""}`,
+    `  animation: ${name} ${D}ms ${toEasing(v)} ${delay}ms ${iterations === Infinity ? "infinite" : iterations} both${loop ? `, ${name}-loop ${Math.round((range[1] - range[0]) * D)}ms linear ${Math.round(delay + range[1] * D)}ms infinite` : ""};${springNote(v)}${rotate !== undefined && !turns ? `\n  rotate: ${rotate}deg;` : ""}`,
+    ...on.map((c) => `  ${consumer(c)}`),
+    ...(range ? [`  --dials-loop: ${range[0]} ${range[1]};`] : []),
     `}`,
   ].join("\n");
 }
-/** WAAPI: the same frames with the easing on each frame, so segments ease exactly as in CSS. */
-export function toWaapiKeyframes(frames, v = {}, { name = "element", iterations = 1 } = {}) {
-  const easing = toEasing(v),
-    f = sortFrames(frames);
-  const rows = f.map((k) => {
+const waapiRows = (f, easing) =>
+  f.map((k) => {
     const props = Object.entries(k)
       .filter(([key]) => key !== "easing")
       .map(([key, val]) => `${/^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key)}: ${typeof val === "number" ? val : JSON.stringify(val)}`);
     return `  { ${props.join(", ")}, easing: "${easing}" },`;
   });
-  return `${name}.animate([\n${rows.join("\n")}\n], { duration: ${v.duration || 1000}, delay: ${v.delay || 0}, iterations: ${iterations === Infinity ? "Infinity" : iterations}, fill: "both" });`;
+/** WAAPI: the same frames with the easing on each frame, so segments ease exactly as in CSS. */
+export function toWaapiKeyframes(frames, v = {}, { name = "element", iterations = 1, rotate, keyed = [] } = {}) {
+  const easing = toEasing(v),
+    f = sortFrames(frames),
+    on = keyed.filter((c) => f.some((k) => Number.isFinite(k[c.key]))),
+    range = loopRangeOf(v),
+    D = v.duration || 1000,
+    delay = v.delay || 0,
+    turns = on.some((c) => c.property === "rotate");
+  const lines = [
+    ...on.map((c) => `try { CSS.registerProperty({ name: "${c.key}", syntax: "<number>", inherits: false, initialValue: "${c.initial}" }); } catch {} // once per page`),
+    ...on.filter((c) => c.property).map((c) => `${name}.style.setProperty("${c.property}", "calc(var(${c.key}) * 1${c.unit || ""})");`),
+    ...(rotate !== undefined && !turns ? [`${name}.style.rotate = "${rotate}deg";`] : []),
+    `${name}.animate([\n${waapiRows(f, easing).join("\n")}\n], { duration: ${D}, delay: ${delay}, iterations: ${iterations === Infinity ? "Infinity" : iterations}, fill: "both" });`,
+  ];
+  if (range)
+    lines.push(
+      `// --dials-loop: ${range[0]} ${range[1]} (then repeat ${Math.round(delay + range[0] * D)}–${Math.round(delay + range[1] * D)} ms)`,
+      `${name}.animate([\n${waapiRows(bakeRange(f, v, range, { keyed: on }), "linear").join("\n")}\n], { duration: ${Math.round((range[1] - range[0]) * D)}, delay: ${Math.round(delay + range[1] * D)}, iterations: Infinity });`,
+    );
+  return lines.join("\n");
 }
 const named = {
   linear: [0, 0, 1, 1],
@@ -346,7 +474,7 @@ export function parseMotionCSS(text) {
   const decl = (prop) => new RegExp(`(?:^|[;{\\s])${prop}\\s*:\\s*([^;}]+)`, "i").exec(src)?.[1];
   const anim = decl("animation"),
     trans = decl("transition");
-  if (anim) out.motion = timing(anim);
+  if (anim) out.motion = timing(topLevel(anim)[0]);
   else if (trans) out.motion = timing(topLevel(trans)[0]);
   const spring = decl("--dials-spring");
   if (spring && out.motion) {
@@ -354,8 +482,20 @@ export function parseMotionCSS(text) {
     Object.assign(out.motion, { mode: "spring", stiffness: k, damping: d, mass: m, velocity: v0 });
   }
   const rotate = decl("rotate");
-  if (rotate) out.rotate = parseFloat(rotate);
-  const block = /@keyframes\s+[\w-]+\s*\{([\s\S]*)\}/.exec(src);
+  if (rotate && Number.isFinite(parseFloat(rotate))) out.rotate = parseFloat(rotate);
+  // The first @keyframes block is the motion; a "-loop" block after it is the baked loop range.
+  const head = /@keyframes\s+[\w-]+\s*\{/.exec(src);
+  let block = null;
+  if (head) {
+    let depth = 0;
+    for (let i = head.index + head[0].length - 1; i < src.length; i++) {
+      if (src[i] === "{") depth++;
+      else if (src[i] === "}" && !--depth) {
+        block = [null, src.slice(head.index + head[0].length, i)];
+        break;
+      }
+    }
+  }
   if (block) {
     const frames = [];
     const re = /([\d.]+%|from|to)\s*\{([^}]*)\}/g;
@@ -453,9 +593,10 @@ export function parseWaapi(text) {
 /**
  * Everything a motion section writes, as code a host can save: a transition rule, an
  * @keyframes animation and a WAAPI call. `motion` is the response, `frames` the keyframes
- * (optional), `loop` and `rotate` the section's other values.
+ * (optional), `loop` and `rotate` the section's other values, `keyed` the section controls keyed on
+ * the timeline (see keyedOf). A `loopRange` on the motion is written too.
  */
-export function motionCode({ motion = {}, frames, loop = false, rotate, name = "entrance", selector = ".element" } = {}) {
+export function motionCode({ motion = {}, frames, loop = false, rotate, keyed = [], name = "entrance", selector = ".element" } = {}) {
   const iterations = loop ? Infinity : 1,
     list = frames && frames.length >= 2 ? frames : [
       { offset: 0, transform: "translateX(0px)" },
@@ -463,8 +604,8 @@ export function motionCode({ motion = {}, frames, loop = false, rotate, name = "
     ];
   return {
     transition: [`${selector} {`, `  ${toTransition(motion, "transform")}${springNote(motion)}`, `}`].join("\n"),
-    keyframes: toKeyframesCSS(list, motion, { name, selector, iterations, rotate }),
-    waapi: toWaapiKeyframes(list, motion, { name: "element", iterations }) + (motion.mode === "spring" ? `\n// --dials-spring: ${motion.stiffness ?? 170} ${motion.damping ?? 20} ${motion.mass ?? 1} ${motion.velocity ?? 0}` : ""),
+    keyframes: toKeyframesCSS(list, motion, { name, selector, iterations, rotate, keyed }),
+    waapi: toWaapiKeyframes(list, motion, { name: "element", iterations, rotate, keyed }) + (motion.mode === "spring" ? `\n// --dials-spring: ${motion.stiffness ?? 170} ${motion.damping ?? 20} ${motion.mass ?? 1} ${motion.velocity ?? 0}` : ""),
   };
 }
 /** Read any of the three back. Returns { motion, frames, iterations, rotate, kind } or throws. */
@@ -474,6 +615,15 @@ export function readMotionCode(text) {
   const spring = /--dials-spring:\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/.exec(src);
   if (spring && out.motion) Object.assign(out.motion, { mode: "spring", stiffness: +spring[1], damping: +spring[2], mass: +spring[3], velocity: +spring[4] });
   if (!out.motion && !out.frames) throw new Error("No transition, animation or animate() call found.");
+  const range = /--dials-loop:\s*([\d.]+)\s+([\d.]+)/.exec(src);
+  if (out.motion) {
+    delete out.motion.loopRange;
+    if (range) out.motion.loopRange = [Number(range[1]), Number(range[2])];
+  }
+  if (out.kind === "waapi") {
+    const turn = /\.style\.rotate\s*=\s*["'](-?[\d.]+)deg["']/.exec(src);
+    if (turn) out.rotate = Number(turn[1]);
+  }
   return out;
 }
 /** Split a declaration list on commas that are not inside parentheses. */
