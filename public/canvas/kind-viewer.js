@@ -394,8 +394,24 @@ const loadLottie = () =>
     s.onerror = () => no(new Error('The Lottie player could not be loaded. Next: reload the page; the file is unchanged.'));
     document.head.append(s);
   }));
+// Hand-written and generated files often list a shape and its fill straight on the layer. The player wants them in a group
+// with a transform, so loose items are wrapped in one (the drawing is the same, nothing is added to the file on disk).
+function groupLoose(layers) {
+  for (const l of layers || []) {
+    if (l.ty !== 4 || !Array.isArray(l.shapes) || l.shapes.every((x) => x.ty === 'gr' || x.ty === 'tr')) continue;
+    const loose = l.shapes.filter((x) => x.ty !== 'gr'),
+      at = l.shapes.findIndex((x) => x.ty !== 'gr'),
+      rest = l.shapes.filter((x) => x.ty === 'gr');
+    const group = { ty: 'gr', nm: 'Group', it: [...loose.filter((x) => x.ty !== 'tr'), loose.find((x) => x.ty === 'tr') || { ty: 'tr', p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 } }] };
+    rest.splice(Math.min(at, rest.length), 0, group);
+    l.shapes = rest;
+  }
+}
 async function lottie(j) {
   const lib = await loadLottie();
+  j = JSON.parse(JSON.stringify(j));
+  groupLoose(j.layers);
+  for (const a of j.assets || []) groupLoose(a.layers);
   root.innerHTML =
     bar(label, `${j.w} × ${j.h} · ${j.fr} fps`) +
     '<div class="motion-stage"><div class="lottie-host" tabindex="0" role="img" aria-label="Vector animation. Space plays or pauses, arrow keys step."></div></div>';
@@ -408,7 +424,7 @@ async function lottie(j) {
       renderer: 'svg',
       loop: true,
       autoplay: !(isReduced || r.paused),
-      animationData: JSON.parse(JSON.stringify(j)),
+      animationData: j,
       rendererSettings: { preserveAspectRatio: 'xMidYMid meet', progressiveLoad: false },
     });
   } catch (e) {
@@ -541,14 +557,39 @@ async function run() {
   if (item.family === 'model') {
     const args = { root, recipe: r, label, bar, note, fmt, isReduced, esc };
     const soft = async () => modelView({ ...args, scene: await data() });
-    // The real 3D runtime first; the software viewer only when WebGL or the file's loader fails.
-    try {
+    const real = async () => {
       const buffer = await (await fetch(raw)).arrayBuffer();
-      return await modelThree({ ...args, buffer, kind: item.kind === 'obj' ? 'obj' : 'gltf', itemId: item.id, fallback: soft });
-    } catch (e) {
-      console.warn('3D runtime unavailable, using the software viewer:', e.message);
-      return soft();
+      return modelThree({ ...args, buffer, kind: item.kind === 'obj' ? 'obj' : 'gltf', itemId: item.id, fallback: soft });
+    };
+    // On its own page the real 3D runtime (three.js) draws it. Inside a canvas card a thousand folders must stay cheap, so the
+    // card starts on the light software drawing and upgrades to the real runtime when the card is pointed at, focused or entered.
+    const card = window.parent !== window ? window.frameElement?.closest?.('.item-card') : null;
+    if (!card) {
+      try {
+        return await real();
+      } catch (e) {
+        console.warn('3D runtime unavailable, using the software viewer:', e.message);
+        return soft();
+      }
     }
+    await soft();
+    let upgraded = false;
+    const upgrade = async () => {
+      if (upgraded) return;
+      upgraded = true;
+      try {
+        await real();
+      } catch (e) {
+        console.warn('3D runtime unavailable, keeping the software viewer:', e.message);
+        await soft();
+      }
+    };
+    document.addEventListener('pointermove', upgrade, { once: true });
+    document.addEventListener('pointerdown', upgrade, { once: true });
+    document.addEventListener('focusin', upgrade, { once: true });
+    if (card.dataset.focused) upgrade();
+    new MutationObserver(() => card.dataset.focused && upgrade()).observe(card, { attributes: true, attributeFilter: ['data-focused'] });
+    return;
   }
   const d = await data();
   if (item.family === 'binary') {

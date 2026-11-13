@@ -216,12 +216,7 @@ export async function previewData(ctx, query = new URLSearchParams()) {
   }
   if (family === 'parquet') {
     // `group` (older callers) names a row group; `offset` is any row of the file.
-    let info;
-    try {
-      info = parquetInfo(ctx.file);
-    } catch (e) {
-      throw new Error(`${e.message}. Next: open the file in its own application; napkin still shows its bytes.`);
-    }
+    const info = parquetInfo(ctx.file);
     const at = query.get('group') !== null ? info.starts[Math.max(0, Number(query.get('group')) || 0)] ?? 0 : offset;
     return parquetRows(ctx.file, at, count);
   }

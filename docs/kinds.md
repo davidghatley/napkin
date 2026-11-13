@@ -173,23 +173,22 @@ streams use ranges; they never pass through the whole-file document cache.
 
 | Reader | Current boundary |
 | --- | --- |
-| CSV/TSV/JSONL | An 8 MiB text window; 120 displayed rows; distributions describe that window |
+| CSV/TSV/JSONL | Every row reachable (one-pass index, UTF-8 and UTF-16 with or without a byte order mark); 120 displayed rows; distributions describe the window on screen |
 | JSON and notebooks | 1 MiB document preview; larger files show the limit |
-| Parquet | Footer up to 8 MiB; selected row group; flat primitive V1/V2 pages, plain and dictionary/RLE values; uncompressed, Snappy, gzip and Brotli |
+| Parquet | hyparquet (vendored): every row reachable by offset, nested and logical types, all page encodings, Snappy, gzip, Brotli and zstd; reads only the row groups that hold the window |
 | Arrow | IPC files with flat primitive numeric, text, binary, boolean and date/time vectors; reads selected vector windows |
 | SQLite | Read-only connection, selected table and bounded row query |
 | ZIP | Central directory up to 8 MiB; entry preview up to 1 MiB; stored and deflated entries; no ZIP64 or encrypted entries |
 | Audio | PCM WAV peaks from a bounded prefix; local ffmpeg optionally decodes up to 60 seconds for other codecs |
-| 3D | Bounded geometry preview, up to 50,000 vertices per accessor; triangle primitives; no materials, skinning or skeletal animation |
-| Lottie | Vector shape layers, transforms, paths, fills, strokes and animated properties; no image assets, masks or effects |
+| 3D | three.js (vendored) for glTF, GLB and OBJ: PBR materials, textures, skins, morph targets, animation clips, scene cameras, Meshopt. Draco-compressed meshes are named as not decoded |
+| Lottie | lottie-web (vendored): precompositions, masks, mattes, gradients, trim paths, repeaters, text, expressions, image assets; 3D layers are drawn flat and said so |
 | Charts | Inline numeric data and bar, line, area-line and point marks; no full Vega expression engine or external data loader |
 | PDF | Browser's native PDF viewer |
 | Source edits | Up to 1 MiB; larger edits need a streaming format adapter |
 
-Parquet codecs/encodings outside this set show the real schema, row count and row groups,
-with the unsupported feature named. Nested/dictionary Arrow, compressed IPC, richer
-Lottie compositions, and full glTF scene transforms need adapters. These are explicit
-limits, not whole-file fallback reads.
+Formats with a real runtime (Parquet, Lottie, glTF, OBJ) are drawn by that runtime, not by a
+miniature of it: see docs/decisions/0021-kinds-real-format-runtimes.md. Anything a runtime cannot
+do is named on the view. Nested or dictionary Arrow and compressed IPC still need an adapter.
 
 ## Evidence
 
@@ -219,7 +218,7 @@ its open-time assertion does not establish the separate frame-time target.
 
 - Text is decoded as UTF-8, UTF-16 (with a byte order mark) or, when UTF-8 fails, Latin-1. A bare MPEG frame sync only counts as mp3 when the file is named .mp3, because it is also the UTF-16 byte order mark.
 - A JSON file that is a list of records is shown as a typed table with distributions, above its tree.
-- Long tables (a Parquet file with millions of rows, a SQLite table, an Arrow file) scroll like a document: the scrollbar spans every row and the rows drawn follow where it stops. Parquet jumps by row group; the first pages of a column chunk are read from a 96 KiB window.
+- Long tables (a Parquet file with millions of rows, a SQLite table, an Arrow file) scroll like a document: the scrollbar spans every row and the rows drawn follow where it stops. Parquet is read at any row offset, to the last row.
 - Fonts show their glyph count, read from their own tables (ttf, otf, woff, woff2 through Brotli).
 - Video cards show a poster (`/api/poster/<id>`, one ffmpeg frame, two at a time) and load the clip when the pointer reaches for it.
 - A folder of more than 150 files opens on its first files at 30%, grouped by kind, with room for each title. Shift+1 still fits everything. File cards stay out of the picture until they are placed and their picture has arrived; a component that is not drawn live shows the first lines of its file.
@@ -234,8 +233,11 @@ its open-time assertion does not establish the separate frame-time target.
 ## Round 4: viewers run the format
 
 - **Vega-Lite** is interpreted by `public/canvas/vega-lite.js`: inline, named and same-folder data; filter, calculate, aggregate, bin, timeUnit, fold, window and joinaggregate transforms; linear, log, sqrt, time and band scales; stacking; bar, line, area, point, circle, square, tick, rule, text, rect and arc marks; layers, hconcat, vconcat, facet and repeat; legends. Anything it cannot run (other marks, projections, interactive parameters) is named under the chart ("Not drawn: ...") instead of being replaced by something else. The older `{type, x, y, data}` and `{series}` chart shapes are converted to the same specification (`chart-spec.js`). Text categories sort in natural order (orbit-2 before orbit-10), which is a deliberate difference from Vega-Lite's plain alphabetical order.
-- **glTF and OBJ** are read by `src/kinds/gltf.js` into a scene: node tree with matrix or translation, rotation and scale, instanced meshes, material base colors, cameras and animation channels (linear, step and cubic samplers). `public/canvas/model-view.js` runs it: the animation clock, a time scrubber, a clip menu, a camera menu, orbit by pointer or keys. Not applied, and listed under the model when present: textures, skins, morph targets, sparse accessors, Draco meshes, vertex colors.
-- **Delimited and line files** (CSV, TSV, JSONL) are indexed once in a single streaming pass (`src/kinds/rowindex.js`: the byte offset of every 500th record, quoted line breaks tracked across chunks), so any row of a file of any size can be reached with bounded memory. UTF-16 files keep the old first-8-MiB window.
+- **glTF, GLB and OBJ** run on three.js (`public/canvas/model-runtime.js`, loaded only when a 3D file opens; `public/canvas/model-three.js` is the viewer: clock, scrubber, clip and camera menus, orbit by pointer or keys). On a canvas card the light software drawing (`model-view.js`, fed by `src/kinds/gltf.js`) shows first and the real runtime takes over when the card is pointed at, clicked or focused, so a thousand folders stay cheap; it is also the fallback when WebGL is missing or its context is lost. `src/kinds/gltf.js` still produces the card metadata (counts, materials, the first pose).
+- **Lottie** runs on lottie-web (`public/canvas/lottie-runtime.js`). Shapes listed straight on a layer are wrapped in a group first, as the player expects.
+- **Parquet** runs on hyparquet (`src/vendor/hyparquet`, `src/kinds/parquet.js`). The footer is read synchronously and cached per file revision; rows come through byte ranges of the file.
+- **Focus.** Enter on a file card focuses it like a component: the card stays at full strength and clickable (every stage section, files included, takes the focus mark). A page whose name does not say HTML (`renamed.bin`) is still one card, drawn in a sandboxed frame.
+- **Delimited and line files** (CSV, TSV, JSONL) are indexed once in a single streaming pass (`src/kinds/rowindex.js`: the byte offset of every 500th record, quoted line breaks tracked across chunks), so any row of a file of any size can be reached with bounded memory. UTF-16 files (either byte order, with or without a byte order mark) are indexed by 16-bit unit, so they reach their last row too.
 - **Content sniffing.** When the name says nothing (no extension, `.bin`, `.dat`, `.txt`, `.log`), HTML, JSON, JSONL, CSV and TSV are recognised from their contents. A recipe can also name the kind (`"kind": "csv"` in `<file>.napkin-recipe.json`, or the "Open as" control).
 - **Cards show the item's own content at every zoom.** Model cards draw the posed scene with its material colors, chart cards run the same interpreter, PDF cards show the first rendered page, audio cards draw the real waveform (whole file when it decodes in 20 s, else its first minute). Zoomed out, the kind and main fact are a strip along the bottom edge, not a cover over the content. Audio, PDF and chart cards load when they come within 300 px of the screen.
 - **Keyboard.** Waveform: arrows seek 5 s (Shift 15 s), Home and End, Space plays. Model: arrows turn, plus and minus zoom, Space turns or plays, W wireframe, Home resets. PDF: Page Up and Page Down. Long tables scroll with the standard keys.

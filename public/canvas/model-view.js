@@ -275,6 +275,7 @@ export function modelView({ root, scene, recipe: r, label, bar, note, fmt, isRed
     active = true;
   document.addEventListener('visibilitychange', () => (active = !document.hidden));
   const loop = (now) => {
+    if (!canvas.isConnected) return; // replaced by the real 3D runtime
     const dt = Math.min(0.1, (now - last) / 1000);
     last = now;
     if (active) {

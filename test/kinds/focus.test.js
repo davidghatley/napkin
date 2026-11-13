@@ -9,7 +9,7 @@ test('a focused file card stays live, and an HTML page with the wrong extension 
   const dir = mkdtempSync(join(tmpdir(), 'napkin-kinds-focus-')),
     files = join(dir, 'files');
   mkdirSync(files);
-  for (const n of ['turn.mp4', 'observations.csv', 'tone.wav']) copyFileSync(resolve('test/kinds/samples', n), join(files, n));
+  for (const n of ['turn.mp4', 'observations.csv', 'tone.wav', 'textured.gltf']) copyFileSync(resolve('test/kinds/samples', n), join(files, n));
   writeFileSync(join(files, 'renamed.bin'), '<!doctype html><html><body><h1 id="hi">Renamed page</h1></body></html>');
   const server = await startServer(files, { env: { NAPKIN_STATE_DIR: join(dir, 'state') } }),
     browser = await launchChromium({ width: 1300, height: 820 });
@@ -37,4 +37,10 @@ test('a focused file card stays live, and an HTML page with the wrong extension 
         10000,
       );
   }
+  // A 3D card starts on the light drawing and becomes the real 3D runtime once it is focused.
+  await browser.goto(server.url + '#textured.gltf');
+  await browser.waitFor(
+    `(()=>{const f=document.querySelector('.item-card[data-item-id="textured.gltf"] iframe');try{return f?.contentDocument?.querySelector('canvas.model')?.dataset.renderer==='webgl'}catch{return false}})()`,
+    15000,
+  );
 });

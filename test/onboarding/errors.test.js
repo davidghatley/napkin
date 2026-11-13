@@ -24,7 +24,7 @@ test('ONB-04: every explicit thrown/returned error in src has an actionable rule
   // These constructors format at construction; API fail(), store.apply(), and server
   // json() format at the return boundary. Each boundary is asserted below.
   const typed = new Set(['EditError', 'DialectError', 'CreateError', 'RenderError', 'LockError', 'ToolError', 'Unreachable']);
-  function files(dir) { return readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? files(join(dir, e.name)) : e.name.endsWith('.js') ? [join(dir, e.name)] : []); }
+  function files(dir) { return readdirSync(dir, { withFileTypes: true }).flatMap((e) => e.isDirectory() ? (e.name === 'vendor' ? [] : files(join(dir, e.name))) : e.name.endsWith('.js') ? [join(dir, e.name)] : []); }
   for (const file of files(join(ROOT, 'src'))) {
     const source = readFileSync(file, 'utf8'), ast = parse(source, { sourceType: 'module' }), name = file.slice(join(ROOT, 'src').length + 1);
     walk(ast, (n, parents) => {

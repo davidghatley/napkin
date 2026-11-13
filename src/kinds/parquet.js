@@ -38,14 +38,14 @@ export function parquetInfo(file) {
   const st = statSync(file),
     key = `${file}:${st.size}:${st.mtimeMs}`;
   if (!metas.has(key)) {
-    if (st.size < 12) throw new Error('Parquet footer is missing');
+    if (st.size < 12) throw new Error('Parquet footer is missing. Next: check the file is complete, or open it in its own application');
     const fd = openSync(file, 'r');
     try {
       const tail = Buffer.alloc(8);
       readSync(fd, tail, 0, 8, st.size - 8);
       const len = tail.readUInt32LE(0);
-      if (tail.toString('latin1', 4) !== 'PAR1' || len + 8 > st.size) throw new Error('Parquet footer is missing');
-      if (len > 64 * 1024 * 1024) throw new Error('Parquet footer exceeds 64 MiB');
+      if (tail.toString('latin1', 4) !== 'PAR1' || len + 8 > st.size) throw new Error('Parquet footer is missing. Next: check the file is complete, or open it in its own application');
+      if (len > 64 * 1024 * 1024) throw new Error('Parquet footer exceeds 64 MiB. Next: open the file in its own application');
       const foot = Buffer.alloc(len + 8);
       readSync(fd, foot, 0, len + 8, st.size - len - 8);
       const metadata = parquetMetadata(foot.buffer.slice(foot.byteOffset, foot.byteOffset + foot.length));
@@ -85,7 +85,12 @@ export async function parquetRows(file, offset = 0, count = 120) {
     end = Math.min(info.rows, start + count),
     { fh, buffer } = await fileBuffer(file);
   try {
-    const rows = start < end ? await parquetReadObjects({ file: buffer, metadata: info.metadata, rowStart: start, rowEnd: end, compressors, utf8: true }) : [];
+    let rows = [];
+    try {
+      if (start < end) rows = await parquetReadObjects({ file: buffer, metadata: info.metadata, rowStart: start, rowEnd: end, compressors, utf8: true });
+    } catch (e) {
+      throw new Error(`${e.message}. Next: open the file in its own application; napkin still shows its metadata and bytes.`);
+    }
     const cols = info.leaves.map((s) => s.name);
     const out = table(rows.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, plain(v)]))), cols);
     let g = info.starts.findLastIndex((s) => s <= start);
