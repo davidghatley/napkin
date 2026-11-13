@@ -97,7 +97,7 @@ body {
   margin: 0; height: 100vh; overflow: hidden;
   font: 12px/1.45 var(--nk-sans); font-feature-settings: "cv11", "ss03"; letter-spacing: -.003em;
   color: var(--nk-text); background: var(--nk-bg);
-  display: grid; grid-template-columns: var(--nk-left-w) minmax(0, 1fr) var(--nk-right-w); grid-template-rows: var(--nk-h-bar) minmax(0, 1fr) auto 26px;
+  display: grid; grid-template-columns: var(--nk-left-w) minmax(0, 1fr) var(--nk-right-w); grid-template-rows: var(--nk-h-bar) minmax(0, 1fr) auto calc(var(--nk-h-control) + 1px); /* the status bar: a 32 px row under its 1 px rule */
   grid-template-areas: "top top top" "side stage insp" "side dock insp" "status status status";
   -webkit-font-smoothing: antialiased;
 }
@@ -344,15 +344,38 @@ body[data-tool] #stage .cmp-head { cursor: grab; }
 /* ---- status bar and reserved dock ---- */
 #dock { grid-area: dock; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); }
 #dock[hidden] { display: none; }
-#statusbar { grid-area: status; display: flex; align-items: center; gap: 16px; padding: 0 12px; background: var(--nk-chrome); border-top: 1px solid var(--nk-line); color: var(--nk-text-3); font-size: 11px; }
-#counts { width: 190px; flex: none; white-space: nowrap; }
-#statusbar .hints { flex: 1; min-width: 0; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#statusbar .hints kbd { margin: 0 3px 0 8px; }
-.zoomctl { display: inline-flex; align-items: center; gap: 2px; width: 190px; justify-content: flex-end; flex: none; }
-.zoomctl button { height: 20px; min-width: 22px; padding: 0 6px; border: 0; border-radius: 5px; background: transparent; color: var(--nk-text-2); font: 500 11px var(--nk-mono); }
-.zoomctl button:hover { background: var(--nk-chrome-3); color: var(--nk-text); }
-.zoomctl #zoom-level { min-width: 46px; color: var(--nk-text); }
-.zoomctl #zoom-fit { font-family: var(--nk-sans); }
+
+/* The status bar (statusbar.js, drawer.js): counts | drawer toggles | the legend while a mode has the keys | zoom. 32 px tall, the
+   control height, so its 24 px compact controls (the hit target of a 16 px icon) sit 4 px from each edge and their 2 px ring at a 2 px
+   offset lands inside the bar, never cut by the window. 11 px type, two weights, tokens only; colours from the light-dark() roles. */
+#statusbar {
+  grid-area: status; display: flex; align-items: center; gap: var(--nk-s2); min-width: 0;
+  padding: 0 var(--nk-s2) 0 var(--nk-s3); background: var(--nk-panel); border-top: var(--nk-border); color: var(--nk-ink-muted);
+  font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+#counts { flex: none; width: calc(var(--nk-s6) * 4); overflow: hidden; text-overflow: ellipsis; } /* reserved: a selection's count never moves the drawers */
+#drawer-tabs { display: flex; align-items: center; gap: var(--nk-s1); flex: none; min-width: calc(var(--nk-s6) * 13); } /* the seven toggles arrive late: their room is kept */
+#statusbar .hints { display: flex; align-items: center; gap: var(--nk-s3); flex: 1 1 auto; min-width: 0; justify-content: flex-end; overflow: hidden; }
+#statusbar .hints:empty { visibility: hidden; }
+#statusbar .hints .h { display: inline-flex; align-items: center; gap: var(--nk-s1); }
+#statusbar kbd { padding: 0; border: 0; background: none; color: var(--nk-ink); font: inherit; }
+body[data-empty="1"] #statusbar .hints { visibility: hidden; }
+.zoomctl { display: flex; align-items: center; gap: var(--nk-s1); flex: none; margin-left: auto; }
+
+/* One control for the bar: 24 px high, 4 px radius, the five states of standards section 1 with the 120 ms fill. */
+#drawer-tabs button, .sb-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; height: var(--nk-h-field); min-width: var(--nk-h-field);
+  padding: 0 var(--nk-s2); border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-ink-muted); cursor: pointer;
+  font: inherit; font-weight: var(--nk-w-regular);
+  transition: background-color var(--nk-motion) var(--nk-ease); /* the fill eases; the text colour snaps, so a theme switch never shows half-contrast text */
+}
+.sb-icon { width: var(--nk-h-field); padding: 0; }
+#zoom-level { min-width: calc(var(--nk-s6) + var(--nk-s4)); padding: 0 var(--nk-s1); color: var(--nk-ink); }
+:is(#drawer-tabs button, .sb-btn):hover { background: var(--nk-hover); color: var(--nk-ink); }
+:is(#drawer-tabs button, .sb-btn):active { background: var(--nk-press); color: var(--nk-ink); }
+#drawer-tabs button[aria-pressed="true"], #zoom-level[aria-expanded="true"] { background: var(--nk-armed); color: var(--nk-armed-ink); }
+.sb-btn[aria-disabled="true"] { opacity: .4; background: transparent; color: var(--nk-ink-muted); cursor: default; }
+#zoom-menu .nk-mk { margin-left: auto; }
 
 /* ---- quick open ---- */
 #quick { position: fixed; inset: 0; z-index: 50; display: grid; justify-items: center; align-items: start; padding-top: 14vh; }
@@ -630,17 +653,10 @@ details.sec { margin-top: 2px; }
 .bundle-pending { width:420px; height:200px; padding:20px; box-sizing:border-box; color:var(--nk-text-3); font:12px var(--nk-sans); }
 #scan-progress { position:absolute; z-index:2; top:16px; left:24px; padding:8px 12px; border-radius:8px; background:var(--nk-chrome); color:var(--nk-text-2); }
 #scan-progress:empty { display:none; }
-body[data-empty="1"] #statusbar .hints { visibility:hidden; }
 
 .cmp .badge:not([hidden]) { flex-shrink:1; min-width:60px; }
 .frame .build-error, .mount .error { color:#9f2633; }
 
-/* WPC-15: at 1280 px and narrower the tools collapse to icons (the tooltip and aria-label carry the name) and the status-bar hints give up
-   their last entries one by one, so the top bar and status bar never overlap or truncate. */
-@media (max-width: 1360px) {
-  #statusbar .hints .h:nth-child(n+5) { display: none; }
-}
-@media (max-width: 1180px) { #statusbar .hints .h:nth-child(n+3) { display: none; } }
 
 /* The chrome (the layers list has a row per component) is its own stacking context: chunks of a stacking context that did not change are not
    walked again by the layerize pass that every view change triggers, which cost 2 ms per frame at 200 components (PRF-04). */
