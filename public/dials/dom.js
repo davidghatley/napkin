@@ -155,23 +155,35 @@ export function visible(c) {
 }
 export function grid(ctx, w, h) {
   ctx.clearRect(0, 0, w, h);
-  ctx.strokeStyle =
-    getComputedStyle(ctx.canvas).getPropertyValue("--d-line").trim() ||
-    "#ccd0da";
+  const css = getComputedStyle(ctx.canvas);
+  const line = css.getPropertyValue("--d-line").trim() || "#ccd0da",
+    ink = css.getPropertyValue("--d-text").trim() || "#111";
+  // Quarter rules, with minor ticks on the left and bottom edges like a printed scale.
   ctx.lineWidth = 1;
+  ctx.strokeStyle = line;
+  ctx.globalAlpha = 0.7;
   ctx.beginPath();
-  for (let i = 0; i <= 10; i++) {
-    ctx.moveTo((i * w) / 10, 0);
-    ctx.lineTo((i * w) / 10, h);
-    ctx.moveTo(0, (i * h) / 10);
-    ctx.lineTo(w, (i * h) / 10);
+  for (let i = 1; i < 4; i++) {
+    ctx.moveTo(Math.round((i * w) / 4) + 0.5, 0);
+    ctx.lineTo(Math.round((i * w) / 4) + 0.5, h);
+    ctx.moveTo(0, Math.round((i * h) / 4) + 0.5);
+    ctx.lineTo(w, Math.round((i * h) / 4) + 0.5);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = ink;
+  ctx.beginPath();
+  for (let i = 0; i <= 20; i++) {
+    const len = i % 5 ? 3 : 6,
+      x = Math.round((i * w) / 20) + 0.5,
+      y = Math.round((i * h) / 20) + 0.5;
+    ctx.moveTo(x, h);
+    ctx.lineTo(x, h - len);
+    ctx.moveTo(0, y);
+    ctx.lineTo(len, y);
   }
   ctx.stroke();
 }
-/**
- * A drawn replacement for the browser select. Few short options become a segmented control;
- * the rest become a button that opens a listbox. `node.value` reads and sets the choice.
- */
 export function choiceBox(label, options, change, { none } = {}) {
   const list = options.map((o) =>
     typeof o === "object" ? o : { value: o, text: String(o) },

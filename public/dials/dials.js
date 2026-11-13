@@ -395,8 +395,9 @@ export class Dials extends EventTarget {
     node.append(reset, label, fig, wrap);
     const row = { c, section, node, label, fig, input, plugin, context };
     this.rows.set(c.id, row);
+    node.dataset.kind = numeric(c) ? "num" : c.type;
     this.scrub(label, c.id);
-    this.scrub(fig, c.id);
+    if (!this.figureDrag(fig, c)) this.scrub(fig, c.id);
     label.addEventListener("dblclick", () => this.reset(c.id));
     if (c.disabled) {
       node.inert = true;
@@ -743,6 +744,76 @@ export class Dials extends EventTarget {
     if (event.type === "pointermove" || event.type === "pointerdown")
       this.change(id, result);
     else this.transact(id, result);
+  }
+  /**
+   * The figure is the control: where the pointer lands on the drawing is the value.
+   * Rulers (numbers with a range), opacity ramps, angle dials and vector pads map the pointer
+   * straight to a value; other figures fall back to relative scrubbing.
+   */
+  figureDrag(fig, c) {
+    const key = typeof c.figure === "string" ? c.figure : c.figure?.type;
+    if (figures.has(key) || controls.has(c.type)) return false;
+    const finite = Number.isFinite(c.min) && Number.isFinite(c.max);
+    const kind = key || c.type;
+    let map;
+    const box = () => fig.querySelector("svg").getBoundingClientRect();
+    if (kind === "angle" && typeof c.value === "number") {
+      map = (e) => {
+        const r = box(),
+          s = r.width / 64,
+          dx = e.clientX - (r.left + 30 * s),
+          dy = e.clientY - (r.top + 12 * s);
+        let deg = (Math.atan2(-dy, dx) * 180) / Math.PI;
+        const lo = c.min ?? 0,
+          hi = c.max ?? 360;
+        if (lo >= 0) deg = (deg + 360) % 360;
+        return clamp(deg, lo, hi);
+      };
+    } else if (
+      kind === "vector" &&
+      Array.isArray(c.value) &&
+      c.value.length === 2 &&
+      !c.step_free
+    ) {
+      const lo = c.min ?? -1,
+        hi = c.max ?? 1;
+      map = (e) => {
+        const r = box(),
+          s = r.width / 64,
+          x = clamp(((e.clientX - r.left) / s - 4) / 56, 0, 1),
+          y = clamp((22 - (e.clientY - r.top) / s) / 20, 0, 1);
+        return [lo + x * (hi - lo), lo + y * (hi - lo)];
+      };
+    } else if (finite && typeof c.value === "number" && kind !== "boolean") {
+      map = (e) => {
+        const svg = fig.querySelector("svg"),
+          r = svg.getBoundingClientRect(),
+          t =
+            svg.dataset.kind === "ruler"
+              ? clamp((e.clientX - r.left - 4) / (r.width - 8), 0, 1)
+              : clamp(((e.clientX - r.left) / (r.width / 64) - 2) / 60, 0, 1);
+        return c.min + t * (c.max - c.min);
+      };
+    } else return false;
+    let moved = false;
+    this.gestures.push(
+      pointerSurface(fig, {
+        start: () => {
+          moved = false;
+          this.begin(c.id, "figure");
+        },
+        move: (e) => {
+          moved = true;
+          let v = map(e);
+          if (Array.isArray(v)) v = v.map((n) => Number(n.toFixed(4)));
+          else v = quantize(v, { ...c, step: e.shiftKey ? (c.step || 1) / 10 : c.step });
+          this.change(c.id, v);
+        },
+        end: () => this.commit(c.id),
+        cancel: () => this.cancel(c.id),
+      }),
+    );
+    return true;
   }
   scrub(target, id) {
     let startX,

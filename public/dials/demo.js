@@ -23,7 +23,7 @@ for (const sample of samples) {
       el(
         "div",
         {},
-        el("h2", { text: sample.title }),
+        el("h2", { text: `Plate ${String(samples.indexOf(sample) + 1).padStart(2, "0")} · ${sample.title}` }),
         el("p", { text: sample.file }),
       ),
     ),

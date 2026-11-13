@@ -202,7 +202,6 @@ function updateSwatches(host, label, colors, onPick, lines) {
   });
 }
 function colorStudio(ctx, host) {
-  host.append(heading("Color space"));
   let space = "srgb",
     planeMode = "OKLCH",
     map = "Off",
@@ -215,21 +214,39 @@ function colorStudio(ctx, host) {
     dead = false;
   const plane = canvas(
       "Color plane. Left and right change chroma; up and down change lightness. Shift fine.",
-      512,
-      320,
+      640,
+      300,
+    ),
+    hue = canvas(
+      "Hue strip. Left and right change hue; the lower band is the most chroma the gamut holds at each hue.",
+      640,
+      40,
     ),
     proof = el("canvas", {
-      width: 200,
-      height: 100,
+      width: 320,
+      height: 116,
       role: "img",
       "aria-label": "Selected color on the contrast background",
     }),
     preview = el("div", { class: "d-color-preview" }, proof);
-  const wcag = metric("WCAG 2 · ratio"),
-    lc = metric("APCA · experimental Lc"),
-    gamut = metric("Gamut");
-  const code = el("output", { class: "d-color-code" }),
-    readout = el("div", { class: "d-readout" }, wcag.node, lc.node, gamut.node);
+  const ratioNum = el("b", { text: "0.00" }),
+    grade = el("span", { class: "d-cs-grade", text: "" }),
+    lcNum = el("dd", { text: "—" }),
+    gamutNum = el("dd", { text: "—" }),
+    code = el("output", { class: "d-color-code" }),
+    readout = el(
+      "div",
+      { class: "d-cs-score" },
+      el("div", { class: "d-cs-big" }, ratioNum, el("span", { text: ": 1" }), grade),
+      el(
+        "dl",
+        { class: "d-cs-facts" },
+        el("div", {}, el("dt", { text: "WCAG 2" }), el("dd", { class: "d-cs-wcag", text: "—" })),
+        el("div", {}, el("dt", { text: "APCA Lc" }), lcNum),
+        el("div", {}, el("dt", { text: "Gamut" }), gamutNum),
+      ),
+    ),
+    wcag = { set: (t) => (readout.querySelector(".d-cs-wcag").textContent = t) };
   const toolbar = el(
     "div",
     { class: "d-tools d-studio-only" },
@@ -279,16 +296,16 @@ function colorStudio(ctx, host) {
     el(
       "div",
       { class: "d-plot-key" },
-      el("span", { text: "0 ← chroma → .4" }),
-      el("span", { text: "— sRGB   ┄ P3" }),
+      el("span", { text: "Lightness ↑" }),
+      el("span", { text: "Chroma 0 → 0.4" }),
+      el("span", { class: "d-key-line", text: "sRGB edge" }),
+      el("span", { class: "d-key-dash", text: "P3 edge" }),
     ),
+    hue,
+    el("div", { class: "d-plot-key" }, el("span", { text: "Hue 0 → 360°" }), el("span", { text: "Lower band: most chroma this gamut holds" })),
+    code,
   );
-  const main = el(
-    "div",
-    { class: "d-color-main" },
-    planeWrap,
-    el("div", { class: "d-color-proof" }, preview, readout, code),
-  );
+  const main = el("div", { class: "d-color-main" }, planeWrap);
   const channelCtx = {
     ...ctx,
     get: () => {
@@ -300,7 +317,7 @@ function colorStudio(ctx, host) {
   const channels = fields(channelCtx, [
     ["Lightness", "l", 0, 1, 0.001],
     ["Chroma", "c", 0, 0.5, 0.001],
-    ["Hue", "h", 0, 360, 1, "deg"],
+    ["Hue", "h", 0, 360, 1],
     ["Alpha", "a", 0, 1, 0.01],
   ]);
   const palettes = el("div", { class: "d-palettes d-studio-only" }),
@@ -418,7 +435,66 @@ function colorStudio(ctx, host) {
       el("div", { class: "d-tools" }, formats, copy),
     ),
   );
-  host.append(toolbar, main, plates, channels.node, palettes);
+  const side = el("div", { class: "d-color-side" }, preview, readout, channels.node);
+  host.append(
+    toolbar,
+    el("div", { class: "d-cs-top" }, main, side),
+    plates,
+    palettes,
+  );
+  const hueAt = (e) => {
+    const r = hue.getBoundingClientRect(),
+      v = parseColor(ctx.get(), ctx.host);
+    ctx.change(cssLch([v[0], v[1], clamp((e.clientX - r.left) / r.width, 0, 1) * 360, v[3]]));
+  };
+  ctx.surface(hue, {
+    start: () => ctx.begin("color-hue"),
+    move: hueAt,
+    end: () => ctx.commit(),
+    cancel: () => ctx.cancel(),
+  });
+  hue.addEventListener("keydown", (e) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    e.preventDefault();
+    const v = parseColor(ctx.get(), ctx.host),
+      f = e.shiftKey ? 0.1 : e.altKey ? 10 : 1;
+    v[2] = (v[2] + (e.key === "ArrowRight" ? 1 : -1) * f + 360) % 360;
+    ctx.set(cssLch(v));
+  });
+  hue.addEventListener("d-resize", () => update());
+  function drawHue(v) {
+    const g = hue.getContext("2d"),
+      w = hue.width,
+      h = hue.height,
+      band = 12;
+    g.clearRect(0, 0, w, h);
+    const css = getComputedStyle(hue),
+      ink = css.getPropertyValue("--d-text").trim() || "#111",
+      paper = css.getPropertyValue("--d-surface").trim() || "#fff";
+    const step = 4;
+    for (let x = 0; x < w; x += step) {
+      const H = ((x + step / 2) / w) * 360,
+        top = Math.min(Math.max(v[1], 0.04), gamutChroma(v[0], H, space));
+      g.fillStyle = cssLch([v[0], top, H, 1]);
+      g.fillRect(x, 0, step, h - band);
+    }
+    g.fillStyle = paper;
+    g.fillRect(0, h - band, w, band);
+    g.fillStyle = ink;
+    g.globalAlpha = 0.22;
+    for (let x = 0; x < w; x += step) {
+      const H = ((x + step / 2) / w) * 360,
+        m = gamutChroma(v[0], H, space) / 0.4,
+        bar = Math.max(1, m * (band - 2));
+      g.fillRect(x, h - bar, step - 1, bar);
+    }
+    g.globalAlpha = 1;
+    const x = (v[2] / 360) * w;
+    g.fillStyle = ink;
+    g.fillRect(x - 1.5, 0, 3, h);
+    g.fillStyle = paper;
+    g.fillRect(x - 0.5, 0, 1, h - band);
+  }
   const pick = (e) => {
     const r = plane.getBoundingClientRect(),
       x = clamp((e.clientX - r.left) / r.width, 0, 1),
@@ -592,20 +668,24 @@ function colorStudio(ctx, host) {
       `${ctx.get()} against ${background}. WCAG ratio ${ratio.toFixed(2)}; ${ratio >= 4.5 ? "passes" : "fails"} AA for small text.`,
     );
     const proofContext = proof.getContext("2d");
-    proofContext.clearRect(0, 0, 200, 100);
+    proofContext.clearRect(0, 0, 320, 116);
     proofContext.fillStyle = cssLch(v);
-    proofContext.textAlign = "center";
-    proofContext.font = "650 64px sans-serif";
-    proofContext.fillText("Aa", 100, 69);
-    proofContext.font = "10px sans-serif";
-    proofContext.fillText("Small type / large type", 100, 93);
-    wcag.set(
-      `${ratio.toFixed(2)} : 1 · ${ratio >= 7 ? "AAA" : ratio >= 4.5 ? "AA" : "Fail"}`,
-    );
-    lc.set(apca(v, back).toFixed(1));
-    gamut.set(
-      inGamut(v) ? "sRGB" : inGamut(v, "p3") ? "P3 only" : "Outside P3",
-    );
+    proofContext.textAlign = "left";
+    proofContext.font = "700 72px Dials Inter, sans-serif";
+    proofContext.fillText("Aa", 16, 72);
+    proofContext.font = "500 15px Dials Inter, sans-serif";
+    proofContext.fillText("Large type, 24 px", 128, 52);
+    proofContext.font = "500 12px Dials Inter, sans-serif";
+    proofContext.fillText("Small type, 12 px", 128, 74);
+    proofContext.fillText("the quick brown fox", 16, 102);
+    ratioNum.textContent = ratio >= 100 ? "100" : ratio.toFixed(2);
+    const gradeText = ratio >= 7 ? "AAA" : ratio >= 4.5 ? "AA" : ratio >= 3 ? "AA large" : "FAIL";
+    grade.textContent = gradeText;
+    grade.dataset.pass = String(ratio >= 4.5);
+    wcag.set(`small ${ratio >= 4.5 ? "pass" : "fail"} · large ${ratio >= 3 ? "pass" : "fail"}`);
+    lcNum.textContent = apca(v, back).toFixed(1);
+    gamutNum.textContent = inGamut(v) ? "sRGB" : inGamut(v, "p3") ? "P3 only" : "Outside P3";
+    drawHue(v);
     code.value =
       format === "Hex"
         ? toHex(v)
@@ -666,23 +746,22 @@ function motionStudio(ctx, host) {
       ...rawContext.get(),
     }),
   };
-  host.append(heading("Motion study"));
   const plot = canvas(
-      "Motion curve. Use the handle fields to edit the curve.",
-      600,
-      220,
+      "Motion curve. Drag the two handles; Tab to the handle fields to type.",
+      640,
+      280,
       false,
     ),
     ghost = canvas(
       "Ghost trail: the current response above, the pinned earlier response below",
-      300,
-      84,
+      316,
+      96,
       false,
     ),
     velocity = canvas(
       "Velocity of the response over time, in change per second",
-      300,
-      84,
+      316,
+      96,
       false,
     ),
     lanes = () => {
@@ -777,6 +856,8 @@ function motionStudio(ctx, host) {
     ["Damping", "damping", 0.1, 200, 0.1],
     ["Mass", "mass", 0.01, 20, 0.01],
     ["Velocity", "velocity", -20, 20, 0.1],
+    ["Loop in", ["range", 0], 0, 1, 0.01],
+    ["Loop out", ["range", 1], 0, 1, 0.01],
   ]);
   const handles = fields(ctx, [
     ["Handle 1 x", ["bezier", 0], 0, 1, 0.01],
@@ -823,10 +904,6 @@ function motionStudio(ctx, host) {
       renderCompare(ctx.get());
     },
   );
-  const rangeFields = fields(ctx, [
-    ["Loop in", ["range", 0], 0, 1, 0.01],
-    ["Loop out", ["range", 1], 0, 1, 0.01],
-  ]);
   const compare = el("div", { class: "d-compare", role: "table", "aria-label": "Response measurements" });
   const applyTracks = button(
     "Apply at playhead",
@@ -908,14 +985,10 @@ function motionStudio(ctx, host) {
       { class: "d-studio-only d-motion-details" },
       el("div", { class: "d-compare-head" }, heading("Measured", "Settle within 2 percent of the end"), pin),
       compare,
-      heading("Loop", "Playback repeats inside this range"),
-      rangeFields.node,
       bezierOnly,
-      heading("Keyframes", "Time is normalized from 0 to 1"),
-      add,
+      el("div", { class: "d-lab-head" }, el("h3", { text: "Keyframes" }), add),
       keyframes,
-      readouts,
-      applyTracks,
+      el("div", { class: "d-apply" }, applyTracks, readouts),
     ),
   );
   host.append(el("div", { class: "d-tools" }, mode, play), main, side, outputs);
@@ -1007,7 +1080,7 @@ function motionStudio(ctx, host) {
       g.globalAlpha = 1;
     }
     g.fillStyle = getComputedStyle(plot).getPropertyValue("--d-muted").trim() || "#777";
-    g.font = "10px ui-monospace, monospace";
+    g.font = "500 11px Dials Inter, sans-serif";
     g.textBaseline = "alphabetic";
     g.textAlign = "left";
     g.fillText("0", 4, h - 4);
@@ -1046,26 +1119,37 @@ function motionStudio(ctx, host) {
     g.setLineDash([2, 3]);
     g.stroke();
     g.setLineDash([]);
-    const gg = ghost.getContext("2d");
-    grid(gg, ghost.width, ghost.height);
-    const gx = (p) => 14 + clamp(p, -0.1, 1.25) * (ghost.width - 56);
-    for (let i = 0; i <= 14; i++) {
-      gg.globalAlpha = 0.08 + (i / 14) * 0.22;
+    const gg = ghost.getContext("2d"),
+      gw = ghost.width,
+      gh = ghost.height,
+      gcss = getComputedStyle(ghost),
+      gmuted = gcss.getPropertyValue("--d-muted").trim() || "#777",
+      gink = gcss.getPropertyValue("--d-text").trim() || "#111";
+    grid(gg, gw, gh);
+    const gx = (p) => 12 + clamp(p, -0.1, 1.25) * (gw - 24 - 18);
+    gg.font = "500 11px Dials Inter, sans-serif";
+    gg.textBaseline = "alphabetic";
+    gg.fillStyle = gmuted;
+    gg.fillText("Now", 6, 14);
+    gg.fillText("Before", 6, gh / 2 + 14);
+    for (let i = 0; i <= 12; i++) {
+      gg.globalAlpha = 0.06 + (i / 12) * 0.2;
       gg.fillStyle = a;
-      gg.fillRect(gx(motionAt(i / 14, v)), 16, 16, 24);
+      gg.fillRect(gx(motionAt(i / 12, v)), 18, 18, 22);
     }
     gg.globalAlpha = 1;
     gg.fillStyle = a;
-    gg.fillRect(gx(value), 16, 16, 24);
-    gg.strokeStyle = a;
-    gg.strokeRect(gx(key), 6, 16, 8);
-    gg.strokeStyle = getComputedStyle(ghost).getPropertyValue("--d-muted").trim() || "#777";
+    gg.fillRect(gx(value), 18, 18, 22);
+    gg.strokeStyle = gink;
+    gg.lineWidth = 1.5;
+    gg.strokeRect(gx(key), 18, 18, 22);
+    gg.lineWidth = 1;
+    gg.strokeStyle = gmuted;
     gg.setLineDash([3, 3]);
-    for (let i = 0; i <= 14; i++)
-      gg.strokeRect(gx(motionAt(i / 14, reference)), 54, 16, 24);
+    for (let i = 0; i <= 12; i++) gg.strokeRect(gx(motionAt(i / 12, reference)), gh / 2 + 18, 18, 22);
     gg.setLineDash([]);
-    gg.fillStyle = gg.strokeStyle;
-    gg.fillRect(gx(motionAt(t, reference)), 54, 16, 24);
+    gg.fillStyle = gmuted;
+    gg.fillRect(gx(motionAt(t, reference)), gh / 2 + 18, 18, 22);
     drawVelocity(v);
     drawTimeline(v);
     time.textContent = `${Math.round(playhead * ((v.duration || 1000) + (v.delay || 0)))} ms · response ${value.toFixed(3)} · keyframe ${key.toFixed(3)}`;
@@ -1103,7 +1187,7 @@ function motionStudio(ctx, host) {
     g.lineWidth = 1.5;
     g.stroke();
     g.fillStyle = getComputedStyle(velocity).getPropertyValue("--d-muted").trim() || "#777";
-    g.font = "10px ui-monospace, monospace";
+    g.font = "500 11px Dials Inter, sans-serif";
     g.textBaseline = "top";
     g.fillText(`velocity, peak ${peak.toFixed(1)}/s`, 6, 4);
   }
@@ -1128,7 +1212,7 @@ function motionStudio(ctx, host) {
       [r0, r1] = v.range || [0, 1],
       list = lanes();
     g.clearRect(0, 0, W, H);
-    g.font = "9px ui-monospace, monospace";
+    g.font = "500 10px Dials Inter, sans-serif";
     g.textBaseline = "middle";
     g.fillStyle = a;
     g.globalAlpha = 0.1;
@@ -1172,15 +1256,17 @@ function motionStudio(ctx, host) {
       g.fillStyle = muted;
       g.textAlign = "left";
       g.fillText(lane.label, PAD, top + 8);
-      const sorted = [...lane.keys].sort((p, q) => p.time - q.time);
+      const sorted = [...lane.keys].sort((p, q) => p.time - q.time),
+        dl = (v.delay || 0) / total;
       g.beginPath();
-      for (let k = 0; k <= 80; k++) {
-        const t = k / 80,
-          y = laneValueY(lane, i, keyframeAt(t, sorted));
+      for (let k = 0; k <= 120; k++) {
+        const t = k / 120,
+          val = lane.id === "response" ? motionAt(clamp((t - dl) / (1 - dl || 1), 0, 1), v) : keyframeAt(t, sorted),
+          y = laneValueY(lane, i, val);
         k ? g.lineTo(tx(t), y) : g.moveTo(tx(t), y);
       }
       g.strokeStyle = a;
-      g.lineWidth = 1.5;
+      g.lineWidth = 2;
       g.stroke();
       g.lineWidth = 1;
       for (const k of lane.keys) {
@@ -1358,7 +1444,6 @@ function motionStudio(ctx, host) {
     mode.querySelector(".d-choice").value = v.mode || "bezier";
     numbers.update();
     handles.update();
-    rangeFields.update();
     bezierOnly.hidden = v.mode === "spring";
     const ks = JSON.stringify(v.keyframes);
     if (ks !== lastKeys) {
@@ -2594,7 +2679,7 @@ export function createStudio(panel, section, host) {
   else if (c.type === "sampler") lab = samplerStudio(ctx, host);
   else lab = generalStudio(ctx, host);
   // Two columns in a wide studio: the main figure and its direct tools on the left, the rest on the right.
-  if (host.dataset.studio !== "motion") {
+  if (!["motion", "color"].includes(host.dataset.studio)) {
     const kids = [...host.children].filter((k) => !k.matches(".d-lab-head")),
       heroSelector = ".d-plot, .d-stage, .d-color-main, .d-type-specimen, .d-type-ruler, .d-step-cells, .d-type-lab, .d-sched-table, .d-color-plates",
       main = el("div", { class: "d-col d-col-main" }),
