@@ -174,9 +174,10 @@ streams use ranges; they never pass through the whole-file document cache.
 | Reader | Current boundary |
 | --- | --- |
 | CSV/TSV/JSONL | Every row reachable (one-pass index, UTF-8 and UTF-16 with or without a byte order mark); 120 displayed rows; distributions describe the window on screen |
-| JSON and notebooks | 1 MiB document preview; larger files show the limit |
+| JSON and notebooks | 1 MiB document; numbers keep the digits written in the file; the tree opens lazily, 200 entries a page, every entry reachable; larger files show the limit |
+| Markdown | marked (vendored), GitHub-flavoured: tables, task lists, strikethrough; raw HTML is shown as text, never run |
 | Parquet | hyparquet (vendored): every row reachable by offset, nested and logical types, all page encodings, Snappy, gzip, Brotli and zstd; reads only the row groups that hold the window |
-| Arrow | IPC files with flat primitive numeric, text, binary, boolean and date/time vectors; reads selected vector windows |
+| Arrow | Apache Arrow JS (vendored): file and stream formats (.arrow, .arrows, .feather, .ipc), dictionaries and replacement dictionaries, nulls, nested types, many record batches; a window decodes only the batches that hold its rows (up to 256 MiB) |
 | SQLite | Read-only connection, selected table and bounded row query |
 | ZIP | Central directory up to 8 MiB; entry preview up to 1 MiB; stored and deflated entries; no ZIP64 or encrypted entries |
 | Audio | PCM WAV peaks from a bounded prefix; local ffmpeg optionally decodes up to 60 seconds for other codecs |
@@ -188,7 +189,7 @@ streams use ranges; they never pass through the whole-file document cache.
 
 Formats with a real runtime (Parquet, Lottie, glTF, OBJ) are drawn by that runtime, not by a
 miniature of it: see docs/decisions/0021-kinds-real-format-runtimes.md. Anything a runtime cannot
-do is named on the view. Nested or dictionary Arrow and compressed IPC still need an adapter.
+do is named on the view. Arrow and Markdown are read by their reference implementations too: see docs/decisions/0022-kinds-lossless-tables-and-reference-readers.md.
 
 ## Evidence
 
@@ -244,3 +245,12 @@ its open-time assertion does not establish the separate frame-time target.
 - **Controls change the picture.** PDF zoom sets the render resolution and the page width; the test compares the drawn page before and after.
 - **Undo history survives a restart** (`kind-undo.json` beside the layout, steps stored with their bytes, capped at 8 MiB).
 - **Test evidence** is written to a temporary folder (or `$KINDS_EVIDENCE`), so test runs leave the tree clean.
+
+## Round 6 notes
+
+- One table model for every tabular kind (`src/kinds/cells.js`): a cell is the file's exact text (`00123`, `9007199254740993` and `1.50` stay as written), columns are positional (two headers called `value` are two columns), and a column type is a label for alignment and the distribution. The CSV, TSV, JSONL, JSON-records and SQLite views honour a `columnTypes` entry in the recipe (`{"2": "string"}`, by position or name); there is no control for it on the panel yet.
+- A file that cannot be read faithfully says so on its card: ragged CSV rows, JSONL lines that are not JSON, an Arrow stream that ends early.
+- Every file has a card and a Layers row from the start. A kind registered by a plugin gets a text (or hex) preview on its card when its own metadata gives none. A TSX or JSX module that exports no component gets a card with its source.
+- Lottie animations are given the defaults their exporters omit, and image assets are read from beside the animation; an animation that draws nothing says so.
+- `test/kinds/differential.test.js` checks cells against sqlite3 and Apache Arrow on seeded random files; `test/kinds/fidelity.test.js` checks the same truths in a real browser.
+- Pan and zoom only move the world (see decision 0022). `test/kinds/performance.test.js` holds p95 frame < 16.7 ms at three window sizes.
