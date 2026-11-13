@@ -170,33 +170,64 @@ export function initTools(ctx) {
     const cell = el?.closest('.cell');
     return el && cell && { el, component: cell.closest('.cmp').dataset.component, node: el.dataset.n, variant: JSON.parse(cell.dataset.variant) };
   }
-  function cancelDraw() { drag = null; rect.hidden = true; }
+  // the size readout under the outline: canvas px, as Figma and tldraw show it while drawing
+  const readout = document.createElement('div');
+  readout.id = 'draw-size'; readout.hidden = true; document.body.append(readout);
+  function cancelDraw() { drag = null; rect.hidden = true; readout.hidden = true; delete rect.dataset.on; }
 
   const drawing = () => ctx.state.tool === 'frame' || ctx.state.tool === 'text' || ctx.state.tool === 'image';
+  // A press on a component the dialect draws inserts there (draw below); anywhere else ctx.create decides: an HTML frame
+  // (insert into it) or the canvas (a new frame file).
   document.addEventListener('pointerdown', (ev) => {
-    if (!drawing() || ev.button !== 0 || !stageEl.contains(ev.target)) return;
+    if (!drawing() || ev.button !== 0 || ev.pointerType === 'touch' || !stageEl.contains(ev.target) || ctx.view.isPanning()) return;
     const h = hit(ev.target);
-    if (!h) return;
+    const target = h ? null : ctx.create?.targetAt(ev);
+    if (!h && !target) return;
     ev.preventDefault();
-    drag = { h, x: ev.clientX, y: ev.clientY, moved: false };
+    drag = { h, target, x: ev.clientX, y: ev.clientY, moved: false };
     swallowClick = Date.now();
   }, true);
+  // The drawn box in screen px: Shift makes it square, Alt draws it from its centre (standards section 2).
+  function boxOf(d, ev) {
+    let dx = ev.clientX - d.x, dy = ev.clientY - d.y;
+    if (ev.shiftKey && !d.h) { const s = Math.max(Math.abs(dx), Math.abs(dy)); dx = Math.sign(dx || 1) * s; dy = Math.sign(dy || 1) * s; }
+    if (ev.altKey && !d.h) return { left: d.x - Math.abs(dx), top: d.y - Math.abs(dy), w: 2 * Math.abs(dx), h: 2 * Math.abs(dy) };
+    return { left: Math.min(d.x, d.x + dx), top: Math.min(d.y, d.y + dy), w: Math.abs(dx), h: Math.abs(dy) };
+  }
   document.addEventListener('pointermove', (ev) => {
-    if (!drag || ctx.state.tool === 'text') return;
+    if (!drag || (drag.h && ctx.state.tool === 'text')) return;
     if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < DRAG) return;
     drag.moved = true;
-    Object.assign(rect.style, { left: `${Math.min(drag.x, ev.clientX)}px`, top: `${Math.min(drag.y, ev.clientY)}px`, width: `${Math.abs(ev.clientX - drag.x)}px`, height: `${Math.abs(ev.clientY - drag.y)}px` });
+    const b = boxOf(drag, ev);
+    Object.assign(rect.style, { left: `${b.left}px`, top: `${b.top}px`, width: `${b.w}px`, height: `${b.h}px` });
+    if (drag.target?.kind === 'canvas' && ctx.state.tool !== 'text') rect.dataset.on = 'canvas'; else delete rect.dataset.on;
     rect.hidden = false;
+    if (!drag.h) {
+      const z = zoom();
+      readout.textContent = ctx.state.tool === 'text' ? `${Math.round(b.w / z)}` : `${Math.round(b.w / z)} \u00d7 ${Math.round(b.h / z)}`;
+      Object.assign(readout.style, { left: `${b.left + b.w / 2}px`, top: `${b.top + b.h + 8}px` });
+      readout.hidden = false;
+    }
   }, true);
   document.addEventListener('pointerup', (ev) => {
     if (!drag) return;
-    const d = drag; cancelDraw();
-    const size = d.moved && ctx.state.tool !== 'text' ? [Math.round(Math.abs(ev.clientX - d.x) / zoom()), Math.round(Math.abs(ev.clientY - d.y) / zoom())] : null;
-    draw(d.h, ctx.state.tool, size, ev.shiftKey);
+    const d = drag, box = d.moved ? boxOf(d, ev) : null; cancelDraw();
+    const tool = ctx.state.tool;
+    if (d.h) {
+      const size = d.moved && tool !== 'text' ? [Math.round(Math.abs(ev.clientX - d.x) / zoom()), Math.round(Math.abs(ev.clientY - d.y) / zoom())] : null;
+      draw(d.h, tool, size, ev.shiftKey);
+      return;
+    }
+    use('select'); // one use, then back to Select (standards section 2, open item settled)
+    const go = () => ctx.create.make({ tool, target: d.target, box, point: { x: d.x, y: d.y } })?.catch?.((e) => { console.error(e); say(String(e.message || e)); });
+    // the image tool opens the file picker, which Chromium only opens from the click (not the pointerup) of a mouse gesture
+    if (tool === 'image') { afterClick = go; setTimeout(() => { if (afterClick === go) { afterClick = null; go(); } }, 400); } else go();
   }, true);
   // The click that follows a drawing gesture belongs to the tool, not to the select tool.
+  let afterClick = null;
   document.addEventListener('click', (ev) => {
     if (swallowClick && Date.now() - swallowClick < 1000) { swallowClick = 0; ev.stopPropagation(); ev.preventDefault(); }
+    if (afterClick) { const f = afterClick; afterClick = null; f(); }
   }, true);
   document.addEventListener('pointercancel', cancelDraw, true);
 
@@ -251,6 +282,10 @@ export function initTools(ctx) {
       if (drag) cancelDraw();
       else if (ctx.state.tool !== 'select') use('select');
       return;
+    }
+    // the keyboard path: F (or T, I) then Enter makes the default one in the middle of the view
+    if (ev.key === 'Enter' && drawing() && !drag && !ev.ctrlKey && !ev.metaKey && !ev.altKey && ctx.create) {
+      ev.preventDefault(); const tool = ctx.state.tool; use('select'); ctx.create.atCentre(tool)?.catch?.(console.error); return;
     }
     if (ev.altKey && !ev.ctrlKey && !ev.metaKey && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown')) {
       ev.preventDefault(); moveSelected(ev.key === 'ArrowUp' ? -1 : 1); return;
