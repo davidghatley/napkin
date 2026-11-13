@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 420" width="880" height="420" font-family="Inter, ui-sans-serif, system-ui, sans-serif">
+  <title>One registry drives the palette, the key map, the keys and the server</title>
+  <rect width="880" height="420" fill="#fbfaf7"/>
+  <g stroke="#15161a" stroke-width="1.2" fill="#ffffff">
+    <rect x="330" y="30" width="220" height="70" rx="8"/>
+    <rect x="40" y="170" width="190" height="64" rx="8"/>
+    <rect x="250" y="170" width="190" height="64" rx="8"/>
+    <rect x="460" y="170" width="190" height="64" rx="8"/>
+    <rect x="670" y="170" width="170" height="64" rx="8"/>
+    <rect x="160" y="320" width="250" height="64" rx="8"/>
+    <rect x="470" y="320" width="250" height="64" rx="8"/>
+  </g>
+  <rect x="330" y="30" width="220" height="6" fill="#1f45d3"/>
+  <g fill="#15161a" font-size="14" font-weight="600" text-anchor="middle">
+    <text x="440" y="62">actions.js</text>
+    <text x="135" y="198">Palette (Ctrl K)</text>
+    <text x="345" y="198">Key map (?)</text>
+    <text x="555" y="198">Key dispatcher</text>
+    <text x="755" y="198">GET /api/keys</text>
+    <text x="285" y="348">Instrument panel</text>
+    <text x="595" y="348">Board state</text>
+  </g>
+  <g fill="#4d4f57" font-size="12" text-anchor="middle">
+    <text x="440" y="82">id · label · phrase · keys · arg · run</text>
+    <text x="135" y="218">exact phrase, then prefix, then fuzzy</text>
+    <text x="345" y="218">bindings in force, rebind</text>
+    <text x="555" y="218">chords, sequences, counts</text>
+    <text x="755" y="218">bindings + commands</text>
+    <text x="285" y="368">dials, from /api/controls/&lt;id&gt;</text>
+    <text x="595" y="368">/api/board · state dir, not the folder</text>
+  </g>
+  <g stroke="#1f45d3" stroke-width="1.4" fill="none" marker-end="url(#a)">
+    <path d="M400 100 L150 168"/><path d="M425 100 L350 168"/><path d="M455 100 L545 168"/><path d="M490 100 L745 168"/>
+    <path d="M135 234 L250 318"/><path d="M555 234 L330 318"/><path d="M555 234 L590 318"/><path d="M135 234 L520 318"/>
+  </g>
+  <defs><marker id="a" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0 L8 4 L0 8 z" fill="#1f45d3"/></marker></defs>
+  <text x="40" y="408" font-size="11" fill="#66686f">Figure 1. Every command is declared once. Rebinding writes the state directory; the map, the dispatcher and the API read it back.</text>
+</svg>
