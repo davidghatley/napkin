@@ -347,7 +347,7 @@ export function parseMotionCSS(text) {
   const anim = decl("animation"),
     trans = decl("transition");
   if (anim) out.motion = timing(anim);
-  else if (trans) out.motion = timing(trans.split(",")[0]);
+  else if (trans) out.motion = timing(topLevel(trans)[0]);
   const spring = decl("--dials-spring");
   if (spring && out.motion) {
     const [k, d, m, v0] = spring.trim().split(/\s+/).map(Number);
@@ -399,4 +399,47 @@ export function parseWaapi(text) {
     frames: frames.map(({ easing: _, ...f }) => f),
     iterations: options.iterations === "Infinity" ? Infinity : options.iterations,
   };
+}
+/**
+ * Everything a motion section writes, as code a host can save: a transition rule, an
+ * @keyframes animation and a WAAPI call. `motion` is the response, `frames` the keyframes
+ * (optional), `loop` and `rotate` the section's other values.
+ */
+export function motionCode({ motion = {}, frames, loop = false, rotate, name = "entrance", selector = ".element" } = {}) {
+  const iterations = loop ? Infinity : 1,
+    list = frames && frames.length >= 2 ? frames : [
+      { offset: 0, transform: "translateX(0px)" },
+      { offset: 1, transform: "translateX(100px)" },
+    ];
+  return {
+    transition: [`${selector} {`, `  ${toTransition(motion, "transform")}${springNote(motion)}`, `}`].join("\n"),
+    keyframes: toKeyframesCSS(list, motion, { name, selector, iterations, rotate }),
+    waapi: toWaapiKeyframes(list, motion, { name: "element", iterations }) + (motion.mode === "spring" ? `\n// --dials-spring: ${motion.stiffness ?? 170} ${motion.damping ?? 20} ${motion.mass ?? 1} ${motion.velocity ?? 0}` : ""),
+  };
+}
+/** Read any of the three back. Returns { motion, frames, iterations, rotate, kind } or throws. */
+export function readMotionCode(text) {
+  const src = String(text);
+  const out = /\.animate\s*\(/.test(src) ? { ...parseWaapi(src), kind: "waapi" } : { ...parseMotionCSS(src), kind: /@keyframes/.test(src) ? "keyframes" : "transition" };
+  const spring = /--dials-spring:\s*([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/.exec(src);
+  if (spring && out.motion) Object.assign(out.motion, { mode: "spring", stiffness: +spring[1], damping: +spring[2], mass: +spring[3], velocity: +spring[4] });
+  if (!out.motion && !out.frames) throw new Error("No transition, animation or animate() call found.");
+  return out;
+}
+/** Split a declaration list on commas that are not inside parentheses. */
+function topLevel(text) {
+  const parts = [];
+  let depth = 0,
+    start = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === "(") depth++;
+    else if (ch === ")") depth--;
+    else if (ch === "," && depth === 0) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
 }

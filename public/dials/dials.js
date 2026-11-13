@@ -12,6 +12,7 @@ import {
   validateValue,
 } from "./values.js";
 import { parseColor, cssLch } from "./color.js";
+import { motionCode, readMotionCode } from "./motion.js";
 import { drawFigure, translateOf } from "./figures.js";
 /** Replace (or add) translateX in a CSS transform list. */
 export const withTranslate = (transform = "", x) => {
@@ -533,7 +534,7 @@ export class Dials extends EventTarget {
   }
   event(id, phase, edit) {
     if (!edit) return;
-    this.emit("value", {
+    const detail = {
       control: id,
       value: this.get(id),
       previous: clone(edit.before),
@@ -541,7 +542,52 @@ export class Dials extends EventTarget {
       source: edit.source,
       transaction: edit.transaction,
       baseRevision: edit.revision,
+    };
+    // A finished motion edit carries the code it writes, so a host can save the file.
+    const r = this.rows.get(id);
+    if (phase === "commit" && r && ["motion", "bezier", "spring", "keyframes"].includes(r.c.type))
+      detail.code = this.motionCode(r.section.schema.id);
+    this.emit("value", detail);
+  }
+  /** The CSS transition, CSS @keyframes animation and WAAPI call a motion section writes. */
+  motionCode(sectionId) {
+    const s = this.sections.get(sectionId);
+    if (!s) throw new Error("Unknown section " + sectionId);
+    const of = (...types) => s.schema.controls.find((c) => types.includes(c.type));
+    const m = of("motion", "bezier", "spring"),
+      k = of("keyframes"),
+      loop = s.schema.controls.find((c) => c.type === "boolean" && /loop|repeat/i.test(c.id + c.label)),
+      rot = s.schema.controls.find((c) => c.type === "angle");
+    const mv = m ? this.get(m.id) : {};
+    return motionCode({
+      motion: m?.type === "bezier" ? { mode: "bezier", bezier: mv, duration: 1000 } : m?.type === "spring" ? { mode: "spring", ...mv } : mv,
+      frames: k ? this.get(k.id) : undefined,
+      loop: loop ? !!this.get(loop.id) : false,
+      rotate: rot ? this.get(rot.id) : undefined,
+      name: s.schema.id,
     });
+  }
+  /**
+   * Read motion code back into a section: a transition rule, an @keyframes animation or a
+   * WAAPI animate() call. Each changed control is one undoable edit. Returns what was read.
+   */
+  applyMotionCode(sectionId, text) {
+    const s = this.sections.get(sectionId);
+    if (!s) throw new Error("Unknown section " + sectionId);
+    const read = readMotionCode(text),
+      ids = s.schema.controls;
+    const m = ids.find((c) => c.type === "motion"),
+      k = ids.find((c) => c.type === "keyframes"),
+      loop = ids.find((c) => c.type === "boolean" && /loop|repeat/i.test(c.id + c.label)),
+      rot = ids.find((c) => c.type === "angle");
+    const put = (c, v) => {
+      if (c && !same(this.get(c.id), v)) this.transact(c.id, v, "code");
+    };
+    if (read.motion && m) put(m, { ...this.get(m.id), ...read.motion });
+    if (read.frames && k) put(k, read.frames);
+    if (read.iterations !== undefined && loop) put(loop, read.iterations === Infinity);
+    if (read.rotate !== undefined && rot) put(rot, read.rotate);
+    return read;
   }
   reconcile(id, edit, local) {
     if (!this.pending.has(id)) return;
@@ -694,6 +740,8 @@ export class Dials extends EventTarget {
   buildStudio(s, id, update = true) {
     s.lab?.destroy?.();
     s.labHost.replaceChildren();
+    s.labHost.className = "d-lab";
+    delete s.labHost.dataset.layout;
     s.railHost.replaceChildren();
     s.studioControl = id;
     if (s.depth === 3) s.node.dataset.studioFor = id;

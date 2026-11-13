@@ -27,6 +27,8 @@ import {
   toWaapi,
 } from "./motion.js";
 import { schedule } from "./figures.js";
+import { imageStudio } from "./studio-image.js";
+import { motionStudio as motionLab } from "./studio-motion.js";
 const accent = (node) =>
   getComputedStyle(node).getPropertyValue("--d-accent").trim() || "#3459e2";
 const controlValues = (panel, section) =>
@@ -2032,326 +2034,6 @@ function typeStudio(ctx, host) {
     },
   };
 }
-function imageStudio(ctx, host) {
-  host.append(
-    heading("Image"),
-  );
-  const preview = canvas("Image after levels, curves, crop and mask", 320, 180, false),
-    hist = canvas(
-      "Luminance histogram and tone curve. Arrows adjust middle curve point.",
-      320,
-      100,
-    ),
-    status = el("output", { class: "d-note" });
-  const source = document.createElement("canvas");
-  source.width = 320;
-  source.height = 180;
-  const s = source.getContext("2d", { willReadFrequently: true });
-  // A locally drawn still life is the default source; uploads replace its pixels.
-  const backdrop = s.createLinearGradient(0, 0, 320, 180);
-  backdrop.addColorStop(0, "#17266c");
-  backdrop.addColorStop(1, "#526bca");
-  s.fillStyle = backdrop;
-  s.fillRect(0, 0, 320, 180);
-  s.fillStyle = "#e5ddbf";
-  s.fillRect(0, 135, 320, 45);
-  s.fillStyle = "#11214f";
-  s.beginPath();
-  s.ellipse(180, 142, 88, 12, 0, 0, Math.PI * 2);
-  s.fill();
-  const orange = s.createRadialGradient(145, 76, 1, 179, 100, 65);
-  orange.addColorStop(0, "#ffcc56");
-  orange.addColorStop(0.6, "#ed7d21");
-  orange.addColorStop(1, "#792e16");
-  s.fillStyle = orange;
-  s.beginPath();
-  s.arc(177, 95, 53, 0, Math.PI * 2);
-  s.fill();
-  s.fillStyle = "#749b42";
-  s.beginPath();
-  s.ellipse(181, 39, 22, 7, -0.4, 0, Math.PI * 2);
-  s.fill();
-  s.fillStyle = "#f2eee0";
-  s.fillRect(34, 70, 45, 65);
-  s.fillStyle = "#c9c5b6";
-  s.fillRect(73, 70, 8, 65);
-  const output = Object.assign(document.createElement("canvas"), {
-    width: 320,
-    height: 180,
-  });
-  let original = s.getImageData(0, 0, 320, 180),
-    dead = false,
-    frame = 0,
-    drag = 2;
-  const upload = filePick("Load an image", "image/*", async (file) => {
-    try {
-      const b = await createImageBitmap(file);
-      s.clearRect(0, 0, 320, 180);
-      s.drawImage(b, 0, 0, 320, 180);
-      b.close();
-      original = s.getImageData(0, 0, 320, 180);
-      status.textContent = file.name;
-      update();
-    } catch {
-      status.textContent = "Could not read image";
-    }
-  }, "or drop one here", "Load image for adjustment");
-  const f = fields(ctx, [
-    ["Black", "black", 0, 0.99, 0.01],
-    ["White", "white", 0.01, 1, 0.01],
-    ["Gamma", "gamma", 0.1, 5, 0.01],
-    ["Exposure", "exposure", -5, 5, 0.1],
-    ["Saturation", "saturation", 0, 3, 0.01],
-  ]);
-  const crop = fields(ctx, [
-    ["Crop left", "cropLeft", 0, 0.95, 0.01],
-    ["Crop top", "cropTop", 0, 0.95, 0.01],
-    ["Crop right", "cropRight", 0, 0.95, 0.01],
-    ["Crop bottom", "cropBottom", 0, 0.95, 0.01],
-    ["Mask radius", "mask", 0, 1, 0.01],
-  ]);
-  const curveCtx = {
-    ...ctx,
-    get: () => ({ points: ctx.get().curve || [0, 0.25, 0.5, 0.75, 1] }),
-    change: (v) => ctx.change({ ...ctx.get(), curve: v.points }),
-  };
-  const curveFields = fields(
-    curveCtx,
-    Array.from({ length: 5 }, (_, i) => [
-      `Tone ${i * 25}%`,
-      ["points", i],
-      0,
-      1,
-      0.01,
-    ]),
-  );
-  const stage = el("div", { class: "d-stage" }, preview),
-    cropBox = el("div", { class: "d-crop-box" }),
-    ring = el("div", { class: "d-mask-ring" });
-  stage.append(cropBox, ring);
-  const keys = { cropLeft: "x", cropTop: "y", cropRight: "x", cropBottom: "y", mask: "x" },
-    handleDefs = [
-      ["nw", "Crop top left corner", ["cropLeft", "cropTop"]],
-      ["n", "Crop top edge", ["cropTop"]],
-      ["ne", "Crop top right corner", ["cropRight", "cropTop"]],
-      ["e", "Crop right edge", ["cropRight"]],
-      ["se", "Crop bottom right corner", ["cropRight", "cropBottom"]],
-      ["s", "Crop bottom edge", ["cropBottom"]],
-      ["sw", "Crop bottom left corner", ["cropLeft", "cropBottom"]],
-      ["w", "Crop left edge", ["cropLeft"]],
-    ];
-  const setEdge = (v, key, fx, fy) => {
-    const n = {
-      cropLeft: fx,
-      cropRight: 1 - fx,
-      cropTop: fy,
-      cropBottom: 1 - fy,
-    }[key];
-    v[key] = Number(clamp(n, 0, 0.95).toFixed(3));
-  };
-  const handleButtons = handleDefs.map(([pos, label, edges]) => {
-    const h = el("button", {
-      type: "button",
-      class: `d-crop-h d-crop-${pos}`,
-      role: "slider",
-      "aria-label": label,
-      "aria-valuemin": "0",
-      "aria-valuemax": "95",
-    });
-    ctx.surface(h, {
-      start: () => ctx.begin("crop"),
-      move: (e) => {
-        const r = stage.getBoundingClientRect(),
-          v = ctx.get(),
-          fx = clamp((e.clientX - r.left) / r.width, 0, 1),
-          fy = clamp((e.clientY - r.top) / r.height, 0, 1);
-        for (const k of edges) setEdge(v, k, fx, fy);
-        ctx.change(v);
-      },
-      end: () => ctx.commit(),
-      cancel: () => ctx.cancel(),
-    });
-    h.addEventListener("keydown", (e) => {
-      const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
-      if (!dir) return;
-      e.preventDefault();
-      const step = 0.01 * (e.shiftKey ? 0.1 : e.altKey ? 10 : 1),
-        v = ctx.get();
-      for (const k of edges) {
-        const axis = keys[k] === "x" ? 0 : 1,
-          sign = k === "cropLeft" || k === "cropTop" ? 1 : -1;
-        v[k] = Number(clamp((v[k] || 0) + dir[axis] * sign * step, 0, 0.95).toFixed(3));
-      }
-      ctx.set(v);
-    });
-    cropBox.append(h);
-    return [h, edges];
-  });
-  const maskHandle = el("button", {
-    type: "button",
-    class: "d-crop-h d-mask-h",
-    role: "slider",
-    "aria-label": "Mask radius",
-    "aria-valuemin": "0",
-    "aria-valuemax": "100",
-  });
-  ctx.surface(maskHandle, {
-    start: () => ctx.begin("mask"),
-    move: (e) => {
-      const r = stage.getBoundingClientRect(),
-        v = ctx.get();
-      v.mask = Number(clamp(Math.abs((e.clientX - r.left) / r.width - 0.5) * 2, 0, 1).toFixed(3));
-      ctx.change(v);
-    },
-    end: () => ctx.commit(),
-    cancel: () => ctx.cancel(),
-  });
-  maskHandle.addEventListener("keydown", (e) => {
-    if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
-    e.preventDefault();
-    const v = ctx.get();
-    v.mask = Number(clamp((v.mask || 0) + (e.key === "ArrowRight" ? 1 : -1) * 0.01 * (e.shiftKey ? 0.1 : e.altKey ? 10 : 1), 0, 1).toFixed(3));
-    ctx.set(v);
-  });
-  ring.append(maskHandle);
-  host.append(
-    stage,
-    hist,
-    status,
-    f.node,
-    el(
-      "div",
-      { class: "d-studio-only" },
-      heading("Tone curve", "Drag a knot; Tab to enter it exactly"),
-      curveFields.node,
-      heading("Crop & mask", "Normalized source coordinates"),
-      crop.node,
-      upload,
-    ),
-  );
-  ctx.surface(hist, {
-    start: (e) => {
-      ctx.begin("tone-curve");
-      const r = hist.getBoundingClientRect();
-      drag = clamp(Math.round(((e.clientX - r.left) / r.width) * 4), 0, 4);
-    },
-    move: (e) => {
-      const r = hist.getBoundingClientRect(),
-        v = ctx.get();
-      v.curve ||= [0, 0.25, 0.5, 0.75, 1];
-      v.curve[drag] = clamp(1 - (e.clientY - r.top) / r.height, 0, 1);
-      ctx.change(v);
-    },
-    end: () => ctx.commit(),
-    cancel: () => ctx.cancel(),
-  });
-  hist.addEventListener("keydown", (e) => {
-    if (!["ArrowUp", "ArrowDown"].includes(e.key)) return;
-    e.preventDefault();
-    const v = ctx.get();
-    v.curve ||= [0, 0.25, 0.5, 0.75, 1];
-    v.curve[2] = clamp(v.curve[2] + (e.key === "ArrowUp" ? 0.01 : -0.01), 0, 1);
-    ctx.set(v);
-  });
-  for (const cv of [preview, hist])
-    cv.addEventListener("d-resize", () => {
-      if (!frame) frame = requestAnimationFrame(draw);
-    });
-  function draw() {
-    frame = 0;
-    if (dead || !visible(preview)) return;
-    const v = ctx.get(),
-      g = preview.getContext("2d"),
-      out = new ImageData(320, 180),
-      bins = new Array(64).fill(0),
-      curve = v.curve || [0, 0.25, 0.5, 0.75, 1],
-      black = v.black || 0,
-      white = Math.max(black + 0.001, v.white ?? 1);
-    for (let i = 0; i < original.data.length; i += 4) {
-      const px = (i / 4) % 320,
-        py = Math.floor(i / 4 / 320),
-        color = [];
-      for (let k = 0; k < 3; k++) {
-        let n =
-          clamp(
-            ((original.data[i + k] / 255) * 2 ** (v.exposure || 0) - black) /
-              (white - black),
-            0,
-            1,
-          ) **
-          (1 / (v.gamma || 1));
-        const p = n * 4,
-          lo = Math.min(3, Math.floor(p));
-        color[k] = curve[lo] + (curve[lo + 1] - curve[lo]) * (p - lo);
-      }
-      const l = color[0] * 0.2126 + color[1] * 0.7152 + color[2] * 0.0722;
-      for (let k = 0; k < 3; k++)
-        out.data[i + k] =
-          clamp(l + (color[k] - l) * (v.saturation ?? 1), 0, 1) * 255;
-      const inside =
-          px >= 320 * (v.cropLeft || 0) &&
-          px <= 320 * (1 - (v.cropRight || 0)) &&
-          py >= 180 * (v.cropTop || 0) &&
-          py <= 180 * (1 - (v.cropBottom || 0)),
-        masked =
-          !(v.mask > 0) ||
-          Math.hypot((px - 160) / 160, (py - 90) / 90) < v.mask;
-      out.data[i + 3] = inside && masked ? 255 : 30;
-      if (inside && masked) bins[Math.min(63, Math.floor(l * 64))]++;
-    }
-    output.getContext("2d").putImageData(out, 0, 0);
-    g.imageSmoothingQuality = "high";
-    g.clearRect(0, 0, 320, 180);
-    g.drawImage(output, 0, 0, 320, 180);
-    const hg = hist.getContext("2d");
-    grid(hg, 320, 100);
-    const max = Math.max(...bins);
-    hg.fillStyle = accent(host);
-    hg.globalAlpha = 0.3;
-    bins.forEach((n, i) =>
-      hg.fillRect(i * 5, 100 - (n / max) * 90, 4, (n / max) * 90),
-    );
-    hg.globalAlpha = 1;
-    hg.beginPath();
-    curve.forEach((n, i) =>
-      i ? hg.lineTo(i * 80, 100 - n * 100) : hg.moveTo(0, 100 - n * 100),
-    );
-    hg.strokeStyle = accent(host);
-    hg.lineWidth = 2;
-    hg.stroke();
-    curve.forEach((n, i) => {
-      hg.beginPath();
-      hg.arc(i * 80, 100 - n * 100, 4, 0, Math.PI * 2);
-      hg.fillStyle = accent(host);
-      hg.fill();
-    });
-    status.value = `${bins.reduce((a, b) => a + b, 0).toLocaleString()} visible pixels · 64 luminance bins`;
-  }
-  function update() {
-    f.update();
-    crop.update();
-    curveFields.update();
-    const v = ctx.get();
-    cropBox.style.inset = `${(v.cropTop || 0) * 100}% ${(v.cropRight || 0) * 100}% ${(v.cropBottom || 0) * 100}% ${(v.cropLeft || 0) * 100}%`;
-    ring.classList.toggle("is-off", !(v.mask > 0));
-    ring.style.width = `${(v.mask || 0) * 100}%`;
-    ring.style.height = `${(v.mask || 0) * 100}%`;
-    for (const [h, edges] of handleButtons) {
-      const n = Math.round((v[edges[0]] || 0) * 100);
-      h.setAttribute("aria-valuenow", String(n));
-      h.setAttribute("aria-valuetext", edges.map((k) => `${k.replace("crop", "").toLowerCase()} ${Math.round((v[k] || 0) * 100)}%`).join(", "));
-    }
-    maskHandle.setAttribute("aria-valuenow", String(Math.round((v.mask || 0) * 100)));
-    if (!frame) frame = requestAnimationFrame(draw);
-  }
-  return {
-    update,
-    destroy: () => {
-      dead = true;
-      cancelAnimationFrame(frame);
-    },
-  };
-}
 function encodingStudio(ctx, host) {
   host.append(
     heading("Encoding shelf"),
@@ -2929,7 +2611,7 @@ export function createStudio(panel, section, host, rail = document.createElement
     ) ||
     section.controls[0];
   if (!c) return {};
-  host.dataset.studio = ["motion", "spring", "bezier"].includes(c.type)
+  host.dataset.studio = ["motion", "spring", "bezier", "keyframes"].includes(c.type)
     ? "motion"
     : c.type;
   const cleanup = [];
@@ -2944,6 +2626,8 @@ export function createStudio(panel, section, host, rail = document.createElement
   };
   let lab;
   if (c.type === "color") lab = colorStudio(ctx, host);
+  else if (c.type === "keyframes" || (c.type === "motion" && !section.controls.some((x) => ["bezier", "spring"].includes(x.type))))
+    lab = motionLab(ctx, host);
   else if (["motion", "bezier", "spring"].includes(c.type))
     lab = motionStudio(ctx, host);
   else if (c.type === "typography") lab = typeStudio(ctx, host);
@@ -2952,7 +2636,7 @@ export function createStudio(panel, section, host, rail = document.createElement
   else if (c.type === "sampler") lab = samplerStudio(ctx, host);
   else lab = generalStudio(ctx, host);
   // Two columns in a wide studio: the main figure and its direct tools on the left, the rest on the right.
-  if (!["motion", "color"].includes(host.dataset.studio)) {
+  if (!["motion", "color"].includes(host.dataset.studio) && host.dataset.layout !== "own") {
     const kids = [...host.children].filter((k) => !k.matches(".d-lab-head")),
       heroSelector = ".d-plot, .d-stage, .d-color-main, .d-type-specimen, .d-type-ruler, .d-step-cells, .d-type-lab, .d-sched-table, .d-color-plates",
       main = el("div", { class: "d-col d-col-main" }),

@@ -1002,14 +1002,14 @@
 .d-col {
   display: contents;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"]) {
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
   grid-template-areas: "head head" "main side";
   align-content: start;
   gap: 16px 32px;
 }
-.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"]) > .d-lab-head {
+.dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-lab:not([data-studio="motion"], [data-studio="color"], .k-studio) > .d-lab-head {
   grid-area: head;
 }
 .dials[data-studio-mode="viewport"] .d-section[data-depth="3"] .d-col {
@@ -2143,4 +2143,732 @@
   min-height: 0;
   max-height: 104px;
   overflow: hidden;
+}
+
+/* ---------- Studio kit: one field, one hero, one choice row, one handle ---------- */
+.d-section[data-depth="3"] .d-lab.k-studio {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(300px, 1fr);
+  gap: 28px 36px;
+  align-content: start;
+  padding: 20px 28px 28px;
+}
+.k-main,
+.k-side {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-width: 0;
+}
+.k-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.k-title {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  color: var(--d-text);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.k-title small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--d-faint);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+.k-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.k-hero-label {
+  font-size: 11.5px;
+  color: var(--d-muted);
+}
+.k-hero-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.k-hero-num {
+  font-family: var(--d-pixel);
+  font-size: 48px;
+  line-height: 44px;
+  color: var(--d-text);
+  letter-spacing: 0;
+  font-feature-settings: normal;
+}
+.k-hero-unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--d-muted);
+}
+.k-hero-note {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 0 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  color: var(--d-accent-text);
+}
+.k-hero-note:empty {
+  display: none;
+}
+.k-hero-note[data-tone="good"] {
+  color: var(--d-good);
+}
+.k-hero-note[data-tone="bad"] {
+  color: var(--d-bad);
+}
+.k-hero-note[data-tone="quiet"] {
+  color: var(--d-muted);
+}
+.k-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+}
+.k-fields.k-one {
+  grid-template-columns: minmax(0, 1fr);
+}
+.k-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name input" "bar bar";
+  align-items: center;
+  gap: 3px 8px;
+  min-width: 0;
+}
+.k-field-name {
+  grid-area: name;
+  font-size: 11.5px;
+  color: var(--d-muted);
+  cursor: ew-resize;
+  user-select: none;
+  touch-action: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.k-field-name:hover {
+  color: var(--d-text);
+}
+.dials .k-field-input {
+  grid-area: input;
+  width: 76px;
+  height: 20px;
+  text-align: right;
+  font-weight: 500;
+}
+.k-bar {
+  grid-area: bar;
+  position: relative;
+  height: 14px;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 7px;
+}
+.k-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 5px;
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--d-rule) 60%, transparent);
+}
+.k-field-painted .k-bar::before {
+  top: 3px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--d-text) 10%, transparent);
+}
+.k-bar i {
+  position: absolute;
+  left: 0;
+  top: 5px;
+  height: 4px;
+  width: calc(var(--p, 0) * 100%);
+  border-radius: 2px;
+  background: var(--d-accent);
+}
+.k-field-painted .k-bar i {
+  display: none;
+}
+.k-bar b {
+  position: absolute;
+  left: calc(var(--p, 0) * 100%);
+  top: 1px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--d-surface);
+  box-shadow: inset 0 0 0 1.5px var(--d-text), 0 1px 2px rgb(0 0 0 / 0.15);
+  transition: transform 120ms var(--d-ease);
+}
+.k-bar:hover b,
+.k-bar:focus-visible b {
+  transform: scale(1.15);
+}
+.dials .k-bar:focus-visible {
+  outline-offset: 3px;
+}
+.k-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 4px;
+  min-width: 0;
+}
+.dials .k-chip {
+  height: 26px;
+  min-height: 0;
+  padding: 0 8px;
+  border-radius: 0;
+  color: var(--d-muted);
+  font-weight: 450;
+  box-shadow: inset 0 -1px 0 var(--d-line);
+}
+.dials .k-chip:hover {
+  background: transparent;
+  color: var(--d-text);
+  box-shadow: inset 0 -1px 0 var(--d-rule);
+}
+.dials .k-chip[aria-checked="true"] {
+  color: var(--d-text);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--d-text);
+}
+.dials .k-chip-glyph {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 6px 7px;
+  font-size: 11px;
+}
+.dials .k-chip-glyph svg {
+  display: block;
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.dials .k-chip-glyph[aria-checked="true"] svg {
+  box-shadow: 0 0 0 1.5px var(--d-text);
+}
+.k-handle {
+  cursor: grab;
+  outline: none;
+}
+.k-handle:active {
+  cursor: grabbing;
+}
+.k-handle-hit {
+  fill: transparent;
+}
+.k-handle-dot {
+  fill: var(--d-surface);
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+  transition: r 120ms var(--d-ease);
+}
+.k-handle:hover .k-handle-dot {
+  stroke: var(--d-accent);
+}
+.k-handle:focus-visible .k-handle-dot {
+  stroke: var(--d-accent);
+  stroke-width: 3;
+}
+.k-handle.is-accent .k-handle-dot {
+  fill: var(--d-accent);
+  stroke: var(--d-surface);
+}
+.k-svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  touch-action: none;
+  user-select: none;
+}
+.k-svg text {
+  font: 400 10.5px var(--d-sans);
+  fill: var(--d-faint);
+  font-variant-numeric: tabular-nums;
+}
+.k-svg .k-strong {
+  font-weight: 600;
+  fill: var(--d-text);
+}
+.k-svg .k-pixel {
+  font-family: var(--d-pixel);
+  font-size: 10px;
+  fill: var(--d-text);
+}
+.k-grid line,
+.k-grid path {
+  stroke: var(--d-line);
+  stroke-width: 1;
+}
+.k-hint {
+  margin-top: 4px;
+  display: grid;
+  gap: 4px;
+}
+.k-hint p {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--d-faint);
+}
+.k-hint kbd {
+  flex: none;
+  min-width: 44px;
+  font: 500 10.5px var(--d-sans);
+  color: var(--d-muted);
+}
+.k-readout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 0;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.k-readout dt {
+  color: var(--d-muted);
+}
+.k-readout dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 500;
+}
+.k-drop {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 8px;
+  border: 1px dashed var(--d-rule);
+  border-radius: 4px;
+  color: var(--d-muted);
+  font-size: 11.5px;
+}
+.k-drop.is-over {
+  border-color: var(--d-accent);
+  background: var(--d-soft);
+}
+.k-drop canvas,
+.k-drop svg {
+  grid-row: span 2;
+  width: 56px;
+  height: 40px;
+  border-radius: 2px;
+  object-fit: cover;
+}
+.dials .k-drop button {
+  justify-self: start;
+  padding: 0;
+  height: 20px;
+  min-height: 0;
+  color: var(--d-accent-text);
+  font-weight: 600;
+}
+.dials .k-drop button:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.k-looks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 10px;
+}
+.dials .k-look {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: auto;
+  padding: 0;
+  align-items: stretch;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 450;
+  color: var(--d-muted);
+  border-radius: 0;
+}
+.dials .k-look:hover {
+  background: transparent;
+  color: var(--d-text);
+}
+.k-look canvas {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 2px;
+  display: block;
+}
+.dials .k-look[aria-pressed="true"] {
+  color: var(--d-text);
+  font-weight: 600;
+}
+.dials .k-look[aria-pressed="true"] canvas {
+  box-shadow: 0 0 0 2px var(--d-surface), 0 0 0 3.5px var(--d-text);
+}
+
+/* ---------- Image studio ---------- */
+.ki-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  margin: 6px;
+  border-radius: 3px;
+  background: var(--d-well);
+}
+.ki-stage canvas {
+  border-radius: 3px;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.ki-over {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  overflow: visible;
+}
+.ki-shade {
+  fill: rgb(10 11 14 / 0.62);
+}
+.ki-vignette {
+  fill: rgb(10 11 14 / 0.38);
+}
+.ki-frame {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 1;
+}
+.ki-thirds {
+  stroke: rgb(255 255 255 / 0.32);
+  stroke-width: 1;
+  fill: none;
+}
+.ki-ring {
+  fill: none;
+  stroke: #fff;
+  stroke-dasharray: 4 3;
+}
+.ki-split {
+  stroke: #fff;
+  stroke-width: 1.5;
+}
+.k-svg .ki-tag {
+  fill: #fff;
+  font-weight: 600;
+  font-size: 11px;
+  paint-order: stroke;
+  stroke: rgb(0 0 0 / 0.45);
+  stroke-width: 3px;
+}
+.ki-over .k-handle-dot {
+  fill: #fff;
+  stroke: #15161a;
+}
+.ki-over .ki-crop .k-handle-dot {
+  r: 4.5;
+}
+.ki-split-h .k-handle-dot {
+  fill: #fff;
+}
+.ki-split-glyph {
+  fill: none;
+  stroke: #15161a;
+  stroke-width: 1.4;
+  pointer-events: none;
+}
+.ki-mask .k-handle-dot {
+  fill: var(--d-accent);
+  stroke: #fff;
+}
+.ki-tone {
+  height: 220px;
+}
+.ki-grid {
+  stroke: var(--d-line);
+  fill: none;
+}
+.ki-hist {
+  fill: color-mix(in srgb, var(--d-text) 13%, transparent);
+}
+.ki-ident {
+  stroke: var(--d-rule);
+  stroke-dasharray: 3 3;
+}
+.ki-curve {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 1.75;
+}
+.ki-tri .k-handle-dot {
+  display: none;
+}
+.ki-tri-shape {
+  stroke: var(--d-text);
+  stroke-width: 1.2;
+  stroke-linejoin: round;
+}
+.ki-tri.is-black .ki-tri-shape {
+  fill: #000;
+}
+.ki-tri.is-grey .ki-tri-shape {
+  fill: #8a8a8a;
+}
+.ki-tri.is-white .ki-tri-shape {
+  fill: #fff;
+}
+.ki-tri:focus-visible .ki-tri-shape,
+.ki-tri:hover .ki-tri-shape {
+  stroke: var(--d-accent);
+  stroke-width: 2.2;
+}
+.ki-hero-row {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.ki-src-name {
+  color: var(--d-text);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.k-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--d-line);
+}
+.k-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.k-stat span {
+  font-size: 11px;
+  color: var(--d-muted);
+}
+.k-stat b {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Motion studio ---------- */
+.km-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+}
+.km-response {
+  height: 250px;
+}
+.km-track {
+  height: 168px;
+}
+.km-ghost {
+  height: 96px;
+}
+.km-grid {
+  stroke: var(--d-line);
+  fill: none;
+}
+.km-delay {
+  fill: color-mix(in srgb, var(--d-text) 5%, transparent);
+}
+.km-cut {
+  fill: color-mix(in srgb, var(--d-bad) 9%, transparent);
+}
+.km-arm {
+  stroke: var(--d-accent);
+  stroke-width: 1.25;
+  fill: none;
+}
+.km-curve,
+.km-path {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.km-settle {
+  stroke: var(--d-text);
+  stroke-dasharray: 3 3;
+}
+.km-now {
+  stroke: var(--d-accent);
+  stroke-width: 1;
+  opacity: 0.6;
+}
+.km-chip rect {
+  fill: var(--d-text);
+}
+.km-chip text {
+  fill: var(--d-surface);
+  font: 500 11px var(--d-sans);
+  font-variant-numeric: tabular-nums;
+  white-space: pre;
+}
+.km-edge .k-handle-dot {
+  fill: var(--d-text);
+  stroke: var(--d-surface);
+}
+.km-key .k-handle-dot {
+  display: none;
+}
+.km-diamond {
+  fill: var(--d-surface);
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+}
+.km-key:hover .km-diamond,
+.km-key:focus-visible .km-diamond {
+  fill: var(--d-accent);
+  stroke: var(--d-accent);
+}
+.km-lane {
+  stroke: var(--d-rule);
+}
+.km-ticks {
+  stroke: var(--d-text);
+  stroke-width: 1.25;
+}
+.km-ghost-start {
+  fill: none;
+  stroke: var(--d-rule);
+  stroke-dasharray: 3 2;
+}
+.km-ghost-end {
+  fill: none;
+  stroke: var(--d-text);
+}
+.km-block {
+  fill: var(--d-accent);
+}
+.km-playbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.km-clock {
+  font-family: var(--d-pixel);
+  font-size: 12px;
+  white-space: pre;
+  color: var(--d-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dials .km-play,
+.dials .km-copy {
+  height: 24px;
+  min-height: 0;
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--d-accent-text);
+}
+.dials .km-play:hover,
+.dials .km-copy:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+.km-presets {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.dials .km-presets .k-chip-glyph {
+  box-shadow: none;
+  padding: 0 0 2px;
+}
+.dials .km-presets .k-chip-glyph svg {
+  width: 56px;
+  height: 40px;
+  max-width: 100%;
+}
+.km-pre-curve {
+  fill: none;
+  stroke: var(--d-text);
+  stroke-width: 1.5;
+}
+.km-pre-guide {
+  stroke: var(--d-line);
+  stroke-dasharray: 2 2;
+}
+.dials .km-presets .k-chip-glyph[aria-checked="true"] svg {
+  box-shadow: 0 0 0 2px var(--d-accent);
+}
+.dials .km-code {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--d-well);
+  color: var(--d-text);
+  font: 11px/1.6 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  scrollbar-width: thin;
+  overflow: auto;
+  tab-size: 2;
+}
+.dials .km-code:focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 0;
+}
+.km-code[aria-invalid="true"] {
+  box-shadow: inset 2px 0 0 var(--d-bad);
+}
+.km-code-note {
+  font-size: 11px;
+  color: var(--d-muted);
+  min-height: 16px;
+  overflow-wrap: anywhere;
+}
+.km-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.km-table th {
+  text-align: right;
+  font-weight: 500;
+  color: var(--d-muted);
+  padding: 0 0 4px;
+  border-bottom: 1px solid var(--d-line);
+}
+.km-table td {
+  text-align: right;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--d-line);
+}
+.km-table th:first-child,
+.km-table td:first-child {
+  text-align: left;
 }
