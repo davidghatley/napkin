@@ -97,7 +97,11 @@ const panel = new Dials(document.querySelector('#inspector'), {
 panel.render(await fetch('/api/controls/item-id').then(r => r.json()));
 ```
 
-The convenience form is `render(schema, container, options) → panel`. `render` replaces the selected document. Use `update({ controlId: value }, { revision })` for external value patches; it preserves the existing rows, focused entry and active gesture. `get(id)` and `values()` return clones. `open(controlId, 3)` opens one control's studio. `setDepth(sectionId, 1|2|3)` changes the section without replacing its rows. `destroy()` cancels local edits, releases studio animation/subscriptions/object URLs and removes the panel.
+The convenience form is `render(schema, container, options) → panel`. `render` replaces the selected document. Use `update({ controlId: value }, { revision })` for external value patches; it preserves the existing rows, focused entry and active gesture. `get(id)` and `values()` return clones. `open(controlId, 3)` opens one control's studio. `setDepth(sectionId, 1|2|3)` changes the section without replacing its rows. The subject a section edits (a card, a specimen, a chart; any element the host owns) is anchored by the library: pass `subject(sectionId, section)` in the options or call `setSubject(sectionId, element)`. It sits under the section head at dial and bench and moves to the top of the studio rail when the studio opens, so the thing being edited and the row it came from stay in view and in place across depths; it carries `data-anchored="section|studio"` and the class `is-anchored` in the studio. The row whose studio is open carries `data-editing="true"`. `setSubject(id, null)` lets go.
+
+The Prompt studio edits the real prompt: a column per word (drag to weigh), a row per word (rename, lighter, heavier, earlier, later, remove, add) and the line exactly as sent with the section's own sampler, seed and batch.
+
+`destroy()` cancels local edits, releases studio animation/subscriptions/object URLs and removes the panel.
 
 See [the complete schema](dials-schema.md) and the browser [TypeScript declaration](../public/dials/dials.d.ts).
 
