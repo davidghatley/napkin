@@ -1,11 +1,12 @@
 // The shell around the canvas (basics pass 1, docs/basics/standards.md sections 1 and 6): the chrome tooltip and the left panel's
-// collapse. A control with data-tip shows its name (and data-key, its key) after 500 ms of hover, or at once on keyboard focus;
+// collapse. A control with data-tip shows its name (and data-key, its key, as a keylabel.js spec) after 500 ms of hover, or at once on keyboard focus;
 // Escape hides it. The left panel collapses with the bar's panel button or Ctrl+\ (commands.js runs the binding); the canvas takes
 // the width, the picture stays under the same pixels (no animated slide: a moving canvas is harder to follow than a still one),
 // and the choice is remembered.
 //   initShell(ctx) -> ctx.shell = { toggleLeft(open?), leftOpen() }
+import { keyLabel, relabel } from './keylabel.js';
+
 const HOVER_MS = 500;
-const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 export function initShell(ctx) {
   const body = document.body, toggle = document.querySelector('#panel-toggle'), side = document.querySelector('#sidebar');
@@ -15,13 +16,12 @@ export function initShell(ctx) {
   tip.id = 'tip'; tip.hidden = true; tip.setAttribute('aria-hidden', 'true'); // the control's own name and aria-keyshortcuts carry this for a screen reader
   body.append(tip);
   let timer = 0, owner = null;
-  const keyText = (k) => (mac ? k.replace(/^Ctrl K$/, '⌘K') : k);
   function show(el) {
     clearTimeout(timer);
     owner = el;
     const key = el.dataset.key;
     tip.replaceChildren(document.createTextNode(el.dataset.tip));
-    if (key) { const k = document.createElement('kbd'); k.textContent = keyText(key); tip.append(k); }
+    if (key) { const k = document.createElement('kbd'); k.textContent = keyLabel(key); tip.append(k); }
     tip.hidden = false;
     const r = el.getBoundingClientRect(), w = tip.offsetWidth;
     tip.style.left = `${Math.round(Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)))}px`;
@@ -39,8 +39,7 @@ export function initShell(ctx) {
   document.addEventListener('focusin', (ev) => { const el = tipped(ev.target); if (el && el === ev.target && el.matches(':focus-visible')) show(el); else if (owner) hide(); });
   document.addEventListener('focusout', () => { if (owner && !owner.matches(':hover')) hide(); });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && !tip.hidden) hide(); });
-  const qk = document.querySelector('#quick-open kbd');
-  if (qk && mac) qk.textContent = '⌘K';
+  relabel(document); // the bar's and the status bar's static key labels follow the platform
 
   // ---- the left panel ----
   let open = true;

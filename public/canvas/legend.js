@@ -1,6 +1,8 @@
 // The status bar says what the keys do right now, in one place. A piece of the product that takes over the keys pushes its
 // legend under a name and pops it when it is done; the newest one shows; with none, the canvas's own keys show.
 //   initLegend(ctx) -> ctx.legend = { push(name, [[key, words], ...]), pop(name), read() }
+import { keyLabel } from './keylabel.js';
+
 export function initLegend(ctx) {
   const host = document.querySelector('#statusbar .hints');
   const home = host?.innerHTML ?? '';
@@ -17,6 +19,6 @@ export function initLegend(ctx) {
     if (ctx.keyGuard) { ev.stopImmediatePropagation(); ctx.keyGuard(ev); return; }
     if (ev.key === 'Escape' && !ev.isComposing && ctx.inspector?.state?.() && !document.body.dataset.modal) { ev.preventDefault(); ev.stopImmediatePropagation(); ctx.inspector.cancel(); }
   }, true);
-  ctx.on('highlight', (h) => { if (h && !h.quiet) ctx.legend.push('highlight', [['Tab', 'next place'], ['⇧Tab', 'back'], ['Esc', 'done']]); else ctx.legend.pop('highlight'); });
+  ctx.on('highlight', (h) => { if (h && !h.quiet) ctx.legend.push('highlight', [['Tab', 'next place'], [keyLabel('Shift+Tab'), 'back'], ['Esc', 'done']]); else ctx.legend.pop('highlight'); });
   return ctx.legend;
 }

@@ -1,6 +1,7 @@
 // HIS-01..03 on the page: Cmd/Ctrl+Z and Shift+Cmd+Z undo and redo YOUR edits (the server keeps one stack per caller and
 // refuses with who and which revision when someone else changed the same property), and the History tab: a timeline of
 // revisions per component, scrub to preview an older state read-only on the canvas, Restore = one new revision.
+import { keyLabel } from './keylabel.js';
 import { plain } from './words.js';
 import { h } from './drawer.js';
 
@@ -188,8 +189,8 @@ export function initHistory(ctx, drawer) {
     pane.append(
       h('div', { class: 'h-bar' },
         who,
-        h('button', { type: 'button', id: 'h-undo', title: 'Undo your last edit (⌘Z)', text: 'Undo', onclick: () => step('undo', S.component) }),
-        h('button', { type: 'button', id: 'h-redo', title: 'Redo (⇧⌘Z)', text: 'Redo', onclick: () => step('redo', S.component) }),
+        h('button', { type: 'button', id: 'h-undo', title: `Undo your last edit (${keyLabel('Mod+Z')})`, text: 'Undo', onclick: () => step('undo', S.component) }),
+        h('button', { type: 'button', id: 'h-redo', title: `Redo (${keyLabel('Shift+Mod+Z')})`, text: 'Redo', onclick: () => step('redo', S.component) }),
         h('label', { class: 'h-scrub' }, h('span', { text: 'older' }), slider, h('span', { text: 'now' })),
         h('button', { type: 'button', id: 'h-back', text: 'Back to now', onclick: () => exitPreview() }),
         h('button', { type: 'button', id: 'h-restore', class: 'primary', text: 'Restore this', onclick: askRestore }),

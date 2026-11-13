@@ -74,8 +74,26 @@ test('basics pass 1: the top bar has three zones in order, four tools on the cen
     assert.equal(await b.eval(`document.querySelector('#tip').textContent`), 'FrameF');
     await io.key('Escape');
     assert.equal(await b.eval(`document.querySelector('#tip').hidden`), true, 'Escape hides the tooltip');
-    // the right zone: Jump to..., status, theme; nothing else
-    assert.deepEqual(JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('.top-right > *')].filter((e) => e.getBoundingClientRect().width && getComputedStyle(e).visibility === 'visible').map((e) => e.id || e.className))`)), ['quick-open', 'slot', 'theme-toggle']);
+    // the right zone: one right-aligned group, flush to the bar's padding, the tools' gap: [people] [Jump to...] [theme]; the revision only with a selection, at the left end
+    const group = () => b.eval(`JSON.stringify([...document.querySelectorAll('.top-right > *, .top-right .slot > *')].filter((e) => e.getBoundingClientRect().width && getComputedStyle(e).display !== 'contents').map((e) => { const r = e.getBoundingClientRect(); return { n: e.id || e.className, l: r.left, r: r.right }; }))`).then(JSON.parse);
+    let g = await group();
+    assert.deepEqual(g.map((x) => x.n), ['avatars', 'quick-open', 'theme-toggle']);
+    const jump = g[1].l;
+    assert.equal(g.at(-1).r, 1440 - 4, 'flush to the bar padding');
+    assert.deepEqual(g.slice(1).map((x, i) => x.l - g[i].r), [4, 4], 'the gap of the tools');
+    assert.equal(await b.eval(`document.querySelector('#quick-open kbd').textContent`), 'Ctrl K', 'Linux says Ctrl, not the Command sign');
+    assert.match(await b.eval(`document.querySelector('#panel .keys').textContent`), /Ctrl K/, 'the right-panel hints too');
+    assert.doesNotMatch(await b.eval(`document.querySelector('#panel .keys').textContent + document.querySelector('#statusbar').textContent`), /[⌘⇧⌫]/);
+    await b.eval(`napkin.select({ component: napkin.find('Card').component, node: 'title', variant: {} })`); await sleep(200);
+    g = await group();
+    assert.deepEqual(g.map((x) => x.n), ['meta', 'avatars', 'quick-open', 'theme-toggle'], 'the revision joins at the left end');
+    assert.equal(g[2].l, jump, 'and Jump to... stays put');
+    // the panel button follows the folder name, the tools' gap apart, open or closed
+    for (const state of ['open', 'closed']) {
+      const gap = await b.eval(`document.querySelector('#panel-toggle').getBoundingClientRect().left - document.querySelector('.brand').getBoundingClientRect().right`);
+      assert.equal(gap, 4, `toggle after the folder name (${state})`);
+      await b.eval(`napkin.shell.toggleLeft()`);
+    }
     await b.eval(`document.activeElement.blur()`);
   } finally { await close(); }
 });

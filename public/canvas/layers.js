@@ -1,5 +1,6 @@
 // The layers tree (CAN-04): every component, and under it the JSX tree of its nodes, as the file has it.
 // Selection syncs both ways. Rename (F2 / double-click) is one `rename` edit; dragging a row is one `move`.
+import { keyLabel } from './keylabel.js';
 import { index, VOID } from '/src/model.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -171,7 +172,7 @@ export function initLayers(ctx, el) {
     const isRoot = c?.doc?.root.id === row.dataset.node, ro = !!c?.readOnly;
     const hid = (c?.doc && index(c.doc).byId.get(row.dataset.node)?.style?.visibility === 'hidden');
     const off = (why) => (ro || why ? ` disabled title="${why || 'This file is read-only'}"` : '');
-    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${off('')}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${off(isRoot ? "The root can't be duplicated" : '')}>Duplicate<kbd>⌘D</kbd>${isRoot ? '<small>The root can’t be duplicated</small>' : ''}</button><button type="button" role="menuitem" data-do="copy"${isRoot ? ' disabled title="The root can\'t be copied"' : ''}>Copy<kbd>⌘C</kbd></button><button type="button" role="menuitem" data-do="hide"${off('')}>${hid ? 'Show' : 'Hide'}</button><button type="button" role="menuitem" data-do="delete"${off(isRoot ? "The root can't be deleted" : '')}>Delete${isRoot ? '<small>The root can’t be deleted</small>' : '<kbd>⌫</kbd>'}</button>`;
+    menu.innerHTML = `<button type="button" role="menuitem" data-do="rename"${off('')}>Rename<kbd>F2</kbd></button><button type="button" role="menuitem" data-do="duplicate"${off(isRoot ? "The root can't be duplicated" : '')}>Duplicate<kbd>${keyLabel('Mod+D')}</kbd>${isRoot ? '<small>The root can’t be duplicated</small>' : ''}</button><button type="button" role="menuitem" data-do="copy"${isRoot ? ' disabled title="The root can\'t be copied"' : ''}>Copy<kbd>${keyLabel('Mod+C')}</kbd></button><button type="button" role="menuitem" data-do="hide"${off('')}>${hid ? 'Show' : 'Hide'}</button><button type="button" role="menuitem" data-do="delete"${off(isRoot ? "The root can't be deleted" : '')}>Delete${isRoot ? '<small>The root can’t be deleted</small>' : '<kbd>' + keyLabel('Backspace') + '</kbd>'}</button>`;
     const r = btn.getBoundingClientRect();
     Object.assign(menu.style, { left: `${r.right - 164}px`, top: `${r.bottom + 4}px` });
     menu.dataset.component = row.dataset.component; menu.dataset.node = row.dataset.node;
@@ -185,7 +186,7 @@ export function initLayers(ctx, el) {
     else if (b.dataset.do === 'cdelete') ctx.cmpOps.remove(component, { fromRow: true });
     else if (b.dataset.do === 'rename') { const r = el.querySelector(`.lrow[data-component="${CSS.escape(component)}"][data-node="${CSS.escape(node)}"]`); if (r) startRename(r); }
     else if (b.dataset.do === 'duplicate') await ctx.ops.duplicate();
-    else if (b.dataset.do === 'copy') { try { document.execCommand('copy'); } catch {} ctx.hint('Copied. Paste into any component with ⌘V'); }
+    else if (b.dataset.do === 'copy') { try { document.execCommand('copy'); } catch {} ctx.hint('Copied. Paste into any component with ' + keyLabel('Mod+V')); }
     else if (b.dataset.do === 'hide') await ctx.ops.hide();
     else if (b.dataset.do === 'delete') await ctx.sendEdits(component, [{ op: 'delete', id: node }]);
   });

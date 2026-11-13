@@ -132,14 +132,14 @@ code:where(:not(:is(.mount, .preview-inner) *)) { font-family: var(--nk-mono); }
   grid-area: top; display: grid; grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr); align-items: center; column-gap: var(--nk-s4);
   height: var(--nk-h-bar); min-width: 0; padding: 0 var(--nk-s1); /* even sides, so the tools sit on the window's centre line */ background: var(--nk-panel); border-bottom: var(--nk-border);
 }
-.bar-left { display: flex; align-items: center; gap: var(--nk-s2); width: calc(var(--nk-left-w) - 2 * var(--nk-s1)); min-width: 0; padding-left: var(--nk-s2); }
-.brand { display: flex; align-items: center; gap: var(--nk-s2); flex: 1; min-width: 0; margin: 0; font: var(--nk-w-strong) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); color: var(--nk-ink); }
+.bar-left { display: flex; align-items: center; gap: var(--nk-s1); min-width: 0; padding-left: var(--nk-s2); } /* the panel button follows the folder name, the tools' gap apart, open or closed */
+.brand { display: flex; align-items: center; gap: var(--nk-s1); flex: 0 1 auto; min-width: 0; max-width: calc(var(--nk-left-w) - var(--nk-h-control) - var(--nk-s3)); margin: 0; font: var(--nk-w-strong) var(--nk-fs-title)/var(--nk-lh-loose) var(--nk-sans); color: var(--nk-ink); }
 .brand .glyph { flex: none; color: var(--nk-ink); }
 #folder { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #toolbar { display: flex; align-items: center; gap: var(--nk-s1); justify-self: center; min-width: calc(4 * var(--nk-h-control) + 3 * var(--nk-s1)); } /* sized before tools.js fills it: the bar never shifts on load */
-.top-right { display: flex; align-items: center; justify-content: flex-end; gap: var(--nk-s2); min-width: 0; }
+.top-right { display: flex; align-items: center; justify-content: flex-end; gap: var(--nk-s1); min-width: 0; } /* the tools' gap */
 #quick-open {
-  display: inline-flex; align-items: center; gap: var(--nk-s2); height: var(--nk-h-control); padding: 0 var(--nk-s2); margin-right: var(--nk-s2);
+  display: inline-flex; align-items: center; gap: var(--nk-s2); height: var(--nk-h-control); padding: 0 var(--nk-s2);
   border: 0; border-radius: var(--nk-radius); background: transparent; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans);
   transition: background-color var(--nk-motion) var(--nk-ease), color var(--nk-motion) var(--nk-ease);
 }
@@ -149,10 +149,10 @@ code:where(:not(:is(.mount, .preview-inner) *)) { font-family: var(--nk-mono); }
 .meta { display: inline-flex; align-items: baseline; gap: var(--nk-s1); color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); white-space: nowrap; }
 .meta[hidden] { display: none; }
 .meta code { display: inline-block; min-width: 9ch; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-mono); }
-.slot { display: flex; align-items: center; justify-content: flex-start; gap: var(--nk-s2); flex: 0 1 calc(5 * var(--nk-h-control)); min-width: var(--nk-h-control); }
-/* presence has a fixed place: people arriving fill it left to right, so Jump to... and the revision never move */
-#avatars { max-width: 100%; overflow: hidden; }
-.top-right .meta[hidden] { display: inline-flex; visibility: hidden; } /* nothing selected: the revision keeps its place, so Jump to... never moves */
+/* one right-aligned group, the tools' gap apart: [rev] [people] [Jump to...] [theme]. Whatever comes and goes (the revision with a
+   selection, people joining, up to five avatars then +N) sits at the left end and grows into free space; Jump to... never moves.
+   The slot only carries the live region and the avatars into the group. */
+.slot { display: contents; }
 #token-theme-label { display: inline-flex; align-items: center; gap: var(--nk-s2); color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); white-space: nowrap; }
 #token-theme-label[hidden] { display: none; }
 #token-theme { height: var(--nk-h-field); padding: 0 var(--nk-s1); border: var(--nk-border); border-radius: var(--nk-radius); background: var(--nk-panel); color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-body) var(--nk-sans); }
@@ -218,7 +218,7 @@ body[data-left="closed"] #sidebar { visibility: hidden; border-right-width: 0; }
 
 /* The top bar at 720 to 1100 px: the jump field gives up its words, then the revision goes. Nothing wraps. */
 @media (max-width: 1100px) { #quick-open span, #quick-open kbd { display: none; } #quick-open { width: var(--nk-h-control); padding: 0; justify-content: center; margin-right: 0; } }
-@media (max-width: 860px) { .top-right .meta, .top-right .meta[hidden] { display: none; } }
+@media (max-width: 860px) { .top-right .meta { display: none; } }
 
 /* ---- the canvas ---- */
 #stage {
