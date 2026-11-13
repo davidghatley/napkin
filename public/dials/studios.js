@@ -391,7 +391,7 @@ function colorStudio(ctx, host) {
   const ramps = section(
     "Ramp",
     "d-cx-ramp",
-    el("header", {}, el("h3", { text: "Ramp" }), el("span", { class: "d-note", text: "Lightness and contrast on the background" })),
+    el("header", {}, el("h3", { text: "Ramp" })),
     rampHost,
   );
   const harmonies = section(
