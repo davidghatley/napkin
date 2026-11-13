@@ -1,0 +1,20 @@
+/* Cards on the canvas (docs/basics/standards.md 3, 5 and 10): every kind of card, an HTML frame, a component, a stylesheet, a picture, a page of
+   Markdown or text, has the same anatomy. A label 4 px above the top-left corner (name, then the extension, quieter); one surface, a hairline edge
+   (--nk-card-edge) with square corners; hover and selection drawn by the stage's overlays (1 px and 2 px accent). Loaded last; chrome tokens only. */
+
+/* the label: 4 screen px above the card at any zoom (the label is scaled by the zoom's label scale, and so is its gap), cut with an ellipsis at the card's width */
+.cmp-head { max-width: calc(var(--nk-w, 480px) / var(--nk-lf, 1)); }
+.item-card .cmp-head { margin-bottom: calc(var(--nk-s1) * min(4, var(--nk-lf, 1))); max-width: calc(var(--nk-w, 480px) / min(4, var(--nk-lf, 1))); }
+.cmp-title { max-width: 100%; overflow: hidden; }
+/* (the label's colours follow the side of a theme wipe it sits on: stage.css marks the side, light-dark() reads it here) */
+.cmp-title[data-wipe-side="dark"] { color-scheme: dark; }
+.cmp-title:is([data-wipe-side="light"], [data-wipe-side="cross"]) { color-scheme: light; }
+.cmp-title .cmp-path { margin-left: calc(var(--nk-s1) * -1); } /* "orbit.html", the extension quieter: one word, not two */
+.cmp-title h3 { flex-shrink: 1; min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the label carries no revision: it lives in the top bar (and the file's tooltip); a hash in monospace is not a name */
+:is(.cmp, .item-card) .cmp-head .rev, :is(.cmp, .item-card) .cmp-head:hover .rev { display: none; }
+
+/* the surface: one edge for every kind, no drop shadow, square corners (a card is an artboard) */
+:is(.cmp, .item-card)[data-component] > .frame { border-radius: 0; box-shadow: var(--nk-card-edge); }
+.item-card > .frame { padding: 0; background: var(--nk-frame); }

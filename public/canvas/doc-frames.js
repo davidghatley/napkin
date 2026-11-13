@@ -28,6 +28,16 @@ export function mapDom(document, roots, host = null) {
   return { byNode, byEl };
 }
 
+// The width a component's page needs when the component does not fill it: the right edge of what #root draws, plus the body's own margin
+// on the right. 0 when the component fills the page (a block that takes the width it is given) or there is nothing to measure.
+function hugWidth(d) {
+  const root = d?.getElementById('root');
+  if (!root?.firstElementChild) return 0;
+  const right = Math.max(...[...root.children].map((e) => e.getBoundingClientRect().right));
+  const bs = d.defaultView.getComputedStyle(d.body), w = Math.ceil(right + (parseFloat(bs.marginRight) || 0) + (parseFloat(bs.paddingRight) || 0));
+  return right > 0 && w < DOC_WIDTH - 1 ? Math.max(120, w) : 0;
+}
+
 export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   const cell = document.createElement('figure');
   cell.className = 'cell doc-cell'; cell.dataset.variant = '{}';
@@ -42,7 +52,7 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
   const fillGlance = () => { const c = ctx.state.components.get(id); glance.textContent = (ctx.glances?.get(c?.path)?.text || (c ? `${c.name}\n${c.path}` : id)).slice(0, 700); };
   if (ctx.state.components.total > 150) { fillGlance(); cell.prepend(glance); } // (a big folder only: smaller canvases draw their frames at once)
   const offGlance = ctx.on?.('glances', fillGlance);
-  let widthAt = 0, iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
+  let hugged = false, widthAt = 0, iframe = null, map = { byNode: new Map(), byEl: new Map() }, tree = null, nodes = new Map(), width = DOC_WIDTH, ro = null, gen = 0;
   const proxies = new WeakMap();
   const say = (w, snapped) => { cap.textContent = ruler.say(w, snapped); grip.setAttribute('aria-valuenow', String(w)); grip.setAttribute('aria-valuetext', `${w} px`); };
   say(width);
@@ -164,7 +174,16 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     const noBars = next.contentDocument.createElement('style'); noBars.setAttribute('data-napkin', ''); noBars.setAttribute('data-napkin-chrome', ''); noBars.textContent = 'html{scrollbar-width:none}html::-webkit-scrollbar{display:none}';
     if (!document.body.dataset.play) (next.contentDocument.head || next.contentDocument.documentElement).append(noBars);
     size();
-    ruler.update(); say(width);
+    ruler.update();
+    // A TSX or JSX component with no width of its own that does not fill its page hugs its content (the page's own body margin around it): a button is
+    // not drawn as a tiny thing in a wide empty page. Measured once, on the first draw; a width you set (the grip, the panel) is kept.
+    // (A file with width breakpoints keeps its 640 px page: those answer to the frame's width, and the ruler shows them.)
+    if (!hugged && (fk === 'tsx' || fk === 'jsx') && !ctx.state.components.get(id)?.width && width === DOC_WIDTH && !ruler.points().length) {
+      hugged = true;
+      const w = hugWidth(next.contentDocument);
+      if (w && w < width) { width = w; next.style.width = `${width}px`; ruler.paint(); size(); }
+    }
+    say(width);
     return true;
   }
   // The element under a page point (nearest one with a source node), or null.

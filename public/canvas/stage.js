@@ -15,7 +15,8 @@ import { plain, problemBanner } from './words.js';
 import { variantGrid, axes, index } from '/src/model.js';
 import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
-import { createItemFrame, compactItem, glanceCard } from './kinds.js';
+import { createItemFrame, compactItem, glanceCard, cardSize } from './kinds.js';
+import { cardLabel } from './card-label.js';
 
 let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -72,11 +73,29 @@ export function createStage(ctx, root, world, view) {
   }
 
   // A file card stays out of the picture until it is placed and its picture, poster or type has arrived: it never shows as an empty box.
+  // A file card's size comes from what it shows (kinds.js cardSize), never from a layout read.
+  function sizeCard(sec, c) {
+    const { w, h } = cardSize(c, sec.natural);
+    if (sec.size.w === w && sec.size.h === h) return;
+    sec.size = { w, h }; sec.el.style.setProperty('--nk-w', `${w}px`); sec.el.style.setProperty('--nk-h', `${h}px`);
+  }
   const revealCard = (sec) => { if (sec.item && sec.pos && sec.media !== false) delete sec.el.dataset.awaiting; };
   function awaitMedia(sec) {
     sec.media = false;
     if (sec.culled) { sec.media = true; return; }
-    const done = () => { if (sec.media === false) { sec.media = true; revealCard(sec); } };
+    const done = () => {
+      if (sec.media !== false) return;
+      sec.media = true;
+      // a picture's card takes the picture's proportions (kinds.js cardSize): known once it has decoded
+      const img = sec.frame.querySelector('.kind-compact > img:not(.kind-poster)');
+      if (img?.naturalWidth && !sec.natural) {
+        sec.natural = { w: img.naturalWidth, h: img.naturalHeight };
+        const id = sec.el.dataset.component, was = { ...sec.size };
+        measure(sec);
+        if (laidOut && (was.w !== sec.size.w || was.h !== sec.size.h)) { if (auto.has(id) && overlapsOthers(id, sec)) placeNew(id); refreshOverlays(); ctx.emit('layout', {}); }
+      }
+      revealCard(sec);
+    };
     const wait = [];
     for (const m of sec.frame.querySelectorAll('img')) if (!m.complete) wait.push(new Promise((r) => { m.addEventListener('load', r, { once: true }); m.addEventListener('error', r, { once: true }); }));
     for (const v of sec.frame.querySelectorAll('video[poster]')) wait.push(new Promise((r) => { const i = new Image(); i.onload = i.onerror = r; i.src = v.poster; }));
@@ -85,7 +104,9 @@ export function createStage(ctx, root, world, view) {
   }
   function header(id) {
     const c = ctx.state.components.get(id), sec = section(id);
-    sec.el.querySelector('h3').textContent = ctx.title(c);
+    const label = cardLabel(c, ctx.title(c)), path = sec.el.querySelector('.cmp-path'); // one label for every kind: name, then the extension, quieter
+    sec.el.querySelector('h3').textContent = label.name;
+    path.textContent = label.ext; path.hidden = !label.ext; sec.el.querySelector('.cmp-title').title = label.path;
     sec.el.dataset.name = c.name;
     const ax = c.doc ? axes(c.doc) : [];
     sec.el.querySelector('.axes-strip').textContent = ax.map((a, i) => `${a.name} ×${a.options.length}${i === 0 ? ' →' : i === 1 ? ' ↓' : ''}`).join('  ');
@@ -176,8 +197,7 @@ export function createStage(ctx, root, world, view) {
     if (c.item && !laidOut && !force) {
       sec.frame.innerHTML = `<figure class="cell doc-cell kind-cell" data-n="item">${compactItem(c)}</figure>`;
       awaitMedia(sec);
-      sec.size = { w: 480, h: 340 }; sec.pending = true;
-      sec.el.style.setProperty('--nk-w', '480px'); sec.el.style.setProperty('--nk-h', '340px');
+      sec.pending = true; sizeCard(sec, c);
       sec.el.dataset.kind = c.kind; sec.el.dataset.ready = '1';
       return;
     }
@@ -260,7 +280,6 @@ export function createStage(ctx, root, world, view) {
       sec.docFrame = c.item ? createItemFrame(ctx, id) : createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
       sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
       sec.el.dataset.kind = c.item ? c.kind : 'html';
-      const path = sec.el.querySelector('.cmp-path'); path.textContent = (c.path || '').split('/').slice(-2).join('/'); path.title = c.path || ''; path.hidden = false;
     }
     let ok = false;
     try { ok = await sec.docFrame.load(c.revision); }
@@ -289,7 +308,7 @@ export function createStage(ctx, root, world, view) {
   function measure(sec) {
     if (sec.culled) return;
     if (ctx.state.components.get(sec.el.dataset.component)?.item) { // fixed viewport; no layout reads, including newly arrived files
-      if (sec.size.w !== 480 || sec.size.h !== 340) { sec.size = { w: 480, h: 340 }; sec.el.style.setProperty('--nk-w', '480px'); sec.el.style.setProperty('--nk-h', '340px'); }
+      sizeCard(sec, ctx.state.components.get(sec.el.dataset.component));
       return;
     }
     sec.size = { w: sec.frame.offsetWidth, h: sec.frame.offsetHeight };
@@ -642,7 +661,8 @@ export function createStage(ctx, root, world, view) {
     const others = sels.filter((s) => s !== sel);
     while (extras.length < others.length) { const d = document.createElement('div'); d.className = 'overlay-extra'; overlays.append(d); extras.push(d); }
     extras.forEach((d, i) => (others[i] ? place(d, selectedElement(others[i]), undefined, base) : (d.style.display = 'none')));
-    place(hoverBox, hoverEl && !sels.some((s) => selectedElement(s) === hoverEl) ? hoverEl : null, undefined, base);
+    const cardSelected = hoverEl?.classList?.contains('frame') && hoverEl.parentElement?.dataset.sel; // a card hovered by its label is not outlined twice once selected
+    place(hoverBox, hoverEl && !cardSelected && !sels.some((s) => selectedElement(s) === hoverEl) ? hoverEl : null, undefined, base);
     drawMeasure(base);
     selectBox.dataset.count = String(sels.length);
     ctx.emit('overlays', {});
@@ -797,7 +817,13 @@ export function createStage(ctx, root, world, view) {
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
   root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
   const setHoverEl = (el, h) => { hoverEl = el; ctx.emit('hover', h ? { component: h.id, node: h.el.dataset.n } : null); refreshOverlays(); };
-  root.addEventListener('mouseover', (ev) => { if (document.body.dataset.play) return; const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mouseover', (ev) => {
+    if (document.body.dataset.play) return;
+    // over a card's label: the whole card is outlined, as when the pointer is on it (standards 3, States); not when it is selected already
+    const head = ev.target.closest?.('.cmp-head');
+    if (head) { const card = head.parentElement; setHoverEl(card.dataset.sel ? null : card.querySelector(':scope > .frame'), null); return; }
+    const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h);
+  });
   root.addEventListener('mousemove', (ev) => { if (document.body.dataset.play || !ev.target.closest?.('.doc-cell')) return; const h = hit(ev.target, ev); if ((h?.el ?? null) !== hoverEl) setHoverEl(h?.el ?? null, h); });
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
