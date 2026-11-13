@@ -1,0 +1,11 @@
+{
+  "name": "napkin-d3-bench-tools",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Generator-only tools for the DREAM 3 corpus and the bench self-test. The product never loads these.",
+  "dependencies": {
+    "apache-arrow": "21.1.0",
+    "opentype.js": "1.3.4",
+    "parquetjs-lite": "0.8.7"
+  }
+}

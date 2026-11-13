@@ -61,3 +61,12 @@ Files on disk are the source of truth. napkin renders what it loads as it is and
 
 ## Pass rule
 A piece passes at rubric ≥ 8/10 from a fresh critic with every measure for its dimension met and no other dimension regressed. Beat-the-best is a milestone; the loop keeps going toward the dream.
+
+## Contract addendum (lead, 2026-11-12, after measures round 4)
+The builder-facing contract table in `bench/README.md` is part of this contract: the DOM hooks the benches look for, the palette command phrases, the extra `/api/board` fields and the keyframe record shape. In brief:
+- Hooks: every card carries `data-item-id`; the panel is `[data-controls-for=<item id>]`; each control row carries `data-control-id`; a studio is `[data-studio-for=<control id>]`; also `[data-modified]`, `[data-proposal-id]`, `[data-variant]`, `[data-group-id]`, `[data-presenting]`. The palette and key map are `[role=dialog]` with `[role=option]` entries.
+- Palette: typing a command's exact phrase and pressing Enter runs it; exact and prefix matches rank above fuzzy ones. Commands: `Select <path>`, `Control <label>`, `Dial|Bench|Studio <label>`, `Reset <label>`, `Arrange by <kind|folder|date|similarity|tag|status|run|meta.<column>>`, `Present`, `Compare variants`, `Approve`, `Reject`, `Generate`, `Open folder`, `Group`, `Rebind <command> to <keys>`.
+- `GET /api/board` also returns `selection: [id]`, `compare: { item, variants }`, `presentation: boolean`.
+- Cards show the item's own content; every control row shows a live figure that changes with the value; a keyframe value is an array of at least two frame records that include `transform`, written back as live code.
+- Judged gates (blind rubric, slop audit, real-harness runs, GPU smoke) are signed by the lead; the bench holds only the public key.
+Where the README table and this file disagree, this file wins and the lead fixes the README.
