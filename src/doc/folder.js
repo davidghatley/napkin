@@ -357,11 +357,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
 
   // ---------- edits ----------
   const sheetsIn = (path, s) => (kindOf(path) === 'css' ? [{ from: 0, to: s.length }] : kindOf(path) === 'html' ? parseHtml(s).styles.map((n) => ({ from: n.openEnd, to: n.closeStart })) : []);
-  function nodeIn(comp, s, start) {
-    const e = { s, rev: null };
-    if (comp.kind === 'html') e.html = parseHtml(s); else e.jsx = parseJsx(s, extname(comp.path));
-    const { flat } = nodesOf(comp, e);
-    return flat.find((n) => n.start === start) || null;
+  function nodeIn(comp, s, start, e = { s, rev: null }) { // (pass one `e` for several lookups in the same text: they share one parse)
+    if (!e.flat) { if (comp.kind === 'html') e.html = parseHtml(s); else e.jsx = parseJsx(s, extname(comp.path)); e.flat = nodesOf(comp, e).flat; }
+    return e.flat.find((n) => n.start === start) || null;
   }
   // Apply a batch: { baseRevision, edits, by } -> { ok, revision, changed } (throws DocError/EditRefused).
   // { dryRun }: plan the edit and say what the files would hold, writing nothing (the canvas previews with exactly these bytes).
@@ -417,7 +415,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
         } else {
           path = comp.path;
           const s = textOf(path);
-          const find = (start, what) => { const n = nodeIn(comp, s, map(path, start)); if (!n) throw new DocError(`edit #${k}: the ${what} is gone after an earlier edit of this batch. Next: send it as a separate batch`, 409); return n; };
+          const one = { s, rev: null }; // one parse for the whole edit: a move's node and parent must be nodes of the same tree, or the node is not found among the parent's children
+          const find = (start, what) => { const n = nodeIn(comp, s, map(path, start), one); if (!n) throw new DocError(`edit #${k}: the ${what} is gone after an earlier edit of this batch. Next: send it as a separate batch`, 409); return n; };
           if (e.op === 'insert') splices = planInsert(s, find(refs[k].parent, 'parent'), e.index ?? 0, e.html ?? e.jsx);
           else if (e.op === 'move') splices = planMove(s, find(refs[k].node, 'node'), find(refs[k].parent, 'parent'), e.index ?? 0);
           else splices = planNodeEdit(s, find(refs[k].node, 'node'), e);
