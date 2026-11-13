@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { setup, SVG } from './helpers.js';
 
-const files = (dir) => Object.fromEntries(readdirSync(dir).filter((f) => !f.startsWith('.') && f !== 'state').map((f) => [f, createHash('sha256').update(readFileSync(join(dir, f))).digest('hex')]));
+const files = (dir) => Object.fromEntries(readdirSync(dir).filter((f) => !f.startsWith('.')).map((f) => [f, createHash('sha256').update(readFileSync(join(dir, f))).digest('hex')]));
 
 test('a run keeps its plan, step status and artifacts; artifacts are real files with detected kinds', async (t) => {
   const ctl = await setup(t);

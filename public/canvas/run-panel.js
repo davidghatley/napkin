@@ -41,7 +41,14 @@ export function initRuns(ctx) {
     for (const a of agents?.agents ?? []) S.agents.set(a.name, a);
     schedule();
   }
-  async function loadReview() { const r = await get('/api/review'); if (r?.proposals) { S.review = r; schedule(); } }
+  async function loadReview() {
+    const r = await get('/api/review');
+    if (!r?.proposals) return;
+    // draw the cards together with the runs they belong to, so a question never shows without its run
+    const missing = [...new Set([...r.proposals, ...r.questions].map((x) => x.run).filter((id) => id && !S.runs.has(id)))];
+    await Promise.all(missing.map(loadRun));
+    S.review = r; schedule();
+  }
   const pending = new Map();
   const later = (key, fn, ms = 60) => { clearTimeout(pending.get(key)); pending.set(key, setTimeout(fn, ms)); };
 
@@ -51,7 +58,7 @@ export function initRuns(ctx) {
     if (f.run) later(`run:${f.run}`, () => loadRun(f.run));
     if (/^run-(proposal|question)/.test(f.type)) later('review', loadReview, 30);
     if (f.type === 'run-proposal' || f.type === 'run-question') {
-      S.announce = f.type === 'run-question' ? `${f.by} asks: ${f.text}` : `${f.by} proposes ${f.proposal?.path ?? 'a change'}`;
+      S.announce = f.type === 'run-question' ? `${f.by} asked you a question` : `${f.by} proposed a change`;
       if (S.userFolded) { S.userFolded = false; } // something needs you: show the panel
     }
   });
@@ -102,7 +109,7 @@ export function initRuns(ctx) {
       : p.texty && p.preview != null ? h('pre', { class: 'rp-pre', text: p.preview.split('\n').slice(0, 7).join('\n') })
       : h('p', { class: 'rp-meta', text: `${p.bytes} bytes` });
     const card = h('li', { class: 'rp-card', 'data-proposal-id': p.id, 'data-kind': p.kind, tabindex: '0', 'aria-label': `Proposal: ${p.path}, from ${p.by}` },
-      h('div', { class: 'rp-line' }, chip(p.by), h('span', { class: 'rp-when', text: ago(p.at) })),
+      h('div', { class: 'rp-line' }, chip(p.by), h('span', { class: 'rp-when', text: [S.runs.get(p.run)?.name, ago(p.at)].filter(Boolean).join(' · ') })),
       h('p', { class: 'rp-path' }, h('span', { class: 'rp-verb', text: p.kind === 'control' ? 'change' : p.baseSha ? 'replace' : 'add' }), ' ', h('code', { text: p.path })),
       p.note && h('p', { class: 'rp-note', text: p.note }),
       media,
@@ -123,7 +130,7 @@ export function initRuns(ctx) {
     const field = h('input', { type: 'text', class: 'rp-input', 'data-note-for': q.id, 'aria-label': 'Your answer', placeholder: q.options?.length ? 'Or type an answer (C)' : 'Type an answer (C)', value: drafts.get(q.id) ?? '', maxlength: '4000',
       oninput: (e) => drafts.set(q.id, e.target.value), onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); answer(q, e.target.value); } else if (e.key === 'Escape') { e.stopPropagation(); e.target.closest('.rp-card').focus(); } } });
     const card = h('li', { class: 'rp-card', 'data-question-id': q.id, tabindex: '0', 'aria-label': `Question from ${q.by}: ${q.text}` },
-      h('div', { class: 'rp-line' }, chip(q.by), h('span', { class: 'rp-when', text: ago(q.at) })),
+      h('div', { class: 'rp-line' }, chip(q.by), h('span', { class: 'rp-when', text: [S.runs.get(q.run)?.name, ago(q.at)].filter(Boolean).join(' · ') })),
       h('p', { class: 'rp-q', text: q.text }),
       q.options?.length ? h('div', { class: 'rp-opts', role: 'group', 'aria-label': 'Options' }, q.options.slice(0, 9).map((o, i) => btn(o, String(i + 1), () => answer(q, o), i === 0 ? 'primary' : ''))) : null,
       field,
@@ -142,7 +149,8 @@ export function initRuns(ctx) {
       h('span', { class: 'rp-run-name', text: r.name }), h('span', { class: 'rp-run-status', text: r.status === 'running' ? (cur ? cur.label : 'running') : r.status }),
       total ? h('span', { class: 'rp-count', text: `${done} / ${total}` }) : null);
     const bar = total ? h('div', { class: 'rp-bar', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': String(total), 'aria-valuenow': String(done), 'aria-label': `${r.name}: ${done} of ${total} steps` }, h('i', { style: `width:${(done / total) * 100}%` })) : null;
-    el.append(h('div', { class: 'rp-run-top' }, toggle, h('span', { class: 'rp-by' }, chip(r.by))), bar);
+    el.append(h('div', { class: 'rp-run-top' }, toggle, h('span', { class: 'rp-by' }, chip(r.by))));
+    if (bar) el.append(bar);
     if (open) {
       if (total) el.append(h('ol', { class: 'rp-steps' }, r.steps.map((s) => h('li', { 'data-status': s.status, 'data-step-id': s.id }, h('span', { class: 'rp-mark', 'aria-hidden': 'true', text: MARK[s.status] }), h('span', { class: 'rp-step-label', text: s.label }), h('span', { class: 'rp-sr', text: ` ${LABEL[s.status]}` }), s.note && h('small', { text: s.note })))));
       if (r.artifacts.length) el.append(h('ul', { class: 'rp-arts', 'aria-label': `Files from ${r.name}` }, r.artifacts.slice(-40).map((a) => h('li', {}, h('button', { type: 'button', class: 'rp-art', 'data-path': a.path, title: `${a.kind}, ${a.bytes} bytes`, onclick: () => pick(a.path) }, h('span', { class: 'rp-kind', text: a.kind }), a.path.split('/').pop())))));
@@ -157,7 +165,7 @@ export function initRuns(ctx) {
     ctx.nav?.focus?.(path);
   }
 
-  let raf = 0, keepFocus = false;
+  let raf = 0, keepFocus = false, clearLive = 0;
   function schedule(restoreFocus) { if (restoreFocus) keepFocus = true; if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); }); }
   function draw() {
     const runs = [...S.runs.values()].sort((a, b) => b.createdAt - a.createdAt);
@@ -184,7 +192,7 @@ export function initRuns(ctx) {
     if (runs.length) nodes.push(h('section', { class: 'rp-runs', 'aria-label': 'Runs' }, runs.slice(0, 8).map(runBlock)));
     else if (!waiting) nodes.push(h('p', { class: 'rp-empty', text: 'Agents are connected. Runs they start show up here.' }));
     body.replaceChildren(...nodes);
-    if (S.announce) { live.textContent = S.announce; S.announce = ''; }
+    if (S.announce) { live.textContent = S.announce; S.announce = ''; clearTimeout(clearLive); clearLive = setTimeout(() => { live.textContent = ''; }, 3000); }
     if (keepFocus || typing) {
       keepFocus = false;
       const sel = typing ? `[data-note-for="${CSS.escape(typing.id)}"]` : focusedId ? `[data-proposal-id="${CSS.escape(focusedId)}"],[data-question-id="${CSS.escape(focusedId)}"]` : null;

@@ -9,7 +9,7 @@ export const SVG = (n = 1) => `<svg xmlns="http://www.w3.org/2000/svg" width="16
 
 export async function setup(t, { config, files = {}, env = {} } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'napkin-agents3-'));
-  const state = join(dir, 'state');
+  const state = mkdtempSync(join(tmpdir(), 'napkin-agents3-state-'));
   writeFileSync(join(dir, 'seed.svg'), SVG());
   writeFileSync(join(dir, 'notes.md'), '# Notes\n\nhello\n');
   for (const [name, text] of Object.entries(files)) writeFileSync(join(dir, name), text);
@@ -21,7 +21,7 @@ export async function setup(t, { config, files = {}, env = {} } = {}) {
     return ctl;
   };
   await boot();
-  t.after(async () => { await ctl.server?.stop(); rmSync(dir, { recursive: true, force: true }); });
+  t.after(async () => { await ctl.server?.stop(); rmSync(dir, { recursive: true, force: true }); rmSync(state, { recursive: true, force: true }); });
   ctl.restart = async () => {
     const port = Number(new URL(ctl.url).port);
     await ctl.server.stop();

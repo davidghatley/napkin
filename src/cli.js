@@ -12,8 +12,19 @@ import { starterSource } from './adopt.js';
 import { SERVER_FLAGS } from './node-flags.js';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+// One line per harness, for the canvas that is running at `url` (README: "Connect an agent").
+export function harnessLines(url) {
+  const mcp = join(ROOT, 'src/mcp.js');
+  const opencode = JSON.stringify({ mcp: { napkin: { type: 'local', command: ['node', mcp], environment: { NAPKIN_URL: url, NAPKIN_AGENT: 'opencode' }, enabled: true } } });
+  return [
+    `Claude Code: claude mcp add napkin -e NAPKIN_URL=${url} -e NAPKIN_AGENT=claude -- node ${mcp}`,
+    `Codex:       codex mcp add napkin --env NAPKIN_URL=${url} --env NAPKIN_AGENT=codex -- node ${mcp}`,
+    `opencode:    OPENCODE_CONFIG_CONTENT='${opencode}' opencode`,
+    `Any script:  NAPKIN_URL=${url} NAPKIN_AGENT=script node ${mcp}   (MCP over stdio; the same tools are plain HTTP under ${url}api/)`,
+  ].join('\n');
+}
 export function connection(url) {
-  return `Canvas: ${url}\nPaste into .mcp.json for Claude Code:\n${JSON.stringify({ mcpServers: { napkin: { command: 'node', args: [join(ROOT, 'src/mcp.js')], env: { NAPKIN_URL: url, NAPKIN_AGENT: 'claude' } } } }, null, 2)}`;
+  return `Canvas: ${url}\nPaste into .mcp.json for Claude Code:\n${JSON.stringify({ mcpServers: { napkin: { command: 'node', args: [join(ROOT, 'src/mcp.js')], env: { NAPKIN_URL: url, NAPKIN_AGENT: 'claude' } } } }, null, 2)}\nOr connect in one line:\n${harnessLines(url)}`;
 }
 
 async function main() {

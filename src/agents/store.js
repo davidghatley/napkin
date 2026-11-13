@@ -110,7 +110,7 @@ export function createRuns({ root, stateDir = stateRoot(), items, broadcast = ()
   // Presence for runs: who is here, what they are doing, for how long.
   const agents = new Map(); // name -> { name, run, label, step, at, since }
   function touch(by, run, label, step) {
-    if (!by) return;
+    if (!by || by === 'you') return; // the person is not an agent: no presence chip for them
     const prev = agents.get(by);
     const a = { name: by, run: run?.id ?? prev?.run ?? null, runName: run?.name ?? prev?.runName ?? null, label: label || prev?.label || 'working', step: step ?? null, at: Date.now(), since: prev?.since ?? Date.now() };
     agents.set(by, a);
