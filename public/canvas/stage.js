@@ -17,6 +17,7 @@ import { variantLabel } from './panel.js';
 import { createDocFrame } from './doc-frames.js';
 import { createItemFrame, compactItem, glanceCard, cardSize } from './kinds.js';
 import { cardLabel } from './card-label.js';
+import { tidyLayout, GUTTER } from './tidy.js';
 
 let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -41,7 +42,7 @@ export function createStage(ctx, root, world, view) {
   const sizeChip = document.createElement('span'); sizeChip.className = 'osize'; selectBox.append(sizeChip); // "128 × 36", in canvas pixels
   const extras = [];
   let shelf = { x: 0, y: 0, h: 0 };
-  let laidOut = false, hoverEl = null, measuring = false;
+  let laidOut = false, hoverEl = null, measuring = false, tidy = false;
   const byName = (a, b) => (ctx.state.components.get(a)?.name ?? a).localeCompare(ctx.state.components.get(b)?.name ?? b);
 
   // ---------------------------------------------------------------------------------------------- lookup
@@ -92,7 +93,7 @@ export function createStage(ctx, root, world, view) {
         sec.natural = img.naturalWidth ? { w: img.naturalWidth, h: img.naturalHeight } : { broken: true };
         const id = sec.el.dataset.component, was = { ...sec.size };
         measure(sec);
-        if (laidOut && (was.w !== sec.size.w || was.h !== sec.size.h)) { if (auto.has(id) && overlapsOthers(id, sec)) placeNew(id); refreshOverlays(); ctx.emit('layout', {}); }
+        if (laidOut && (was.w !== sec.size.w || was.h !== sec.size.h)) { if (auto.has(id) && overlapsOthers(id, sec)) reseat(id); refreshOverlays(); ctx.emit('layout', {}); }
       }
       revealCard(sec);
     };
@@ -160,7 +161,7 @@ export function createStage(ctx, root, world, view) {
     const detail = document.createElement('pre'); detail.textContent = message;
     card.append(summary, detail); return card;
   }
-  const overlapsOthers = (id, sec) => sec.pos && sections.all().some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + GAP_X && sec.pos.x + sec.size.w + GAP_X > other.pos.x && sec.pos.y < other.pos.y + other.size.h + GAP_Y * 0.6 && sec.pos.y + sec.size.h + GAP_Y * 0.6 > other.pos.y);
+  const overlapsOthers = (id, sec) => { const gx = tidy ? GUTTER / 2 : GAP_X, gy = tidy ? GUTTER / 2 : GAP_Y * 0.6; return sec.pos && sections.all().some(([otherId, other]) => otherId !== id && other.pos && sec.pos.x < other.pos.x + other.size.w + gx && sec.pos.x + sec.size.w + gx > other.pos.x && sec.pos.y < other.pos.y + other.size.h + gy && sec.pos.y + sec.size.h + gy > other.pos.y); };
   // WPC-23: a frame far off screen is kept at the size it had (or a placeholder's) while it is culled; when it is drawn again it can be bigger
   // than the room it was given. The ones the stage placed itself move aside to free space; nothing else moves.
   function regrown(secs) {
@@ -171,7 +172,7 @@ export function createStage(ctx, root, world, view) {
       const was = { ...sec.size }; measure(sec);
       if (was.w === sec.size.w && was.h === sec.size.h) continue;
       changed = true;
-      if (laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id);
+      if (laidOut && auto.has(id) && overlapsOthers(id, sec)) reseat(id);
     }
     if (changed) { refreshOverlays(); ctx.emit('layout', {}); }
   }
@@ -182,7 +183,7 @@ export function createStage(ctx, root, world, view) {
     if (sec.item) { if (sec.media === undefined) awaitMedia(sec); revealCard(sec); }
     const resized = previous.w !== sec.size.w || previous.h !== sec.size.h;
     const overlaps = overlapsOthers(id, sec);
-    if (laidOut && (!sec.pos || auto.has(id) && resized && overlaps)) placeNew(id);
+    if (laidOut && (!sec.pos || auto.has(id) && resized && overlaps)) reseat(id);
     if (sec.follow) { sec.follow = false; view.flyTo(componentRect(id), { pad: 96, max: Math.max(1, view.get().z) }); }
     refreshOverlays(); ctx.emit('render', { component: id, revision }); queueCull();
   }
@@ -277,7 +278,7 @@ export function createStage(ctx, root, world, view) {
   // A component of the document engine (decision 0014): the file itself, in an iframe of /view (doc-frames.js).
   async function renderDoc(id, c, sec, token) {
     if (!sec.docFrame) {
-      sec.docFrame = c.item ? createItemFrame(ctx, id) : createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) placeNew(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
+      sec.docFrame = c.item ? createItemFrame(ctx, id) : createDocFrame(ctx, id, { onResize: (byWidth) => { if (!sections.has(id)) return; measure(sec); if (byWidth) rearrangeSoon(id); if (!byWidth && laidOut && auto.has(id) && overlapsOthers(id, sec)) reseat(id); /* (a frame never moves because you changed its width: it may cover its neighbour while you look) */ refreshOverlays(); ctx.emit('layout', {}); } });
       sec.frame.replaceChildren(sec.docFrame.cell); sec.frame.style.minWidth = sec.frame.style.minHeight = '';
       sec.el.dataset.kind = c.item ? c.kind : 'html';
     }
@@ -356,6 +357,31 @@ export function createStage(ctx, root, world, view) {
     }
     return { w: Math.max(sec.size.w, Math.ceil(nat.w * lf)), top: Math.ceil((nat.h + 8) * lf) + CLEAR };
   };
+  // The room a card's label takes at zoom z, in canvas units: above the card (top: the label and its 4 px gap) and across (w: a short card's
+  // label may be wider than the card). Labels are a fixed size on screen (view.labelScale), so the room grows as the zoom falls.
+  let ch10 = 0;
+  function labelRoom(sec, z) {
+    const head = sec.el.querySelector('.cmp-head'), t = head?.querySelector('.cmp-title');
+    if (!t || (!sec.item && (ctx.matrix?.natural(sec.el) || head.querySelector('.axes-strip')?.textContent || head.querySelector('.problem')?.textContent))) { const b = headBox(sec, z); return { top: b.top - CLEAR, w: b.w }; }
+    const lf = sec.item ? Math.min(4, view.labelScale(z)) : view.labelScale(z);
+    if (!ch10) { const p = document.createElement('span'); p.style.cssText = 'position:absolute;visibility:hidden;width:10ch'; head.append(p); ch10 = p.offsetWidth || 66; p.remove(); }
+    const path = t.querySelector('.cmp-path'), nat = (t.querySelector('h3')?.scrollWidth || 0) + (path && !path.hidden ? path.scrollWidth - 4 : 0);
+    return { top: ((t.offsetHeight || 16) + 4) * lf, w: sec.item ? sec.size.w : Math.max(sec.size.w, Math.min(nat * lf, ch10 * lf, sec.size.w + 24)) }; // (cards.css: a label runs at most 24 units past its card)
+  }
+  // A folder of up to CULL_AFTER cards opens on a tidy layout (tidy.js): grouped by what they are, rows with aligned tops, one gutter, sized so the
+  // first view shows them all at the largest zoom the canvas between the panels allows. Cards with a saved position stay; the rest go below them.
+  const GROUP = { css: 2, image: 3, markdown: 4, text: 4 }; // pages, components, stylesheets, pictures, then text
+  const groupOf = (id) => { const c = ctx.state.components.get(id); return c?.item ? GROUP[c.meta?.family] ?? 5 : /\.html?$/i.test(c?.path || '') ? 0 : 1; };
+  function layoutTidy(ids) {
+    const todo = ids.filter((id) => !placed(id)).sort((a, b) => groupOf(a) - groupOf(b) || byName(a, b));
+    const seated = ids.filter((id) => placed(id) && sections.get(id).pos);
+    const origin = seated.length ? { x: Math.min(...seated.map((id) => sections.get(id).pos.x)), y: Math.max(...seated.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + GUTTER } : { x: 0, y: 0 };
+    const res = tidyLayout(todo.map((id) => { const sec = sections.get(id); return { id, group: groupOf(id), w: sec.size.w, h: sec.size.h, reserve: (z) => labelRoom(sec, z) }; }), { box: view.stageBox(), origin });
+    for (const id of todo) { const p = res.at.get(id); auto.set(id, { x: p.x, y: p.y }); moveTo(id, p.x, p.y); }
+    SHELF_W = Math.max(SHELF_W, res.width);
+    const last = todo.at(-1);
+    shelf = last ? { x: res.at.get(last).x + sections.get(last).size.w + GUTTER, y: res.at.get(last).y, h: sections.get(last).size.h } : { x: 0, y: 0, h: 0 };
+  }
   // Components with no saved position are packed once (alphabetically, in rows). Nothing is ever re-packed.
   function pack(ids, taken, z) {
     let y = taken.length ? Math.max(...taken.map((id) => sections.get(id).pos.y + sections.get(id).size.h)) + CLEAR : 0;
@@ -431,6 +457,15 @@ export function createStage(ctx, root, world, view) {
       for (const id of pend) { const x = sections.get(id); x.size = { ...est }; x.el.style.setProperty('--nk-w', `${est.w}px`); x.el.style.setProperty('--nk-h', `${est.h}px`); }
     }
     for (const id of ids) if (placed(id)) { const s = ctx.state.components.get(id).canvas; moveTo(id, s.x, s.y); }
+    tidy = ids.length <= CULL_AFTER && !pend.length;
+    if (tidy) {
+      layoutTidy(ids);
+      laidOut = true;
+      for (const [, x] of sections.all()) revealCard(x);
+      world.style.visibility = '';
+      ctx.emit('layout', {});
+      return;
+    }
     const isItem = (id) => !!ctx.state.components.get(id)?.item;
     // Files that are not components are packed after them, so a component never lands somewhere different because other files exist.
     const todo = ids.filter((id) => !placed(id) && !auto.has(id) && !isItem(id)).sort(byName);
@@ -481,6 +516,16 @@ export function createStage(ctx, root, world, view) {
     const ys = [...new Set([0, ...others.map((o) => o.y + o.h + CLEAR)])].filter((v) => v >= 0).sort((p, q) => p - q);
     for (const ry of ys) for (const rx of xs) if ((rx === 0 || rx + w <= SHELF_W) && !hit(rx, ry)) return { x: rx, y: ry + top };
     return { x: 0, y: Math.max(0, ...others.map((o) => o.y + o.h)) + CLEAR + top };
+  }
+  // A card the stage placed has grown into a neighbour. While the folder is still opening (nothing pressed, clicked or scrolled yet) the
+  // tidy layout is worked out again for the real sizes; after that it goes into the first free slot, so nothing else moves.
+  let opening = true, retidy = 0;
+  for (const e of ['pointerdown', 'keydown', 'wheel']) addEventListener(e, () => { opening = false; }, { capture: true, once: true });
+  function reseat(id) {
+    if (!(tidy && opening && sections.has(id))) return placeNew(id);
+    if (!sections.get(id).pos) placeNew(id); // (somewhere at once; the tidy layout follows)
+    clearTimeout(retidy);
+    retidy = setTimeout(() => { if (tidy && opening) { layoutTidy(sections.all().map(([k]) => k)); refreshOverlays(); ctx.emit('layout', {}); } }, 60);
   }
   // A component that appears later goes into the first free slot, so nothing else moves.
   function placeNew(id) {
@@ -562,10 +607,11 @@ export function createStage(ctx, root, world, view) {
     const x0 = Math.min(...rs.map((r) => r.x)), y0 = Math.min(...rs.map((r) => r.y));
     return { x: x0, y: y0, w: Math.max(...rs.map((r) => r.x + r.w)) - x0, h: Math.max(...rs.map((r) => r.y + r.h)) - y0 };
   };
-  const allRect = () => union(sections.all().map(([k]) => k).map(componentRect));
+  // Everything, at zoom z with each label at its size on screen (view.js fitAll); without z, with a 36 unit title strip
+  const allRect = (z) => z ? union(sections.all().map(([, sec]) => { if (!sec.pos) return null; const r = labelRoom(sec, z); return { x: sec.pos.x, y: sec.pos.y - r.top, w: Math.max(sec.size.w, r.w), h: sec.size.h + r.top }; })) : union(sections.all().map(([k]) => k).map(componentRect));
   function nodeRect(sel) { live(sel.component); const el = selectedElement(sel); return el ? elementRect(el) : null; }
   const selectionRect = () => (ctx.state.selections.length ? union(ctx.state.selections.map(nodeRect)) : null);
-  // The first view of a folder frames its components (the work it was opened for); file items sit beside them and Shift+1 shows everything.
+  // The components alone (the work the folder was opened for): fitAll({ work: true }). The first view and Shift+1 show everything.
   const workRect = () => { const own = [...sections.keys()]; return own.length ? union(own.map(componentRect)) : allRect(); };
   view.setFitters({ all: allRect, selection: selectionRect, work: workRect });
 

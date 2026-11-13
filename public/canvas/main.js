@@ -18,6 +18,7 @@
 //   ctx.emit(event, payload)                for modules that raise their own events
 //   ctx.view / ctx.stage / ctx.nav          viewport, stage and focus APIs
 //   ctx.ops                                 wrap / unwrap / duplicate / copy / paste (edit-ops.js); ctx.handles: direct manipulation (handles.js)
+//   ctx.menu / ctx.layers                   the context menu (context-menu.js); the layers tree's rows (layers.js)
 //
 // Page conventions (the tests rely on these): body[data-ready="1"] once every component has drawn;
 // #revision = the revision of the component drawn last; section.cmp[data-component][data-revision][data-ready]
@@ -62,6 +63,8 @@ import { initKinds } from './kinds.js';
 import { initInstruments } from './surface-panel.js';
 import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
+import { initContextMenu } from './context-menu.js';
+import { initRightPanel } from './right-panel.js';
 import { initCreate } from './create.js';
 import { initMakeComponent } from './make-component.js';
 
@@ -142,6 +145,7 @@ window.napkin = ctx; // for tests and the console
 const view = createView(ctx, $('#stage'), $('#world'));
 const stage = createStage(ctx, $('#stage'), $('#world'), view);
 Object.assign(ctx, { view, stage });
+initContextMenu(ctx); // right-click menus (standards section 8); first, so an open menu hears the keys before the canvas does
 initLive(ctx); // M1: Space-P holds play mode (registered before play.js so it sees P first)
 initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
@@ -149,6 +153,7 @@ initTools(ctx);
 initCreate(ctx); // basics pass 2: draw a frame, text or image on the canvas or into an HTML frame (create.js)
 initMakeComponent(ctx); // basics pass 3: an element selected in an HTML frame becomes a component file (make-component.js)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
+initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initLayers(ctx, $('#layers'));

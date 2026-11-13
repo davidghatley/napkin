@@ -11,6 +11,10 @@
 export const MIN_Z = 0.05, MAX_Z = 8;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const typing = (el) => !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+// The labels' scale (--nk-lf) at a zoom: 1 / zoom, so a card's label is 11 px with a 4 px gap on screen at every zoom (docs/basics/standards.md 3.2):
+// counter-scaled up when zoomed out (to 16x, the 200-component fit) and down when zoomed in. Quantised so it changes rarely: in 1/20 steps of
+// 1 / zoom below 100%, of the zoom above it (within 1% of exact either way).
+export const labelScale = (z) => z <= 1 ? Math.round(clamp(1 / z, 1, 16) * 20) / 20 : 1 / (Math.round(clamp(z, 1, MAX_Z) * 20) / 20);
 export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function createView(ctx, stageEl, worldEl) {
@@ -40,7 +44,7 @@ export function createView(ctx, stageEl, worldEl) {
     const { z } = v; labelsStale = false; labelZ = z;
     const ls = Math.round(clamp(1 / z, 1, 3.2) * 20) / 20; // label scale, quantised so it changes rarely
     if (worldEl.dataset.ls !== String(ls)) { worldEl.dataset.ls = String(ls); worldEl.style.setProperty('--nk-ls', ls); }
-    const lf = Math.round(clamp(1 / z, 1, 16) * 20) / 20; // titles and the axis strip stay readable down to the 200-component fit
+    const lf = labelScale(z); // titles and the axis strip stay readable down to the 200-component fit, and stay chrome-sized above 100%
     if (worldEl.dataset.lf !== String(lf)) { worldEl.dataset.lf = String(lf); worldEl.style.setProperty('--nk-lf', lf); }
     // (an attribute written with the value it already has still repaints the page: only write on a change)
     const hdr = z < 0.4 ? 'strip' : '', band = z < 0.25 ? 'far' : z < 0.6 ? 'mid' : 'near';
@@ -72,7 +76,7 @@ export function createView(ctx, stageEl, worldEl) {
     if (zoomedSinceRaster) { zoomedSinceRaster = false; worldEl.style.willChange = 'auto'; requestAnimationFrame(() => requestAnimationFrame(() => { worldEl.style.willChange = ''; })); }
     ctx.emit('viewsettle', { ...v });
   }
-  view.labelScale = (z) => Math.round(clamp(1 / z, 1, 16) * 20) / 20; // the title scale for a zoom, as labels() quantises it
+  view.labelScale = labelScale; // the title scale for a zoom, as labels() quantises it
   view.settledLabelScale = () => Number(worldEl.dataset.lf || 1);
   view.labelScaleLs = (z) => Math.round(clamp(1 / z, 1, 3.2) * 20) / 20;
   view.settledLabelScaleLs = () => Number(worldEl.dataset.ls || 1);
@@ -133,20 +137,33 @@ export function createView(ctx, stageEl, worldEl) {
     clearTimeout(refitTimer);
     refitTimer = setTimeout(() => {
       if (!lastFit || anim || !near(v, lastFit)) return;
-      const r = (lastWork && fitters.work?.()) || fitters.all(); if (!r) return;
-      const t = view.fitView(r, { pad: 72, max: 1 });
+      const t = fitAllView(lastWork); if (!t) return;
       if (!near(t, lastFit)) { lastFit = t; set(t); }
     }, 120);
   };
   ctx.on('render', refit); ctx.on('layout', refit);
   view.hold = () => { lastFit = null; }; // something placed by hand (a frame drawn on the canvas) ends the fit too: it must stay where it was drawn
   let lastWork = false;
+  // Everything with its labels: a label is a fixed size on screen, so the room it takes in canvas units depends on the zoom of the fit.
+  // fitters.all(z) is the rectangle at zoom z; a few steps settle it. Centred, so the margins are even on both sides.
+  const fitAllView = (work) => {
+    let r = (work && fitters.work?.()) || fitters.all();
+    if (!r) return null;
+    let t = view.fitView(r, { pad: 72, max: 1 });
+    for (let i = 0; i < 4 && !work; i++) {
+      r = fitters.all(t.z) || r;
+      const n = view.fitView(r, { pad: 72, max: 1 });
+      if (near(n, t)) break;
+      t = n;
+    }
+    return t;
+  };
   view.fitAll = (opts = {}) => {
     lastWork = !!opts.work;
-    const r = (opts.work && fitters.work?.()) || fitters.all();
-    if (!r) { lastFit = null; return set({ x: 80, y: 120, z: 1 }, opts); }
-    lastFit = view.fitView(r, { pad: 72, max: 1 });
-    return view.fitRect(r, { pad: 72, max: 1, ...opts });
+    const t = fitAllView(lastWork);
+    if (!t) { lastFit = null; return set({ x: 80, y: 120, z: 1 }, opts); }
+    lastFit = t;
+    return set(t, { animate: opts.animate });
   };
   view.fitSelection = (opts = {}) => { const r = fitters.selection(); return r ? view.fitRect(r, { pad: 96, max: 4, ...opts }) : undefined; };
 

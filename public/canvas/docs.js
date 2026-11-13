@@ -115,7 +115,7 @@ export function initDocs(ctx) {
   // their real sizes, the same layout a reload gives, and fit once; a person's own placement is never touched.
   let settle = 0, settleOff = null;
   function settleLayout() {
-    const go = () => { settleOff?.(); settleOff = null; ctx.stage.layoutAll(); ctx.view.fitAll({ animate: false, work: true }); };
+    const go = () => { settleOff?.(); settleOff = null; ctx.stage.layoutAll(); ctx.view.fitAll({ animate: false }); };
     clearTimeout(settle); settle = setTimeout(go, 900);
     if (!settleOff) { const on = () => { clearTimeout(settle); settle = setTimeout(go, 350); }; settleOff = ctx.on('render', on); }
   }

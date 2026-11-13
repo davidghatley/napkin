@@ -3,6 +3,10 @@
 //   Paste: nodes copied from napkin (any component, fresh ids), an image file or SVG (stored in assets/ by content hash), an HTML snippet
 //   (dialect nodes if it fits exactly, else refused with the reason), or a line of text.
 //   ctx.ops = { duplicate, wrap, unwrap, copy(event?), paste(clipboardData), hide, last }  (`last` is the result of the latest paste, for tests)
+// The same verbs for the menus and the palette (context-menu.js, actions.js), on both engines: the TSX dialect (ctx.sendEdits) and the
+// document engine's HTML and React files (POST /api/edit, one batch, one undo step):
+//   ctx.ops.can(verb) -> true | the reason it is off now | null (it can never apply to this selection)
+//   ctx.ops.{ remove, order(forward|backward|front|back), selectParent, selectChildren, copyNow, cutNow, pasteNow }
 import { plain, SANS } from './words.js';
 import { index, VOID } from '/src/model.js';
 import { pasteHtml } from './html-paste.js';
@@ -167,11 +171,176 @@ export function initEditOps(ctx) {
     const mod = ev.ctrlKey || ev.metaKey;
     if (!mod) return;
     const key = ev.key.toLowerCase();
-    if (key === 'd' && !ev.altKey && !ev.shiftKey) { ev.preventDefault(); duplicate(); }
+    if (key === 'd' && !ev.altKey && !ev.shiftKey) { ev.preventDefault(); ops.duplicate(); }
     else if (key === 'g' && ev.altKey && !ev.shiftKey) { ev.preventDefault(); wrap(); }
     else if (key === 'g' && ev.shiftKey && !ev.altKey) { ev.preventDefault(); unwrap(); }
   });
-  Object.assign(ops, { duplicate, wrap, unwrap, hide, copy, paste, payload });
+  // ---- the document engine (HTML, and React files the engine draws): its tree comes from the frame (doc-frames.js) ----
+  const SKIP = new Set(['script', 'style', 'template', 'link', 'meta', 'title', 'head', 'base', 'noscript']);
+  const TOP = new Set(['html', 'body', 'head']);
+  const isReact = (c) => c.fileKind === 'tsx' || c.fileKind === 'jsx';
+  function eng() {
+    const s = ctx.state.selection, c = s && ctx.state.components.get(s.component);
+    if (!c || c.item || c.doc || c.kind !== 'html') return null;
+    const f = ctx.stage?.sections.get(s.component)?.docFrame, tree = f?.tree()?.tree;
+    if (!tree) return null;
+    const find = (id) => { const walk = (list, up) => { for (const n of list) { if (n.node === id) return { n, parent: up }; const r = walk(n.children, n); if (r) return r; } return null; }; return walk(tree, null); };
+    const sels = ctx.state.selections.filter((x) => x.component === s.component);
+    // the selected elements, minus any whose ancestor is selected too (it goes with it)
+    const all = new Set(sels.map((x) => x.node));
+    const ids = [...all].filter((id) => { for (let p = find(id)?.parent; p; p = find(p.node)?.parent) if (all.has(p.node)) return false; return true; });
+    return { s, c, f, tree, find, ids, at: find(s.node) };
+  }
+  const visible = (list) => list.filter((n) => !SKIP.has(n.tag));
+  async function engEdit(c, edits, summary) {
+    const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: c.component, baseRevision: c.revision, edits, summary }) });
+    const j = await r.json().catch(() => ({ ok: false, error: `server answered ${r.status}` }));
+    if (!j.ok) say(`Not done: ${plain(j.error)}`);
+    return j;
+  }
+  // after an engine edit, the frame draws the new revision; a selection made before that would point at the old tree
+  async function drawn(e, revision, nodes) {
+    for (let i = 0; i < 160; i++) { const t = e.f.tree(); if ((!revision || t?.revision === revision) && nodes.every((n) => e.f.has(n))) return true; await new Promise((r) => setTimeout(r, 25)); }
+    return false;
+  }
+  const kind = () => { const s = ctx.state.selection, c = s && ctx.state.components.get(s.component); return !c ? null : c.item ? 'item' : c.doc ? 'dialect' : c.kind === 'html' ? 'engine' : null; };
+
+  // What each verb can do with the selection now. A reason is shown on the disabled menu item.
+  function can(verb) {
+    const k = kind(), c = k && ctx.state.components.get(ctx.state.selection.component);
+    if (!k) return verb === 'paste' ? 'Select a frame or an element to paste into' : 'Select something first';
+    if (k === 'item') return null;
+    if (c.readOnly) return `${c.name} is read-only`;
+    const many = ctx.state.selections.length > 1;
+    if (k === 'dialect') {
+      const p = picked(), n = p && p.byId.get(p.s.node), par = n && p.parentOf.get(n.id);
+      switch (verb) {
+        case 'copy': return picked({ root: true })?.ids.length ? true : 'Select a layer first';
+        case 'cut': case 'delete': case 'duplicate': return p?.ids.length ? true : 'The root of a component stays';
+        case 'paste': return target() ? true : 'Select a layer to paste into';
+        case 'wrap': return !p?.ids.length ? 'The root of a component stays' : new Set(p.ids.map((id) => p.parentOf.get(id)?.id)).size === 1 ? true : 'Wrap needs layers that share one parent';
+        case 'rename': return many ? 'Select one layer to rename' : true;
+        case 'parent': return par ? true : 'This is the top of the component';
+        case 'children': return n?.children.length ? true : 'Nothing inside this layer';
+        case 'forward': case 'front': return many ? 'Select one layer to reorder' : !par ? 'The root has no siblings' : par.children.at(-1) === n ? 'Already in front of its siblings' : true;
+        case 'backward': case 'back': return many ? 'Select one layer to reorder' : !par ? 'The root has no siblings' : par.children[0] === n ? 'Already behind its siblings' : true;
+      }
+      return null;
+    }
+    const e = eng();
+    if (!e?.at) return 'The frame is still loading';
+    const n = e.at.n, top = TOP.has(n.tag) || !e.at.parent, card = !!e.s.card, par = e.at.parent && !TOP.has(e.at.parent.tag) ? e.at.parent : null;
+    const sibs = e.at.parent ? visible(e.at.parent.children) : visible(e.tree);
+    switch (verb) {
+      case 'copy': case 'cut': case 'delete': case 'duplicate': return card ? 'A frame is its file: select an element inside it' : top ? 'Select an element inside the frame' : true;
+      case 'paste': return true;
+      case 'wrap': return 'Not yet for HTML elements: coming in the next pass';
+      case 'rename': return null; // an HTML element is named by its id and class (the panel edits those)
+      case 'parent': return par ? true : 'This element is at the top of the file';
+      case 'children': return visible(n.children).length ? true : 'Nothing inside this element';
+      case 'forward': case 'front': return card ? null : many ? 'Select one element to reorder' : top ? 'The top element has no siblings' : sibs.at(-1) === n ? 'Already in front of its siblings' : true;
+      case 'backward': case 'back': return card ? null : many ? 'Select one element to reorder' : top ? 'The top element has no siblings' : sibs[0] === n ? 'Already behind its siblings' : true;
+    }
+    return null;
+  }
+  const refuse = (verb) => { const r = can(verb); if (r === true) return false; say(r || 'Not for this selection'); return true; };
+
+  async function remove() {
+    if (kind() === 'dialect') {
+      const k = picked();
+      if (!k?.ids.length) return say('Select something to delete (the root of a component stays)');
+      const r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
+      if (r.ok) ctx.select(null);
+      return r;
+    }
+    if (refuse('delete')) return null;
+    const e = eng();
+    const j = await engEdit(e.c, e.ids.map((node) => ({ op: 'delete', node })), e.ids.length > 1 ? `Deleted ${e.ids.length} elements` : `Deleted <${e.at.n.tag}>`);
+    if (j.ok) ctx.select(null);
+    return j;
+  }
+  async function engDuplicate() {
+    if (refuse('duplicate')) return null;
+    const e = eng();
+    const src = await Promise.all(e.ids.map((node) => fetch(`/api/component/${encodeURIComponent(e.c.component)}/copy?node=${encodeURIComponent(node)}`).then((r) => r.json())));
+    if (src.some((p) => !p.ok)) { say('Could not read the element to duplicate'); return null; }
+    // each copy goes right after its original; the last in the file first, so the earlier places do not move
+    const jobs = e.ids.map((node, i) => { const at = e.find(node); const list = at.parent ? at.parent.children : e.tree; return { parent: at.parent?.node, index: list.indexOf(at.n) + 1, code: src[i].source, path: (at.parent ? at.parent.node + '.' : '') }; })
+      .sort((a, b) => (a.parent === b.parent ? b.index - a.index : 0));
+    if (jobs.some((x) => x.parent === undefined)) { say('Select an element inside the frame'); return null; }
+    const j = await engEdit(e.c, jobs.map((x) => ({ op: 'insert', parent: x.parent, index: x.index, [isReact(e.c) ? 'jsx' : 'html']: x.code })), jobs.length > 1 ? `Duplicated ${jobs.length} elements` : `Duplicated <${e.at.n.tag}>`);
+    if (j.ok) {
+      // the copies' places, counted after every insert of the batch
+      const added = jobs.map((x) => x.path + (x.index + jobs.filter((y) => y.parent === x.parent && y.index < x.index).length));
+      if (await drawn(e, j.revision, added)) ctx.selectMany(added.map((node) => ({ component: e.c.component, node, variant: {} })));
+    }
+    return j;
+  }
+  async function order(how) {
+    if (refuse(how)) return null;
+    if (kind() === 'dialect') {
+      const k = picked({ root: true }), n = k.byId.get(k.s.node), par = k.parentOf.get(n.id), i = par.children.indexOf(n);
+      const index = how === 'forward' ? i + 1 : how === 'backward' ? i - 1 : how === 'front' ? par.children.length - 1 : 0;
+      return ctx.sendEdits(k.s.component, [{ op: 'move', id: n.id, parent: par.id, index }]);
+    }
+    const e = eng(), n = e.at.n, list = e.at.parent ? e.at.parent.children : e.tree, sibs = visible(list), i = sibs.indexOf(n);
+    // the place among the visible siblings, turned into the file's index (a <style> or <script> between them stays where it is)
+    const to = how === 'forward' ? sibs[i + 1] : how === 'backward' ? sibs[i - 1] : how === 'front' ? sibs.at(-1) : sibs[0];
+    const rest = list.filter((x) => x !== n), index = rest.indexOf(to) + (how === 'forward' || how === 'front' ? 1 : 0);
+    const j = await engEdit(e.c, [{ op: 'move', node: n.node, parent: e.at.parent.node, index }], `Moved <${n.tag}> ${how === 'front' ? 'to the front' : how === 'back' ? 'to the back' : how}`);
+    if (j.ok) { const node = (e.at.parent ? e.at.parent.node + '.' : '') + index; if (await drawn(e, j.revision, [node])) ctx.select({ component: e.c.component, node, variant: {} }); }
+    return j;
+  }
+  function selectParent() {
+    if (refuse('parent')) return;
+    if (kind() === 'dialect') { const k = picked({ root: true }); ctx.select({ ...k.s, node: k.parentOf.get(k.s.node).id }); return; }
+    const e = eng(); ctx.select({ component: e.c.component, node: e.at.parent.node, variant: {} });
+  }
+  function selectChildren() {
+    if (refuse('children')) return;
+    if (kind() === 'dialect') { const k = picked({ root: true }); ctx.selectMany(k.byId.get(k.s.node).children.map((x) => ({ ...k.s, node: x.id }))); return; }
+    const e = eng(); ctx.selectMany(visible(e.at.n.children).map((x) => ({ component: e.c.component, node: x.node, variant: {} })));
+  }
+
+  // ---- the clipboard from a menu or the palette: the same copy and cut events the keys make, and a paste read from the clipboard ----
+  function copyNow() {
+    if (refuse('copy')) return false;
+    let done = false; try { done = document.execCommand('copy'); } catch {}
+    if (!done) { if (kind() === 'engine') ctx.copyCode?.copy(); else copy(); }
+    return true;
+  }
+  async function cutNow() {
+    if (refuse('cut')) return null;
+    copyNow();
+    return kind() === 'engine' ? remove() : (async () => { const k = picked(); return k?.ids.length ? ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id }))) : null; })();
+  }
+  // The clipboard as a paste event would give it; napkin's own last copy when the page may not read the clipboard.
+  async function readClipboard() {
+    try {
+      const items = await Promise.race([navigator.clipboard.read(), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 10000))]);
+      const text = {}, files = [];
+      for (const it of items) for (const t of it.types) { const b = await it.getType(t); if (t.startsWith('text/')) text[t] = await b.text(); else if (/^image\//.test(t)) files.push(new File([b], 'pasted', { type: t })); }
+      if (Object.keys(text).length || files.length) return { getData: (t) => text[t] ?? '', files };
+    } catch {}
+    if (kind() === 'engine' && ctx.clip) return { getData: (t) => (t === 'text/plain' ? ctx.clip.text : t === 'text/html' ? ctx.clip.html : ''), files: [] };
+    if (ops.clip) { const text = JSON.stringify(ops.clip); return { getData: (t) => (t === MIME ? text : t === 'text/plain' ? PREFIX + text : ''), files: [] }; }
+    if (ctx.clip) return { getData: (t) => (t === 'text/plain' ? ctx.clip.text : t === 'text/html' ? ctx.clip.html : ''), files: [] };
+    return null;
+  }
+  async function pasteNow() {
+    if (refuse('paste')) return null;
+    const data = await readClipboard();
+    if (!data) { say(`Nothing to paste yet. Copy something first, or use ${'Ctrl/Cmd+V'}`); return null; }
+    if (kind() === 'engine') {
+      const e = eng();
+      // onto a frame (its card): into the body; onto an element: into it, as the keys do
+      const into = e.s.card ? (e.at.parent?.node ?? null) : null;
+      return ctx.copyCode?.paste(data.getData('text/plain'), data.getData('text/html'), into);
+    }
+    return paste(data);
+  }
+
+  Object.assign(ops, { duplicate: async () => (kind() === 'engine' ? engDuplicate() : duplicate()), wrap, unwrap, hide, copy, paste, payload, can, kind, remove, order, selectParent, selectChildren, copyNow, cutNow, pasteNow });
   ctx.ops = ops;
   return ops;
 }

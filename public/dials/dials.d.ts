@@ -80,12 +80,28 @@ export interface Options {
     Record<"increase" | "decrease" | "reset" | "studio" | "help", string[]>
   >;
   label?: string;
-  /** "viewport": a studio takes over the window; "inline": it stays in the host (default). */
+  /** Ignored: a section's full editor always opens in place, inside the host (there is no full-window studio). Kept so old hosts still type-check. */
   studio?: "viewport" | "inline";
   theme?: "light" | "dark";
   history?: boolean;
   onChange?(event: ValueEvent): void;
+  /** Not called for a depth the panel's width chose (see reveal). */
   onDepth?(section: string, depth: Depth): void;
+  /**
+   * The width lever, for a host that is a resizable side panel: the root's width picks a tier (narrow under 340 px,
+   * medium from 340, wide from 460, see TIER_MEDIUM and TIER_WIDE). A colour section then shows its row and opens
+   * pickColor when narrow, its sliders under the rows when medium, and its full editor in place when wide (that depth
+   * is not the person's choice, so it is not passed to onDepth and its depth event carries auto: true).
+   */
+  reveal?: boolean;
+  /** With reveal, a narrow panel's colour figure opens this small anchored picker instead of the full editor. */
+  pickColor?(picker: {
+    anchor: HTMLElement;
+    value: string;
+    label: string;
+    onPreview(value: string): void;
+    onCommit(value: string): void;
+  }): void;
   /** An element a section edits; kept in view at every depth (see Dials.setSubject). */
   subject?(section: string, schema: unknown): HTMLElement | null | undefined;
   /**
@@ -157,11 +173,14 @@ export class Dials extends EventTarget {
   ): this;
   get(id: string): JSONValue;
   values(): Record<string, JSONValue>;
+  /** Reveal a control's section in the panel: 3 (default) opens its full editor in place, 2 opens the section, 1 folds it; the panel scrolls it into view. */
   open(id: string, depth?: Depth): this;
   /** Keep the element a section edits in view at every depth: under the head at dial and bench, atop the studio rail in the studio. null lets go. */
   setSubject(section: string, node: HTMLElement | null, animate?: boolean): this;
-  setDepth(section: string, depth: Depth, animate?: boolean): void;
-  resizeStudio(section: string, width: number, height: number): void;
+  /** 1 folds the section, 2 opens it, 3 opens it with its full editor; always inside the host. */
+  setDepth(section: string, depth: Depth, animate?: boolean, meta?: { auto?: boolean }): void;
+  /** Scroll the nearest scrolling box (never the page) so the section is in view. */
+  reveal(section: string): this;
   begin(id: string, source?: string): void;
   change(id: string, value: JSONValue): void;
   commit(id: string): void;
@@ -209,6 +228,9 @@ export function expression(
   control?: Pick<Control, "min" | "max" | "step" | "unit">,
 ): number;
 export const bindings: string[][];
+export const TIER_MEDIUM: number;
+export const TIER_WIDE: number;
+export function tierOf(width: number): "narrow" | "medium" | "wide";
 
 export const defaultKeys: Record<
   "increase" | "decrease" | "reset" | "studio" | "help",

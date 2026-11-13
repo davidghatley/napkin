@@ -292,18 +292,13 @@ test(
               `dialsDemo.panels[0].update({ink:${JSON.stringify(color)}})`,
             );
           }
-          await focus("#sample-color .d-pane-size");
-          const width = await q(
-            'dialsDemo.panels[0].sections.get("pigment").node.offsetWidth',
-          );
-          await key("ArrowLeft");
-          assert.equal(
+          // The full editor opens in place: inside its panel's box, in the page flow, with no pane to resize.
+          const placed = JSON.parse(
             await q(
-              'dialsDemo.panels[0].sections.get("pigment").node.offsetWidth',
+              '(()=>{const s=dialsDemo.panels[0].sections.get("pigment"),r=s.node.getBoundingClientRect(),h=document.querySelector("#sample-color .study-mount").getBoundingClientRect();return JSON.stringify({pos:getComputedStyle(s.node).position,inside:r.left>=h.left-0.5&&r.right<=h.right+0.5,expanded:s.expand.getAttribute("aria-expanded"),grips:document.querySelectorAll("#sample-color .d-pane-size, #sample-color .d-depth").length})})()',
             ),
-            width - 16,
           );
-          await key("ArrowRight");
+          assert.deepEqual(placed, { pos: "relative", inside: true, expanded: "true", grips: 0 });
           await q(
             `(async()=>{const canvas=document.createElement('canvas');canvas.width=96;canvas.height=96;const g=canvas.getContext('2d');g.fillStyle='red';g.fillRect(0,0,48,96);g.fillStyle='blue';g.fillRect(48,0,48,96);const blob=await new Promise(r=>canvas.toBlob(r));const data=new DataTransfer();data.items.add(new File([blob],'two-colors.png',{type:'image/png'}));const input=document.querySelector('#sample-color [aria-label="Sample palette from an image"]');input.files=data.files;input.dispatchEvent(new Event('change'));})()`,
           );
@@ -469,6 +464,11 @@ test(
               await q('dialsDemo.galleryPanel.sections.get("geometry").depth'),
               3,
             );
+            // the editor opens in place, inside the gallery's panel, and the head's one disclosure says so
+            assert.equal(
+              await q('(()=>{const s=dialsDemo.galleryPanel.sections.get("geometry"),r=s.node.getBoundingClientRect(),h=dialsDemo.galleryPanel.root.getBoundingClientRect();return getComputedStyle(s.node).position!=="fixed"&&r.left>=h.left-0.5&&r.right<=h.right+0.5&&s.expand.getAttribute("aria-expanded")==="true"})()'),
+              true,
+            );
           }
           await q(
             'dialsDemo.galleryPanel.setDepth("geometry",2);document.querySelector(".catalog").open=false',
@@ -502,6 +502,13 @@ test(
           });
           assert.equal(
             await q("document.documentElement.scrollWidth<=innerWidth"),
+            true,
+          );
+          // At phone width the open full editor is still inside its own panel, in the page flow: it covers nothing.
+          assert.equal(
+            await q(
+              '(()=>{const s=dialsDemo.panels[2].sections.get("time").node,r=s.getBoundingClientRect(),h=document.querySelector("#sample-motion .study-mount").getBoundingClientRect();return getComputedStyle(s).position!=="fixed"&&r.left>=h.left-0.5&&r.right<=h.right+0.5&&r.top>=h.top-0.5&&r.bottom<=h.bottom+0.5})()',
+            ),
             true,
           );
           await shot("narrow-studio");
