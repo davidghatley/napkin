@@ -2,6 +2,7 @@ import { extname } from 'node:path';
 import { sections, applyNative } from './controls.js';
 import { renderViewer, previewData } from './view.js';
 import { cardMetadata } from './metadata.js';
+import { parseColumnTypes } from './cells.js';
 const entries = [];
 export function registerKind(definition) {
   if (!/^[a-z][a-z0-9-]*$/.test(definition.id) || entries.some((d) => d.id === definition.id))
@@ -58,7 +59,7 @@ function define(id, extensions, mime, family, magic) {
     controls: (ctx) => sections(ctx, entries.map((d) => d.id).sort()),
     apply: (ctx, c, v) =>
       c.target.mode === 'recipe'
-        ? { recipe: { ...ctx.recipe, [c.target.key]: v } }
+        ? { recipe: { ...ctx.recipe, [c.target.key]: c.target.key === 'columnTypes' ? parseColumnTypes(v) : v } }
         : { source: applyNative(ctx, c, v) },
   });
 }

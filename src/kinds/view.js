@@ -10,6 +10,7 @@ import { arrowTable } from './arrow.js';
 import { sqliteRows } from './sqlite.js';
 import { parseGltf, parseObj } from './gltf.js';
 import { utf16, buildIndex, readRecords } from './rowindex.js';
+import { jsonWindow, jsonRecords } from './jsonscan.js';
 const exec = promisify(execFile),
   esc = (s) =>
     String(s).replace(
@@ -212,9 +213,9 @@ export async function previewData(ctx, query = new URLSearchParams()) {
     // `group` (older callers) names a row group; `offset` is any row of the file.
     const info = parquetInfo(ctx.file);
     const at = query.get('group') !== null ? info.starts[Math.max(0, Number(query.get('group')) || 0)] ?? 0 : offset;
-    return parquetRows(ctx.file, at, count);
+    return parquetRows(ctx.file, at, count, ctx.recipe.columnTypes || {});
   }
-  if (family === 'arrow') return arrowTable(ctx.file, offset, count);
+  if (family === 'arrow') return arrowTable(ctx.file, offset, count, ctx.recipe.columnTypes || {});
   if (family === 'sqlite') {
     const { DatabaseSync } = await import('node:sqlite');
     const db = new DatabaseSync(ctx.file, {
@@ -290,7 +291,19 @@ export async function previewData(ctx, query = new URLSearchParams()) {
   }
   if (family === 'json') {
     // The tree is drawn from the text itself (numbers keep the digits written in the file); a list of records is also a table.
-    if (ctx.bytes > LIMIT) throw new Error('JSON preview is limited to the first 1 MiB; use JSONL for streaming records');
+    if (ctx.bytes > LIMIT) {
+      // Over 1 MiB the file is read in bounded windows (jsonscan.js): a list of records is a table that scrolls through every record, anything else
+      // is a tree whose branches fetch their children when opened. Nothing is cut: the whole file stays reachable.
+      const path = (query.get('path') || '').split('.').filter((x) => x !== '');
+      if (!path.length && !query.has('tree')) {
+        const t = jsonRecords(ctx.file, offset, count);
+        if (t) {
+          const { names, rows } = recordsToRows(t.records);
+          return { ...tableWindow(names, rows, { overrides: ctx.recipe.columnTypes || {} }), large: true, total: t.total, offset: t.offset, asTable: true, ...(t.capped ? { note: 'Only the first 3,000,000 records are indexed.' } : {}) };
+        }
+      }
+      return { large: true, path, ...jsonWindow(ctx.file, path, Math.max(0, Number(query.get('from')) || 0), 200) };
+    }
     const data = parseExact(ctx.text),
       list = Array.isArray(data) ? data : null;
     if (list && list.length > 1 && list.slice(0, 200).every((r) => r && typeof r === 'object' && !Array.isArray(r))) {

@@ -170,7 +170,7 @@ function streamBatches(file, ix, need) {
     closeSync(fd);
   }
 }
-export async function arrowTable(file, offset = 0, count = 80) {
+export async function arrowTable(file, offset = 0, count = 80, overrides = {}) {
   const ix = index(file),
     start = Math.max(0, Math.min(offset, Math.max(0, ix.total - 1))),
     end = Math.min(ix.total, start + count),
@@ -192,7 +192,7 @@ export async function arrowTable(file, offset = 0, count = 80) {
   const shaped = tableWindow(
     fields.map((f) => f.name),
     rows,
-    { declared: fields.map((f) => typeName(f.type)) },
+    { declared: fields.map((f) => typeName(f.type)), overrides },
   );
   return {
     ...shaped,

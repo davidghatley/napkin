@@ -1,4 +1,5 @@
 import { delimited } from './readers.js';
+import { parseColumnTypes, columnTypesText } from './cells.js';
 const control = (id, label, value, target, extra = {}) => ({
   id,
   label,
@@ -264,6 +265,9 @@ export function sections(ctx, kindIds = []) {
       label: 'Viewer',
       controls: [
         ...recipeControls(ctx),
+        ...(['table', 'parquet', 'sqlite', 'arrow'].includes(ctx.definition.family)
+          ? [control('view:columnTypes', 'Column types', columnTypesText(ctx.recipe.columnTypes), { mode: 'recipe', key: 'columnTypes' }, { type: 'text', figure: { type: 'value' }, storage: 'recipe', placeholder: '2=string, price=number', hint: 'Which columns count as integer, number, boolean, date or string (by position from 0, or by name). Cells keep the file text; this changes alignment and the distribution.' })]
+          : []),
         ...(kindIds.length
           ? [control('view:kind', 'Open as', ctx.recipe.kind ?? ctx.kind, { mode: 'recipe', key: 'kind' }, { type: 'select', options: kindIds, figure: { type: 'value' }, storage: 'recipe' })]
           : []),
@@ -272,6 +276,11 @@ export function sections(ctx, kindIds = []) {
   ];
 }
 export function validate(c, value) {
+  if (c.id === 'view:columnTypes') {
+    if (typeof value !== 'string') throw new Error('Send text such as 2=string, price=number');
+    parseColumnTypes(value);
+    return;
+  }
   if (c.type === 'number' && (typeof value !== 'number' || !Number.isFinite(value)))
     throw new Error('Send a finite number');
   if (c.type === 'boolean' && typeof value !== 'boolean') throw new Error('Send true or false');

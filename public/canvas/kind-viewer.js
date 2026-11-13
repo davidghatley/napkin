@@ -108,7 +108,7 @@ const ROW_H = 26, WINDOW_H = 380;
 async function showTable(params = {}) {
   const d = await data(params);
   // A long table scrolls like a document: the scrollbar spans every row, and where it stops decides which rows are drawn.
-  const long = d.total > 400 && (d.starts || d.tables || ['arrow', 'sqlite', 'csv', 'tsv', 'jsonl', 'parquet'].includes(item.kind));
+  const long = d.total > 400 && (d.starts || d.tables || d.large || ['arrow', 'sqlite', 'csv', 'tsv', 'jsonl', 'parquet'].includes(item.kind));
   const numbered = d.rowStart !== undefined || (long && d.offset !== undefined);
   root.innerHTML =
     bar(
@@ -244,6 +244,64 @@ function jsonTree(host, value) {
       { v, depth } = values.get(d);
     fill(d, v, depth, Number(d.dataset.filled));
   });
+}
+// A tree over a file the server reads in windows: each branch asks for its children by their positions (path = child indexes from the root).
+function largeJsonTree(host, first) {
+  const leaf = (e) => {
+    const text = e.text ?? '';
+    const shown = e.kind === 'string' ? JSON.stringify(text) + (e.more ? ` … (${fmt(e.more)} characters, shortened)` : '') : text;
+    return `<div class="json-leaf" role="treeitem"><span class="json-key">${esc(e.key)}</span> <span class="tok-${e.kind === 'string' ? 'string' : 'number'}">${esc(shown)}</span>${e.damaged ? ' <span class="meta">(not valid JSON here)</span>' : ''}</div>`;
+  };
+  const fill = (el, w, path) => {
+    el.querySelector(':scope > .json-more')?.remove();
+    for (const e of w.entries) {
+      const p = [...path, e.index];
+      if (e.kind !== 'object' && e.kind !== 'array') {
+        el.insertAdjacentHTML('beforeend', leaf(e));
+        continue;
+      }
+      const det = document.createElement('details');
+      det.setAttribute('role', 'treeitem');
+      const sum = document.createElement('summary');
+      sum.innerHTML = `<span class="json-key">${esc(e.key)}</span> <span class="meta">${e.kind === 'array' ? '[' : '{'} ${e.count !== undefined ? fmt(e.count) + ' entries' : fmt(e.bytes) + ' bytes'} ${e.kind === 'array' ? ']' : '}'}</span>`;
+      det.append(sum);
+      det.addEventListener('toggle', async () => {
+        if (!det.open || det.dataset.filled) return;
+        det.dataset.filled = '1';
+        try {
+          fill(det, await data({ path: p.join('.'), from: 0 }), p);
+        } catch (err) {
+          det.insertAdjacentHTML('beforeend', `<p class="error" role="alert">${esc(err.message)}</p>`);
+        }
+      });
+      el.append(det);
+    }
+    const to = w.from + w.entries.length;
+    if (to < w.total) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'json-more';
+      b.textContent = `Show entries ${fmt(to + 1)}–${fmt(Math.min(w.total, to + 200))} of ${fmt(w.total)}`;
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          fill(el, await data({ path: path.join('.'), from: to }), path);
+        } catch (err) {
+          b.disabled = false;
+          error(err);
+        }
+      });
+      el.append(b);
+    }
+    if (w.capped) el.insertAdjacentHTML('beforeend', '<div class="note">Only the first 3,000,000 entries of this branch are indexed.</div>');
+  };
+  host.innerHTML = '';
+  if (first.scalar) return void (host.innerHTML = leaf({ key: 'value', kind: first.kind, text: first.text }));
+  const top = document.createElement('details');
+  top.open = true;
+  top.innerHTML = `<summary><span class="json-key">root</span> <span class="meta">${first.container === 'array' ? '[' : '{'} ${fmt(first.total)} entries ${first.container === 'array' ? ']' : '}'}</span></summary>`;
+  host.append(top);
+  fill(top, first, []);
 }
 async function chartView(j) {
   const rel = (u) => {
@@ -699,6 +757,14 @@ async function run() {
   if (item.family === 'markdown') {
     await loadMarkdown();
     root.innerHTML = markdown(d.text) + (d.limited ? note('Showing the first 1 MiB') : '');
+    return;
+  }
+  if (item.family === 'json' && d.large) {
+    // Over 1 MiB: the file is read in windows by the server, so nothing is cut. A list of records scrolls like a table; anything else is a tree
+    // whose branches fetch their children when opened.
+    if (d.asTable) return showTable({ offset: 0 });
+    root.innerHTML = bar(label, `Large JSON · ${fmt(d.bytes)} bytes · read in windows`) + '<div class="json-tree" role="tree"></div>' + note('This file is over 1 MiB, so it is read in windows from disk. Structure is found by scanning the file; it is not validated.');
+    largeJsonTree(root.querySelector('.json-tree'), d);
     return;
   }
   if (item.family === 'json') {

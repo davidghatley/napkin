@@ -68,7 +68,7 @@ export function parquetInfo(file) {
 const declaredType = (s) => String(s.logical_type?.type || s.converted_type || s.type || '').toLowerCase();
 
 // The 120 rows (at most) from `offset`, with the typed columns computed over that window.
-export async function parquetRows(file, offset = 0, count = 120) {
+export async function parquetRows(file, offset = 0, count = 120, overrides = {}) {
   const info = parquetInfo(file),
     start = Math.max(0, Math.min(info.rows ? info.rows - 1 : 0, offset)),
     end = Math.min(info.rows, start + count),
@@ -85,7 +85,7 @@ export async function parquetRows(file, offset = 0, count = 120) {
       out = tableWindow(
         top.map((s) => s.name),
         rows.map((r) => top.map((s) => r[s.name])),
-        { declared: top.map((s) => (s.num_children ? 'nested' : declaredType(s))) },
+        { declared: top.map((s) => (s.num_children ? 'nested' : declaredType(s))), overrides },
       );
     let g = info.starts.findLastIndex((s) => s <= start);
     return {

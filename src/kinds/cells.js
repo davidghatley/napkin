@@ -10,6 +10,19 @@ const INT = /^[+-]?\d+$/,
   BOOL = /^(?:true|false)$/i,
   DATE = /^\d{4}-\d\d-\d\d(?:[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:?\d\d)?)?$/;
 export const TYPES = ['integer', 'number', 'boolean', 'date', 'string'];
+// The "Column types" control is text: "2=string, price=number" (a column by position, counting from 0, or by name). Empty clears every override.
+export function parseColumnTypes(text) {
+  const out = {};
+  for (const part of String(text).split(',').map((x) => x.trim()).filter(Boolean)) {
+    const at = part.lastIndexOf('='),
+      key = part.slice(0, at).trim(),
+      type = part.slice(at + 1).trim().toLowerCase();
+    if (at < 1 || !key || !TYPES.includes(type)) throw new Error(`"${part}" is not a column type. Next: write column=type pairs such as 2=string, price=number (types: ${TYPES.join(', ')}).`);
+    out[key] = type;
+  }
+  return out;
+}
+export const columnTypesText = (o) => Object.entries(o || {}).map(([k, v]) => `${k}=${v}`).join(', ');
 // The text a typed value is shown as. JavaScript prints a double as the shortest text that reads back to the same double,
 // so a stored float is shown exactly as stored; integers beyond 2^53 arrive as bigint or text and keep every digit.
 export function cellText(v) {
