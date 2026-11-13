@@ -182,7 +182,7 @@ export function compactItem(c) {
   // Source-derived overview surfaces are cached SVG images. Thousands of table cells and graph
   // paths need not enter the canvas DOM; focusing still opens the fully interactive viewer.
   // Text-like files keep real text in the card (it is what you read, search and select); heavier surfaces are cached images.
-  const plain = ['md', 'txt', 'csv', 'tsv', 'json', 'jsonl', 'code', 'diff', 'patch', 'css', 'css-keyframes', 'yaml', 'toml', 'xml', 'shader'].includes(c.kind);
+  const plain = ['md', 'txt', 'csv', 'tsv', 'json', 'jsonl', 'code', 'tsx', 'jsx', 'diff', 'patch', 'css', 'css-keyframes', 'yaml', 'toml', 'xml', 'shader'].includes(c.kind);
   if (!plain && !c.meta.spec && family !== 'pdf' && !['image', 'video', 'font', 'audio'].includes(family)) content = cachedSurface(content);
   return `<div class="kind-compact" data-napkin-kind="${esc(c.kind)}">${content}${headline(c)}<span class="kind-stamp">${esc(c.kind)} · ${c.bytes.toLocaleString()} bytes</span></div>`;
 }

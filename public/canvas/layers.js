@@ -311,7 +311,7 @@ export function initLayers(ctx, el) {
   // ---- keep in step ----
   // the tree follows the selection: its component opens, the other files' trees close, unless you opened them by hand
   ctx.on('select', () => { const sels = ctx.state.selections; if (sels.length && sels.every((x) => ctx.state.components.get(x.component)?.kind === 'html')) for (const id of [...expanded]) if (ctx.state.components.get(id)?.kind === 'html' && !sels.some((x) => x.component === id) && !keptOpen.has(id)) expanded.delete(id); for (const x of sels) expanded.add(x.component); reveal = true; schedule(); });
-  for (const e of ['render', 'removed', 'added']) ctx.on(e, schedule);
+  for (const e of ['render', 'removed', 'added', 'layout']) ctx.on(e, schedule); // ('layout': a folder of files only has no component render to draw the first rows)
   let seeded = false; // a small repo opens fully expanded, once
   ctx.on('render', () => { if (!seeded && ctx.state.components.size <= 8) { seeded = true; for (const id of ctx.state.components.keys()) expanded.add(id); } });
   draw();
