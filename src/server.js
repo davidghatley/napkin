@@ -114,17 +114,17 @@ try { await openSession(); } catch (e) { if (e instanceof LockError) { console.e
 let switching = null;
 async function switchFolder(target) {
   const want = resolve(String(target ?? '').replace(/^~(?=\/|$)/, process.env.HOME || '~'));
-  const fail = (m) => { const e = new Error(m); e.status = 400; throw e; };
-  if (!String(target ?? '').trim()) fail('Name the folder to open. Next: send { folder: "/path/to/folder" }.');
-  if (!existsSync(want)) fail(`There is no folder at ${want}. Next: check the path.`);
-  if (!statSync(want).isDirectory()) fail(`${want} is a file. Next: name a folder.`);
-  if (switching) fail('A folder is already being opened. Next: wait a moment and try again.');
+  const refuse = (m) => { throw Object.assign(new Error(explainError(m)), { status: 400 }); };
+  if (!String(target ?? '').trim()) refuse('Name the folder to open. Next: send { folder: "/path/to/folder" }.');
+  if (!existsSync(want)) refuse(`There is no folder at ${want}. Next: check the path.`);
+  if (!statSync(want).isDirectory()) refuse(`${want} is a file. Next: name a folder.`);
+  if (switching) refuse('A folder is already being opened. Next: wait a moment and try again.');
   let components = want;
   if (existsSync(join(want, 'napkin.json'))) {
-    let config; try { config = JSON.parse(readFileSync(join(want, 'napkin.json'), 'utf8')); } catch (e) { fail(`${join(want, 'napkin.json')}: ${e.message}. Next: fix its JSON.`); }
-    if (config.components !== undefined && typeof config.components !== 'string') fail('napkin.json: components must be a folder path string. Next: set components to "components".');
+    let config; try { config = JSON.parse(readFileSync(join(want, 'napkin.json'), 'utf8')); } catch (e) { refuse(`${join(want, 'napkin.json')}: ${e.message}. Next: fix its JSON.`); }
+    if (config.components !== undefined && typeof config.components !== 'string') refuse('napkin.json: components must be a folder path string. Next: set components to "components".');
     components = resolve(want, config.components || 'components');
-    if (!existsSync(components)) fail(`${components} does not exist (napkin.json). Next: create it or correct the components path.`);
+    if (!existsSync(components)) refuse(`${components} does not exist (napkin.json). Next: create it or correct the components path.`);
   }
   if (resolve(root || dir) === want && dir === components) return { folder: want, same: true };
   switching = true;
@@ -132,7 +132,7 @@ async function switchFolder(target) {
   try {
     dir = components; only = undefined; root = want;
     try { await openSession(); }
-    catch (e) { ({ dir, only, root } = old); lock = old.lock; docs = old.docs; ws = old.ws; api = old.api; items = old.items; docRoot = resolve(old.root || old.dir); throw Object.assign(e instanceof LockError ? e : new Error(e.message), { status: 409 }); }
+    catch (e) { ({ dir, only, root } = old); lock = old.lock; docs = old.docs; ws = old.ws; api = old.api; items = old.items; docRoot = resolve(old.root || old.dir); throw Object.assign(e instanceof LockError ? e : new Error(explainError(e.message)), { status: 409 }); }
     old.docs.close(); old.items.close();
     await old.api.close().then(() => old.ws.close()).catch(() => {});
     old.lock.release();

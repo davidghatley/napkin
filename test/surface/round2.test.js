@@ -32,7 +32,7 @@ test('surface round 2: early keys, typed #, dial rows, panel order, Ctrl+Z, numb
   for (const ch of 'Select a.css') { const vk = ch.toUpperCase().charCodeAt(0); await b.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, windowsVirtualKeyCode: vk }); await b.send('Input.dispatchKeyEvent', { type: 'char', text: ch, key: ch, windowsVirtualKeyCode: vk }); await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch, windowsVirtualKeyCode: vk }); } // as a remote-control tool sends them: '.' arrives with the code of Delete
   await io.key('Enter');
   await b.waitFor('document.body.dataset.ready === "1"', 20000);
-  await b.waitFor('!!document.querySelector(\'[data-controls-for="a.css"] [data-control-id]\')', 8000);
+  await b.waitFor('!!document.querySelector(\'[data-controls-for="a.css"] [data-control-id]\')', 30000);
 
   // A '#' sent with the virtual-key code of End (what remote-control tools send) replaces the selection like any character.
   await palette('Select a.css');

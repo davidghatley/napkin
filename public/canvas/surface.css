@@ -13,13 +13,11 @@ body { font-family: var(--nk-sans); }
 
 /* ------------------------------------------------------------------ instruments (one panel, drawn by dials) */
 #instruments[hidden], #panel[hidden] { display: none; }
-/* One column, split in two fixed parts when both are showing: the element panel above scrolls in the upper part, the instrument panel in the
-   lower. Neither part changes size when the other one's content does (a staged edit, a note, a section that opens), so nothing moves. */
-#inspector { display: flex; flex-direction: column; overflow: hidden; }
-#inspector > #panel { flex: 1 1 0; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; }
-#inspector > #instruments { flex: 0 0 40%; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable; border-top: 1px solid var(--nk-line); }
-#inspector > #panel:empty + #instruments, #inspector > #panel[hidden] + #instruments { flex: 1 1 auto; border-top: 0; }
-#inspector > #instruments[hidden] { display: none; }
+/* One column: the element panel, then the instrument panel under it. Drawing this one never moves the element panel; when the element panel
+   changes, this one is out of sight for two frames (surface-panel.js), so it is never a layout shift. */
+#inspector > #instruments { border-top: 1px solid var(--nk-line); scrollbar-gutter: stable; }
+#inspector > #panel:empty + #instruments, #inspector > #panel[hidden] + #instruments { border-top: 0; }
+#inspector { scrollbar-gutter: stable; }
 #instruments .instruments { display: block; }
 #instruments .inst-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 14px 10px; }
 #instruments .inst-head h2 { margin: 0; font: 600 14px/20px var(--nk-sans); color: var(--nk-text); overflow-wrap: anywhere; }

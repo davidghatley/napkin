@@ -182,7 +182,7 @@ export function createSurfaceRoutes({ items, dir, openFolder, identify, permissi
         const m = await body(req); who(req);
         if (!openFolder) throw new SurfaceError('This napkin cannot switch folders. Next: run napkin open <folder>.', 501);
         try { return json(res, 200, { ok: true, ...(await openFolder(m.folder)) }), true; }
-        catch (e) { throw Object.assign(new SurfaceError(e.message, e.status || 400), { status: e.status || 400 }); }
+        catch (e) { throw Object.assign(new SurfaceError(explainError(e.message), e.status || 400), { status: e.status || 400 }); }
       }
       if (path === '/api/board') {
         if (req.method === 'GET') { await settled(); return json(res, 200, view()), true; }

@@ -314,6 +314,9 @@ export function initInstruments(ctx) {
   ctx.on('change', (f) => { if (panel?.items.includes(ctx.itemOf(f.component))) refresh(); });
   ctx.on('items-changed', () => { if (panel) refresh(); });
   host.hidden = true;
+  // When the element panel's DOM changes (a staged edit, a note) this panel moves with it. The observer runs before the frame is laid out, so it is
+  // out of sight in the frame that moves.
+  new MutationObserver(() => { if (!host.hidden) quiet(); }).observe(el0, { childList: true, subtree: true });
   // The schemas of the cards on the canvas are read while the page is idle, so a selection draws its panel at once.
   const warm = async () => {
     const onScreen = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight; };
