@@ -472,6 +472,25 @@ function colorStudio(ctx, host) {
     ),
     code,
   );
+  // Exported CSS stays one line until it is wanted: a fold that opens to the code, with Copy beside it (it never runs on as a
+  // paragraph of declarations under the swatches).
+  const codeFold = (title, out) => {
+    const note = el("output", { class: "d-note" });
+    const copyIt = button("Copy", `Copy ${title}`, async () => {
+      try {
+        await navigator.clipboard.writeText(out.value);
+        note.textContent = "Copied";
+      } catch {
+        note.textContent = "Open it and select the code";
+      }
+      setTimeout(() => (note.textContent = ""), 1400);
+    });
+    copyIt.classList.add("d-cx-copy");
+    const summary = el("summary", {}, el("span", { text: title }));
+    const fold = el("details", { class: "d-cx-css" }, summary, out);
+    const node = el("div", { class: "d-cx-css-row" }, fold, note, copyIt);
+    return node;
+  };
   const section = (title, cls, ...kids) =>
     el("div", { class: `d-cx-section ${cls === "d-cx-ramp" ? "" : "d-deep "}${cls}` }, ...kids);
   const rampHost = el("div"),
@@ -495,7 +514,7 @@ function colorStudio(ctx, host) {
     "d-cx-ramp",
     el("header", {}, el("h3", { text: "Ramp" }), rampSteps, rampAnchor),
     rampHost,
-    rampCode,
+    codeFold("CSS for the ramp", rampCode),
   );
   // The palette: colours kept by name (--id-1 …), added from the current colour or any swatch,
   // removed with Delete, and exported as custom properties. It survives studio rebuilds.
@@ -527,7 +546,7 @@ function colorStudio(ctx, host) {
     });
     paletteHost.replaceChildren(keep.palette.length ? row : el("p", { class: "d-note", text: "No colours kept yet. Add the current colour to start a palette." }));
     paletteCode.value = keep.palette.map((c, i) => `--${varBase}-${i + 1}: ${c};`).join("\n");
-    paletteCode.hidden = !keep.palette.length;
+    { const row = paletteCode.closest(".d-cx-css-row"), none = !keep.palette.length; if (row) { row.hidden = none; paletteCode.hidden = false; } else paletteCode.hidden = none; }
     raw.panel.emit?.("palette", { control: raw.control.id, palette: [...keep.palette] });
   }
   const addToPalette = button("+ Add colour", "Add the current colour to the palette", () => {
@@ -545,7 +564,7 @@ function colorStudio(ctx, host) {
     "d-cx-palette-block",
     el("header", {}, el("h3", { text: "Palette" }), paletteStatus, addToPalette),
     paletteHost,
-    paletteCode,
+    codeFold("CSS for the palette", paletteCode),
   );
   const harmonies = section(
     "Harmony",
@@ -1039,8 +1058,12 @@ function colorStudio(ctx, host) {
     n >= 75 ? "body" : n >= 60 ? "content" : n >= 45 ? "large" : n >= 30 ? "spot" : "fail";
   function update() {
     if (dead) return;
-    // Nothing below is seen while the studio is collapsed or scrolled away; it runs once it comes into view.
-    if (!visible(plane)) return;
+    // Nothing below is seen while the studio is collapsed or scrolled away; it runs once it comes into view. A medium-width
+    // panel shows the channel sliders alone (dials.css, the width lever): they are kept current on their own.
+    if (!visible(plane)) {
+      if (visible(channels.node)) channels.update();
+      return;
+    }
     const value = ctx.get(),
       v = parseColor(value, ctx.host),
       back = parseColor(background, ctx.host),

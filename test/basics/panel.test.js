@@ -1,6 +1,7 @@
 // Basics, the right panel (docs/basics/standards.md section 7 and decision 0023): one panel that stays in the sidebar, is resized by its left
 // edge (pointer, double-click, keys), remembers its width, and never covers the canvas: not at its narrowest, default or widest, not with a
-// section's full editor open, not with the colour popover open. Later tasks of the lane add: more controls appear as the panel gets wider.
+// section's full editor open, not with the colour popover open. Width and height are the levers that reveal more: a wider panel shows more
+// controls (colour sliders, X beside Y, a padding's sides), a long list shows six rows until its bottom edge is dragged down.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
@@ -14,7 +15,7 @@ const AXE = readFileSync(join(ROOT, 'node_modules', 'axe-core', 'axe.min.js'), '
 function folder() {
   const r = tempRepo(['Card', 'Button']);
   writeFileSync(join(r.compDir, 'landing.html'), `<!doctype html><html><head><link rel="stylesheet" href="theme.css"></head><body><main class="hero"><h1>Plan the week</h1><p>One page, one list.</p><button class="cta">Start</button></main><section class="cards"><article class="card"><h2>Monday</h2><p>Design review</p></article><article class="card"><h2>Tuesday</h2><p>Ship the shell</p></article></section></body></html>\n`);
-  writeFileSync(join(r.compDir, 'theme.css'), `:root { --ink: #1d2433; --paper: #fbf7ef; }\nbody { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--paper); }\n.hero { padding: 32px; } .cards { display: flex; gap: 16px; padding: 0 32px 32px; } .card { padding: 16px; border: 1px solid #d9d2c3; border-radius: 8px; }\n.cta { padding: 8px 16px; border: 0; border-radius: 6px; background: #1d2433; color: #fff; }\n`);
+  writeFileSync(join(r.compDir, 'theme.css'), `:root { --ink: #1d2433; --paper: #fbf7ef; --line: #d9d2c3; --accent: #2f6fdf; --muted: #6b7280; --good: #1f8a4c; --warn: #b7791f; --bad: #c0392b; --wash: #eef2f7; }\nbody { margin: 0; font: 16px/1.5 system-ui, sans-serif; color: var(--ink); background: var(--paper); }\n.hero { padding: 32px; } .cards { display: flex; gap: 16px; padding: 0 32px 32px; } .card { padding: 16px; border: 1px solid #d9d2c3; border-radius: 8px; }\n.cta { padding: 8px 16px; border: 0; border-radius: 6px; background: #1d2433; color: #fff; }\n`);
   writeFileSync(join(r.compDir, 'mark.svg'), `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M2 2h16L2 18z" fill="#1d2433"/></svg>\n`);
   writeFileSync(join(r.compDir, 'notes.md'), '# Notes\n\nThe panel comes next.\n');
   return r;
@@ -123,6 +124,7 @@ test('the right panel: one panel, resized by its left edge (drag, double-click, 
     await io.key('End'); assert.equal(await width(b), 720, 'End: half of a 1440 px window');
     assert.equal(await b.eval(`document.querySelector('#right-edge').getAttribute('aria-valuenow')`), '720');
     assert.equal(await b.eval(`document.activeElement.id`), 'right-edge', 'focus stays on the edge');
+    await sleep(250); // the edge's colour eases in
     const focused = await b.eval(`getComputedStyle(document.querySelector('#right-edge'), '::after').backgroundColor`);
     assert.notEqual(focused, idle, 'the focused edge is visible');
 
@@ -223,5 +225,138 @@ test('axe finds no serious or critical problems in the right panel, light and da
         assert.deepEqual(v, [], `${what} ${th}`);
       }
     }
+  } finally { await close(); }
+});
+
+// ---- the width lever (standards section 7 rule 6b) ----
+// What is on screen, measured: the colour section's tier and whether its sliders and plane show, the element panel's pairs and sides.
+const LOOK = `JSON.stringify((() => {
+  const vis = (e) => !!e && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';
+  const p = napkin.instruments.panel(), s = p && [...p.sections.values()].find((x) => x.node.dataset.reveal === 'width');
+  const ch = s && [...s.node.querySelectorAll('.d-cx-channels')].find(vis);
+  const names = ch ? [...ch.querySelectorAll('.k-field-name')].filter(vis).map((e) => e.textContent.trim()) : [];
+  const top = (sel) => { const e = document.querySelector(sel); return e && vis(e) ? Math.round(e.getBoundingClientRect().top) : null; };
+  const xy = [...document.querySelectorAll('#panel .pl-geo[data-pair=xy] > .vrow')].map((e) => Math.round(e.getBoundingClientRect().top));
+  const wh = [...document.querySelectorAll('#panel .pl-geo[data-pair=wh] > .vrow')].map((e) => Math.round(e.getBoundingClientRect().top));
+  return { tier: p?.root.dataset.tier ?? null, depth: s?.node.dataset.depth ?? null, sliders: names, plane: !!s && [...s.node.querySelectorAll('.d-cx-plane, canvas')].some(vis),
+    xy, wh, sides: [...document.querySelectorAll('#panel .pl-sides')].some(vis), box: vis(document.querySelector('#panel .pl-box')) };
+})())`;
+// Every piece of text in the panel that could be cut: its content fits its box (no ellipsis, no clipped number).
+const CLIPPED = `JSON.stringify((() => {
+  const out = [];
+  for (const e of document.querySelectorAll('#inspector label, #inspector .d-label, #inspector .k-field-name, #inspector .phead label, #inspector .pl-gh, #inspector h3, #inspector h4, #inspector summary, #inspector .nk-cap-all, #inspector .d-value, #inspector input.val, #inspector input.ro, #inspector .decl .prop, #inspector .decl .val')) {
+    if (!e.getClientRects().length || getComputedStyle(e).visibility === 'hidden' || !e.clientWidth) continue;
+    const over = e.tagName === 'INPUT' ? e.value && e.scrollWidth > e.clientWidth + 1 : e.scrollWidth > e.clientWidth + 1;
+    if (over) out.push((e.className || e.tagName) + ' "' + (e.value || e.textContent).trim().slice(0, 24) + '" ' + e.scrollWidth + '>' + e.clientWidth);
+  }
+  return out.slice(0, 8);
+})())`;
+async function dragEdge(b, io, to) {
+  const e = await box(b, '#right-edge'), x = e.l + e.w / 2, y = e.t + 300, dx = to - (await width(b)); // left widens
+  await io.move(x, y); await io.press(x, y);
+  for (let i = 1; i <= 8; i++) await io.move(x - (dx * i) / 8, y, { buttons: 1 });
+  await io.release(x - dx, y);
+  await sleep(500);
+  assert.equal(await width(b), to, `dragged to ${to}`);
+}
+
+test('the width lever: at 280 one column and no sliders; dragging the edge wider pairs X with Y, shows the sides, the colour sliders, then the full editor; nothing is cut at 280, 360 or 560', { timeout: 180000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    const look = async (what) => { await select(b, what); await sleep(300); return JSON.parse(await b.eval(LOOK)); };
+    const clipped = async (what, w) => assert.deepEqual(JSON.parse(await b.eval(CLIPPED)), [], `${w} px, ${what}: no text is cut`);
+    // 280: the colour is a row and a popover, the element's values are label, field, one per line
+    let c = await look('css');
+    assert.equal(c.tier, 'narrow'); assert.equal(c.depth, '2');
+    assert.deepEqual(c.sliders, [], 'no colour sliders at 280');
+    await clipped('css', 280);
+    let e = await look('element');
+    assert.ok(e.xy.length === 2 && e.xy[0] !== e.xy[1], `X above Y at 280 (${e.xy})`);
+    assert.ok(e.wh.length === 2 && e.wh[0] !== e.wh[1], `W above H at 280 (${e.wh})`);
+    assert.equal(e.sides, false, 'the padding sides wait behind their toggle at 280');
+    assert.equal(e.box, false);
+    await clipped('element', 280);
+    // the small toggle at the right of the padding row shows the sides, one under another
+    await b.eval(`document.querySelector('#panel .pl-adv[data-adv=padding]').click()`); await sleep(150);
+    assert.equal(await b.eval(`document.querySelector('#panel .pl-adv[data-adv=padding]').getAttribute('aria-expanded')`), 'true');
+    const sides280 = JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#pl-sides-padding > .vrow')].map((r) => Math.round(r.getBoundingClientRect().top)))`));
+    assert.equal(new Set(sides280).size, 4, `four sides, one per line at 280 (${sides280})`);
+    await clipped('element, sides open', 280);
+    await b.eval(`document.querySelector('#panel .pl-adv[data-adv=padding]').click()`);
+
+    // drag the edge to 360 with real pointer events: pairs, sides and sliders appear
+    await dragEdge(b, io, 360);
+    e = JSON.parse(await b.eval(LOOK));
+    assert.equal(e.xy[0], e.xy[1], `X beside Y at 360 (${e.xy})`);
+    assert.equal(e.wh[0], e.wh[1], `W beside H at 360 (${e.wh})`);
+    assert.equal(e.sides, true, 'the padding sides show without a toggle at 360');
+    const sides360 = JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#pl-sides-padding > .vrow')].map((r) => Math.round(r.getBoundingClientRect().top)))`));
+    assert.equal(new Set(sides360).size, 2, `the sides two by two at 360 (${sides360})`);
+    await clipped('element', 360);
+    c = await look('css');
+    assert.equal(c.tier, 'medium'); assert.equal(c.depth, '2');
+    assert.deepEqual(c.sliders, ['Lightness', 'Chroma', 'Hue', 'Alpha'], 'the four sliders, labels whole, at 360');
+    await clipped('css', 360);
+
+    // drag on to 560: the colour section shows its full editor in place, the element its box figure
+    await dragEdge(b, io, 560);
+    c = JSON.parse(await b.eval(LOOK));
+    assert.equal(c.tier, 'wide'); assert.equal(c.depth, '3', 'the full editor opens at 560 by width alone');
+    assert.equal(c.plane, true, 'the plane shows');
+    await clipped('css', 560);
+    e = await look('element');
+    assert.equal(e.box, true, 'the box figure at 560');
+    await clipped('element', 560);
+    // and back to 280: the colour section folds back to its row
+    await dragEdge(b, io, 280);
+    c = await look('css');
+    assert.equal(c.tier, 'narrow'); assert.equal(c.depth, '2', 'narrower: the editor the width opened closes again');
+    assert.deepEqual(JSON.parse(await b.eval(COVERS)), []);
+  } finally { await close(); }
+});
+
+// ---- the height lever (standards section 7 rule 6c) ----
+const LONG = `[...napkin.instruments.panel().sections.values()].find((x) => x.rowlist.children.length > 6)`;
+const CAP = () => `JSON.stringify((() => {
+  const s = ${LONG}, l = s.rowlist, f = l.nextElementSibling, lr = l.getBoundingClientRect();
+  const rows = [...l.children].filter((r) => !r.hidden);
+  const g = f?.querySelector('.nk-cap-grip'), a = f?.querySelector('.nk-cap-all');
+  return { total: rows.length, seen: rows.filter((r) => r.getBoundingClientRect().bottom <= lr.bottom + 1).length, capped: l.hasAttribute('data-capped'),
+    role: g?.getAttribute('role'), now: g ? Number(g.getAttribute('aria-valuenow')) : null, label: g?.getAttribute('aria-label'), all: a?.textContent, expanded: a?.getAttribute('aria-expanded') };
+})())`;
+
+test('the height lever: a long list shows six rows; its bottom edge drags (and keys) for more, "Show all" opens it, remembered per kind', { timeout: 150000 }, async () => {
+  const { b, io, url, close } = await boot();
+  try {
+    await b.eval(`try { localStorage.removeItem('napkin.rows'); } catch {}`);
+    await select(b, 'css');
+    let m = JSON.parse(await b.eval(CAP()));
+    assert.ok(m.total > 6, `a list longer than six (${m.total})`);
+    assert.equal(m.seen, 6, 'six rows show'); assert.equal(m.capped, true);
+    assert.equal(m.role, 'separator'); assert.match(m.label, /^Rows shown in /); assert.equal(m.now, 6);
+    assert.equal(m.all, `Show all ${m.total}`); assert.equal(m.expanded, 'false');
+    // drag the bottom edge down by about two rows with real pointer events
+    const g = JSON.parse(await b.eval(`JSON.stringify((() => { const s = [...napkin.instruments.panel().sections.values()].find((x) => x.rowlist.children.length > 6); s.node.scrollIntoView({ block: 'start' }); const r = s.rowlist.nextElementSibling.querySelector('.nk-cap-grip').getBoundingClientRect(), h = s.rowlist.children[0].getBoundingClientRect().height; return { x: r.left + r.width / 2, y: r.top + r.height / 2, h }; })())`));
+    await io.move(g.x, g.y); await io.press(g.x, g.y);
+    for (let i = 1; i <= 6; i++) await io.move(g.x, g.y + (g.h * 2 * i) / 6, { buttons: 1 });
+    await io.release(g.x, g.y + g.h * 2);
+    await sleep(200);
+    m = JSON.parse(await b.eval(CAP()));
+    assert.equal(m.now, 8, 'two more rows');
+    // the keyboard does the same: Up one fewer, End all, Home back to six
+    await b.eval(`[...napkin.instruments.panel().sections.values()].find((x) => x.rowlist.children.length > 6).rowlist.nextElementSibling.querySelector('.nk-cap-grip').focus()`);
+    await io.key('ArrowUp'); await sleep(100);
+    assert.equal(JSON.parse(await b.eval(CAP())).seen, 7, 'Up: one row fewer');
+    // remembered for this kind of file across a reload
+    await reload(b, url); await select(b, 'css');
+    m = JSON.parse(await b.eval(CAP()));
+    assert.equal(m.seen, 7, 'remembered'); assert.equal(m.now, 7);
+    assert.ok(JSON.parse(await b.eval(`localStorage.getItem('napkin.rows')`))['css.' + await b.eval(`[...napkin.instruments.panel().sections.values()].find((x) => x.rowlist.children.length > 6).schema.id`)] === 7, 'stored per kind and list');
+    // Show all, then Show fewer
+    await b.eval(`[...napkin.instruments.panel().sections.values()].find((x) => x.rowlist.children.length > 6).rowlist.nextElementSibling.querySelector('.nk-cap-all').click()`); await sleep(100);
+    m = JSON.parse(await b.eval(CAP()));
+    assert.equal(m.seen, m.total, 'every row'); assert.equal(m.capped, false); assert.equal(m.all, 'Show fewer'); assert.equal(m.expanded, 'true');
+    await b.eval(`${LONG}.rowlist.nextElementSibling.querySelector('.nk-cap-grip').focus()`); await io.key('Home'); await sleep(100);
+    assert.equal(JSON.parse(await b.eval(CAP())).seen, 6, 'Home: six again');
   } finally { await close(); }
 });
