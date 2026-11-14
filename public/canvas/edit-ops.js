@@ -9,7 +9,8 @@
 //   ctx.ops.{ remove, order(forward|backward|front|back), selectParent, selectChildren, selectAll, copyNow, cutNow, pasteNow, isFrame }
 // A frame (a file's card, or its root: the dialect's root layer, an HTML file's <html> or <body>) is the file as a whole: Copy
 // takes what it holds, Duplicate, Rename and Delete act on the file (file-ops.js; a TSX component's own dialogs, component-ops.js).
-// Undo after a Delete or a Cut puts the selection back as it was.
+// Every Delete, Cut and Duplicate is one history step that knows the selection before it and after it: Undo puts back the one
+// before, Redo the one after (by identity at that revision, so a positional id that now names another element is never picked).
 import { plain, SANS } from './words.js';
 import { index, VOID } from '/src/model.js';
 import { pasteHtml } from './html-paste.js';
@@ -39,8 +40,9 @@ export function initEditOps(ctx) {
   async function duplicate() {
     const k = picked();
     if (!k?.ids.length) return say('Select something to duplicate (the root can’t be duplicated)');
+    const sels = [...ctx.state.selections], before = k.c.revision;
     const r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'duplicate', id })));
-    if (r.ok) { const added = newIds(k.doc, r.doc), after = index(r.doc); select(k.s.component, added.filter((id) => !added.includes(after.parentOf.get(id)?.id))); }
+    if (r.ok) { const added = newIds(k.doc, r.doc), after = index(r.doc); select(k.s.component, added.filter((id) => !added.includes(after.parentOf.get(id)?.id))); remember(k.s.component, before, r, sels, [...ctx.state.selections]); }
     return r;
   }
   async function wrap() {
@@ -166,7 +168,7 @@ export function initEditOps(ctx) {
   document.addEventListener('cut', async (ev) => {
     if (typing(ev.target) || !copy(ev)) return;
     const k = picked();
-    if (k?.ids.length) { const sels = [...ctx.state.selections], before = k.c.revision, r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id }))); remember(k.s.component, before, r, sels); }
+    if (k?.ids.length) { const sels = [...ctx.state.selections], before = k.c.revision, r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id }))); remember(k.s.component, before, r, sels); if (r.ok) clearIf(sels); }
   });
   document.addEventListener('paste', (ev) => { if (typing(ev.target) || !ev.clipboardData) return; ev.preventDefault(); paste(ev.clipboardData).catch((e) => say(plain(e.message || e))); });
   document.addEventListener('keydown', (ev) => {
@@ -192,11 +194,11 @@ export function initEditOps(ctx) {
     // the selected elements, minus any whose ancestor is selected too (it goes with it)
     const all = new Set(sels.map((x) => x.node));
     const ids = [...all].filter((id) => { for (let p = find(id)?.parent; p; p = find(p.node)?.parent) if (all.has(p.node)) return false; return true; });
-    return { s, c, f, tree, find, ids, at: find(s.node) };
+    return { s, c, f, tree, find, ids, at: find(s.node), base: c.revision };
   }
   const visible = (list) => list.filter((n) => !SKIP.has(n.tag));
-  async function engEdit(c, edits, summary) {
-    const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: c.component, baseRevision: c.revision, edits, summary }) });
+  async function engEdit(c, edits, summary, base = c.revision) {
+    const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: c.component, baseRevision: base, edits, summary }) });
     const j = await r.json().catch(() => ({ ok: false, error: `server answered ${r.status}` }));
     if (!j.ok) say(`Not done: ${plain(j.error)}`);
     return j;
@@ -269,21 +271,40 @@ export function initEditOps(ctx) {
   }
   const refuse = (verb) => { const r = can(verb); if (r === true) return false; say(r || 'Not for this selection'); return true; };
 
-  // Undo after a delete (or a cut) selects again what was selected: the step's revision says it is that step being undone.
-  let undoSel = null; // { component, before, after, sels }
-  function remember(component, before, r, sels) { if (r?.ok) undoSel = { component, before, after: r.revision, sels: sels.map((x) => ({ ...x })) }; }
-  ctx.on('undone', async (u) => {
-    const r = undoSel;
-    if (!r || u.component !== r.component || (u.revision !== r.before && u.undone?.revision !== r.after)) return;
-    undoSel = null;
-    const f = ctx.stage?.sections.get(r.component)?.docFrame;
+  // The selection each step of ours had before and after it, oldest first; `undone` marks the steps Redo can bring back.
+  const steps = []; // { component, before, after, selsBefore, selsAfter, undone }
+  const copySels = (list) => list.map((x) => ({ ...x }));
+  function remember(component, before, r, selsBefore, selsAfter = []) {
+    if (!r?.ok) return;
+    for (let i = steps.length - 1; i >= 0; i--) if (steps[i].component === component && steps[i].undone) steps.splice(i, 1); // a new step ends that redo line
+    steps.push({ component, before, after: r.revision, selsBefore: copySels(selsBefore), selsAfter: copySels(selsAfter), undone: false });
+    if (steps.length > 200) steps.shift();
+  }
+  // after the step: the selection clears only when it is still what the step acted on (a later click picked something else: it stays)
+  const sameSels = (a, b) => a.length === b.length && a.every((x) => b.some((y) => y.component === x.component && y.node === x.node));
+  function clearIf(sels) { if (sameSels(ctx.state.selections, sels)) ctx.select(null); }
+  // select `sels` once the frame (or the dialect doc) shows `revision` and holds them
+  async function putBack(component, revision, sels) {
+    const f = ctx.stage?.sections.get(component)?.docFrame;
     for (let i = 0; i < 160; i++) {
-      const c = ctx.state.components.get(r.component);
-      const there = f ? f.tree()?.revision === u.revision && r.sels.every((x) => f.has(x.node)) : c?.doc && r.sels.every((x) => index(c.doc).byId.has(x.node));
+      const c = ctx.state.components.get(component);
+      const there = f ? f.tree()?.revision === revision && sels.every((x) => f.has(x.node)) : !sels.length || (c?.doc && sels.every((x) => index(c.doc).byId.has(x.node)));
       if (there) break;
       await new Promise((res) => setTimeout(res, 25));
     }
-    ctx.selectMany(r.sels);
+    if (sels.length) ctx.selectMany(sels); else ctx.select(null);
+  }
+  ctx.on('undone', (u) => {
+    const i = steps.findLastIndex((x) => x.component === u.component && !x.undone), st = steps[i];
+    if (!st || (u.revision !== st.before && u.undone?.revision !== st.after)) return; // the step undone is not one of ours
+    st.undone = true;
+    putBack(st.component, u.revision, st.selsBefore);
+  });
+  ctx.on('redone', (u) => {
+    const i = steps.findIndex((x) => x.component === u.component && x.undone), st = steps[i];
+    if (!st || (u.revision !== st.after && u.redone?.revision !== st.after)) return;
+    st.undone = false;
+    putBack(st.component, u.revision, st.selsAfter);
   });
   async function remove() {
     if (oneFrame()) {
@@ -297,14 +318,17 @@ export function initEditOps(ctx) {
       if (!k?.ids.length) return say('Select something to delete (the root of a component stays)');
       const before = k.c.revision, r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
       remember(k.s.component, before, r, sels);
-      if (r.ok) ctx.select(null);
+      if (r.ok) clearIf(sels);
       return r;
     }
     if (refuse('delete')) return null;
-    const e = eng(), before = e.c.revision;
-    const j = await engEdit(e.c, e.ids.map((node) => ({ op: 'delete', node })), e.ids.length > 1 ? `Deleted ${e.ids.length} elements` : `Deleted <${e.at.n.tag}>`);
-    remember(e.c.component, before, j, sels);
-    if (j.ok) ctx.select(null);
+    return engRemove(eng(), sels);
+  }
+  // the elements of `e` (taken when the command started) and its revision then: exactly those go, whatever is selected by now
+  async function engRemove(e, sels) {
+    const j = await engEdit(e.c, e.ids.map((node) => ({ op: 'delete', node })), e.ids.length > 1 ? `Deleted ${e.ids.length} elements` : `Deleted <${e.at.n.tag}>`, e.base);
+    remember(e.c.component, e.base, j, sels);
+    if (j.ok) clearIf(sels);
     return j;
   }
   async function frameDuplicate() {
@@ -313,18 +337,20 @@ export function initEditOps(ctx) {
   }
   async function engDuplicate() {
     if (refuse('duplicate')) return null;
-    const e = eng();
+    const e = eng(), sels = [...ctx.state.selections];
     const src = await Promise.all(e.ids.map((node) => fetch(`/api/component/${encodeURIComponent(e.c.component)}/copy?node=${encodeURIComponent(node)}`).then((r) => r.json())));
     if (src.some((p) => !p.ok)) { say('Could not read the element to duplicate'); return null; }
     // each copy goes right after its original; the last in the file first, so the earlier places do not move
     const jobs = e.ids.map((node, i) => { const at = e.find(node); const list = at.parent ? at.parent.children : e.tree; return { parent: at.parent?.node, index: list.indexOf(at.n) + 1, code: src[i].source, path: (at.parent ? at.parent.node + '.' : '') }; })
       .sort((a, b) => (a.parent === b.parent ? b.index - a.index : 0));
     if (jobs.some((x) => x.parent === undefined)) { say('Select an element inside the frame'); return null; }
-    const j = await engEdit(e.c, jobs.map((x) => ({ op: 'insert', parent: x.parent, index: x.index, [isReact(e.c) ? 'jsx' : 'html']: x.code })), jobs.length > 1 ? `Duplicated ${jobs.length} elements` : `Duplicated <${e.at.n.tag}>`);
+    const j = await engEdit(e.c, jobs.map((x) => ({ op: 'insert', parent: x.parent, index: x.index, [isReact(e.c) ? 'jsx' : 'html']: x.code })), jobs.length > 1 ? `Duplicated ${jobs.length} elements` : `Duplicated <${e.at.n.tag}>`, e.base);
     if (j.ok) {
       // the copies' places, counted after every insert of the batch
       const added = jobs.map((x) => x.path + (x.index + jobs.filter((y) => y.parent === x.parent && y.index < x.index).length));
-      if (await drawn(e, j.revision, added)) ctx.selectMany(added.map((node) => ({ component: e.c.component, node, variant: {} })));
+      const copies = added.map((node) => ({ component: e.c.component, node, variant: {} }));
+      remember(e.c.component, e.base, j, sels, copies);
+      if (await drawn(e, j.revision, added)) ctx.selectMany(copies);
     }
     return j;
   }
@@ -374,12 +400,15 @@ export function initEditOps(ctx) {
   // Cut: everything selected goes to the clipboard first (the copy event fills it from the whole selection), then exactly those go.
   async function cutNow() {
     if (refuse('cut')) return null;
-    if (kind() === 'engine') { if (!(await ctx.copyCode?.copy())) return null; return remove(); } // (nothing goes unless the copy holds it)
+    // the target and its revision are taken now, before the copy is awaited: a right-click meanwhile does not change what goes
+    const sels = [...ctx.state.selections];
+    if (kind() === 'engine') { const e = eng(); if (!(await ctx.copyCode?.copy())) return null; return engRemove(e, sels); } // (nothing goes unless the copy holds it)
     copyNow();
-    const k = picked(), sels = [...ctx.state.selections];
+    const k = picked();
     if (!k?.ids.length) return null;
     const before = k.c.revision, r = await ctx.sendEdits(k.s.component, k.ids.map((id) => ({ op: 'delete', id })));
     remember(k.s.component, before, r, sels);
+    if (r.ok) clearIf(sels);
     return r;
   }
   // The clipboard as a paste event would give it; napkin's own last copy when the page may not read the clipboard.

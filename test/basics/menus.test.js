@@ -36,8 +36,9 @@ const j = async (b, expr) => JSON.parse(await b.eval(`Promise.resolve(${expr}).t
 const MENU = `(() => { const m = document.querySelector('#ctxmenu'); if (m.hidden) return null; return { label: m.getAttribute('aria-label'), rows: [...m.children].map((e) => e.getAttribute('role') === 'separator' ? '---' : (e.querySelector('.nk-ml').textContent + (e.dataset.sub ? ' >' : ''))), items: [...m.querySelectorAll('[role=menuitem]')].map((e) => ({ id: e.dataset.action || null, label: e.querySelector('.nk-ml').textContent, key: e.querySelector('.nk-mk')?.textContent ?? '', off: e.getAttribute('aria-disabled') === 'true', why: e.title, opacity: getComputedStyle(e).opacity })) }; })()`;
 const menu = (b) => j(b, MENU);
 const labels = async (b) => (await menu(b))?.rows;
-async function rclick(io, p) { if (await isOpen(io.b)) await io.key('Escape'); // (a menu still open from before: closed first, so the point is not on it)
-  await io.move(p.x, p.y); await io.press(p.x, p.y, { button: 'right' }); await io.release(p.x, p.y, { button: 'right' }); await sleep(250); }
+// o.ctrl: Ctrl+right-click, which picks the deepest element as Ctrl+click does (a plain one picks what a click there would)
+async function rclick(io, p, o = {}) { if (await isOpen(io.b)) await io.key('Escape'); // (a menu still open from before: closed first, so the point is not on it)
+  await io.move(p.x, p.y, o); await io.press(p.x, p.y, { ...o, button: 'right' }); await io.release(p.x, p.y, { ...o, button: 'right' }); await sleep(250); }
 const centre = (b, expr) => j(b, `(() => { const r = (${expr}).getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
 const el = (node) => `napkin.stage.cellElement(${JSON.stringify(LANDING)}, ${JSON.stringify(node)}, {})`;
 const node = (b, sel) => b.eval(`(() => { const f = napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame, d = f.doc(); const e = d.querySelector(${JSON.stringify(sel)}); return f.nodeOf(e); })()`);
@@ -97,11 +98,14 @@ test('menus: each target has its own item set, in the group order, with the regi
     await keysMatchSheet(b, sheet);
     t.diagnostic(`frame: ${m.rows.join(' | ')}`);
 
-    // an element inside a frame (the frame is an iframe that takes no pointer events: the right-click reaches the canvas)
+    // an element inside a frame (the frame is an iframe that takes no pointer events: the right-click reaches the canvas); a plain
+    // right-click picks what a click would (the top-level main), Ctrl+right-click the deepest (the heading), as Ctrl+click does
     const h1 = await node(b, 'h1');
     await rclick(io, await centre(b, el(h1)));
+    assert.deepEqual(await selection(b), [`${LANDING}|${await node(b, 'main')}`], 'the top-level element under the pointer is selected, the others cleared');
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
     m = await menu(b);
-    assert.deepEqual(await selection(b), [`${LANDING}|${h1}`], 'the element under the pointer is selected, the others cleared');
+    assert.deepEqual(await selection(b), [`${LANDING}|${h1}`], 'Ctrl: the element under the pointer itself');
     assert.deepEqual(m.rows, ['Cut', 'Copy', 'Paste here', 'Duplicate', '---', 'Select parent', 'Select children', 'Order >', 'Wrap in frame', '---', 'Create component', '---', 'Zoom to selection', 'Show code', '---', 'Delete']);
     const by = Object.fromEntries(m.items.map((x) => [x.label, x]));
     assert.ok(!by['Create component'].off, 'an element in a frame can become a component (pass 3)');
@@ -157,7 +161,7 @@ test('menus: each target has its own item set, in the group order, with the regi
     const card = await b.eval(`napkin.find('Card').component`), root = await b.eval(`napkin.state.components.get(napkin.find('Card').component).doc.root.id`);
     await rclick(io, await centre(b, `document.querySelector('section.cmp[data-component="${card}"] .cmp-head h3')`));
     const tsx = (await menu(b)).rows;
-    assert.deepEqual(tsx.slice(0, 4), ['Copy', 'Paste inside', 'Duplicate', 'Rename…'], `a TSX frame: ${tsx.join(' | ')}`);
+    assert.deepEqual(tsx.slice(0, 4), ['Copy', 'Paste inside', 'Duplicate', 'Rename'], `a TSX frame: ${tsx.join(' | ')}`);
     assert.equal(tsx.at(-1), 'Delete file…', 'a TSX file is deleted after its dialog');
     await keysMatchSheet(b, sheet);
     for (const row of [`#layers .lcomp[data-component="${card}"]`, `#layers .lrow[data-component="${card}"][data-node="${root}"]`]) {
@@ -181,7 +185,7 @@ test('menus: the items do the thing (duplicate, delete, copy and paste here, ord
   try {
     // Duplicate: a second Monday card right after the first, and it is the selection
     let r0 = await rev();
-    await rclick(io, await centre(b, el(await node(b, 'article'))));
+    await rclick(io, await centre(b, el(await node(b, 'article'))), { ctrl: true });
     await pick('Duplicate');
     await reloaded(r0);
     assert.equal(html().match(/<article class="card"><h2>Monday<\/h2>/g)?.length, 2, 'the copy is in the file');
@@ -194,18 +198,18 @@ test('menus: the items do the thing (duplicate, delete, copy and paste here, ord
     assert.equal(html().match(/<h2>Monday<\/h2>/g)?.length, 1, 'deleted from the file');
     assert.deepEqual(await selection(b), []);
     // Copy, then Paste here on another element: it lands inside the element under the pointer
-    await rclick(io, await centre(b, el(await node(b, 'button.cta'))));
+    await rclick(io, await centre(b, el(await node(b, 'button.cta'))), { ctrl: true });
     await pick('Copy');
     await sleep(300);
     r0 = await rev();
     const tuesday = await b.eval(`(() => { const f = napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame; return f.nodeOf(f.doc().querySelectorAll('article')[1]); })()`);
-    await rclick(io, await centre(b, el(tuesday)));
+    await rclick(io, await centre(b, el(tuesday)), { ctrl: true });
     await pick('Paste here');
     await reloaded(r0);
     assert.match(html(), /<p>Ship the shell<\/p>\s*<button class="cta">Start<\/button><\/article>/, 'pasted into the card under the pointer, as its last child');
     // Order (the submenu): hover opens it after 150 ms; Bring to front makes the heading the last of its siblings
     r0 = await rev();
-    await rclick(io, await centre(b, el(await node(b, 'h1'))));
+    await rclick(io, await centre(b, el(await node(b, 'h1'))), { ctrl: true });
     const order = await centre(b, `document.querySelector('#ctxmenu [data-sub]')`);
     await io.move(order.x, order.y);
     await sleep(60);
@@ -225,7 +229,7 @@ test('menus: the items do the thing (duplicate, delete, copy and paste here, ord
     await reloaded(r0);
     assert.match(html(), /<main class="hero"><p>One page, one list.<\/p><h1>Plan the week<\/h1><button class="cta">Start<\/button><\/main>/, 'Ctrl+[ is the same command');
     // Select parent: from the heading to the main
-    await rclick(io, await centre(b, el(await node(b, 'h1'))));
+    await rclick(io, await centre(b, el(await node(b, 'h1'))), { ctrl: true });
     await pick('Select parent');
     assert.equal(await b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.node(napkin.state.selection.node).tag`), 'main');
     // Select children, then back up with Shift+Enter (the same registry command)
@@ -283,7 +287,7 @@ test('menus: Cut of several and Paste, Undo with the selection, Show code, the f
     // Paste inside the second card: both come back, in order, and are the selection
     const tuesday = await b.eval(`(() => { const f = napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame; return f.nodeOf(f.doc().querySelectorAll('article')[1]); })()`);
     r0 = await rev();
-    await rclick(io, await centre(b, el(tuesday)));
+    await rclick(io, await centre(b, el(tuesday)), { ctrl: true });
     await pick('Paste here');
     await reloaded(r0);
     assert.match(html(), /<p>Ship the shell<\/p><h1>Plan the week<\/h1><button class="cta">Start<\/button><\/article>/, 'both pasted, in order');
@@ -529,5 +533,137 @@ test('menus: flip at the window edges without the pointer on an item; close on o
       assert.deepEqual(v, [], th);
       await io.key('Escape'); await io.key('Escape');
     }
+  } finally { await close(); }
+});
+
+test('menus: a right-click picks what a click there would pick, and keeps a selection the pointer is inside', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    const [main, h1, btn] = [await node(b, 'main'), await node(b, 'h1'), await node(b, 'button.cta')];
+    await rclick(io, await centre(b, el(h1)));
+    assert.deepEqual(await selection(b), [`${LANDING}|${main}`], 'on the heading: its top-level element, the main');
+    assert.equal((await menu(b)).items.find((x) => x.label === 'Select children').off, false, "the main's menu (it has children)");
+    await rclick(io, await centre(b, el(btn)));
+    assert.deepEqual(await selection(b), [`${LANDING}|${main}`], 'inside the selection: the selection stays');
+    await io.key('Escape');
+    // a click at the same point picks the same
+    await b.eval(`napkin.select(null)`);
+    const p = await centre(b, el(btn));
+    await io.click(p.x, p.y); await sleep(200);
+    assert.deepEqual(await selection(b), [`${LANDING}|${main}`], 'a click there picks the main too');
+    // Ctrl+right-click: the deepest element, as Ctrl+click
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    assert.deepEqual(await selection(b), [`${LANDING}|${h1}`], 'Ctrl: the heading itself');
+    // beside the selection: its sibling, as a click picks
+    await rclick(io, await centre(b, el(btn)));
+    assert.deepEqual(await selection(b), [`${LANDING}|${btn}`], 'a sibling of the selected heading');
+    await io.key('Escape');
+  } finally { await close(); }
+});
+
+test('menus: Cut takes what it was started on; Undo and Redo bring back their own selection', { timeout: 180000 }, async () => {
+  const { b, io, html, close } = await boot();
+  const pick = async (label) => { const p = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === ${JSON.stringify(label)})`); await io.click(p.x, p.y); };
+  const rev = () => b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.tree()?.revision ?? null`);
+  const reloaded = async (before) => { await b.waitFor(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.tree()?.revision !== ${JSON.stringify(before)}`, 10000); await sleep(300); };
+  const selIs = async (want, why) => { try { await b.waitFor(`JSON.stringify(napkin.state.selections.map((s) => s.component + '|' + s.node)) === ${JSON.stringify(JSON.stringify(want))}`, 5000); } catch {} assert.deepEqual(await selection(b), want, why); };
+  const tagOf = (n) => b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.node(${JSON.stringify(n)})?.tag ?? null`);
+  const undo = async (redo = false) => { await b.eval(`document.activeElement?.blur()`); const r0 = await rev(); await io.key('z', { ctrl: true, shift: redo }); await reloaded(r0); };
+  try {
+    await b.send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: new URL(await b.eval('location.href')).origin });
+    const [main, sec] = [await node(b, 'main'), await node(b, 'section.cards')];
+    const S = (n) => `${LANDING}|${n}`;
+    // Cut the cards' section, then at once right-click the main: the section goes, the main stays and is the selection
+    await rclick(io, await centre(b, el(sec)));
+    assert.deepEqual(await selection(b), [S(sec)]);
+    const p = await centre(b, el(main));
+    let r0 = await rev();
+    await pick('Cut');
+    await io.move(p.x, p.y); await io.press(p.x, p.y, { button: 'right' }); await io.release(p.x, p.y, { button: 'right' });
+    await reloaded(r0);
+    assert.match(await b.eval(`navigator.clipboard.readText()`), /^<section class="cards">/, 'the section is on the clipboard');
+    assert.match(html(), /<main class="hero">/, 'the main the second right-click picked is still in the file');
+    assert.doesNotMatch(html(), /class="cards"/, 'the section Cut was started on is gone');
+    await selIs([S(main)], 'and the main stays selected');
+    await io.key('Escape');
+    // Undo the cut: the section is back and selected; Redo: it goes, and nothing stale stays selected
+    await undo();
+    assert.match(html(), /class="cards"/);
+    await selIs([S(sec)], 'undo selects what was cut');
+    await undo(true);
+    assert.doesNotMatch(html(), /class="cards"/);
+    await selIs([], 'redo of a cut: nothing selected');
+    await undo();
+    await selIs([S(sec)]);
+    // Delete the section, then the main, from the menu; two Undos: each puts back its own selection
+    await rclick(io, await centre(b, el(sec)));
+    r0 = await rev(); await pick('Delete'); await reloaded(r0);
+    await rclick(io, await centre(b, el(main)));
+    assert.deepEqual(await selection(b), [S(main)]);
+    r0 = await rev(); await pick('Delete'); await reloaded(r0);
+    assert.doesNotMatch(html(), /<main|class="cards"/);
+    await undo();
+    await selIs([S(main)], 'the first Undo brings back the main, selected');
+    await undo();
+    assert.match(html(), /<main class="hero">.*<section class="cards">/s);
+    await selIs([S(sec)], 'the second brings back the section, selected (not the main)');
+    // Duplicate the main; Undo selects the original again (not what now sits in the copy's place); Redo selects the copy
+    await rclick(io, await centre(b, el(main)));
+    r0 = await rev(); await pick('Duplicate'); await reloaded(r0);
+    assert.equal(html().match(/<main class="hero">/g)?.length, 2);
+    const copy = await b.eval(`napkin.state.selection?.node`);
+    assert.notEqual(copy, main);
+    assert.equal(await tagOf(copy), 'main', 'the copy is selected');
+    await undo();
+    assert.equal(html().match(/<main class="hero">/g)?.length, 1);
+    await selIs([S(main)], 'undo of a duplicate selects the original');
+    await undo(true);
+    assert.equal(html().match(/<main class="hero">/g)?.length, 2);
+    await selIs([S(copy)], 'redo selects the copy');
+  } finally { await close(); }
+});
+
+test('menus: no dead right-click after Shift+F10 and Escape; text fields keep their menu; a dimmed item has the one focus ring', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    const empty = await emptyCanvas(b);
+    await b.eval(`napkin.select(null); document.activeElement?.blur()`);
+    await io.key('F10', { shift: true });
+    assert.ok(await isOpen(b), 'Shift+F10 opens it');
+    await io.key('Escape');
+    assert.equal(await isOpen(b), false);
+    await io.move(empty.x, empty.y); await io.press(empty.x, empty.y, { button: 'right' }); await io.release(empty.x, empty.y, { button: 'right' });
+    await sleep(100);
+    assert.ok(await isOpen(b), 'a right-click right after opens the menu at once');
+    await io.key('Escape');
+    // a text field right after the keys: the browser's own menu, not prevented
+    const main = await node(b, 'main');
+    const mp = await centre(b, el(main));
+    await io.click(mp.x, mp.y); await sleep(400);
+    const field = `[...document.querySelectorAll('input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), textarea')].find((e) => { const r = e.getBoundingClientRect(); return r.width > 20 && r.height > 8 && !e.closest('#stage') && getComputedStyle(e).visibility !== 'hidden' && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) === e; })`;
+    const fp = await centre(b, field);
+    await b.eval(`document.activeElement?.blur()`);
+    await io.key('F10', { shift: true });
+    assert.ok(await isOpen(b));
+    await io.key('Escape');
+    await b.eval(`window.__native = null; addEventListener('contextmenu', (e) => { window.__native = !e.defaultPrevented; }, { once: true })`);
+    await io.move(fp.x, fp.y); await io.press(fp.x, fp.y, { button: 'right' }); await io.release(fp.x, fp.y, { button: 'right' });
+    await sleep(100);
+    assert.equal(await b.eval('window.__native'), true, 'the field keeps the browser menu');
+    assert.equal(await isOpen(b), false);
+    // the keyboard on a dimmed item: the same ring as a live one (2 px accent, 2 px outside), and no fill
+    await b.eval(`napkin.select({ component: ${JSON.stringify(LANDING)}, node: ${JSON.stringify(main)}, variant: {} }); document.activeElement?.blur()`);
+    await io.key('F10', { shift: true });
+    await io.key('w');
+    const ring = () => j(b, `(() => { const e = document.activeElement, s = getComputedStyle(e); return { label: e.querySelector('.nk-ml').textContent, off: e.getAttribute('aria-disabled') === 'true', ring: [s.outlineWidth, s.outlineStyle, s.outlineOffset, s.outlineColor], bg: s.backgroundColor }; })()`);
+    const dim = await ring();
+    assert.equal(dim.label, 'Wrap in frame'); assert.ok(dim.off);
+    await io.key('Home');
+    const live = await ring();
+    assert.equal(live.off, false);
+    assert.deepEqual(live.ring.slice(0, 3), ['2px', 'solid', '2px']);
+    assert.deepEqual(dim.ring, live.ring, `one ring for both: ${JSON.stringify({ dim, live })}`);
+    assert.equal(dim.bg, 'rgba(0, 0, 0, 0)', 'a dimmed item still has no fill');
+    await io.key('Escape');
   } finally { await close(); }
 });
