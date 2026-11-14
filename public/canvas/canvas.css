@@ -17,7 +17,6 @@
   --nk-text: #1c1f27;
   --nk-text-2: #4f5663;        /* secondary, 7:1 on chrome */
   --nk-text-3: #626a79;        /* tertiary, 5.3:1 */
-  --nk-measure: #e5484d;
   --nk-ok: #1d7a4f;
   --nk-warn: #a8480b;
   --nk-frame: #ffffff;
@@ -33,7 +32,7 @@
     color-scheme: dark;
     --nk-bg: #14161b; --nk-dot: #2c3039; --nk-chrome: #1b1d23; --nk-chrome-2: #23262d; --nk-chrome-3: #2b2f37; --nk-line: #2c2f37; --nk-line-2: #3a3e48;
     --nk-text: #e8eaf0; --nk-text-2: #b4bac7; --nk-text-3: #959cab;
-    --nk-measure: #ff6b70; --nk-ok: #5ed39b; --nk-warn: #f0a15f;
+    --nk-ok: #5ed39b; --nk-warn: #f0a15f;
     --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .07), 0 14px 36px -12px rgba(0, 0, 0, .7);
     --nk-cell-line: #d3d7e0; --nk-head-line: #e7e9ee; --nk-kbd: #2b2f37; --nk-shadow-pop: 0 18px 50px -10px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08);
   }
@@ -42,7 +41,7 @@
   color-scheme: dark;
   --nk-bg: #14161b; --nk-dot: #2c3039; --nk-chrome: #1b1d23; --nk-chrome-2: #23262d; --nk-chrome-3: #2b2f37; --nk-line: #2c2f37; --nk-line-2: #3a3e48;
   --nk-text: #e8eaf0; --nk-text-2: #b4bac7; --nk-text-3: #959cab;
-  --nk-measure: #ff6b70; --nk-ok: #5ed39b; --nk-warn: #f0a15f;
+  --nk-ok: #5ed39b; --nk-warn: #f0a15f;
   --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .07), 0 14px 36px -12px rgba(0, 0, 0, .7);
   --nk-cell-line: #d3d7e0; --nk-head-line: #e7e9ee; --nk-kbd: #2b2f37; --nk-shadow-pop: 0 18px 50px -10px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08);
 }
@@ -76,10 +75,16 @@
   --nk-panel: var(--nk-chrome);
   --nk-ink: var(--nk-text);
   --nk-ink-muted: light-dark(#5b6371, #a3aab7);  /* 6:1 on the panel, both themes */
-  --nk-hover: light-dark(rgb(28 31 39 / .06), rgb(232 234 240 / .07));
+  --nk-hover: light-dark(rgb(28 31 39 / .08), rgb(232 234 240 / .08));
   --nk-press: light-dark(rgb(28 31 39 / .11), rgb(232 234 240 / .13));
   --nk-armed: light-dark(rgb(52 89 226 / .12), rgb(123 155 255 / .18));
   --nk-armed-ink: light-dark(#2c52d2, #a9bfff);  /* icon on --nk-armed: 5:1 and 7:1 */
+  --nk-measure: light-dark(#e5484d, #ff6b70);       /* danger and error colour as text and a fill on the chrome */
+  --nk-measure-mark: #e5484d;                        /* distance lines: one mid-tone, 3:1 or better over white, black and both canvases */
+  --nk-measure-fill: #d02f34;                        /* the distance badge: white text holds 5:1, and its 1 px white edge lifts it off a dark canvas or black artwork */
+  --nk-on-measure: #ffffff;
+  --nk-halo: light-dark(#ffffff, #0d1220);           /* the second tone of the selection outline: the accent keeps 3:1 over artwork of either lightness */
+  --nk-halo-w: 1px;
   --nk-danger: var(--nk-measure);
   --nk-danger-ink: light-dark(#ce2c31, #ff8589);  /* danger as small text: 5.2:1 on white, 4.5:1+ on the dark chrome */
   /* cards on the canvas (standards 3, 5): one surface for every kind, a hairline edge and no shadow; the label's quieter half */
@@ -286,8 +291,8 @@ body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n],
 /* ---- overlays (screen space) ---- */
 #overlays { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 5; }
 #overlay-select, #overlay-hover, .overlay-extra { position: absolute; left: 0; top: 0; display: none; pointer-events: none; }
-#overlay-select, .overlay-extra { outline: 2px solid var(--nk-accent); outline-offset: 0; } /* selected: 2 px accent; hover: 1 px accent (standards 5.9, 10) */
-#overlay-hover { outline: 1px solid var(--nk-accent); }
+#overlay-select, .overlay-extra { outline: 2px solid var(--nk-accent); outline-offset: 0; box-shadow: 0 0 0 calc(var(--nk-ring-width) + var(--nk-halo-w)) var(--nk-halo), inset 0 0 0 var(--nk-halo-w) var(--nk-halo); } /* selected: 2 px accent; hover: 1 px accent (standards 5.9, 10) */
+#overlay-hover { outline: 1px solid var(--nk-accent); box-shadow: 0 0 0 calc(1px + var(--nk-halo-w)) var(--nk-halo), inset 0 0 0 var(--nk-halo-w) var(--nk-halo); }
 #overlay-select::before, .overlay-extra::before {
   content: ""; position: absolute; inset: -4px; pointer-events: none;
   --nk-h: linear-gradient(var(--nk-frame), var(--nk-frame));
@@ -301,17 +306,17 @@ body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n],
 #overlay-select[data-count]:not([data-count="1"]):not([data-count="0"])::after { content: attr(data-label) " +" attr(data-more); }
 #overlay-select .osize { position: absolute; left: 0; top: 0; transform: translate(calc(var(--nk-w, 0px) / 2), calc(var(--nk-h, 0px) + var(--nk-s2))) translateX(-50%); }
 #overlay-measure { position: absolute; inset: 0; pointer-events: none; }
-.m-line { position: absolute; left: 0; top: 0; border: 0 solid var(--nk-measure); }
+.m-line { position: absolute; left: 0; top: 0; border: 0 solid var(--nk-measure-mark); }
 .m-x { border-top-width: 1px; }
 .m-y { border-left-width: 1px; }
-.m-x::before, .m-x::after { content: ""; position: absolute; top: -4px; height: 8px; border-left: 1px solid var(--nk-measure); }
+.m-x::before, .m-x::after { content: ""; position: absolute; top: -4px; height: 8px; border-left: 1px solid var(--nk-measure-mark); }
 .m-x::before { left: 0; } .m-x::after { right: 0; }
-.m-y::before, .m-y::after { content: ""; position: absolute; left: -4px; width: 8px; border-top: 1px solid var(--nk-measure); }
+.m-y::before, .m-y::after { content: ""; position: absolute; left: -4px; width: 8px; border-top: 1px solid var(--nk-measure-mark); }
 .m-y::before { top: 0; } .m-y::after { bottom: 0; }
-.m-label { position: absolute; background: var(--nk-measure); color: #fff; font: 600 10px/1 var(--nk-mono); padding: 3px 5px; border-radius: 4px; white-space: nowrap; }
+.m-label { position: absolute; background: var(--nk-measure-fill); color: var(--nk-on-measure); box-shadow: 0 0 0 1px var(--nk-on-measure); font: var(--nk-w-strong) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); font-variant-numeric: tabular-nums; padding: 0 var(--nk-s1); border-radius: var(--nk-radius); white-space: nowrap; }
 .m-x .m-label { left: 50%; top: 0; transform: translate(-50%, -135%); }
 .m-y .m-label { top: 50%; left: 0; transform: translate(8px, -50%); }
-.m-target { position: absolute; left: 0; top: 0; outline: 1px solid var(--nk-measure); outline-offset: 0; }
+.m-target { position: absolute; left: 0; top: 0; outline: 1px solid var(--nk-measure-mark); outline-offset: 0; }
 #marquee { position: absolute; z-index: 6; pointer-events: none; border: 1px solid var(--nk-accent); background: color-mix(in srgb, var(--nk-accent) 8%, transparent); } /* standards 5.5 */
 #marquee[hidden] { display: none; }
 #draw-rect { position: fixed; z-index: 20; pointer-events: none; box-sizing: border-box; border: 1px solid var(--nk-accent); background: color-mix(in srgb, var(--nk-accent) 8%, transparent); }
@@ -379,6 +384,7 @@ body[data-empty="1"] #statusbar .hints { visibility: hidden; }
 :is(#drawer-tabs button, .sb-btn):not([aria-disabled="true"]):hover { background: var(--nk-hover); color: var(--nk-ink); }
 :is(#drawer-tabs button, .sb-btn):not([aria-disabled="true"]):active { background: var(--nk-press); color: var(--nk-ink); } /* disabled: no hover or press fill (standards 1) */
 #drawer-tabs button[aria-pressed="true"], #zoom-level[aria-expanded="true"] { background: var(--nk-armed); color: var(--nk-armed-ink); }
+:is(#drawer-tabs button[aria-pressed="true"], #zoom-level[aria-expanded="true"]):not([aria-disabled="true"]):is(:hover, :active) { background: var(--nk-armed); color: var(--nk-armed-ink); } /* an open drawer stays active under the pointer: the fills above would outrank the armed one */
 .sb-btn[aria-disabled="true"] { opacity: .4; background: transparent; color: var(--nk-ink-muted); cursor: default; }
 #zoom-menu .nk-mk { margin-left: auto; }
 
