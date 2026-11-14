@@ -1,0 +1,69 @@
+// Create component, history and discovery (docs/basics/standards.md section 9): undo puts the selection back on the source
+// element, redo makes the component again and selects it; the selection header carries the Create component action.
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { writeFileSync, existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tempRepo, startServer, sleep, waitFor } from '../helpers/harness.js';
+import { launchChromium } from '../helpers/cdp.js';
+import { input } from '../helpers/input.js';
+
+const PAGE = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>page</title>
+<style>
+  body { margin: 0; padding: 32px; font: 15px/1.45 Arial, sans-serif; }
+  .card { width: 280px; padding: 20px; border: 1px solid #ccd; border-radius: 10px; background: #fffdf7; color: #16202a; }
+  .card h2 { margin: 0 0 6px; font-size: 18px; }
+</style>
+</head>
+<body>
+  <h1>Orbit</h1>
+  <article class="card" id="promo">
+    <h2>Launch window</h2>
+    <p>Opens at noon.</p>
+  </article>
+</body>
+</html>
+`;
+const CARD = '0.1.1';
+let r, server, b, io;
+const file = (name) => join(r.compDir, name);
+const q = (e) => b.eval(e);
+const until = (fn, ms = 10000) => waitFor(fn, ms, 50);
+const select = async (node) => { await q(`napkin.select({ component: 'page.html', node: '${node}', variant: {} }); 0`); await sleep(150); };
+const sel = () => q(`napkin.state.selection ? napkin.state.selection.component + '|' + napkin.state.selection.node : ''`);
+
+before(async () => {
+  r = tempRepo(['Button']);
+  writeFileSync(file('page.html'), PAGE);
+  server = await startServer(r.compDir, { timeout: 20000, env: { NAPKIN_ALL_KINDS: '0' } });
+  b = await launchChromium({ width: 1440, height: 900 });
+  io = input(b);
+  await b.goto(server.url);
+  await b.waitFor('document.body.dataset.ready === "1"', 30000);
+  await b.waitFor(`!!document.querySelector('section.cmp[data-component="page.html"]')?.dataset.ready`, 20000);
+  await sleep(400);
+});
+after(async () => { await b?.close(); await server?.stop(); rmSync(r.dir, { recursive: true, force: true }); });
+
+test('component history: undo selects the source element again; redo makes the component again and selects it', { timeout: 90000 }, async () => {
+  await select(CARD);
+  await io.key('k', { ctrl: true, alt: true });
+  await until(() => existsSync(file('Card.tsx')));
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename' || null);
+  await io.key('Escape');
+  await until(async () => (await sel()).startsWith('Card.tsx') || null);
+  await q(`document.activeElement?.blur?.(); 0`);
+  await io.key('z', { ctrl: true });
+  await until(() => !existsSync(file('Card.tsx')));
+  await until(async () => (await sel()) === `page.html|${CARD}` || null, 8000).catch(() => {});
+  assert.equal(await sel(), `page.html|${CARD}`, 'undo: the element it was made from is selected again');
+  await q(`document.activeElement?.blur?.(); 0`);
+  await io.key('z', { ctrl: true, shift: true });
+  await until(() => existsSync(file('Card.tsx')));
+  await until(async () => (await sel()).startsWith('Card.tsx') || null, 8000).catch(() => {});
+  assert.match(await sel(), /^Card\.tsx/, 'redo: the component is back and selected');
+});

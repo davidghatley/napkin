@@ -159,10 +159,32 @@ export function initMakeComponent(ctx) {
       const left = r.dropped?.length ? ` Left behind: ${r.dropped.join('; ')}.` : '';
       ctx.hint(`${r.name} made from ${r.from}. It is ${r.path}; the frame is unchanged.${left}`);
       if (made) { revealWhenSettled(r.path); selectWhenDrawn(r.path); nameWhenDrawn(r.path); }
+      for (let i = steps.length - 1; i >= 0; i--) if (steps[i].undone) steps.splice(i, 1); // a new step ends the redo line
+      steps.push({ path: r.path, from: t.from, node: t.node, undone: false });
       ctx.emit?.('component-made', { path: r.path, name: r.name, from: r.from });
       return { path: r.path, name: r.name, component: made?.id ?? null };
     } finally { busy = false; }
   }
+
+  // Undo and Redo of a made component (history.js emits 'undone' / 'redone' for the file): undo selects the element it was
+  // made from again (waiting for the frame to hold it), redo selects the new card once it is drawn. The same two events
+  // edit-ops.js uses for its own steps; a step that is not ours is left alone.
+  const steps = []; // { path, from, node, undone }
+  const fileOf = (u) => String(u.component ?? '').split('#')[0];
+  ctx.on?.('undone', (u) => {
+    const m = steps.findLast((x) => fileOf(u) === x.path && !x.undone); if (!m) return;
+    m.undone = true;
+    (async () => {
+      const f = () => ctx.stage.sections.get(m.from)?.docFrame;
+      for (let i = 0; i < 160 && !(f()?.has?.(m.node)); i++) await new Promise((r) => setTimeout(r, 25));
+      ctx.select({ component: m.from, node: m.node, variant: {} });
+    })();
+  });
+  ctx.on?.('redone', (u) => {
+    const m = steps.findLast((x) => fileOf(u) === x.path && x.undone); if (!m) return;
+    m.undone = false;
+    selectWhenDrawn(m.path);
+  });
 
   const api = { can, run, rename };
   ctx.makeComponent = api;
