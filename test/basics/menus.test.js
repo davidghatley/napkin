@@ -763,3 +763,23 @@ test('menus: Order stays open while the pointer travels diagonally to a command,
     assert.equal(await b.eval(`document.querySelector('#ctxmenu-sub').hidden`), true, 'a pointer that rests on another row closes it');
   } finally { await close(); }
 });
+
+test('menus: right-clicking the code of a CSS card gives the card its file menu, as its title does', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    await b.waitFor(`!!document.querySelector('.item-card pre')`, 20000);
+    const id = await b.eval(`document.querySelector('.item-card pre').closest('.item-card').dataset.component`);
+    const title = await centre(b, `document.querySelector('.item-card[data-component="${id}"] .cmp-head')`);
+    await rclick(io, title);
+    const byTitle = await labels(b);
+    await io.key('Escape'); await b.eval(`napkin.select(null)`);
+    await sleep(500); await b.waitFor(`!document.body.classList.contains('moving')`, 5000);
+    const sheet = await centre(b, `document.querySelector('.item-card[data-component="${id}"] pre')`);
+    await rclick(io, sheet);
+    assert.ok(await isOpen(b), 'the napkin menu opens on the code, not the browser one');
+    assert.deepEqual(await labels(b), byTitle, 'the same file menu as the title gives');
+    assert.deepEqual(await selection(b), [`${id}|item`], 'the card is selected');
+    const m = await menu(b);
+    assert.ok(m.items.every((x) => !x.off || x.why), 'anything dimmed says why');
+  } finally { await close(); }
+});

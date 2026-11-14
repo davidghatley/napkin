@@ -7,7 +7,7 @@
 //   middle of the canvas). Keys: Down / Up (wrap), Home / End, a letter jumps, Right or Enter opens the submenu, Left closes it,
 //   Enter or Space runs, Escape closes one level and puts the focus back where it was. Closes on a press outside, the wheel, a
 //   scroll, a zoom or pan, a tool change, the window losing focus or changing size.
-//   Text fields keep the browser's own menu; so does a component in play mode (it is live, the menu is its own).
+//   Text fields keep the browser's own menu, and so do code blocks outside a card; so does a component in play mode (it is live, the menu is its own).
 //   initContextMenu(ctx) -> ctx.menu = { open(kind, at, opts), openRow(row, at, opts), openAtSelection(), close(), isOpen(), target() }
 import { ACTIONS } from './actions.js';
 import { keyLabel, MAC } from './keylabel.js';
@@ -279,7 +279,7 @@ export function initContextMenu(ctx) {
     keyEcho = 0;
     const row = t.closest?.('#layers .lrow[data-component]');
     if (row) { ev.preventDefault(); openRow(row, { x: ev.clientX, y: ev.clientY }); return; }
-    if (!t.closest?.('#stage') || document.body.dataset.play || t.closest('#doc-dock, #time, .proposal, details, pre')) return; // in play the component is live and the menu is its own
+    if (!t.closest?.('#stage') || document.body.dataset.play || t.closest('#doc-dock, #time, .proposal, details') || (t.closest('pre') && !t.closest('.item-card'))) return; // (a card's own code is the card: its file menu) // in play the component is live and the menu is its own
     ev.preventDefault();
     openCanvas(t, ev.clientX, ev.clientY, ev.ctrlKey && !MAC || ev.metaKey);
   }, true);
