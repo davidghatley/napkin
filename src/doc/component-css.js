@@ -16,7 +16,10 @@
 //     textOf  rule -> its text as written ("sel { ... }")
 //     dir     the folder the component is written to (posix, relative to the napkin folder)
 //     scope   the wrapper's class name to use when one is needed
-//     width   the root's width in the frame, sent when a grid or flex parent gave it (CSS px, in its own box-sizing)
+//     width   the root's width in the frame (CSS px, in its own box-sizing), sent for any root a width applies to
+//     height  the root's height in the frame, sent when a grid or flex parent sized it (a row stretched it)
+//   The size model: a component keeps the size it had in its frame and may shrink to fit a narrower place (width: min(Npx, 100%)).
+//   It is written last, so it wins over the root's own width rules: those were measured against a parent the component does not have.
 import { posix } from 'node:path';
 import { matches as selMatches } from './select.js';
 
@@ -75,7 +78,7 @@ function keepSpace(el, ancestors, rules) {
 
 const varUses = (t) => [...String(t).matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]);
 
-export function componentCss({ el, html = '', rules, textOf, dir = '.', scope = 'component-context', width = null }) {
+export function componentCss({ el, html = '', rules, textOf, dir = '.', scope = 'component-context', width = null, height = null }) {
   const subtree = []; (function walk(e) { subtree.push(e); e.children.forEach(walk); })(el);
   const ancestors = []; for (let a = el.parent; a; a = a.parent) ancestors.unshift(a);
   const before = el.parent ? el.parent.children.slice(0, el.parent.children.indexOf(el)) : [];
@@ -131,15 +134,16 @@ export function componentCss({ el, html = '', rules, textOf, dir = '.', scope = 
   // :where() counts nothing, so which declaration wins is decided by order alone: the rules go in the order the cascade
   // ranked them (specificity, then order). A pseudo-element cannot sit inside :where(), so it follows it.
   const css = [];
-  // the width a grid or flex parent gave the root, which the component will not have: written first, so a width of the
-  // root's own rules still wins (the frame measured it in the root's own box-sizing)
-  const w = Number(width);
-  if (Number.isFinite(w) && w > 0) css.push({ text: `:where(${W} > *) { width: ${Math.round(w * 100) / 100}px; }`, context: [] });
   const sorted = parts.map((x, i) => ({ ...x, i })).sort((a, b) => cmp(a.spec, b.spec) || a.r.order - b.r.order || a.i - b.i);
   for (const x of sorted) {
     const sel = x.forms.map((f) => { const pe = PSEUDO_ELEMENT.exec(f)?.[0] || ''; return `:where(${f.slice(0, f.length - pe.length)})${pe}`; }).join(', ');
     css.push({ text: `${sel} ${body(x.r)}`, context: x.r.context });
   }
+  // the size the root had in the frame, last: the rules above were written for a parent the component does not have
+  const w = Number(width), h = Number(height), size = [];
+  if (Number.isFinite(w) && w > 0) size.push(`width: min(${Math.round(w * 100) / 100}px, 100%);`);
+  if (Number.isFinite(h) && h > 0) size.push(`min-height: ${Math.round(h * 100) / 100}px;`);
+  const lock = size.length ? { text: `:where(${W} > *) { ${size.join(' ')} }`, context: [] } : null;
 
   // (2) animations its rules name
   const all = () => css.map((c) => c.text).join('\n');
@@ -175,13 +179,14 @@ export function componentCss({ el, html = '', rules, textOf, dir = '.', scope = 
   const need = new Set([...varUses(all()), ...varUses(html), ...given.filter((d) => !d.prop.startsWith('--') && INHERITED.test(d.prop)).flatMap((d) => varUses(d.value))]);
   for (let grew = true; grew;) { grew = false; for (const d of given) if (d.prop.startsWith('--') && need.has(d.prop)) for (const u of varUses(d.value)) if (!need.has(u)) { need.add(u); grew = true; } }
   const kept = given.filter((d) => (d.prop.startsWith('--') ? need.has(d.prop) : INHERITED.test(d.prop)));
-  if (!kept.length && !css.length) return { css, scope: null, keep: keepSpace(el, ancestors, rules) };
+  if (!kept.length && !css.length && !lock) return { css, scope: null, keep: keepSpace(el, ancestors, rules) };
   const blocks = [{ context: [], decls: ['display: contents'] }];
   for (const d of kept) {
     const key = JSON.stringify(d.context), last = blocks.at(-1);
     if (JSON.stringify(last.context) === key) last.decls.push(`${d.prop}: ${d.value}`);
     else blocks.push({ context: d.context, decls: [`${d.prop}: ${d.value}`] });
   }
+  if (lock) css.push(lock);
   css.unshift(...blocks.map((bk) => ({ text: `.${scope} {\n${bk.decls.map((x) => `  ${x};`).join('\n')}\n}`, context: bk.context })));
   return { css, scope, keep: keepSpace(el, ancestors, rules) };
 }

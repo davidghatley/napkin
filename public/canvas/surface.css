@@ -23,8 +23,8 @@ body { font-family: var(--nk-sans); }
 
 /* ------------------------------------------------------------------ cards: spatial focus is visible */
 #world [data-item-id]:focus { outline: none; }
-/* The ring is three screen pixels at any zoom (--nk-lf is 1/zoom when zoomed out) and sits on the card edge. */
-#world [data-item-id]:focus-visible { outline: calc(3px * var(--nk-lf, 1)) solid var(--nk-accent); outline-offset: 0; }
+/* The shared ring (standards 10): 2 px wide, 2 px off the card edge, at any zoom (--nk-lf scales it to screen pixels). */
+#world [data-item-id]:focus-visible { outline: calc(var(--nk-ring-width) * var(--nk-lf, 1)) solid var(--nk-accent); outline-offset: calc(var(--nk-ring-offset) * var(--nk-lf, 1)); }
 
 /* ------------------------------------------------------------------ board groups (arrange, Group <name>) */
 #board-groups { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }

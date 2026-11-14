@@ -40,7 +40,7 @@ export function initMakeComponent(ctx) {
       if (now?.component === id) held++;
       else if (!now && (held || (!asked && !renamed))) return; // the person cleared it (a card drops only a selection it cannot find yet, before it holds; a rename drops the old card's)
       else if (now && key(now) !== was && !(renamed && !ctx.state.components.has(now.component))) return; // the person moved on
-      else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) { asked = true; ctx.select({ component: id, node: root, variant: {}, card: true }); } }
+      else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) { asked = true; ctx.select({ component: id, node: root, variant: {}, card: true }); if (ctx.state.selection?.component === id) held = 1; } } // taken at once: a clear after this is the person's, not the card dropping it
       await new Promise((r) => setTimeout(r, 80));
     }
   }
@@ -122,18 +122,26 @@ export function initMakeComponent(ctx) {
     return !!ed;
   }
 
-  // The width a grid or flex parent gave the element in its frame, in the element's own box-sizing (what `width:` means
-  // for it); null when its width is its own. The component has no such parent, so it is given this width instead.
-  function gridWidth(id, node) {
+  // The box the element has in its frame: its width, and its height when a grid or flex parent sized it (a row stretched it),
+  // each in the element's own box-sizing (what `width:` means for it). The component has no such parent, so it is given the
+  // size it had (and may shrink to fit); null where a size does not apply (an inline box, a table part, display: contents).
+  const REPLACED = /^(img|svg|video|canvas|iframe|input|button|select|textarea|object|embed|meter|progress)$/i;
+  function frameSize(id, node) {
     try {
       const real = ctx.stage.sections.get(id)?.docFrame?.element(node)?.el, win = real?.ownerDocument?.defaultView;
-      if (!real?.parentElement || !win) return null;
-      const s = win.getComputedStyle(real), ps = win.getComputedStyle(real.parentElement);
-      if (!/^(inline-)?(grid|flex)$/.test(ps.display) || /^(inline|contents|none)$/.test(s.display)) return null;
-      let w = real.getBoundingClientRect().width;
-      if (s.boxSizing !== 'border-box') w -= ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((n, k) => n + (parseFloat(s[k]) || 0), 0);
-      return w > 0 ? Math.round(w * 100) / 100 : null;
-    } catch { return null; }
+      if (!real || !win) return {};
+      const s = win.getComputedStyle(real);
+      if (/^(contents|none|table-.*)$/.test(s.display) || (s.display === 'inline' && !REPLACED.test(real.tagName))) return {};
+      const r = real.getBoundingClientRect(), edge = (...k) => k.reduce((n, x) => n + (parseFloat(s[x]) || 0), 0);
+      const inBox = (v, ...k) => (s.boxSizing === 'border-box' ? v : v - edge(...k));
+      const round = (v) => (v > 0 ? Math.round(v * 100) / 100 : null);
+      const parent = real.parentElement && win.getComputedStyle(real.parentElement);
+      return {
+        width: round(inBox(r.width, 'paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth')),
+        height: parent && /^(inline-)?(grid|flex)$/.test(parent.display) && !/^(inline-)?table$/.test(s.display) ? // a table's height leaves out its caption
+           round(inBox(r.height, 'paddingTop', 'paddingBottom', 'borderTopWidth', 'borderBottomWidth')) : null,
+      };
+    } catch { return {}; }
   }
 
   async function run() {
@@ -142,7 +150,7 @@ export function initMakeComponent(ctx) {
     if (!t.ok) { ctx.hint(t.why); return null; }
     busy = true;
     try {
-      const res = await ctx.fetch('/api/frames/component', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: t.from, node: t.node, width: gridWidth(t.from, t.node) }) });
+      const res = await ctx.fetch('/api/frames/component', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: t.from, node: t.node, ...frameSize(t.from, t.node) }) });
       const r = await res.json().catch(() => ({ ok: false, error: `napkin answered ${res.status}` }));
       if (!r.ok) { ctx.hint(`Could not make the component: ${plain(r.error)}`); return null; }
       // the new file joins the canvas on the folder's next scan; wait for its card, then show it

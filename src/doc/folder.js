@@ -663,13 +663,18 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   // POST /api/frames/component: { from, node, name? } -> the element `node` of the HTML frame `from` becomes a component of its
   // own: <Name>.tsx beside the frame, holding the element as JSX and the CSS rules that reach it. The frame is left as it is
   // (plain HTML cannot hold an instance); the component lands on the canvas to the frame's right. One undo step removes it.
-  function componentFrom({ from, node, name, width, by = 'unknown' } = {}) {
+  function componentFrom({ from, node, name, width, height, by = 'unknown' } = {}) {
     const comp = component(frameFile(from));
     const t = tree(comp.id);
     const dom = buildDom(t.tree || []);
     const el = dom.el(node);
     if (!el || el.synthetic) throw new DocError(`no element ${node} in ${comp.path}. Next: select the element again`, 404);
     if (['html', 'head', 'body'].includes(el.tag)) throw new DocError('select an element inside the frame, not the whole frame. Next: double-click into the frame and pick the part you want', 400);
+    // a shape, group or definition inside an <svg> cannot stand alone: it needs the <svg> around it (its viewBox, size and the
+    // gradients and styles it refers to), so it is refused here rather than made blank
+    for (let a = el.parent; a; a = a.parent) if (String(a.tag).toLowerCase() === 'svg') throw new DocError('that element is inside an <svg> and would draw nothing on its own. Next: select the whole <svg> to make a component from it', 400);
+    // a row, a cell or a section of a table is laid out by the table around it: on its own it collapses
+    if (['tr', 'td', 'th', 'thead', 'tbody', 'tfoot', 'caption', 'colgroup', 'col'].includes(String(el.tag).toLowerCase())) throw new DocError(`that <${el.tag}> is part of a table and would collapse on its own. Next: select the whole table to make a component from it`, 400);
     const entry = read(comp.path);
     const html = fromL(entry.s.slice(el.src.start, el.src.end));
     const dir = dirname(comp.path);
@@ -681,7 +686,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     // the CSS that makes it look the same on its own (src/doc/component-css.js): the rules that reach it, rewritten where
     // they name ancestors it will not have, and what the elements around it gave it, on a wrapper that stands in for them
     const base = rulesOf(comp.id);
-    const { css, scope, keep } = componentCss({ el, html, width, rules: base.rules, textOf: (r) => fromL(read(r.file).s.slice(r.start, r.end)), dir: posix.normalize(dir), scope: `${wanted.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context` });
+    const { css, scope, keep } = componentCss({ el, html, width, height, rules: base.rules, textOf: (r) => fromL(read(r.file).s.slice(r.start, r.end)), dir: posix.normalize(dir), scope: `${wanted.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context` });
     let made; try { made = toComponent({ name: wanted, html, css, wrap: scope, keep, from: `${comp.path}:${el.src.line}` }); } catch (e) { throw new DocError(e.message, 400); }
     const p = posix.join(dir, `${wanted}.tsx`).replace(/^\.\//, '');
     const text = toL(made.source);
@@ -708,9 +713,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const dir = dirname(p);
     let taken = []; try { taken = readdirSync(abs(dir)).filter((n) => /\.(tsx|jsx)$/i.test(n)).map((n) => n.replace(/\.(tsx|jsx)$/i, '')).filter((n) => n !== old); } catch { /* gone */ }
     if (taken.some((x) => x.toLowerCase() === name.toLowerCase())) throw new DocError(`${name} already exists in this folder; napkin never overwrites a file. Next: choose another name`, 409);
-    const kebab = (n) => `${n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context`;
+    const kebab = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
     const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const text = st.text.replace(new RegExp(`export default function ${esc(old)}\\(`), `export default function ${name}(`).replace(new RegExp(`(?<![\\w-])${esc(kebab(old))}(?![\\w-])`, 'g'), kebab(name));
+    const text = st.text.replace(new RegExp(`export default function ${esc(old)}\\(`), `export default function ${name}(`).replace(new RegExp(`(?<![\\w-])${esc(kebab(old))}-(context(?![\\w-])|imp-\\d)`, 'g'), (_, tail) => `${kebab(name)}-${tail}`);
     const np = posix.join(dir, `${name}${extname(p)}`).replace(/^\.\//, '');
     const { place } = drop(p, st.text);
     try { put(np, text, place || st.place); } catch (e) { put(p, st.text, place || st.place); throw e; }

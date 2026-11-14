@@ -134,7 +134,9 @@ export function createDocFrame(ctx, id, { onResize = () => {} } = {}) {
     const d = iframe?.contentDocument;
     if (!d?.body) return;
     const err = d.querySelector('[data-napkin-error]'), empty = !err && d.querySelector('[data-napkin-empty]');
-    const next = err ? 'error' : empty ? 'empty' : null, text = (err || empty)?.textContent.trim() || '';
+    // a page that draws nothing at all (an empty body, no height of its own) is a thin strip: it gets the empty card instead
+    const blank = !err && !empty && !d.body.textContent.trim() && d.documentElement.getBoundingClientRect().height < 1 && ![...d.body.querySelectorAll('*')].some((e) => !/^(script|style|link|meta|template|noscript)$/i.test(e.localName));
+    const next = err ? 'error' : empty || blank ? 'empty' : null, text = blank ? 'Empty page' : (err || empty)?.textContent.trim() || '';
     if ((cell.dataset.state || null) === next && (cell.dataset.stateText || '') === (next ? text : '')) return;
     if (next === 'error') setCardState(cell, 'error', { ...errorParts(text), full: text });
     else setCardState(cell, next, { detail: text.replace(/\.$/, '') });
