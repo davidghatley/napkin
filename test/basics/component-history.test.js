@@ -83,5 +83,20 @@ test('component header: the right panel carries a Create component action beside
   await b.waitFor(`!!${btn} && ${btn}.getAttribute('aria-disabled') === null`, 8000);
   const x = await q(`(() => { const r = ${btn}.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   await io.click(x[0], x[1]);
-  await until(() => existsSync(file('Heading.tsx')) || existsSync(file('H2.tsx')) || existsSync(file('Card.tsx')));
+  await until(() => existsSync(file("Heading.tsx")) || existsSync(file("H2.tsx")) || existsSync(file("Card.tsx")));
+});
+
+test('component inspector: the made component shows the styling of its scoped style, not "no styles"', { timeout: 90000 }, async () => {
+  await select(CARD);
+  await io.key('k', { ctrl: true, alt: true });
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename' || null);
+  await io.key('Escape');
+  await until(async () => (await sel()).startsWith('Card') || null);
+  await sleep(1500);
+  const panel = () => q(`document.querySelector('#panel').innerText`);
+  await until(async () => !/Nothing styles this element yet/.test(await panel()) || null);
+  const text = await panel();
+  assert.match(text, /padding/, 'its padding is listed with the values that style it');
+  assert.doesNotMatch(text, /0 matching/, 'the rules of its scoped style match it');
+  assert.match(text, /[1-9]\d* matching/);
 });
