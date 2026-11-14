@@ -334,6 +334,14 @@ export function createStage(ctx, root, world, view) {
     sec.el.style.left = `${x}px`; sec.el.style.top = `${y}px`;
     sec.el.dataset.pos = '1';
   }
+  // A person put the frame here (a drag, a nudge, an undo): it stays here, whatever the packing of the others does.
+  function putAt(id, x, y) {
+    const c = ctx.state.components.get(id);
+    moveTo(id, x, y);
+    if (c) c.canvas = { x, y };
+    auto.delete(id);
+    refreshOverlays();
+  }
   const placed = (id) => { const s = ctx.state.components.get(id)?.canvas; return !!s && (s.x !== 0 || s.y !== 0); };
   // What a frame takes on the canvas besides its body: the title row and filter bar above it (drawn at a size that stays readable,
   // so in canvas units they grow as the view zooms out) and a gap of at least CLEAR px. Packing reserves it, so frames never overlap.
@@ -978,8 +986,8 @@ export function createStage(ctx, root, world, view) {
     try {
       const r = c?.item
         ? await ctx.fetch('/api/item-layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: d.id, x: pos.x, y: pos.y }) })
-        : c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013)
-        ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, x: pos.x, y: pos.y }) })
+        : c?.kind === 'html' // the document engine keeps the layout outside the folder (decision 0013); a move is one undo step (standards 3.8)
+        ? await ctx.fetch('/api/layout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: d.id, x: pos.x, y: pos.y, undo: true }) })
         : await ctx.fetch(`/api/components/${encodeURIComponent(d.id)}/canvas`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(pos) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.status);
     } catch (e) { document.querySelector('#error').textContent = `Could not save the position: ${plain(e.message)}`; }
@@ -997,7 +1005,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     openingRect, componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

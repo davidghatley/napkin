@@ -37,6 +37,7 @@ import { initEmpty } from './empty.js';
 import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
+import { initFrameOps } from './frame-ops.js';
 import { initHandles } from './handles.js';
 import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
@@ -159,6 +160,7 @@ initMakeComponent(ctx); // basics pass 3: an element selected in an HTML frame b
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
 initEditOps(ctx);
+initFrameOps(ctx); // a frame as an object: nudge and resize, each one undo step (frame-ops.js; delete and duplicate: file-ops.js)
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initFileOps(ctx); // an HTML file as a frame: rename on its label, duplicate beside it, delete to the trash, each undoable
 initLayers(ctx, $('#layers'));

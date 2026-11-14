@@ -359,15 +359,29 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   }
 
   // Where a frame sits ({ x, y }) and how wide it is drawn ({ width }); either may be sent alone.
-  function setLayout(id, { x, y, width } = {}) {
+  // { by }: a person moved or sized the frame, so it is one step on their undo stack (standards 3.8); without it (a width
+  // previewed with the grip) nothing is recorded.
+  function setLayout(id, { x, y, width } = {}, { by } = {}) {
     const comp = component(id);
     const num = (v) => v === undefined || v === null || Number.isFinite(v);
     if (!num(x) || !num(y) || !num(width) || (x === undefined) !== (y === undefined) || (x === undefined && width === undefined)) throw new DocError('send { component, x, y } and/or { width } as numbers. Next: retry with the frame position or width', 400);
     const cur = layout[comp.id] || {};
-    layout[comp.id] = { ...cur, ...(x !== undefined && { x: Math.round(x), y: Math.round(y) }), ...(width !== undefined && { width: width === null ? undefined : Math.max(FRAME_MIN.w, Math.min(2400, Math.round(width))) }) };
-    mkdirSync(state, { recursive: true });
-    writeAtomic(join(state, 'layout.json'), JSON.stringify({ folder: real, frames: layout }) + '\n');
+    const next = placeAt(cur, { x, y, width });
+    layout[comp.id] = next;
+    saveLayout();
+    if (by && JSON.stringify(cur) !== JSON.stringify(next)) {
+      const st = { op: 'layout', by, at: Date.now(), path: comp.id, before: { ...cur }, after: { ...next }, summary: x !== undefined ? `moved ${comp.id}` : `sized ${comp.id}` };
+      push(undo, comp.id, st); redo.set(comp.id, (redo.get(comp.id) || []).filter((s) => s.by !== by));
+      push(history, comp.id, { revision: read(comp.path).rev, by, at: Date.now(), summary: st.summary, files: [comp.path] });
+    }
     return { ok: true, component: comp.id, canvas: layout[comp.id] };
+  }
+  const placeAt = (cur, { x, y, width }) => { const o = { ...cur, ...(x !== undefined && x !== null && { x: Math.round(x), y: Math.round(y) }), ...(width !== undefined && { width: width === null ? undefined : Math.max(FRAME_MIN.w, Math.min(2400, Math.round(width))) }) }; if (o.width === undefined) delete o.width; return o; };
+  // A place put back by an undo or a redo: the canvas is told (doc-layout), so the card moves where it was.
+  function putPlace(id, place) {
+    if (place && Object.keys(place).length) layout[id] = { ...place }; else delete layout[id];
+    saveLayout();
+    events.emit('layout', { component: id, canvas: layout[id] ?? null });
   }
 
   // ---------- edits ----------
@@ -378,7 +392,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   }
   // Apply a batch: { baseRevision, edits, by } -> { ok, revision, changed } (throws DocError/EditRefused).
   // { dryRun }: plan the edit and say what the files would hold, writing nothing (the canvas previews with exactly these bytes).
-  function edit(id, { baseRevision, edits, by = 'unknown', summary, dryRun = false } = {}) {
+  // { canvas: { x?, y?, width? } }: the frame's place changes in the same step (a resize from the canvas writes the body's size
+  // and the frame's place at once, so one undo puts both back).
+  function edit(id, { baseRevision, edits, by = 'unknown', summary, dryRun = false, canvas } = {}) {
     const comp = component(id);
     if (!Array.isArray(edits) || !edits.length) throw new DocError('send { edits: [...] }', 400);
     const base = read(comp.path);
@@ -450,10 +466,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     if (!changed.length) return { ok: true, ...(dryRun && { dryRun: true, files: [] }), revision: read(comp.path).rev, changed: [], component: comp.id, noop: true };
     const files = changed.map(([path, s]) => ({ path, before: read(path).s, after: s }));
     if (dryRun) return { ok: true, dryRun: true, component: comp.id, changed: files.map((f) => f.path), files: files.map((f) => ({ path: f.path, text: fromL(f.after) })) };
+    let place = null;
+    if (canvas && typeof canvas === 'object') {
+      const n = (v) => (v === undefined || v === null ? undefined : Number(v));
+      const want = { x: n(canvas.x), y: n(canvas.y), width: n(canvas.width) };
+      if (![want.x, want.y, want.width].every((v) => v === undefined || Number.isFinite(v)) || (want.x === undefined) !== (want.y === undefined)) throw new DocError('canvas needs x and y together, and width, as numbers. Next: retry with the frame box', 400);
+      const cur = layout[comp.id] || {};
+      place = { before: { ...cur }, after: placeAt(cur, want) };
+    }
     write(files);
-    const step = { by, at: Date.now(), files, edits, summary: summary || summarize(edits) };
+    const step = { by, at: Date.now(), files, edits, summary: summary || summarize(edits), ...(place && { place }) };
+    if (place) { layout[comp.id] = { ...place.after }; saveLayout(); }
     push(undo, comp.id, step); redo.set(comp.id, (redo.get(comp.id) || []).filter((x) => x.by !== by));
-    return done2(comp, step, 'edit');
+    return { ...done2(comp, step, 'edit'), ...(place && { canvas: layout[comp.id] }) };
   }
   const summarize = (edits) => edits.map((e) => e.op === 'rule' ? `${e.selector} ${e.prop}` : e.op === 'var' ? `${e.name}` : `${e.op}${e.name ? ' ' + e.name : e.prop ? ' ' + e.prop : ''}`).join(', ');
   const push = (m, id, step) => { if (!m.has(id)) m.set(id, []); const a = m.get(id); a.push(step); if (a.length > HISTORY) a.shift(); };
@@ -510,7 +535,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     write(files);
     stack.splice(k, 1);
     push(toStack, comp.id, { ...st, files: files.map((f) => ({ path: f.path, before: kind === 'undo' ? f.after : f.before, after: kind === 'undo' ? f.before : f.after })) });
-    return done2(comp, { ...st, files }, kind); // the files as they were really written (the commit event says which way)
+    if (st.place) putPlace(comp.id, kind === 'undo' ? st.place.before : st.place.after);
+    return { ...done2(comp, { ...st, files }, kind), ...(st.place && { canvas: layout[comp.id] ?? null }) }; // the files as they were really written (the commit event says which way)
   }
 
   // Put files back to the bytes of an earlier version (the film strip's Restore): one step across all of them, so one undo.
@@ -583,7 +609,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     if (layout[from]) { layout[to] = layout[from]; delete layout[from]; saveLayout(); }
     for (const m of [undo, redo, history]) {
       const a = m.get(from); if (!a) continue;
-      m.delete(from); m.set(to, [...(m.get(to) || []), ...a.map((x) => (x.files ? { ...x, files: x.files.map((f) => (f.path === from ? { ...f, path: to } : f)) } : x))]);
+      m.delete(from); m.set(to, [...(m.get(to) || []), ...a.map((x) => (x.op === 'layout' ? { ...x, path: to } : x.files ? { ...x, files: x.files.map((f) => (f.path === from ? { ...f, path: to } : f)) } : x))]);
     }
   }
   function fileDone(id, by, st, kind) {
@@ -617,6 +643,22 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const st = { op: 'delete', by, at: Date.now(), path: p, text, place, summary: `deleted ${p}` };
     push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
     return fileDone(p, by, st, 'edit');
+  }
+  // POST /api/frames/duplicate: { from, x, y } -> a copy of the frame file, byte for byte (its <title> follows the new name), as the
+  // next free frame-N.html beside it, placed at x, y with the same drawn width. One undo step removes the copy.
+  function duplicateFrame(from, { x, y, by = 'unknown' } = {}) {
+    const f = frameFile(from);
+    const src = read(f).s;
+    const p = nextFrame(posix.dirname(f));
+    const esc = (t) => t.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+    const was0 = `<title>${esc(nameOfPath(f))}</title>`, at = src.indexOf(was0);
+    const text = at < 0 ? src : src.slice(0, at) + `<title>${esc(nameOfPath(p))}</title>` + src.slice(at + was0.length);
+    const was = layout[f] || {};
+    const place = placeOf(Number.isFinite(x) ? x : was.x, Number.isFinite(y) ? y : was.y, was.width);
+    put(p, text, place);
+    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `duplicated ${f} as ${p}` };
+    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
+    return { ...fileDone(p, by, st, 'edit'), path: p, name: nameOfPath(p), from: f, canvas: layout[p] };
   }
   // POST /api/frames/component: { from, node, name? } -> the element `node` of the HTML frame `from` becomes a component of its
   // own: <Name>.tsx beside the frame, holding the element as JSX and the CSS rules that reach it. The frame is left as it is
@@ -665,25 +707,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     push(undo, t, st); redo.set(t, (redo.get(t) || []).filter((s) => s.by !== by));
     return fileDone(t, by, st, 'edit');
   }
-  // POST /api/frames/duplicate: { from, x?, y? } -> a copy beside the file, named with the next free number (orbit.html ->
-  // orbit-2.html), its card at x, y with the original's width. It is a create step: one undo removes the copy and its card.
-  function duplicateFrame(from, { x, y, by = 'unknown' } = {}) {
-    const f = frameFile(from);
-    let text; try { text = read(f).s; } catch { throw new DocError(`${f} is gone. Next: check the file list`, 404); }
-    const dir = posix.dirname(f), ext = extname(f), stem = basename(f, ext).replace(/-\d+$/, '');
-    let n = 2, p; do p = posix.join(dir, `${stem}-${n++}${ext}`).replace(/^\.\//, ''); while (existsSync(abs(p)));
-    const place = placeOf(x, y, layout[f]?.width);
-    put(p, text, place);
-    const st = { op: 'create', by, at: Date.now(), path: p, text, place, summary: `created ${p} (a copy of ${f})` };
-    push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((s) => s.by !== by));
-    return { ...fileDone(p, by, st, 'edit'), path: p, from: f, canvas: layout[p] };
-  }
   // Undo or redo a file step. A create undone removes the file (if it still holds what napkin wrote); a delete undone writes it back.
   function fileStep(id, k, by, kind) {
     const [fromStack, toStack] = kind === 'undo' ? [undo, redo] : [redo, undo];
     const st = fromStack.get(id)[k];
     const back = kind === 'undo';
     let key = id;
+    if (st.op === 'layout') { // a move or a size: the place before (undo) or after (redo)
+      if (!existsSync(abs(st.path))) throw new DocError(`${st.path} is gone. Next: undo its removal first`, 409);
+      putPlace(st.path, back ? st.before : st.after);
+      fromStack.get(id).splice(k, 1);
+      push(toStack, id, st);
+      return { ...fileDone(id, by, st, kind), canvas: layout[id] ?? null };
+    }
     if (st.op === 'create' || st.op === 'delete') {
       if ((st.op === 'create') === back) drop(st.path, st.text); else put(st.path, st.text, st.place);
     } else if (st.op === 'rename') {
@@ -752,7 +788,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       return best;
     },
     undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'), pendingStep,
-    createFrame, duplicateFrame, removeFrame, renameFrame, nextFrame, componentFrom,
+    createFrame, removeFrame, duplicateFrame, renameFrame, nextFrame, componentFrom,
     history: (id) => [...(history.get(has(id) ? component(id).id : id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,
     rescan: () => { scan(); watchDirs(); },
