@@ -25,6 +25,7 @@ export const MENUS = {
 const ROW = ['layer-toggle']; // a layer row adds these to its item's view group
 const GAP = 2;                // the menu opens this far from the pointer, so the pointer is never on an item
 const EDGE = 8;               // and keeps this far inside the window
+const GRACE_MS = 400;         // a submenu stays this long while the pointer travels toward it
 const HOVER_MS = 150;         // a submenu opens after this long on its item
 
 const editable = (t) => !!t?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]') || !!t?.isContentEditable;
@@ -68,6 +69,15 @@ export function initContextMenu(ctx) {
     el.innerHTML = list.map((r, i) => (r.sep ? '<div role="separator" class="nk-msep"></div>'
       : r.sub ? `<div role="menuitem" class="nk-mi" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-controls="ctxmenu-sub" data-sub="${i}"${r.kids.every((a) => enabled(a) !== true) ? ' aria-disabled="true" title="Nothing to reorder here"' : ''}><span class="nk-ml">${esc(r.sub)}</span>${CHEVRON}</div>`
       : itemHtml(r.a, i))).join('');
+  }
+  // Is the pointer, moving from `a` to `b`, inside the triangle from `a` to the submenu's near edge? (the corridor a diagonal move takes)
+  let lastPt = null;
+  function heading(a, b) {
+    const r = sub.getBoundingClientRect(), m = menu.getBoundingClientRect();
+    const x = r.left >= m.right - 8 ? r.left : r.right, p = { x, y: r.top }, q = { x, y: r.bottom };
+    const side = (u, v, w) => (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x);
+    const d1 = side(a, p, b), d2 = side(p, q, b), d3 = side(q, a, b);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
   }
   const items = (el) => [...el.querySelectorAll('[role=menuitem]')];
 
@@ -290,8 +300,11 @@ export function initContextMenu(ctx) {
   for (const el of [menu, sub]) {
     el.addEventListener('click', (ev) => { const it = ev.target.closest('[role=menuitem]'); if (it) run(it); });
     el.addEventListener('pointermove', (ev) => {
+      const from = lastPt; lastPt = { x: ev.clientX, y: ev.clientY };
       const it = ev.target.closest('[role=menuitem]');
       if (!it || it === document.activeElement) return;
+      // Travelling toward an open submenu: the rows crossed on the way neither take the highlight nor close it (a short grace, renewed by each move)
+      if (el === menu && !sub.hidden && from && !it.dataset.sub && heading(from, lastPt)) { clearTimeout(subTimer); subTimer = setTimeout(() => closeSub(false), GRACE_MS); return; }
       menu.dataset.input = sub.dataset.input = 'pointer'; // (the ring is the keyboard's; the pointer's item has the fill only)
       focusItem(el, it);
       if (el === menu) {

@@ -737,3 +737,29 @@ test('menus: Undo of Order and of Paste puts back the selection the step began w
     await selIs([S(btn)], 'Undo of a paste selects the element it was pasted onto');
   } finally { await close(); }
 });
+
+test('menus: Order stays open while the pointer travels diagonally to a command, across the rows between', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    const h1 = await node(b, 'h1');
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    const start = await centre(b, `document.querySelector('#ctxmenu [data-sub]')`);
+    await io.move(start.x, start.y); await sleep(400);
+    assert.equal(await b.eval(`!document.querySelector('#ctxmenu-sub').hidden`), true, 'hovering Order opens it');
+    const goal = await centre(b, `[...document.querySelectorAll('#ctxmenu-sub [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === 'Send to back')`);
+    // the neighbouring row (Wrap in frame, below) is crossed on the way: 20 real moves, 30 ms apart
+    const crossed = new Set();
+    for (let i = 1; i <= 20; i++) {
+      const x = start.x + (goal.x - start.x) * i / 20, y = start.y + (goal.y - start.y) * i / 20;
+      await io.move(Math.round(x), Math.round(y)); await sleep(30);
+      crossed.add(await b.eval(`document.elementFromPoint(${Math.round(x)}, ${Math.round(y)})?.closest('[role=menuitem]')?.querySelector('.nk-ml')?.textContent ?? ''`));
+    }
+    assert.ok(crossed.has('Wrap in frame'), `the path crosses the row below Order (${[...crossed]})`);
+    assert.equal(await b.eval(`!document.querySelector('#ctxmenu-sub').hidden`), true, 'the submenu is still open when the pointer arrives');
+    assert.equal(await b.eval(`document.elementFromPoint(${goal.x}, ${goal.y}).closest('[role=menuitem]').querySelector('.nk-ml').textContent`), 'Send to back');
+    // and a pointer that goes to the neighbouring row and stays there closes it
+    const wrap = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === 'Wrap in frame')`);
+    await io.move(start.x - 10, start.y); await io.move(wrap.x - 20, wrap.y); await sleep(700);
+    assert.equal(await b.eval(`document.querySelector('#ctxmenu-sub').hidden`), true, 'a pointer that rests on another row closes it');
+  } finally { await close(); }
+});
