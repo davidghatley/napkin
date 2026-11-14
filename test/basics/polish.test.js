@@ -123,3 +123,30 @@ test('polish: a blank HTML file is a bounded card that says it is empty, and sel
     }
   } finally { await close(); }
 });
+
+test('polish: a drawer button stays visibly active while the pointer is on it, opened by the click itself', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    const tok = (v, prop) => b.eval(`(() => { const e = document.createElement('i'); e.style.${prop} = 'var(${v})'; document.querySelector('#statusbar').append(e); const c = getComputedStyle(e).${prop === 'color' ? 'color' : 'backgroundColor'}; e.remove(); return c; })()`);
+    for (const th of ['light', 'dark']) {
+      await theme(b, th); await sleep(900);
+      const r = JSON.parse(await b.eval(`JSON.stringify((() => { const e = document.querySelector('#drawer-tabs button'); const q = e.getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; })())`));
+      const look = () => b.eval(`JSON.stringify((() => { const e = document.querySelector('#drawer-tabs button'), s = getComputedStyle(e); return { on: e.getAttribute('aria-pressed'), bg: s.backgroundColor, fg: s.color }; })())`).then(JSON.parse);
+      await io.move(r.x, r.y); await sleep(300);
+      const hovered = await look();
+      assert.equal(hovered.on, 'false', `${th}: closed`);
+      assert.equal(hovered.bg, await tok('--nk-hover', 'background'), `${th}: a closed button hovers with the hover fill`);
+      await io.press(r.x, r.y); await io.release(r.x, r.y); await sleep(400); // the pointer has not moved
+      const open = await look();
+      assert.equal(open.on, 'true', `${th}: opened by the click`);
+      assert.equal(open.bg, await tok('--nk-armed', 'background'), `${th}: open and hovered, it keeps the active fill (${open.bg})`);
+      assert.equal(open.fg, await tok('--nk-armed-ink', 'color'), `${th}: and the active ink (${open.fg})`);
+      await io.press(r.x, r.y); await sleep(150);
+      const pressed = await look();
+      assert.equal(pressed.bg, await tok('--nk-armed', 'background'), `${th}: pressed while open, the active fill stays (${pressed.bg})`);
+      await io.release(r.x, r.y); await sleep(300);
+      await io.move(4, 710);
+      await b.eval(`document.querySelector('#drawer-tabs button[aria-pressed="true"]')?.click()`); await sleep(300);
+    }
+  } finally { await close(); }
+});

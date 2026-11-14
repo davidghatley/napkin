@@ -384,6 +384,7 @@ body[data-empty="1"] #statusbar .hints { visibility: hidden; }
 :is(#drawer-tabs button, .sb-btn):not([aria-disabled="true"]):hover { background: var(--nk-hover); color: var(--nk-ink); }
 :is(#drawer-tabs button, .sb-btn):not([aria-disabled="true"]):active { background: var(--nk-press); color: var(--nk-ink); } /* disabled: no hover or press fill (standards 1) */
 #drawer-tabs button[aria-pressed="true"], #zoom-level[aria-expanded="true"] { background: var(--nk-armed); color: var(--nk-armed-ink); }
+:is(#drawer-tabs button[aria-pressed="true"], #zoom-level[aria-expanded="true"]):not([aria-disabled="true"]):is(:hover, :active) { background: var(--nk-armed); color: var(--nk-armed-ink); } /* an open drawer stays active under the pointer: the fills above would outrank the armed one */
 .sb-btn[aria-disabled="true"] { opacity: .4; background: transparent; color: var(--nk-ink-muted); cursor: default; }
 #zoom-menu .nk-mk { margin-left: auto; }
 
