@@ -834,3 +834,26 @@ test('typography: font, size, weight, line height, align and colour are separate
     assert.doesNotMatch(html(), /font:/, 'no font shorthand written');
   } finally { await close(); }
 });
+
+test('scrubbing an image control previews on the canvas while held; release stores one edit', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot([1440, 900], PICTURES);
+  try {
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await clickOn(b, io, card('a.png'));
+    await b.waitFor(`!!document.querySelector('#instruments [data-control="view:contrast"] input')`, 10000);
+    const filter = () => b.eval(`getComputedStyle(${card('a.png')}.querySelector('img')).filter`);
+    const stored = () => contrast(b, 'a.png');
+    const s0 = await stored(), f0 = await filter();
+    const lab = await centreOf(b, `document.querySelector('#instruments [data-control="view:contrast"] label, #instruments [data-control="view:contrast"] .d-label')`);
+    await io.move(lab.x, lab.y); await io.press(lab.x, lab.y);
+    for (const dx of [10, 20, 40, 80]) await io.move(lab.x + dx, lab.y, { buttons: 1 });
+    await sleep(300);
+    const held = Number(await b.eval(`document.querySelector('#instruments [data-control="view:contrast"] input').value`));
+    assert.notEqual(held, s0, 'the field moved while held');
+    assert.notEqual(await filter(), f0, 'the canvas shows it while held');
+    assert.match(await filter(), new RegExp(`contrast\\(${held}\\)`), 'the canvas shows the held value');
+    assert.equal(await stored(), s0, 'nothing is stored until release');
+    await io.release(lab.x + 80, lab.y);
+    await until(async () => (await stored()) === held, 8000, 'one edit stored on release');
+  } finally { await close(); }
+});
