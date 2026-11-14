@@ -662,18 +662,18 @@ export function createStage(ctx, root, world, view) {
   };
   // On a frame of the engine the name and size sit above the box, or below it when that lands on fewer lines of text.
   function docTagSide(selEl) {
-    const r = selEl.getBoundingClientRect(), H = 22, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
+    const r = selEl.getBoundingClientRect(), H = 16, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
     const frame = selEl.closest('.doc-cell'), fr = frame?.querySelector('iframe.doc-frame')?.getBoundingClientRect(), z = view.get().z;
     if (!fr) return 'above';
     if (z < 0.45) { for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top'); return 'none'; } // an overview: the name is in the layers, the frame's title stays readable
-    const sec = selEl.closest('section.cmp'), tight = r.top - fr.top < H + 9;
+    const sec = selEl.closest('section.cmp'), tight = r.top - fr.top < H + 8;
     for (const other of world.querySelectorAll('.cmp[data-chip-top]')) if (other !== sec || !tight) other.removeAttribute('data-chip-top');
     if (tight) sec.setAttribute('data-chip-top', '');
     const lines = [];
     try { const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), rg = doc.createRange(); for (let n = walker.nextNode(), i = 0; n && i < 600; n = walker.nextNode(), i++) { if (!/\S/.test(n.nodeValue)) continue; rg.selectNodeContents(n); for (const c of rg.getClientRects()) lines.push({ l: fr.left + c.left * z, r: fr.left + c.right * z, t: fr.top + c.top * z, b: fr.top + c.bottom * z }); } } catch { return 'above'; }
     const onText = (top) => lines.filter((c) => c.l < r.left + lw && c.r > r.left && c.t < top + H && c.b > top).length;
-    selectBox.style.setProperty('--nk-tagw', `${lw + 4 + sizeChip.textContent.length * 6.4 + 14}px`); // a small box: the size goes beside the name, never over the title
-    return onText(r.top - 7 - H) <= onText(r.bottom + 7) ? 'above' : 'below';
+    selectBox.style.setProperty('--nk-tagw', `${lw + 4 + sizeChip.textContent.length * 6.4 + 8}px`); // a small box: the size goes beside the name, never over the title
+    return onText(r.top - 8 - H) <= onText(r.bottom + 8) ? 'above' : 'below';
   }
   function tagSide(selEl) {
     let side = 'below';
@@ -683,12 +683,12 @@ export function createStage(ctx, root, world, view) {
     else if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
       const caps = captionRects(selEl.closest('section.cmp'));
       if (caps.length) {
-        const r = selEl.getBoundingClientRect(), narrow = r.width < 190, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), cw = sizeChip.textContent.length * 6.4 + 14, H = 20, pad = 3;
+        const r = selEl.getBoundingClientRect(), narrow = r.width < 192, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), cw = sizeChip.textContent.length * 6.4 + 8, H = 16, pad = 4; // the tags: 16 px tall, 8 px from the box (canvas.css)
         const hits = (ys) => { // ys: [label top, chip top]
           const boxes = [{ x: r.left - 1, w: lw, y: ys[0] }, { x: r.right - cw, w: cw, y: ys[1] }];
           return caps.some((c) => boxes.some((b) => c.left < b.x + b.w + pad && c.right > b.x - pad && c.top < b.y + H + pad && c.bottom > b.y - pad));
         };
-        const below = [r.bottom + 7, r.bottom + 8 + (narrow ? 24 : 0)], above = [r.top - 7 - H, r.top - 7 - H - (narrow ? 24 : 0)];
+        const below = [r.bottom + 8, r.bottom + 8 + (narrow ? 24 : 0)], above = [r.top - 8 - H, r.top - 8 - H - (narrow ? 24 : 0)];
         side = !hits(below) ? 'below' : !hits(above) ? 'above' : 'inside'; // (inside the box never meets a caption: they sit outside the cells)
       }
     }
@@ -898,6 +898,8 @@ export function createStage(ctx, root, world, view) {
       const dc = target.closest?.('.doc-cell');
       const id = dc?.closest('.cmp, .item-card')?.dataset.component;
       const f = id && sections.get(id)?.docFrame;
+      // an empty or failed card shows its state, not its page: the whole card is the object under the pointer, as from its label (standards 5.9)
+      if (dc?.dataset.state && id && !ctx.state.components.get(id)?.item && sections.get(id)?.frame) return { el: sections.get(id).frame, id, variant: {}, card: true };
       let p = f?.pick(ev.clientX, ev.clientY);
       if (p) { const n = pickNode(id, p.dataset.n, { deep: ev.ctrlKey || ev.metaKey }); if (n !== p.dataset.n) p = f.element(n) || p; }
       p = p || (id && ctx.state.components.get(id)?.item ? dc : null);
@@ -913,9 +915,9 @@ export function createStage(ctx, root, world, view) {
     // over a card's label: the whole card is outlined, as when the pointer is on it (standards 3, States); not when it is selected already
     const head = ev.target.closest?.('.cmp-head');
     if (head) { const card = head.parentElement; setHoverEl(card.dataset.sel ? null : card.querySelector(':scope > .frame'), null); return; }
-    const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h);
+    const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h?.card ? null : h);
   });
-  root.addEventListener('mousemove', (ev) => { if (document.body.dataset.play || !ev.target.closest?.('.doc-cell')) return; const h = hit(ev.target, ev); if ((h?.el ?? null) !== hoverEl) setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mousemove', (ev) => { if (document.body.dataset.play || !ev.target.closest?.('.doc-cell')) return; const h = hit(ev.target, ev); if ((h?.el ?? null) !== hoverEl) setHoverEl(h?.el ?? null, h?.card ? null : h); });
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
   function hoverNode(sel) {
@@ -931,6 +933,7 @@ export function createStage(ctx, root, world, view) {
     if (h) ev.preventDefault();
     if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
+    if (h.card) { const s = cardSelection(h.id); if (s) { if (ev.shiftKey) ctx.toggle(s); else ctx.select(s); } return; } // an empty or failed card: selected as its label selects it
     const sel = { component: h.id, node: h.el.dataset.n, variant: h.variant };
     if (ev.shiftKey || (!h.doc && (ev.metaKey || ev.ctrlKey))) ctx.toggle(sel); else ctx.select(sel); // in a document frame Ctrl/Cmd picks the deepest (hit), Shift adds
   }, true);
@@ -981,6 +984,17 @@ export function createStage(ctx, root, world, view) {
   }, true);
 
   // Drag a frame by its title; a plain click on the title selects the component's root.
+  // What a click on a card's label selects: a component's root, a file item, a page's first element (nothing drawn: an empty or failed render
+  // is selected as its card), or a read-only file as itself (nothing to edit: the panel says why). null when the card has none of these.
+  function cardSelection(id) {
+    const c = ctx.state.components.get(id);
+    if (c?.doc) return { component: id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] };
+    if (c?.item) return { component: id, node: 'item', variant: {} };
+    if (c?.kind === 'html') { const t = sections.get(id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; return { component: id, node: first ? first.node : '', variant: {} }; }
+    if (c?.readOnly) return { component: id, node: '', variant: {} };
+    return null;
+  }
+  function selectCard(id) { const s = cardSelection(id); if (s) ctx.select(s); }
   let drag = null;
   root.addEventListener('pointerdown', (ev) => {
     // by the title, or by any empty part of the frame (never by a component's own elements)
@@ -1009,14 +1023,7 @@ export function createStage(ctx, root, world, view) {
     if (held) { held = false; refreshOverlays(); }
     ctx.emit('framedragend', {});
     if (d.moved && d.title && ctx.frameDrop?.(d.id, ev.clientX, ev.clientY)) { moveTo(d.id, d.from.x, d.from.y); suppressClick = Date.now(); refreshOverlays(); return; } // dropped onto another component: it became an instance there, and the frame stays where it was
-    if (!d.moved) {
-      const c = ctx.state.components.get(d.id);
-      if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
-      else if (d.title && c?.item) ctx.select({ component: d.id, node: 'item', variant: {} });
-      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; ctx.select({ component: d.id, node: first ? first.node : '', variant: {} }); } // (nothing drawn: an empty or failed render is selected as its card)
-      else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
-      return;
-    }
+    if (!d.moved) { if (d.title) selectCard(d.id); return; }
     suppressClick = Date.now();
     const pos = sections.get(d.id)?.pos;
     if (!pos) return;

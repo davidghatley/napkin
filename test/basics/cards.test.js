@@ -166,6 +166,14 @@ test('cards: hover is a 1 px accent outline, selection 2 px, the label turns ink
         assert.deepEqual([sel.style, sel.width, sel.color], ['solid', '2px', acc], `${th} ${id}: 2 px accent`);
         assert.equal(sel.label, inkc, `${th} ${id}: the name is ink while selected`);
         assert.ok(!sel.hoverOnCard, `${th} ${id}: no hover outline over the selected card`);
+        // the selection's name and size tags: the chrome's tokens (standards 10): Inter 11 / 16, weight 400 or 600, 4 px side padding, 4 px radius, accent
+        const tags = JSON.parse(await b.eval(`JSON.stringify([getComputedStyle(document.querySelector('#overlay-select'), '::after'), getComputedStyle(document.querySelector('#overlay-select .osize'))].map((s) => ({ family: s.fontFamily, size: s.fontSize, lh: s.lineHeight, weight: s.fontWeight, pad: [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].join(' '), radius: s.borderRadius, bg: s.backgroundColor })))`));
+        for (const [i, g] of tags.entries()) {
+          const what = `${th} ${id}: the ${i ? 'size' : 'name'} tag`;
+          assert.match(g.family, /^"?(Dials )?Inter/, `${what}: Inter (${g.family})`); assert.doesNotMatch(g.family, /mono/i, what);
+          assert.deepEqual([g.size, g.lh, g.pad, g.radius, g.bg], ['11px', '16px', '0px 4px 0px 4px', '4px', acc], `${what} (${JSON.stringify(g)})`);
+          assert.ok(['400', '600'].includes(g.weight), `${what}: weight ${g.weight}`);
+        }
         await io.move(4, 890); await io.key('Escape'); await sleep(150);
       }
       const v = await axe(b, ['#stage']);
@@ -226,7 +234,8 @@ test('cards: an empty component and a failed render say so plainly, on the same 
         const kids = st ? [...st.querySelectorAll('*')] : [];
         return { state: st?.dataset.state, text: st?.innerText.replace(/\\s+/g, ' ').trim(), full: st?.title || '', inside: !!sr && inside(sr) && kids.every((e) => inside(e.getBoundingClientRect())),
           fits: kids.every((e) => e.scrollWidth <= e.clientWidth + 1), w: f.offsetWidth, h: f.offsetHeight,
-          family: getComputedStyle(st || s).fontFamily, sizes: kids.map((e) => getComputedStyle(e).fontSize), mono: kids.some((e) => /mono/i.test(getComputedStyle(e).fontFamily)),
+          family: getComputedStyle(st || s).fontFamily, mono: kids.some((e) => /mono/i.test(getComputedStyle(e).fontFamily)),
+          type: Object.fromEntries([['title', title], ['detail', detail]].filter(([, e]) => e).map(([k, e]) => { const c = getComputedStyle(e); return [k, [c.fontSize, c.lineHeight, c.fontWeight]]; })),
           titleColor: title && getComputedStyle(title).color, detailColor: (detail || st) && getComputedStyle(detail || st).color,
           label: { family: hs.fontFamily, size: hs.fontSize, weight: hs.fontWeight, color: hs.color, gap: fr.top - s.querySelector('.cmp-title').getBoundingClientRect().bottom },
           shadow: getComputedStyle(f).boxShadow, radius: getComputedStyle(f).borderRadius, bg: getComputedStyle(st || f).backgroundColor,
@@ -241,10 +250,12 @@ test('cards: an empty component and a failed render say so plainly, on the same 
         assert.deepEqual([c.label.family, c.label.size, c.label.weight, c.label.color], [ok.family, ok.size, ok.weight, ok.color], `${what}: the label is the cards' label`);
         assert.ok(Math.abs(c.label.gap - 4) <= 0.5, `${what}: 4 px under the label (${c.label.gap})`);
         assert.equal(c.radius, '0px', what); assert.equal(c.shadow, ok.shadow, `${what}: the cards' one edge`);
-        // the words: inside the card, in the chrome's type (Inter 11 or 12 px), never monospace, never cut sideways
+        // the words: inside the card, in the chrome's type (Inter), never monospace, never cut sideways. Standards 10: an empty state's words are
+        // the empty-state type (14 / 20, regular); a failure is body type (12 / 16): what failed in the strong weight, why in the regular one
         assert.ok(c.inside, `${what}: the state is drawn inside the card`); assert.ok(c.fits, `${what}: no line runs out of its box`);
         assert.match(c.family, /Inter/, what); assert.equal(c.mono, false, `${what}: no monospace`);
-        for (const z of c.sizes) assert.ok(['11px', '12px'].includes(z), `${what}: type ${c.sizes}`);
+        if (c.state === 'empty') assert.deepEqual(c.type, { detail: ['14px', '20px', '400'] }, `${what}: empty-state type`);
+        else assert.deepEqual(c.type, { title: ['12px', '16px', '600'], detail: ['12px', '16px', '400'] }, `${what}: body type`);
       }
       // empty: named, quiet, centred words; no chrome dashed box around it; the empty page is not shown
       assert.equal(all.blank.state, 'empty'); assert.equal(all.blank.text, 'Empty frame', `${th}: the frame-only component names itself`);
@@ -487,6 +498,23 @@ test('status bar: counts, drawer toggles and a zoom control with presets, each w
     const at = await z(); await io.click(minus.x, minus.y); await sleep(200);
     assert.equal(await z(), at, 'no zoom past the minimum');
     assert.equal(await b.eval(`document.querySelector('#zoom-in').getAttribute('aria-disabled')`), 'false');
+    // the bar's tooltips open above it, whole inside the window; a disabled control takes no hover fill and its tooltip says why
+    const tipAt = () => b.eval(`JSON.stringify((() => { const t = document.querySelector('#tip'), r = t.getBoundingClientRect(); return { shown: !t.hidden, text: t.textContent, l: r.left, r: r.right, t: r.top, b: r.bottom, bar: document.querySelector('#statusbar').getBoundingClientRect().top, vw: innerWidth, vh: innerHeight }; })())`).then(JSON.parse);
+    for (const sel of ['#zoom-out', '#zoom-in', '#zoom-fit']) {
+      await io.move(4, 890); await sleep(100);
+      const c = await centre(sel); await io.move(c.x, c.y); await sleep(650);
+      const tp = await tipAt();
+      assert.ok(tp.shown, `${sel}: its tooltip shows`);
+      assert.ok(tp.l >= 0 && tp.t >= 0 && tp.r <= tp.vw && tp.b <= tp.vh, `${sel}: the tooltip is inside the window (${JSON.stringify(tp)})`);
+      assert.ok(tp.b <= tp.bar, `${sel}: the tooltip sits above the bar (${JSON.stringify(tp)})`);
+    }
+    await io.move(4, 890); await sleep(100);
+    await io.move(minus.x, minus.y); await sleep(650);
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('#zoom-out')).backgroundColor`), 'rgba(0, 0, 0, 0)', 'no hover fill on the disabled minus');
+    const offTip = await tipAt();
+    assert.ok(offTip.shown && offTip.text === 'Minimum zoom: 5%', `the disabled minus says why (${JSON.stringify(offTip)})`);
+    assert.ok(offTip.b <= offTip.bar && offTip.t >= 0, 'and that tooltip is inside the window too');
+    await io.move(4, 890); await sleep(100);
 
     // axe on the bar at rest, light and dark
     for (const th of ['light', 'dark']) { await theme(b, th); await sleep(250); assert.deepEqual(await axe(b, ['#statusbar']), [], `${th}: axe on the bar`); }
@@ -545,8 +573,13 @@ test('cards: a Layers file row outlines its card on hover; a card selected on th
     await io.move(x0, y0); await io.press(x0, y0);
     let seen = false;
     for (let i = 1; i <= 10; i++) { await io.move(x0 - i * box.width / 12, y0 - i * box.height / 12, { buttons: 1 }); await sleep(30); seen ||= await b.eval(`getComputedStyle(document.querySelector('#overlay-hover')).display !== 'none'`); }
+    // the marquee (standards 5.5): a 1 px accent edge and an 8% accent fill
+    const mq = JSON.parse(await b.eval(`JSON.stringify((() => { const s = getComputedStyle(document.querySelector('#marquee')); return { w: s.borderTopWidth, edge: s.borderTopColor, fill: s.backgroundColor }; })())`));
     await io.release(x0 - box.width * 10 / 12, y0 - box.height * 10 / 12); await sleep(150);
     assert.ok(!seen, 'no hover outline while a marquee is drawn');
+    assert.deepEqual([mq.w, mq.edge], ['1px', await accent(b)], `the marquee edge (${JSON.stringify(mq)})`);
+    const alpha = Number(mq.fill.match(/\/\s*([\d.]+)\)$|,\s*([\d.]+)\)$/)?.slice(1).find(Boolean));
+    assert.ok(Math.abs(alpha - 0.08) < 0.005, `the marquee fill is 8% (${mq.fill})`);
   } finally { await close(); }
 });
 
@@ -556,8 +589,22 @@ test('cards: an empty, a failed and a throwing component are selectable from the
   try {
     await b.waitFor(`['Nothing', 'Broken', 'Thrower'].every((n) => document.querySelector('#world > section[data-name="' + n + '"] .card-state'))`, 30000);
     await sleep(300);
+    const acc = await accent(b);
     for (const name of ['Nothing', 'Broken', 'Thrower']) {
       const id = await secOf(b, name);
+      // the visible state card is a canvas object like any other (standards 5.9): at 100%, its middle hovers it 1 px and a click there selects it
+      await b.eval(`(() => { const r = napkin.view.rectToWorld(document.querySelector('#world > section[data-component="${id}"] > .frame').getBoundingClientRect()), box = napkin.view.stageBox(); return napkin.view.set({ x: box.width / 2 - r.x - r.w / 2, y: box.height / 2 - r.y - r.h / 2, z: 1 }); })()`); await sleep(400);
+      const mid = JSON.parse(await b.eval(`JSON.stringify((() => { const r = document.querySelector('#world > section[data-component="${id}"] .card-state').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })())`));
+      await io.move(mid.x - 20, mid.y - 6); await io.move(mid.x, mid.y); await sleep(250);
+      const hov = await hoverState(b, id);
+      assert.ok(hov.shown && hov.fit <= 1, `${name}: the middle of the state card outlines it (${JSON.stringify(hov)})`);
+      assert.deepEqual(await b.eval(`JSON.stringify((() => { const s = getComputedStyle(document.querySelector('#overlay-hover')); return [s.outlineStyle, s.outlineWidth, s.outlineColor]; })())`).then(JSON.parse), ['solid', '1px', acc], `${name}: 1 px accent`);
+      await io.click(mid.x, mid.y); await sleep(400);
+      assert.ok(await b.eval(`napkin.state.selections.length === 1 && napkin.state.selection.component === ${JSON.stringify(id)}`), `${name}: a click on the state card selects it (${await b.eval('JSON.stringify(napkin.state.selections)')})`);
+      const bodySel = JSON.parse(await b.eval(`JSON.stringify((() => { const o = document.querySelector('#overlay-select'), r = o.getBoundingClientRect(), f = document.querySelector('#world > section[data-component="${id}"] > .frame').getBoundingClientRect(); return { shown: getComputedStyle(o).display !== 'none', fit: Math.max(Math.abs(r.left - f.left), Math.abs(r.top - f.top), Math.abs(r.width - f.width), Math.abs(r.height - f.height)) }; })())`));
+      assert.ok(bodySel.shown && bodySel.fit <= 1, `${name}: outlined as selected (${JSON.stringify(bodySel)})`);
+      assert.ok(!(await hoverState(b, id)).shown, `${name}: no hover outline over the selected card`);
+      await io.move(4, 890); await io.key('Escape'); await sleep(200);
       // from the label
       await b.eval(`napkin.view.fitAll()`); await sleep(400);
       const l = await labelAt(b, id);

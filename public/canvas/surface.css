@@ -5,10 +5,8 @@
 @font-face { font-family: "Dials Inter"; src: url("/dials/fonts/inter-latin-wght-normal.woff2") format("woff2"); font-weight: 100 900; font-display: block; }
 :root {
   --nk-sans: "Dials Inter", "Inter Var", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --nk-accent: #1f45d3; --nk-accent-text: #1c3fc4; --nk-select: #1f45d3;
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --nk-accent: #7b9bff; --nk-accent-text: #9db5ff; --nk-select: #7b9bff; } }
-:root[data-theme="dark"] { --nk-accent: #7b9bff; --nk-accent-text: #9db5ff; --nk-select: #7b9bff; }
+/* (the accent is written once, with light-dark(), in canvas.css's chrome tokens) */
 body { font-family: var(--nk-sans); }
 
 /* ------------------------------------------------------------------ instruments (one panel, drawn by dials) */
