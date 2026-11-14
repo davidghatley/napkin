@@ -3,8 +3,8 @@
 /* ---- canvas: frame titles and selection tags never sit on each other ---- */
 .cmp .rev { display: none; }                                   /* the revision lives in the top bar and the tooltip, not in every title */
 .cmp-head:hover .rev, .cmp-head:focus-within .rev { display: inline; }
-#overlay-select::after { top: 0; bottom: auto; left: -1px; transform: translateY(calc(var(--nk-h, 0px) + 7px)); }  /* below the box, left; the title above stays readable */
-#overlay-select .osize { transform: translate(var(--nk-w, 0px), calc(var(--nk-h, 0px) + 7px + clamp(0px, calc((190px - var(--nk-w, 120px)) * 1000), 24px))) translateX(-100%); } /* a box narrower than 190 px puts the size on a second line */   /* below the box, right */
+#overlay-select::after { top: 0; bottom: auto; left: -1px; transform: translateY(calc(var(--nk-h, 0px) + var(--nk-s2))); }  /* below the box, left; the title above stays readable */
+#overlay-select .osize { transform: translate(var(--nk-w, 0px), calc(var(--nk-h, 0px) + var(--nk-s2) + clamp(0px, calc((var(--nk-s6) * 6 - var(--nk-w, 0px)) * 1000), var(--nk-s5)))) translateX(-100%); } /* a box narrower than 192 px puts the size on a second line */   /* below the box, right */
 
 /* ---- dark theme: a neutral mid-dark surround, clear frame edges, a faint grid ---- */
 :root[data-theme="dark"] { --nk-bg: #2a2d33; --nk-dot: #33373e; --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .16), 0 12px 32px -10px rgba(0, 0, 0, .55); }
@@ -32,7 +32,7 @@ details.sec[data-sec="text"]:not(:has(.fbox:not(.inherited):not(.computed))) > s
 #panel .sec.empty .addbtn { color: var(--nk-text-3); }
 
 /* WPC-33: when the tags below the box would cover a cell caption, both go above it */
-#overlay-select[data-tags="above"]::after { transform: translateY(calc(-100% - 7px)); }
-#overlay-select[data-tags="above"] .osize { transform: translate(var(--nk-w, 0px), calc(-100% - 7px - clamp(0px, calc((190px - var(--nk-w, 120px)) * 1000), 24px))) translateX(-100%); }
-#overlay-select[data-tags="inside"]::after { transform: translate(5px, 5px); }
-#overlay-select[data-tags="inside"] .osize { transform: translate(calc(var(--nk-w, 0px) - 5px), calc(var(--nk-h, 0px) - 5px)) translate(-100%, -100%); }
+#overlay-select[data-tags="above"]::after { transform: translateY(calc(-100% - var(--nk-s2))); }
+#overlay-select[data-tags="above"] .osize { transform: translate(var(--nk-w, 0px), calc(-100% - var(--nk-s2) - clamp(0px, calc((var(--nk-s6) * 6 - var(--nk-w, 0px)) * 1000), var(--nk-s5)))) translateX(-100%); }
+#overlay-select[data-tags="inside"]::after { transform: translate(var(--nk-s1), var(--nk-s1)); }
+#overlay-select[data-tags="inside"] .osize { transform: translate(calc(var(--nk-w, 0px) - var(--nk-s1)), calc(var(--nk-h, 0px) - var(--nk-s1))) translate(-100%, -100%); }

@@ -349,7 +349,10 @@ export function initSurface(ctx) {
     if (document.body.dataset.modal) return; // the palette or the key map has the keyboard
     if (presenting) { if (ev.key === 'Escape') { ev.preventDefault(); ev.stopImmediatePropagation(); present(false); } return; }
     if (comparing && ev.key === 'Escape' && !editable(ev.target)) { ev.preventDefault(); ev.stopImmediatePropagation(); closeCompare(); return; }
-    if (ev.defaultPrevented || editable(ev.target)) return;
+    // The name field a new card opens with (naming afterwards, standards 9 rule 4) keeps typing, but a Ctrl+Alt command
+    // (Create component again, Bring to front) leaves it, keeping the name as typed, and runs. AltGr typing is not a command.
+    const naming = ev.target?.classList?.contains('nk-rename') && ev.ctrlKey && ev.altKey && !ev.getModifierState?.('AltGraph');
+    if (ev.defaultPrevented || (editable(ev.target) && !naming)) return;
     const plain = !ev.ctrlKey && !ev.altKey && !ev.metaKey;
     if (plain && !canvasHasKeys(ev.target)) return;
     if (plain && /^[0-9]$/.test(ev.key) && !ev.shiftKey && !pending.length) {
@@ -365,6 +368,7 @@ export function initSurface(ctx) {
       ev.preventDefault(); ev.stopImmediatePropagation();
       pending = [];
       const n = Number(count) || 1; count = '';
+      if (naming) ev.target.blur(); // the field commits on blur
       byId.get(exact.command).run(ctx, n);
       return;
     }

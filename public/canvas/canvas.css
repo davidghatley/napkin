@@ -17,11 +17,6 @@
   --nk-text: #1c1f27;
   --nk-text-2: #4f5663;        /* secondary, 7:1 on chrome */
   --nk-text-3: #626a79;        /* tertiary, 5.3:1 */
-  --nk-accent: #3459e2;
-  --nk-accent-text: #2c52d2;   /* 6.2:1 on chrome */
-  --nk-accent-soft: #3459e21f;
-  --nk-on-accent: #ffffff;
-  --nk-select: #2f6bff;
   --nk-measure: #e5484d;
   --nk-ok: #1d7a4f;
   --nk-warn: #a8480b;
@@ -38,7 +33,7 @@
     color-scheme: dark;
     --nk-bg: #14161b; --nk-dot: #2c3039; --nk-chrome: #1b1d23; --nk-chrome-2: #23262d; --nk-chrome-3: #2b2f37; --nk-line: #2c2f37; --nk-line-2: #3a3e48;
     --nk-text: #e8eaf0; --nk-text-2: #b4bac7; --nk-text-3: #959cab;
-    --nk-accent: #6e93ff; --nk-accent-text: #8fadff; --nk-accent-soft: #6e93ff26; --nk-on-accent: #0d1220; --nk-select: #5b86ff; --nk-measure: #ff6b70; --nk-ok: #5ed39b; --nk-warn: #f0a15f;
+    --nk-measure: #ff6b70; --nk-ok: #5ed39b; --nk-warn: #f0a15f;
     --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .07), 0 14px 36px -12px rgba(0, 0, 0, .7);
     --nk-cell-line: #d3d7e0; --nk-head-line: #e7e9ee; --nk-kbd: #2b2f37; --nk-shadow-pop: 0 18px 50px -10px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08);
   }
@@ -47,7 +42,7 @@
   color-scheme: dark;
   --nk-bg: #14161b; --nk-dot: #2c3039; --nk-chrome: #1b1d23; --nk-chrome-2: #23262d; --nk-chrome-3: #2b2f37; --nk-line: #2c2f37; --nk-line-2: #3a3e48;
   --nk-text: #e8eaf0; --nk-text-2: #b4bac7; --nk-text-3: #959cab;
-  --nk-accent: #6e93ff; --nk-accent-text: #8fadff; --nk-accent-soft: #6e93ff26; --nk-on-accent: #0d1220; --nk-select: #5b86ff; --nk-measure: #ff6b70; --nk-ok: #5ed39b; --nk-warn: #f0a15f;
+  --nk-measure: #ff6b70; --nk-ok: #5ed39b; --nk-warn: #f0a15f;
   --nk-frame-shadow: 0 0 0 1px rgba(255, 255, 255, .07), 0 14px 36px -12px rgba(0, 0, 0, .7);
   --nk-cell-line: #d3d7e0; --nk-head-line: #e7e9ee; --nk-kbd: #2b2f37; --nk-shadow-pop: 0 18px 50px -10px rgba(0, 0, 0, .7), 0 0 0 1px rgba(255, 255, 255, .08);
 }
@@ -73,6 +68,11 @@
   --nk-shadow-menu: 0 4px 16px rgb(0 0 0 / .18);
   --nk-left-w: 240px; --nk-right-w: 280px; /* the right width is set by right-panel.js (240 to the larger of 480 and half the window) */
   /* colour roles */
+  --nk-accent: light-dark(#1f45d3, #7b9bff);       /* the one accent: outlines, selection, focus ring */
+  --nk-accent-text: light-dark(#1c3fc4, #9db5ff);  /* the accent as small text: 7:1 and 8:1 on the panel */
+  --nk-accent-soft: color-mix(in srgb, var(--nk-accent) 12%, transparent);
+  --nk-on-accent: light-dark(#ffffff, #0d1220);    /* text on an accent fill */
+  --nk-select: var(--nk-accent);                    /* (an older name for the accent; the canvas has one selection colour) */
   --nk-panel: var(--nk-chrome);
   --nk-ink: var(--nk-text);
   --nk-ink-muted: light-dark(#5b6371, #a3aab7);  /* 6:1 on the panel, both themes */
@@ -292,11 +292,14 @@ body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n],
   content: ""; position: absolute; inset: -4px; pointer-events: none;
   --nk-h: linear-gradient(var(--nk-frame), var(--nk-frame));
   background:
-    var(--nk-h) 1px 1px / 6px 6px no-repeat, var(--nk-h) calc(100% - 1px) 1px / 6px 6px no-repeat, var(--nk-h) 1px calc(100% - 1px) / 6px 6px no-repeat, var(--nk-h) calc(100% - 1px) calc(100% - 1px) / 6px 6px no-repeat;
+    var(--nk-h) 0 0 / var(--nk-s2) var(--nk-s2) no-repeat, var(--nk-h) 100% 0 / var(--nk-s2) var(--nk-s2) no-repeat, var(--nk-h) 0 100% / var(--nk-s2) var(--nk-s2) no-repeat, var(--nk-h) 100% 100% / var(--nk-s2) var(--nk-s2) no-repeat;
 }
-#overlay-select::after { content: attr(data-label); position: absolute; left: -1px; top: 0; transform: translateY(calc(-100% - 7px)); padding: 2px 7px; border-radius: 4px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 11px/1.3 var(--nk-sans); white-space: nowrap; }
+/* the selection's name and size tags: one chip, the chrome's label type (11 / 16), 4 px side padding, the 4 px radius, 8 px from the box */
+#overlay-select::after, #overlay-select .osize { padding: 0 var(--nk-s1); border-radius: var(--nk-radius); background: var(--nk-accent); color: var(--nk-on-accent);
+  font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#overlay-select::after { content: attr(data-label); position: absolute; left: -1px; top: 0; transform: translateY(calc(-100% - var(--nk-s2))); }
 #overlay-select[data-count]:not([data-count="1"]):not([data-count="0"])::after { content: attr(data-label) " +" attr(data-more); }
-#overlay-select .osize { position: absolute; left: 0; top: 0; transform: translate(calc(var(--nk-w, 0px) / 2), calc(var(--nk-h, 0px) + 8px)) translateX(-50%); padding: 2px 6px; border-radius: 4px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 10px/1.3 var(--nk-mono); white-space: nowrap; }
+#overlay-select .osize { position: absolute; left: 0; top: 0; transform: translate(calc(var(--nk-w, 0px) / 2), calc(var(--nk-h, 0px) + var(--nk-s2))) translateX(-50%); }
 #overlay-measure { position: absolute; inset: 0; pointer-events: none; }
 .m-line { position: absolute; left: 0; top: 0; border: 0 solid var(--nk-measure); }
 .m-x { border-top-width: 1px; }
@@ -309,12 +312,12 @@ body[data-tool="frame"] .mount [data-n], body[data-tool="text"] .mount [data-n],
 .m-x .m-label { left: 50%; top: 0; transform: translate(-50%, -135%); }
 .m-y .m-label { top: 50%; left: 0; transform: translate(8px, -50%); }
 .m-target { position: absolute; left: 0; top: 0; outline: 1px solid var(--nk-measure); outline-offset: 0; }
-#marquee { position: absolute; z-index: 6; pointer-events: none; border: 1px solid var(--nk-select); background: color-mix(in srgb, var(--nk-select) 12%, transparent); }
+#marquee { position: absolute; z-index: 6; pointer-events: none; border: 1px solid var(--nk-accent); background: color-mix(in srgb, var(--nk-accent) 8%, transparent); } /* standards 5.5 */
 #marquee[hidden] { display: none; }
-#draw-rect { position: fixed; z-index: 20; pointer-events: none; box-sizing: border-box; border: 1px solid var(--nk-select); background: color-mix(in srgb, var(--nk-select) 8%, transparent); }
-#draw-rect[data-on="canvas"] { background: var(--nk-frame); box-shadow: 0 1px 3px rgb(0 0 0 / .12); }
+#draw-rect { position: fixed; z-index: 20; pointer-events: none; box-sizing: border-box; border: 1px solid var(--nk-accent); background: color-mix(in srgb, var(--nk-accent) 8%, transparent); }
+#draw-rect[data-on="canvas"] { background: var(--nk-frame); box-shadow: var(--nk-card-edge); } /* a new card: the cards' one edge, no shadow */
 /* the size readout while drawing (basics pass 2): a small chip centred under the outline, in canvas px */
-#draw-size { position: fixed; z-index: 21; pointer-events: none; transform: translateX(-50%); padding: 0 var(--nk-s1); border-radius: var(--nk-radius); background: var(--nk-select); color: var(--nk-on-accent); font: 500 var(--nk-fs-label)/18px var(--nk-sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#draw-size { position: fixed; z-index: 21; pointer-events: none; transform: translateX(-50%); padding: 0 var(--nk-s1); border-radius: var(--nk-radius); background: var(--nk-accent); color: var(--nk-on-accent); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); font-variant-numeric: tabular-nums; white-space: nowrap; }
 #draw-size[hidden] { display: none; }
 /* an armed drawing tool shows itself in the cursor, everywhere on the canvas (standards section 2) */
 body[data-tool="frame"] #stage, body[data-tool="image"] #stage, body[data-tool="frame"] #stage .frame, body[data-tool="image"] #stage .frame { cursor: crosshair; }
@@ -373,8 +376,8 @@ body[data-empty="1"] #statusbar .hints { visibility: hidden; }
 }
 .sb-icon { width: var(--nk-h-field); padding: 0; }
 #zoom-level { min-width: calc(var(--nk-s6) + var(--nk-s4)); padding: 0 var(--nk-s1); color: var(--nk-ink); }
-:is(#drawer-tabs button, .sb-btn):hover { background: var(--nk-hover); color: var(--nk-ink); }
-:is(#drawer-tabs button, .sb-btn):active { background: var(--nk-press); color: var(--nk-ink); }
+:is(#drawer-tabs button, .sb-btn):not([aria-disabled="true"]):hover { background: var(--nk-hover); color: var(--nk-ink); }
+:is(#drawer-tabs button, .sb-btn):not([aria-disabled="true"]):active { background: var(--nk-press); color: var(--nk-ink); } /* disabled: no hover or press fill (standards 1) */
 #drawer-tabs button[aria-pressed="true"], #zoom-level[aria-expanded="true"] { background: var(--nk-armed); color: var(--nk-armed-ink); }
 .sb-btn[aria-disabled="true"] { opacity: .4; background: transparent; color: var(--nk-ink-muted); cursor: default; }
 #zoom-menu .nk-mk { margin-left: auto; }

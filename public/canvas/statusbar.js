@@ -37,6 +37,7 @@ export function initStatusbar(ctx) {
     if (t !== shown) { shown = t; lvl.textContent = t; lvl.setAttribute('aria-label', `Zoom ${t}, presets`); }
     off(out, atMin(z)); off(inn, atMax(z));
   }
+  out.dataset.tipOff = `Minimum zoom: ${Math.round(MIN_Z * 100)}%`; inn.dataset.tipOff = `Maximum zoom: ${Math.round(MAX_Z * 100)}%`; // the tooltip at an end of the range (shell.js)
   ctx.on('view', zoomShown);
   zoomShown(ctx.view.get());
   out.addEventListener('click', () => { if (!atMin(ctx.view.get().z)) run('zoom-out'); });
