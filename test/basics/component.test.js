@@ -130,6 +130,9 @@ test('basics pass 3: the palette runs it too, and a taken name gets the next fre
 test('basics pass 3: when it cannot apply it says why, in a sentence, and makes nothing', { timeout: 60000 }, async () => {
   const count = () => json(`[...napkin.state.components.keys()].filter((k) => k.endsWith('.tsx')).length`);
   const n = await count();
+  // the card the last test made selects itself once drawn; let that finish before this test clears the selection
+  await until(async () => /^Card2/.test(await q(`napkin.state.selection?.component || ''`)) || null);
+  await sleep(800);
   await select(null);
   await make();
   await until(async () => /Select an element in a frame first/.test(await hint()) || null);
@@ -141,4 +144,28 @@ test('basics pass 3: when it cannot apply it says why, in a sentence, and makes 
   await make();
   await until(async () => /already a component/.test(await hint()) || null);
   assert.equal(await count(), n);
+});
+
+// round 4: the frame's file row means the whole frame however it was clicked
+test('round 4: the whole-frame refusal is the same from a left-click and a right-click on the frame\'s Layers row, and nothing is made', { timeout: 60000 }, async () => {
+  const count = () => json(`[...napkin.state.components.keys()].filter((k) => k.endsWith('.tsx')).length`);
+  const n = await count();
+  const row = `document.querySelector('#layers .lrow[data-kind="component"][data-component="page.html"]')`;
+  await b.waitFor(`!!${row}`, 10000);
+  await q(`${row}.scrollIntoView({ block: 'center' }); 0`);
+  const at = () => json(`(() => { const r = ${row}.querySelector('.lname').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  for (const how of ['left', 'right']) {
+    await select(null);
+    await q(`document.querySelector('#hint').textContent = ''; document.activeElement?.blur?.(); 0`);
+    const p = await at();
+    if (how === 'left') await io.click(p.x, p.y);
+    else { await io.move(p.x, p.y); await io.press(p.x, p.y, { button: 'right' }); await io.release(p.x, p.y, { button: 'right' }); await sleep(300); await io.key('Escape'); await sleep(200); }
+    await q(`document.activeElement?.blur?.(); 0`);
+    await make();
+    await until(async () => /the whole frame cannot be a component/.test(await hint()) || null);
+  }
+  await sleep(400);
+  assert.equal(await count(), n);
+  assert.equal(existsSync(file('Orbit.tsx')), false);
+  assert.equal(existsSync(file('Hero.tsx')), false);
 });

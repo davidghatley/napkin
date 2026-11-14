@@ -190,7 +190,7 @@ const MENU = {
   'bring-forward': { enabled: can('forward') }, 'send-backward': { enabled: can('backward') }, 'bring-to-front': { enabled: can('front') }, 'send-to-back': { enabled: can('back') },
   'make-component': { short: 'Create component', enabled: (c) => { const t = c.makeComponent.can(); return t.ok || t.why; } },
   // a component renames in place on its label (a TSX file's function and Props type change too)
-  'component-rename': { short: (c) => (file(c)?.doc ? 'Rename…' : 'Rename'), spec: 'F2', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : true; } },
+  'component-rename': { short: 'Rename', spec: 'F2', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : true; } },
   'component-delete': { short: 'Delete file…', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : x.doc || x.fileKind === 'html' ? true : 'Delete a React file in your editor for now: that comes in the next pass'; } },
   'open-code': { short: 'Show code', enabled: (c) => { const x = file(c); return !x ? 'Select something first' : x.item ? null : true; } },
   'select-all': { short: 'Select all' },

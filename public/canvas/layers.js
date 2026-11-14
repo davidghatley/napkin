@@ -117,7 +117,8 @@ export function initLayers(ctx, el) {
     if (c?.item) { ctx.select({ component: c.component, node: 'item', variant: {} }); return; }
     if (c?.kind === 'html') { // the document engine: a node of the file, or its first element for the component row
       const node = row.dataset.node || ctx.stage?.mainNode?.(c.component);
-      ctx.select({ component: c.component, node: node ?? '', variant: {} }); // (nothing drawn: an empty or failed render is selected as its card)
+      // a file row stands for the whole frame (as it does for a right-click on it): the selection is its card, so commands that act on a frame, Create component among them, answer the same either way
+      ctx.select(row.dataset.node ? { component: c.component, node, variant: {} } : { component: c.component, node: node ?? '', variant: {}, card: true });
       return;
     }
     if (!c?.doc) return;
