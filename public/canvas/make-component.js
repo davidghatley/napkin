@@ -42,13 +42,27 @@ export function initMakeComponent(ctx) {
     }
   }
 
+  // The width a grid or flex parent gave the element in its frame, in the element's own box-sizing (what `width:` means
+  // for it); null when its width is its own. The component has no such parent, so it is given this width instead.
+  function gridWidth(id, node) {
+    try {
+      const real = ctx.stage.sections.get(id)?.docFrame?.element(node)?.el, win = real?.ownerDocument?.defaultView;
+      if (!real?.parentElement || !win) return null;
+      const s = win.getComputedStyle(real), ps = win.getComputedStyle(real.parentElement);
+      if (!/^(inline-)?(grid|flex)$/.test(ps.display) || /^(inline|contents|none)$/.test(s.display)) return null;
+      let w = real.getBoundingClientRect().width;
+      if (s.boxSizing !== 'border-box') w -= ['paddingLeft', 'paddingRight', 'borderLeftWidth', 'borderRightWidth'].reduce((n, k) => n + (parseFloat(s[k]) || 0), 0);
+      return w > 0 ? Math.round(w * 100) / 100 : null;
+    } catch { return null; }
+  }
+
   async function run() {
     if (busy) return null;
     const t = can();
     if (!t.ok) { ctx.hint(t.why); return null; }
     busy = true;
     try {
-      const res = await ctx.fetch('/api/frames/component', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: t.from, node: t.node }) });
+      const res = await ctx.fetch('/api/frames/component', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ from: t.from, node: t.node, width: gridWidth(t.from, t.node) }) });
       const r = await res.json().catch(() => ({ ok: false, error: `napkin answered ${res.status}` }));
       if (!r.ok) { ctx.hint(`Could not make the component: ${plain(r.error)}`); return null; }
       // the new file joins the canvas on the folder's next scan; wait for its card, then show it

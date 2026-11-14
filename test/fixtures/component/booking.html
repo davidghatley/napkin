@@ -1,0 +1,13 @@
+<!doctype html><html><head><title>Booking</title><style>
+body{margin:0;padding:24px;font:16px/1.5 Georgia,serif;color:#253451;background:#f3f6fa;}
+.booking{width:360px;padding:20px;background:white;border:1px solid #94a3b8;}
+.booking label{display:block;margin-bottom:12px;} .booking input,.booking textarea,.booking select{display:block;width:100%;box-sizing:border-box;}
+.booking button{background:#245fdb;color:white;border:0;padding:8px 16px;} .booking button:hover{background:#122140;} .booking button:focus-visible{outline:3px solid orange;outline-offset:3px;}
+.price{border-collapse:collapse;width:360px;background:white;} .price td,.price th{border:1px solid #94a3b8;padding:8px;text-align:left;}
+.symbol{width:120px;height:80px;} .symbol rect{fill:#245fdb;stroke:#0d2044;stroke-width:2;}
+.inline-parent{font:italic 20px/1.8 Georgia;color:teal;--highlight:orange;} .inline-note{padding:8px;border-bottom:3px solid var(--highlight);}
+</style></head><body><form class="booking" id="booking" onsubmit="return false"><h2>Reserve your place</h2><label for="email">Email<input id="email" type="email" value="david@example.com" required></label><label>Route<select><option>Mountain</option><option selected>Coast</option></select></label><label>Notes<textarea rows="3">Window seat, please.</textarea></label><label><input type="checkbox" checked> Send route updates</label><button type="submit" onclick="alert('Saved')">Reserve</button><script>window.bookingReady=true;</script></form>
+<table class="price"><thead><tr><th>Item</th><th>Cost</th></tr></thead><tbody><tr><td>Stay</td><td>$240</td></tr><tr><td>Meals</td><td>$80</td></tr></tbody></table>
+<svg class="symbol" viewBox="0 0 120 80" role="img" aria-label="Route mark"><defs><linearGradient id="sky"><stop stop-color="#245fdb"/><stop offset="1" stop-color="#92b7ff"/></linearGradient></defs><rect x="4" y="4" width="112" height="72" rx="8" style="fill:url(#sky)"/><text x="16" y="45" fill="white">Go coast</text></svg>
+<div class="inline-parent" style="color:rgb(0,110,100)"><span class="inline-note">A note inherited from home.</span></div>
+</body></html>

@@ -663,7 +663,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   // POST /api/frames/component: { from, node, name? } -> the element `node` of the HTML frame `from` becomes a component of its
   // own: <Name>.tsx beside the frame, holding the element as JSX and the CSS rules that reach it. The frame is left as it is
   // (plain HTML cannot hold an instance); the component lands on the canvas to the frame's right. One undo step removes it.
-  function componentFrom({ from, node, name, by = 'unknown' } = {}) {
+  function componentFrom({ from, node, name, width, by = 'unknown' } = {}) {
     const comp = component(frameFile(from));
     const t = tree(comp.id);
     const dom = buildDom(t.tree || []);
@@ -681,8 +681,8 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     // the CSS that makes it look the same on its own (src/doc/component-css.js): the rules that reach it, rewritten where
     // they name ancestors it will not have, and what the elements around it gave it, on a wrapper that stands in for them
     const base = rulesOf(comp.id);
-    const { css, scope } = componentCss({ el, html, rules: base.rules, textOf: (r) => fromL(read(r.file).s.slice(r.start, r.end)), dir: posix.normalize(dir), scope: `${wanted.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context` });
-    let made; try { made = toComponent({ name: wanted, html, css, wrap: scope, from: `${comp.path}:${el.src.line}` }); } catch (e) { throw new DocError(e.message, 400); }
+    const { css, scope, keep } = componentCss({ el, html, width, rules: base.rules, textOf: (r) => fromL(read(r.file).s.slice(r.start, r.end)), dir: posix.normalize(dir), scope: `${wanted.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context` });
+    let made; try { made = toComponent({ name: wanted, html, css, wrap: scope, keep, from: `${comp.path}:${el.src.line}` }); } catch (e) { throw new DocError(e.message, 400); }
     const p = posix.join(dir, `${wanted}.tsx`).replace(/^\.\//, '');
     const text = toL(made.source);
     const at = layout[comp.path];

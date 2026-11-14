@@ -50,8 +50,8 @@ const hint = () => q(`document.querySelector('#hint').textContent`);
 
 // the element of a frame with this class, by its node id (from the server's tree of the file)
 const nodeOf = (frame, cls) => json(`fetch('/api/component/${frame}').then((x) => x.json()).then((d) => { const walk = (l) => { for (const n of l || []) { if (String(n.attrs?.class || '').split(/\\s+/).includes('${cls}')) return String(n.node); const f = walk(n.children); if (f) return f; } return null; }; return walk(d.tree); })`);
-async function make(frame, cls) {
-  const node = await nodeOf(frame, cls);
+async function make(frame, cls, pick = (n) => n) {
+  const node = pick(await nodeOf(frame, cls));
   assert.ok(node, `${cls} is in ${frame}`);
   await q(`document.activeElement?.blur?.(); napkin.select({ component: '${frame}', node: '${node}', variant: {} }); 0`);
   await sleep(150);
@@ -86,12 +86,16 @@ before(async () => {
   writeFileSync(file('styles/audit.css'), AUDIT_CSS);
   writeFileSync(file('receipt.html'), RECEIPT);
   writeFileSync(file('assets/dot.png'), DOT);
+  // an audit's page (test/fixtures/component): an ancestor's hover, a positional rule, pre-wrap copy, a grid-sized card
+  writeFileSync(file('journey.html'), readFileSync(new URL('../fixtures/component/journey.html', import.meta.url)));
+  writeFileSync(file('styles/journey.css'), readFileSync(new URL('../fixtures/component/styles/journey.css', import.meta.url)));
+  writeFileSync(file('assets/landscape.png'), DOT);
   server = await startServer(r.compDir, { timeout: 20000, env: { NAPKIN_ALL_KINDS: '0' } });
   b = await launchChromium({ width: 1440, height: 900 });
   io = input(b);
   await b.goto(server.url);
   await b.waitFor('document.body.dataset.ready === "1"', 30000);
-  await b.waitFor(`!!document.querySelector('section.cmp[data-component="audit.html"]')?.dataset.ready && !!document.querySelector('section.cmp[data-component="receipt.html"]')?.dataset.ready`, 20000);
+  await b.waitFor(`!!document.querySelector('section.cmp[data-component="audit.html"]')?.dataset.ready && !!document.querySelector('section.cmp[data-component="receipt.html"]')?.dataset.ready && !!document.querySelector('section.cmp[data-component="journey.html"]')?.dataset.ready`, 20000);
   await sleep(400);
 });
 after(async () => { await b?.close(); await server?.stop(); rmSync(r.dir, { recursive: true, force: true }); });
@@ -166,4 +170,53 @@ test('basics pass 3: Create component is one command: one palette entry, the key
   const rows = await json(`[...document.querySelectorAll('#quick [role=option], #quick li')].filter((e) => e.getClientRects().length && /create component/i.test(e.textContent)).map((e) => e.textContent.trim())`);
   assert.equal(rows.length, 1, `one palette row for Create component: ${JSON.stringify(rows)}`);
   await io.key('Escape');
+});
+
+// the made component drawn by /view, with the elements of a page that uses it beside it: what each looks like
+const drawn = (id, sel, host = '') => json(`(async () => {
+  const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;left:0;top:0;width:800px;height:700px;border:0;opacity:0;pointer-events:none;z-index:-1';
+  await new Promise((res) => { f.addEventListener('load', res, { once: true }); f.src = '/view/' + encodeURIComponent(${JSON.stringify(id)}) + '?width=800'; document.body.append(f); });
+  const d = f.contentDocument; const t0 = performance.now();
+  while (!d.querySelector(${JSON.stringify(sel)}) && performance.now() - t0 < 8000) await new Promise((x) => setTimeout(x, 50));
+  const box = d.createElement('div'); box.id = 'host'; box.innerHTML = ${JSON.stringify(host)}; d.body.append(box);
+  await new Promise((x) => setTimeout(x, 100));
+  const pick = (el) => { const s = f.contentWindow.getComputedStyle(el); const r = el.getBoundingClientRect(); return { display: s.display, color: s.color, fontWeight: s.fontWeight, backgroundColor: s.backgroundColor, padding: s.padding, w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, text: el.innerText }; };
+  const out = { root: pick(d.querySelector(${JSON.stringify(sel)})), host: [...box.querySelectorAll('span, section')].map(pick) };
+  f.remove(); return out;
+})()`);
+const madeAs = async (name) => { await until(() => existsSync(file(`${name}.tsx`))); await until(async () => (await q(`String([...napkin.state.components.values()].some((c) => c.path === '${name}.tsx'))`)) === 'true' || null); return `${name}.tsx#${name}`; };
+
+test('basics pass 3: a hover on an ancestor outside stays a hover, a positional rule keeps its look, and no rule reaches the page around the component', { timeout: 120000 }, async () => {
+  await make('journey.html', 'weather');
+  const weather = await drawn(await madeAs('Weather'), '.weather');
+  assert.equal(weather.root.backgroundColor, 'rgb(255, 255, 255)', 'at rest the forecast is white, as in the frame (.shell:hover .weather is a hover)');
+  // the first span of the forecast: :nth-child(2) of its section in the frame, red and bold
+  const forecast = await nodeOf('journey.html', 'weather');
+  await make('journey.html', 'weather', () => `${forecast}.1`);
+  const host = '<p><span>one</span><span>two</span></p><section class="weather"><h3>x</h3><span>a</span><span>b</span></section>';
+  const span = await drawn(await madeAs('Span'), '.span-context > span', host);
+  assert.equal(span.root.color, 'rgb(194, 29, 86)');
+  assert.equal(span.root.fontWeight, '700');
+  assert.equal(span.root.display, 'inline-block');
+  for (const h of span.host.filter((x, i) => i < 2)) {
+    assert.equal(h.display, 'inline', `a span of the page around it is untouched: ${JSON.stringify(h)}`);
+    assert.equal(h.padding, '0px');
+    assert.notEqual(h.color, 'rgb(194, 29, 86)');
+  }
+  for (const h of (await drawn('Weather.tsx#Weather', '.weather', host)).host) assert.equal(h.padding, '0px', `nor an element of the page that shares a class with it: ${JSON.stringify(h)}`);
+});
+
+test('basics pass 3: white space kept by CSS (pre-wrap) reads and measures the same', { timeout: 90000 }, async () => {
+  const { was, is, src } = await same('journey.html', 'scrollcopy', 'Scrollcopy');
+  assert.match(was[0].text, /First line\n {4}Keep four spaces/);
+  assert.deepEqual(is, was);
+  assert.match(src, /\\n {4}Keep/);
+});
+
+test('basics pass 3: a card a grid sized keeps the width it had in the frame', { timeout: 90000 }, async () => {
+  const w = await json(`(() => { const d = document.querySelector('section.cmp[data-component="journey.html"] iframe').contentDocument; return Math.round(d.querySelector('.teaser').getBoundingClientRect().width * 10) / 10; })()`);
+  await make('journey.html', 'teaser');
+  const t = await drawn(await madeAs('Teaser'), '.teaser');
+  assert.ok(w > 100 && w < 600, `the frame draws the teaser in its grid column: ${w}`);
+  assert.equal(t.root.w, w, 'the same width on its own');
 });

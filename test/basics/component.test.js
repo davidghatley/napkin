@@ -77,7 +77,7 @@ test('basics pass 3: Ctrl+Alt+K on a selected element makes a component file bes
   assert.match(src, /<article className="card" id="promo">\n\s+<h2>Launch window<\/h2>\n\s+<p>Opens at <b>07:31<\/b> &amp; closes at noon\.<\/p>\n\s+<a className="btn" href="#go">Reserve a seat<\/a>\n\s+<\/article>/, 'the element reads like hand-written JSX');
   assert.doesNotMatch(src, /onclick|\.hero|\.footer/, 'no inline script, and no rule that never reached the selection');
   assert.match(src, /@keyframes pulse \{/, 'the animation it names comes along');
-  assert.match(src, /@media \(max-width: 500px\) \{\n\s+\.card \{ width: auto; \}/, 'inside its media query');
+  assert.match(src, /@media \(max-width: 500px\) \{\n\s+:where\(\.card-context \.card\) \{ width: auto; \}/, 'inside its media query, scoped to the component');
   assert.equal(readFileSync(file('page.html'), 'utf8'), PAGE, 'the frame is byte for byte what it was');
   await b.waitFor(`!!document.querySelector('section.cmp[data-component^="Card.tsx"]')`, 10000);
   await until(async () => /Card made from page\.html/.test(await hint()) || null);
