@@ -152,6 +152,8 @@ const liveFrame = (id) => `document.querySelector('section.cmp[data-component="$
 const wordAt = (id, word) => json(`(() => { const f = ${liveFrame(id)}; const d = f?.contentDocument; if (!d?.body) return null; const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { const i = n.data.indexOf(${JSON.stringify(word)}); if (i < 0) continue; const r = d.createRange(); r.setStart(n, i); r.setEnd(n, i + ${word.length}); const b = r.getBoundingClientRect(), fr = f.getBoundingClientRect(), z = fr.width / f.offsetWidth; return { x: fr.left + (b.left + b.width / 2) * z, y: fr.top + (b.top + b.height / 2) * z }; } return null; })()`);
 // what a person sees while editing: the caret is in the element in the frame, and what is highlighted
 const editState = (id) => json(`(() => { const f = ${liveFrame(id)}; const d = f?.contentDocument; const a = d?.activeElement; return { focused: document.activeElement === f && !!a?.isContentEditable, tag: a?.localName ?? null, selected: d?.getSelection().toString() ?? '', collapsed: d?.getSelection().isCollapsed ?? true, dialog: !!document.querySelector('dialog[open]') }; })()`);
+// the ladder (standards 5): a double-click on a frame goes in to its text, the next one edits it
+const editWord = async (w) => { await io.dblclick(w.x, w.y); await sleep(250); await io.dblclick(w.x, w.y); };
 const show = async (id) => { await q(`napkin.select(null); napkin.view.fitRect(napkin.stage.componentRect('${id}'), { pad: 160, max: 1 }); 0`); await sleep(400); };
 async function newText(words, at) {
   await emptyCanvas();
@@ -194,7 +196,7 @@ test('round 2: arrows move the caret while editing, they do not move the card', 
   await show(id);
   const card = await cardRect(id);
   const w = await wordAt(id, 'Good');
-  await io.dblclick(w.x, w.y);
+  await editWord(w);
   await until(async () => (await editState(id)).selected === 'Good');
   await io.key('ArrowRight'); // the caret goes to the end of "Good"
   await io.key('ArrowRight'); // and past the space
@@ -208,7 +210,7 @@ test('round 2: arrows move the caret while editing, they do not move the card', 
 test('round 2: Enter on selected text edits all of it; F2 does the same; no dialog', { timeout: 60000 }, async () => {
   await show('page.html');
   const h = await wordAt('page.html', 'Plan');
-  await io.click(h.x, h.y, { ctrl: true }); // (a plain click picks the top-level <main>: selection.test.js)
+  await io.click(h.x, h.y, { ctrl: true }); // (a plain click picks the frame: selection.test.js)
   await until(async () => (await q(`(() => { const s = napkin.state.selection; return s?.component === 'page.html' && napkin.stage.sections.get('page.html').docFrame.element(s.node)?.el.localName; })()`)) === 'h1');
   await io.key('Enter');
   await until(async () => (await editState('page.html')).focused);
@@ -270,7 +272,7 @@ test('round 2: pasted text arrives as plain text, without foreign styles', { tim
   const id = (await frames()).find((f) => />Good very morning<\/p>/.test(readFileSync(file(f), 'utf8')));
   await show(id);
   const w = await wordAt(id, 'very');
-  await io.dblclick(w.x, w.y);
+  await editWord(w);
   await until(async () => (await editState(id)).selected === 'very');
   // a paste the way the browser delivers one from another page: rich HTML and its plain text
   await q(`(() => { const f = ${liveFrame(id)}, d = f.contentDocument, dt = new DataTransfer(); dt.setData('text/html', '<span style="color: red; font-size: 40px">really</span>'); dt.setData('text/plain', 'really'); d.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })(); 0`);

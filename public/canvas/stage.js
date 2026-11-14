@@ -857,9 +857,11 @@ export function createStage(ctx, root, world, view) {
   ctx.on('layout', () => queueCull());
 
   // ---------------------------------------------------------------------------------------------- pointer: hover, click, marquee, frame drag
-  // Figma's selection model in a document frame (standards section 5). The card is <body> (or <html>); its direct children are
-  // the top level. A click picks the element under the pointer at the level of the selection (the children of the selected
-  // element's parent, when that parent is inside the card), else at the top level; Ctrl/Cmd picks the deepest one.
+  // Figma's selection model in a document frame (standards section 5), one ladder: frame, top-level element, deeper. The card is
+  // <body> (or <html>); its direct children are the top level. The scope starts at the canvas, so a click on a frame picks the
+  // frame itself until the selection is inside that frame (double-click or Enter goes in); then a click picks the element under
+  // the pointer at the level of the selection (the children of the selected element's parent, when that parent is inside the
+  // card), else at the top level. Ctrl/Cmd picks the deepest one.
   const CARD = new Set(['html', 'head', 'body']);
   function pathTo(id, node) { // the tree nodes from the root down to node, or null
     const t = sections.get(id)?.docFrame?.tree()?.tree;
@@ -872,6 +874,7 @@ export function createStage(ctx, root, world, view) {
     let card = -1; path.forEach((n, i) => { if (CARD.has(n.tag)) card = i; });
     if (card === path.length - 1) return node; // the card itself (its empty part)
     const s = ctx.state.selections.find((x) => x.component === id), sp = s && pathTo(id, s.node), parent = sp && sp.length > 1 ? sp[sp.length - 2] : null;
+    if (card >= 0 && (!sp || s.card || CARD.has(sp.at(-1).tag))) return path[card].node; // not inside this frame yet: the frame
     if (parent && !CARD.has(parent.tag)) { const i = path.indexOf(path.find((n) => n.node === parent.node)); if (i >= 0 && path[i + 1]) return path[i + 1].node; }
     return path[card + 1].node;
   }
@@ -955,10 +958,13 @@ export function createStage(ctx, root, world, view) {
     suppressClick = Date.now();
     const x0 = Math.min(m.x, ev.clientX), x1 = Math.max(m.x, ev.clientX), y0 = Math.min(m.y, ev.clientY), y1 = Math.max(m.y, ev.clientY);
     let best = [];
+    const frames = []; // HTML frames touched: at the canvas scope a marquee picks the frames themselves (standards 5.5)
     for (const [id, sec] of sections) {
       if (sec.culled || !sec.pos) continue;
       const f = sec.frame.getBoundingClientRect();
       if (f.right < x0 || f.left > x1 || f.bottom < y0 || f.top > y1) continue;
+      const card = sec.docFrame && !ctx.state.components.get(id)?.item && ctx.create?.isFrameFile(ctx.state.components.get(id)) && ctx.create.bodyOf(sec.docFrame.tree());
+      if (card) { frames.push({ component: id, node: card.node, variant: {}, card: true }); continue; }
       const seen = new Set(), found = [];
       for (const el of sec.el.querySelectorAll('.mount [data-n]')) {
         const r = el.getBoundingClientRect();
@@ -968,7 +974,9 @@ export function createStage(ctx, root, world, view) {
       }
       if (found.length > best.length) best = found;
     }
-    if (m.additive && best.length) {
+    if (frames.length) best = frames;
+    if (m.additive && frames.length) best = [...ctx.state.selections.filter((s) => s.card && !frames.some((f) => f.component === s.component)), ...frames];
+    else if (m.additive && best.length) {
       const keep = ctx.state.selections.filter((s) => s.component === best[0].component && !best.some((b) => b.node === s.node));
       best = [...keep, ...best];
     }
@@ -1008,7 +1016,7 @@ export function createStage(ctx, root, world, view) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
       else if (d.title && c?.item) ctx.select({ component: d.id, node: 'item', variant: {} });
-      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; if (first) ctx.select({ component: d.id, node: first.node, variant: {} }); }
+      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const card = body || t?.tree?.[0]; if (card) ctx.select({ component: d.id, node: card.node, variant: {} }); } // the label picks the frame (standards 3.4)
       else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
     }
