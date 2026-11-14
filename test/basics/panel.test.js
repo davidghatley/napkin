@@ -857,3 +857,25 @@ test('scrubbing an image control previews on the canvas while held; release stor
     await until(async () => (await stored()) === held, 8000, 'one edit stored on release');
   } finally { await close(); }
 });
+
+test('typing in a panel field, valid or not, never moves the canvas camera', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(600);
+    await clickOn(b, io, elOf('h1'), { ctrl: true });
+    await until(() => b.eval(`!!document.querySelector('#inspector #pv-width')`), 10000, 'the h1 in the panel');
+    await sleep(500);
+    const view = () => jv(b, `napkin.view.get()`);
+    const v0 = await view();
+    const W = `document.querySelector('#inspector #pv-width')`;
+    await clickOn(b, io, W);
+    await typed(b, '650px'); await sleep(700);
+    assert.deepEqual(await view(), v0, 'typing a width leaves the camera alone');
+    await io.key('Enter'); await sleep(900);
+    assert.deepEqual(await view(), v0, 'committing it too');
+    await clickOn(b, io, W);
+    await typed(b, 'nonsense'); await sleep(500); await io.key('Enter'); await sleep(700);
+    assert.deepEqual(await view(), v0, 'an invalid value too');
+  } finally { await close(); }
+});
