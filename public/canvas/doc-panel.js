@@ -8,6 +8,7 @@
 // change is shown, and Apply writes it with one contract edit (POST /api/edit). The file is the source of truth; the
 // frame and this panel redraw from it when the engine says it changed.
 import { plain } from './words.js';
+import { keyLabel } from './keylabel.js';
 import { createCascade, longhandsOf } from './inspector-cascade.js';
 import { createPreview } from './inspector-preview.js';
 import { classify, offScale, bindExact, bindPieces, kindOfProp, parseColor, tokens, firstVar } from './inspector-model.js';
@@ -347,10 +348,17 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const soft = (id) => (softOpen(id) ? ' data-open="1"' : '');
   const fold = (id, dflt) => ((openFolds.has(id) ? openFolds.get(id) : dflt) ? ' open' : '');
 
+  // Create component beside the selection name (standards 9, rule 2): the same command, the same enabled rule and reason.
+  const makeButton = () => {
+    const can = ctx.makeComponent?.can(); if (!can) return '';
+    const keys = ctx.surface?.bindings().find((x) => x.command === 'make-component')?.keys || '';
+    return `<button type="button" id="make-component" class="doc-make" data-command="make-component"${can.ok ? '' : ` aria-disabled="true" title="${esc(can.why)}"`}>Create component${keys ? ` <kbd>${esc(keyLabel(keys))}</kbd>` : ''}</button>`;
+  };
   el.innerHTML = `
     <button type="button" class="doc-skip" id="doc-skip">Skip to your variables</button>
     <div class="selhead doc-head" data-node="${esc(sel.node)}">
       <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(labelShort)}</span></div>
+      ${makeButton()}
       <p class="hint mono doc-where"><span id="doc-source" title="${esc(comp.path)}:${node.line}">${esc(comp.path)}:${node.line}</span><button type="button" id="doc-frame-width" title="Frame width and breakpoints (B)">${frame.width} px <kbd>B</kbd></button></p>
     </div>
     <div class="doc-body">
@@ -462,6 +470,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     b.addEventListener('focus', () => { if (!staged) light(spec()); }); b.addEventListener('blur', () => { if (!staged) light(null); });
   });
   el.querySelector('#doc-skip')?.addEventListener('click', () => { const c = el.querySelector('#doc-vars .ivchip'); c?.scrollIntoView({ block: 'center' }); c?.focus({ preventScroll: true }); });
+  el.querySelector('#make-component')?.addEventListener('click', (ev) => { if (ev.currentTarget.getAttribute('aria-disabled') === 'true') ctx.hint(ev.currentTarget.title); else ctx.makeComponent.run(); });
   el.querySelector('#doc-frame-width')?.addEventListener('click', () => ctx.breakpoints?.open?.());
 
   // ---------- the staged value: scope, the change, Apply ----------

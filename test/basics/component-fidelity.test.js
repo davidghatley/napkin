@@ -297,3 +297,21 @@ test('basics pass 3: Escape in the name field keeps the automatic name', { timeo
   assert.equal(existsSync(file('Nope.tsx')), false);
   assert.match(readFileSync(file('Banner2.tsx'), 'utf8'), /export default function Banner2\(\)/);
 });
+
+test('basics pass 3: a rename that lands before the made card was selected still ends with the renamed card selected', { timeout: 90000 }, async () => {
+  // The order that broke on a loaded machine: Enter is pressed while the first loop that selects the new card is still
+  // waiting; that loop then selects the card under its old name (it is still drawn until the folder rescan), and the
+  // rename's own loop took that for the person moving on, so nothing was selected once the old card went away.
+  // Forced here: nothing selects a Teaser card until the rename has been answered.
+  await q(`window.__gate = true; const sel = napkin.select; napkin.select = function (s, ...a) { if (window.__gate && /^Teaser\\d*\\.tsx#/.test(String(s?.component))) return; return sel.call(this, s, ...a); };
+    const f = napkin.fetch; napkin.fetch = async function (u, ...a) { const r = await f.call(this, u, ...a); if (/component\\/rename/.test(String(u))) window.__gate = false; return r; }; 0`);
+  await make('journey.html', 'teaser'); // Teaser2
+  await until(() => existsSync(file('Teaser2.tsx')));
+  await until(field, 10000);
+  await io.type('Gated');
+  await io.key('Enter');
+  await until(() => existsSync(file('Gated.tsx')) && !existsSync(file('Teaser2.tsx')));
+  await until(async () => (await q(`String(napkin.state.selection?.component || '')`)) === 'Gated.tsx#Gated' || null, 10000);
+  await sleep(600);
+  assert.equal(await q(`String(napkin.state.selection?.component || '')`), 'Gated.tsx#Gated');
+});

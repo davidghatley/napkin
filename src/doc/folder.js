@@ -201,7 +201,16 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       addFile(target.replace(/^\.\//, ''), origin, media, viaNode);
     };
     for (const p of applied) addFile(p, 'applied', null);
-    if (comp.kind !== 'html') return out;
+    if (comp.kind !== 'html') {
+      // a component's own rules: the template literal of `const css = \`...\`` that its <style> shows (what Create component writes)
+      const src = read(comp.path).s, at = /\bconst css = `/.exec(src);
+      if (at) {
+        const from = at.index + at[0].length; let to = from;
+        while (to < src.length && src[to] !== '`') to += src[to] === '\\' ? 2 : 1;
+        if (to < src.length) out.push({ file: comp.path, from, to, origin: 'style', media: null });
+      }
+      return out;
+    }
     const { entry } = nodesOf(comp);
     const doc = entry.html;
     for (const n of doc.nodes) {

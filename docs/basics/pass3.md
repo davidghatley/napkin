@@ -7,35 +7,34 @@ becomes a component of its own that looks the same. Nothing is asked first.
 ![The component made from it, beside the frame](pass3/2-component-made.jpg)
 
 ## What happens
-- A `.tsx` file is written beside the frame, named from the selection's class, id or tag (`.card` gives `Card.tsx`; a
-  taken name gets the next free one, and an existing file is never overwritten).
-- The markup becomes plain JSX that reads as if written by hand. The CSS rules that reach the selection travel with it,
-  inside their media queries, with the keyframes they name, the type and colour inherited from the page, and the custom
-  properties they read.
-- Every rule is written inside the component's `display: contents` wrapper (`:where(.card-context ...)`), in its cascade
-  order, so the same declarations win and nothing reaches a page that uses the component. Selectors that name ancestors
-  outside the selection (`.shell > .offer`) are rewritten against the component; a state named on an outside ancestor
-  (`.shell:hover .weather`) moves to the wrapper and stays a state; a position the component cannot reproduce
-  (`:nth-child(2)` of the frame) is frozen onto the element by its place inside the component. What the elements around it gave it (inherited
-  type and colour, custom properties followed through each other, media queries included) sits on a `display: contents`
-  wrapper, so a button or a `pre` keeps its native type. `url(...)` from a stylesheet in another folder is rebased, and a
-  component's view resolves relative URLs from its own folder. Spaces at the edges of inline elements are kept, and
-  white space a `pre` or a `white-space: pre-wrap` rule keeps is written exactly. A root that a grid or flex parent sized
-  gets the width it had in the frame.
-- Scripts and inline handlers stay behind; the message says which.
-- The frame's file is not touched. One undo removes the new file.
-- The new card is revealed once it has settled: wholly on the canvas, at 100% (or the largest zoom that fits it), clear
-  of the message. It is selected (its root, past the wrapper), so the panel shows it; its Layers file row selects the same.
-- Its label is then a field with the automatic name selected: type a name and press Enter to rename the file and its
-  export (`POST /api/frames/component/rename`; one undo still removes the component), or Escape to keep the name.
-- When it cannot apply (nothing selected, the whole frame, several elements, something that is already a component) it
-  says why in one sentence and makes nothing.
+- **Trigger.** Ctrl+Alt+K, the palette, the right-click menu, or the Create component button beside the selection name in the
+  right panel (same command, same enabled rule, shortcut shown). Undo of it selects the source element again; redo makes the
+  component again and selects it.
+- **Naming in place.** The file is written beside the frame at once, named from the selection's class, id or tag (`.card`
+  gives `Card.tsx`; a taken name gets the next free one; an existing file is never overwritten). The new card's label is then
+  a field with that name selected: Enter renames the file and its export (`POST /api/frames/component/rename`), Escape keeps it.
+- **Refusals.** It makes nothing and says why in one sentence when nothing is selected, several elements are, the selection
+  is the whole frame (the frame's Layers row, its label and `html`/`head`/`body` all count), it is already a component, it is
+  inside an `<svg>` (select the whole `<svg>`), or it is part of a table (select the whole table).
+- **Carried over.** The markup becomes plain JSX that reads as if written by hand: long tags take a line per attribute, a
+  textarea's text and `<option selected>` become `defaultValue`, and inline custom properties and `!important` declarations move
+  into the component's CSS (a style object cannot hold them). The CSS that reaches the selection travels with it, one declaration
+  per line, inside its media queries, with the keyframes it names, the custom properties it reads and the type and colour
+  inherited from the page (on a `display: contents` wrapper). Every rule is `:where(.card-context ...)` in cascade order, so
+  the same declarations win and nothing reaches a page that uses the component. Selectors naming outside ancestors are
+  rewritten against the component; a state on an outside ancestor stays a state on the wrapper; a position the component
+  cannot reproduce is frozen onto the element. `url(...)` is rebased to the component's folder, spaces and `pre` text are
+  kept, and the root keeps the size it had in the frame (`width: min(Npx, 100%)`, plus a height a grid or flex row gave it).
+- **Left behind.** Scripts and inline event handlers; the message lists them. The frame's file is not touched.
+- **Inspector.** The made component's panel lists the rules of its scoped `<style>` (padding, border, colours) like any frame's.
+- **Reveal.** The new card is shown whole and readable, clear of the message, and selected (its root, past the wrapper).
+- One undo removes the new file and card, also after a rename.
 
 ## Where it lives
 - `src/doc/to-component.js`: HTML and CSS to a component source; `src/doc/component-css.js`: the CSS that keeps it looking the same.
 - `src/doc/folder.js` `componentFrom`, `POST /api/frames/component { from, node, name? }`.
 - `public/canvas/make-component.js`; the command is `make-component` in the action registry, so menus can list it.
-- Tests: `test/basics/to-component.test.js`, `test/basics/component-css.test.js`, `test/basics/component.test.js`, `test/basics/component-fidelity.test.js` (measured in the browser); fixtures in `test/fixtures/component/`.
+- Tests: `test/basics/to-component.test.js`, `test/basics/component-css.test.js`, `test/basics/component.test.js`, `test/basics/component-fidelity.test.js` (measured in the browser), `test/basics/component-history.test.js` (undo, redo, header button, inspector); fixtures in `test/fixtures/component/`.
 
 ## Not yet
 - The selection is not replaced by an instance of the new component; the frame stays as it was.
