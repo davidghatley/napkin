@@ -4,7 +4,7 @@
 // What the browser draws from these files is checked in component-fidelity.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, cpSync, readFileSync, mkdirSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -106,4 +106,23 @@ test('naming afterwards: the file and its export take the new name, and one undo
   eng.undo('CoastCard.tsx', 'me');
   assert.equal(existsSync(join(d, 'CoastCard.tsx')), false, 'one undo: the component is gone');
   assert.equal(existsSync(join(d, 'Trip.tsx')), false);
+});
+
+// ---- round 4 ----
+const made = (d) => readdirSync(d).filter((n) => /\.tsx$/.test(n));
+
+test('a shape inside an inline <svg> is refused in one sentence and nothing is made; the whole <svg> still works', () => {
+  const { d, eng } = engine();
+  const before = made(d);
+  for (const tag of ['rect', 'text', 'defs', 'linearGradient', 'stop']) {
+    const node = find(eng, 'workshop.html', (n) => n.tag === tag);
+    assert.ok(node, `${tag} is in the frame`);
+    assert.throws(() => eng.componentFrom({ from: 'workshop.html', node: node.node }), (e) => e.status === 400 && /inside an <svg>/.test(e.message) && /select the whole <svg>/i.test(e.message), tag);
+  }
+  assert.deepEqual(made(d), before, 'nothing was written');
+  const svg = find(eng, 'workshop.html', (n) => n.tag === 'svg');
+  const ok = eng.componentFrom({ from: 'workshop.html', node: svg.node });
+  const src = readFileSync(join(d, ok.path), 'utf8');
+  assert.match(src, /<svg[^>]*viewBox="0 0 96 48"/);
+  assert.match(src, /fill="url\(#sky\)"/);
 });

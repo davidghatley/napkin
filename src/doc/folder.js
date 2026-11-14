@@ -670,6 +670,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const el = dom.el(node);
     if (!el || el.synthetic) throw new DocError(`no element ${node} in ${comp.path}. Next: select the element again`, 404);
     if (['html', 'head', 'body'].includes(el.tag)) throw new DocError('select an element inside the frame, not the whole frame. Next: double-click into the frame and pick the part you want', 400);
+    // a shape, group or definition inside an <svg> cannot stand alone: it needs the <svg> around it (its viewBox, size and the
+    // gradients and styles it refers to), so it is refused here rather than made blank
+    for (let a = el.parent; a; a = a.parent) if (String(a.tag).toLowerCase() === 'svg') throw new DocError('that element is inside an <svg> and would draw nothing on its own. Next: select the whole <svg> to make a component from it', 400);
     const entry = read(comp.path);
     const html = fromL(entry.s.slice(el.src.start, el.src.end));
     const dir = dirname(comp.path);
