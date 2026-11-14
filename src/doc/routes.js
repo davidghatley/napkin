@@ -106,6 +106,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
           const n = (v) => (v === undefined || v === null ? undefined : Number(v));
           return json(res, 201, engine.duplicateFrame(m?.from, { x: n(m?.x), y: n(m?.y), by })), true;
         }
+        if (method === 'POST' && path === '/api/frames/component/rename') { const m = await body(req); return json(res, 200, engine.renameMade({ path: m?.path, to: m?.to, by })), true; }
         if (method === 'POST' && path === '/api/frames/component') { const m = await body(req); return json(res, 201, engine.componentFrom({ from: m?.from, node: m?.node, name: m?.name, width: m?.width, by })), true; }
         if (method === 'POST' && path === '/api/frames/rename') { const m = await body(req); return json(res, 200, engine.renameFrame(m?.from, m?.to, { by })), true; }
         if (method === 'DELETE' && path.length > '/api/frames/'.length) return json(res, 200, engine.removeFrame(decodeURIComponent(path.slice('/api/frames/'.length)), { revision: url.searchParams.get('revision') ?? undefined, by })), true;

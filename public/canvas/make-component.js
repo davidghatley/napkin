@@ -1,9 +1,10 @@
 // Create component from a selection (standards section 9, decision 0023). Select an element in an HTML frame, run the
 // command, and that element becomes a component of its own: a .tsx file beside the frame, on the canvas to its right.
-// No name is asked first: the name comes from what was selected (its class, id or tag) and can be changed afterwards.
+// No name is asked first: the name comes from what was selected (its class, id or tag); the card's label is then a field
+// with that name selected, to change it in place (Enter) or keep it (Escape).
 // The server does the work (POST /api/frames/component, src/doc/to-component.js); this file decides when the command
 // applies, says so plainly when it does not, and shows the result: revealed, readable and clear of the message.
-//   initMakeComponent(ctx) -> ctx.makeComponent = { can() -> { ok, why }, run() -> Promise<{ path, name } | null> }
+//   initMakeComponent(ctx) -> ctx.makeComponent = { can() -> { ok, why }, run() -> Promise<{ path, name } | null>, rename(id) -> bool }
 import { plain } from './words.js';
 
 const WHOLE = 'Double-click into the frame and select the part you want; the whole frame cannot be a component.';
@@ -29,14 +30,15 @@ export function initMakeComponent(ctx) {
   // Select the new card so the panel shows it. Its frame may still be drawing, and a card drops a selection it cannot
   // find yet, so this keeps trying for a few seconds in the background and gives up the moment the person selects
   // something else. Focus is not moved.
-  async function selectWhenDrawn(path) {
-    const key = (x) => (x ? `${x.component}\n${x.node}` : ''), was = key(ctx.state.selection), t0 = performance.now(); let held = 0;
+  async function selectWhenDrawn(path, renamed = false) {
+    const key = (x) => (x ? `${x.component}\n${x.node}` : ''), t0 = performance.now(); let held = 0;
+    const was = key(ctx.state.selection);
     while (performance.now() - t0 < 8000 && held < 4) {
       let id = null; for (const [k, c] of ctx.state.components) if (c.path === path) id = k; // a new card's id settles after its first read, so follow the file
       if (id == null || ctx.stage.sections.get(id)?.el?.dataset.ready !== '1') { await new Promise((r) => setTimeout(r, 80)); continue; }
       const now = ctx.state.selection;
       if (now?.component === id) held++;
-      else if (now && key(now) !== was) return; // the person moved on
+      else if (now && key(now) !== was && !(renamed && !ctx.state.components.has(now.component))) return; // the person moved on
       else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) ctx.select({ component: id, node: root, variant: {}, card: true }); }
       await new Promise((r) => setTimeout(r, 80));
     }
@@ -79,6 +81,46 @@ export function initMakeComponent(ctx) {
     }
   }
 
+  // Naming afterwards (standards section 9, rule 4): the new card's label is a field with the automatic name selected.
+  // Enter names it (the file and its export, POST /api/frames/component/rename), Escape or a click away keeps the
+  // automatic name. A .tsx card's id settles after its first read ("Trip.tsx#Trip"), so this follows the file, and waits
+  // for the settled card so the field is not drawn into a card that is about to be replaced.
+  const base = (p) => String(p || '').split('/').pop().replace(/\.(tsx|jsx)$/i, '');
+  const dirOf = (p) => (String(p).includes('/') ? String(p).slice(0, String(p).lastIndexOf('/') + 1) : '');
+  async function nameWhenDrawn(path) {
+    const sel = ctx.state.selection;
+    const got = await until(() => { for (const [id, c] of ctx.state.components) if (c.path === path && String(id).includes('#')) { const s = ctx.stage.sections.get(id); if (s?.el?.dataset.ready === '1' && s.el.querySelector('.cmp-title h3')) return id; } return null; }, 8000);
+    if (got == null) return null;
+    const now = ctx.state.selection;
+    if (now && now.component !== got && sel && (now.component !== sel.component || now.node !== sel.node)) return null; // the person moved on
+    return rename(got);
+  }
+  function rename(id) {
+    const c = ctx.state.components.get(id);
+    if (!c?.path) return false;
+    const was = base(c.path), dir = dirOf(c.path);
+    const taken = new Set([...ctx.state.components.values()].filter((x) => x.path && x.path !== c.path && /\.(tsx|jsx)$/i.test(x.path) && dirOf(x.path) === dir).map((x) => base(x.path).toLowerCase()));
+    const ed = ctx.create?.startRename(id, {
+      name: was,
+      check: (v) => {
+        const to = String(v ?? '').trim().replace(/\.(tsx|jsx)$/i, '');
+        if (to === was) return { same: true };
+        if (!/^[A-Z][A-Za-z0-9]*$/.test(to)) return { error: 'A component name is letters and digits, starting with a capital: Card, PriceTag.' };
+        if (taken.has(to.toLowerCase())) return { error: `${to} is already a component in this folder.` };
+        return { name: to };
+      },
+      rename: async (to) => {
+        const res = await ctx.fetch('/api/frames/component/rename', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: c.path, to }) });
+        const j = await res.json().catch(() => ({ ok: false, error: `napkin answered ${res.status}` }));
+        if (!j.ok) return { ok: false, error: plain(j.error) };
+        ctx.hint(`Named ${j.name}: ${j.path}.`);
+        selectWhenDrawn(j.path, true);
+        return j;
+      },
+    });
+    return !!ed;
+  }
+
   // The width a grid or flex parent gave the element in its frame, in the element's own box-sizing (what `width:` means
   // for it); null when its width is its own. The component has no such parent, so it is given this width instead.
   function gridWidth(id, node) {
@@ -107,13 +149,13 @@ export function initMakeComponent(ctx) {
       const made = await until(() => { for (const [id, c] of ctx.state.components) if (c.path === r.path) { const s = ctx.stage.sections.get(id); if (s?.el?.isConnected) return { id, c }; } return null; });
       const left = r.dropped?.length ? ` Left behind: ${r.dropped.join('; ')}.` : '';
       ctx.hint(`${r.name} made from ${r.from}. It is ${r.path}; the frame is unchanged.${left}`);
-      if (made) { revealWhenSettled(r.path); selectWhenDrawn(r.path); }
+      if (made) { revealWhenSettled(r.path); selectWhenDrawn(r.path); nameWhenDrawn(r.path); }
       ctx.emit?.('component-made', { path: r.path, name: r.name, from: r.from });
       return { path: r.path, name: r.name, component: made?.id ?? null };
     } finally { busy = false; }
   }
 
-  const api = { can, run };
+  const api = { can, run, rename };
   ctx.makeComponent = api;
   return api;
 }

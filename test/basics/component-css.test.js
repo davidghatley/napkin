@@ -4,7 +4,7 @@
 // What the browser draws from these files is checked in component-fidelity.test.js.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, cpSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, cpSync, readFileSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -84,4 +84,26 @@ test('a root that a grid or flex parent sized gets the width it had, first, so i
   assert.match(css, /^\.teaser-context \{[\s\S]*?\}\n\n(@media[\s\S]*?\}\n\}\n\n)?:where\(\.teaser-context > \*\) \{ width: 396\.5px; \}\n\n:where\(\.teaser-context \.teaser\)/);
   const plain = cssOf(readFileSync(join(d, eng.componentFrom({ from: 'journey.html', node: node.node }).path), 'utf8'));
   assert.doesNotMatch(plain, /width: \d/, 'no width when the frame sent none');
+});
+
+test('naming afterwards: the file and its export take the new name, and one undo still takes the component away', () => {
+  const { d, eng } = engine();
+  const node = find(eng, 'journey.html', cls('trip'));
+  const made = eng.componentFrom({ from: 'journey.html', node: node.node, by: 'me' });
+  assert.equal(made.path, 'Trip.tsx');
+  const r = eng.renameMade({ path: 'Trip.tsx', to: 'CoastCard', by: 'me' });
+  assert.equal(r.path, 'CoastCard.tsx');
+  assert.equal(existsSync(join(d, 'Trip.tsx')), false);
+  const src = readFileSync(join(d, 'CoastCard.tsx'), 'utf8');
+  assert.match(src, /export default function CoastCard\(\) \{/);
+  assert.match(src, /className="coast-card-context"/);
+  assert.match(src, /:where\(\.coast-card-context \.trip\)/);
+  assert.doesNotMatch(src, /trip-context|function Trip\(/);
+  assert.throws(() => eng.renameMade({ path: 'CoastCard.tsx', to: 'lower', by: 'me' }), /cannot be a component name/);
+  assert.throws(() => eng.renameMade({ path: 'CoastCard.tsx', to: 'Other', by: 'someone else' }), /not just made by napkin/);
+  const latest = eng.latest('undo', 'me');
+  assert.equal(latest.component, 'CoastCard.tsx');
+  eng.undo('CoastCard.tsx', 'me');
+  assert.equal(existsSync(join(d, 'CoastCard.tsx')), false, 'one undo: the component is gone');
+  assert.equal(existsSync(join(d, 'Trip.tsx')), false);
 });

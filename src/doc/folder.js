@@ -692,6 +692,33 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     push(undo, p, st); redo.set(p, (redo.get(p) || []).filter((x) => x.by !== by));
     return { ...fileDone(p, by, st, 'edit'), path: p, name: wanted, from: comp.path, node: el.id, dropped: made.dropped, rules: css.length, canvas: layout[p] || null };
   }
+  // POST /api/frames/component/rename: { path, to }. Naming a component after it was made (standards section 9, rule 4):
+  // the file and its export take the new name (Trip.tsx, function Trip -> Journey.tsx, function Journey), and its context
+  // wrapper's class with them. Only a component napkin made and nobody has changed since: its creation is still the newest
+  // step on the caller's undo stack, so the renamed file takes that step's place and one undo still takes it all away.
+  function renameMade({ path, to, by = 'unknown' } = {}) {
+    const p = String(path || '');
+    const steps = undo.get(p) || [], st = steps.at(-1);
+    if (!st || st.op !== 'create' || st.by !== by || !/\.(tsx|jsx)$/i.test(p)) throw new DocError(`${basename(p)} was not just made by napkin, so napkin does not rename it. Next: rename the file and its function together in your editor`, 409);
+    let now; try { now = read(p).s; } catch { throw new DocError(`${p} is gone. Next: check the file list`, 404); }
+    if (now !== st.text) throw new DocError(`${basename(p)} changed since napkin made it, so napkin leaves its name alone. Next: rename the file and its function together in your editor`, 409);
+    const old = basename(p).replace(/\.(tsx|jsx)$/i, ''), name = String(to ?? '').trim().replace(/\.(tsx|jsx)$/i, '');
+    if (name === old) return { ok: true, noop: true, path: p, name, component: p, changed: [] };
+    if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new DocError(`"${name}" cannot be a component name. Next: use letters and digits starting with a capital, like Card`, 400);
+    const dir = dirname(p);
+    let taken = []; try { taken = readdirSync(abs(dir)).filter((n) => /\.(tsx|jsx)$/i.test(n)).map((n) => n.replace(/\.(tsx|jsx)$/i, '')).filter((n) => n !== old); } catch { /* gone */ }
+    if (taken.some((x) => x.toLowerCase() === name.toLowerCase())) throw new DocError(`${name} already exists in this folder; napkin never overwrites a file. Next: choose another name`, 409);
+    const kebab = (n) => `${n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context`;
+    const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const text = st.text.replace(new RegExp(`export default function ${esc(old)}\\(`), `export default function ${name}(`).replace(new RegExp(`(?<![\\w-])${esc(kebab(old))}(?![\\w-])`, 'g'), kebab(name));
+    const np = posix.join(dir, `${name}${extname(p)}`).replace(/^\.\//, '');
+    const { place } = drop(p, st.text);
+    try { put(np, text, place || st.place); } catch (e) { put(p, st.text, place || st.place); throw e; }
+    steps.pop(); if (!steps.length) undo.delete(p);
+    const ns = { ...st, path: np, text, place: place || st.place, at: Date.now(), summary: st.summary.replace(new RegExp(`^made ${esc(old)} `), `made ${name} `) };
+    push(undo, np, ns); redo.delete(np);
+    return { ...fileDone(np, by, { ...ns, summary: `named ${old} ${name}` }, 'edit'), path: np, name, from: p };
+  }
   // POST /api/frames/rename: { from, to } where `to` is a name ("hero") or a file name ("hero.html"), in the same folder.
   function renameFrame(from, to, { by = 'unknown' } = {}) {
     const f = frameFile(from);
@@ -788,7 +815,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
       return best;
     },
     undo: (id, by) => step(id, by, 'undo'), redo: (id, by) => step(id, by, 'redo'), pendingStep,
-    createFrame, removeFrame, duplicateFrame, renameFrame, nextFrame, componentFrom,
+    createFrame, removeFrame, duplicateFrame, renameFrame, nextFrame, componentFrom, renameMade,
     history: (id) => [...(history.get(has(id) ? component(id).id : id) || [])].reverse(),
     read: (path) => read(path), abs, kindOf, applied: () => [...applied], componentsUsing,
     rescan: () => { scan(); watchDirs(); },

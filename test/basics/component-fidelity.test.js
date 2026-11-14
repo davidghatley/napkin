@@ -261,3 +261,39 @@ test('basics pass 3: clicking the made component\'s file row in Layers selects i
   assert.deepEqual(picked, { tag: 'ARTICLE', cls: 'trip card featured' }, 'its root, not the wrapper around it');
   assert.match(await q(`document.querySelector('#inspector').textContent`), /article|trip/i, 'the panel shows it');
 });
+
+const field = () => json(`(() => { const i = document.activeElement; return i?.classList?.contains('nk-rename') ? { value: i.value, selected: i.value.slice(i.selectionStart, i.selectionEnd), card: i.closest('section.cmp')?.dataset.component, dialog: [...document.querySelectorAll('dialog[open], [role=dialog]')].some((d) => d.getClientRects().length > 0) } : null; })()`);
+
+test('basics pass 3: right after it is made the name is a field on its label, selected; Enter names the file and its export', { timeout: 90000 }, async () => {
+  const count = readdirSync(r.compDir).filter((n) => n.endsWith('.tsx')).length;
+  await make('journey.html', 'layout');
+  await until(() => existsSync(file('Layout.tsx')));
+  await until(field, 10000);
+  assert.deepEqual(await field(), { value: 'Layout', selected: 'Layout', card: 'Layout.tsx#Layout', dialog: false }, 'the automatic name, selected, in place; no dialog');
+  await io.type('TripGrid');
+  await io.key('Enter');
+  await until(() => existsSync(file('TripGrid.tsx')) && !existsSync(file('Layout.tsx')));
+  const src = readFileSync(file('TripGrid.tsx'), 'utf8');
+  assert.match(src, /export default function TripGrid\(\) \{/);
+  assert.match(src, /className="trip-grid-context"/);
+  assert.equal(readdirSync(r.compDir).filter((n) => n.endsWith('.tsx')).length, count + 1, 'renamed, not copied');
+  await until(async () => (await q(`String(napkin.state.selection?.component || '')`)) === 'TripGrid.tsx#TripGrid' || null, 10000);
+  // one undo takes the named component away
+  await q(`document.activeElement?.blur?.(); 0`);
+  await io.key('z', { ctrl: true });
+  await until(() => !existsSync(file('TripGrid.tsx')));
+  assert.equal(existsSync(file('Layout.tsx')), false);
+});
+
+test('basics pass 3: Escape in the name field keeps the automatic name', { timeout: 90000 }, async () => {
+  await make('journey.html', 'banner'); // a second Banner: Banner2
+  await until(() => existsSync(file('Banner2.tsx')));
+  await until(field, 10000);
+  await io.type('Nope');
+  await io.key('Escape');
+  await sleep(600);
+  assert.equal(await field(), null, 'the field is gone');
+  assert.ok(existsSync(file('Banner2.tsx')));
+  assert.equal(existsSync(file('Nope.tsx')), false);
+  assert.match(readFileSync(file('Banner2.tsx'), 'utf8'), /export default function Banner2\(\)/);
+});
