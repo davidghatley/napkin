@@ -30,8 +30,8 @@ test('a state named on an ancestor outside stays a state, on the wrapper; it nev
   const node = find(eng, 'journey.html', (n) => n.attrs?.id === 'forecast');
   const made = eng.componentFrom({ from: 'journey.html', node: node.node });
   const css = cssOf(readFileSync(join(d, made.path), 'utf8'));
-  assert.doesNotMatch(css, /:where\(\.weather\) \{background:#ffe2a0;\}/, 'not the resting look');
-  assert.match(css, /:where\(\.weather-context:hover \.weather\) \{background:#ffe2a0;\}/);
+  assert.doesNotMatch(css, /:where\(\.weather\) \{ background: #ffe2a0; \}/, 'not the resting look');
+  assert.match(css, /:where\(\.weather-context:hover \.weather\) \{ background: #ffe2a0; \}/);
 });
 
 test('a positional rule keeps the look it gave: the element is reached by its place in the component instead', () => {
@@ -40,7 +40,7 @@ test('a positional rule keeps the look it gave: the element is reached by its pl
   const span = forecast.children.find((n) => n.tag === 'span'); // the first span: :nth-child(2) of the section
   const made = eng.componentFrom({ from: 'journey.html', node: span.node });
   const css = cssOf(readFileSync(join(d, made.path), 'utf8'));
-  assert.match(css, /:where\(\.span-context > \*\) \{color:#c21d56;font-weight:bold;\}/, 'red and bold, on the root');
+  assert.match(css, /:where\(\.span-context > \*\) \{\n  color: #c21d56;\n  font-weight: bold;\n\}/, 'red and bold, on the root, one declaration to a line');
   assert.doesNotMatch(css, /nth-child\(2\)/);
 });
 
@@ -62,8 +62,8 @@ test('a positional rule that does reach inside the component keeps its readable 
   const { d, eng } = engine();
   const node = find(eng, 'journey.html', (n) => n.attrs?.id === 'forecast');
   const css = cssOf(readFileSync(join(d, eng.componentFrom({ from: 'journey.html', node: node.node }).path), 'utf8'));
-  assert.match(css, /:where\(\.weather-context \.weather span:nth-child\(2\)\) \{color:#c21d56;font-weight:bold;\}/);
-  assert.match(css, /:where\(\.weather-context > \.weather\) \{border:1px solid/);
+  assert.match(css, /:where\(\.weather-context \.weather span:nth-child\(2\)\) \{\n  color: #c21d56;\n  font-weight: bold;\n\}/);
+  assert.match(css, /:where\(\.weather-context > \.weather\) \{\n  border: 1px solid/);
 });
 
 test('white space a rule keeps (white-space: pre-wrap) is written exactly, and so is white space an ancestor keeps', async () => {

@@ -22,6 +22,7 @@
 //   It is written last, so it wins over the root's own width rules: those were measured against a parent the component does not have.
 import { posix } from 'node:path';
 import { matches as selMatches } from './select.js';
+import { declsOf } from './to-component.js';
 
 const INHERITED = /^(color|font|font-(family|size|weight|style|stretch|variant|variant-[\w-]+|feature-settings|kerning|optical-sizing|synthesis)|line-height|letter-spacing|word-spacing|text-align|text-align-last|text-transform|text-indent|text-shadow|text-rendering|white-space|word-break|overflow-wrap|hyphens|tab-size|direction|writing-mode|visibility|cursor|quotes|list-style|list-style-(type|position|image)|caret-color|accent-color|color-scheme|-webkit-font-smoothing|-moz-osx-font-smoothing|-webkit-text-size-adjust)$/i;
 // states a file at rest is never in; for deciding whether a rule reaches the selection they count as met
@@ -78,11 +79,21 @@ function keepSpace(el, ancestors, rules) {
 
 const varUses = (t) => [...String(t).matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]);
 
+// A rule body as a person would write it: one declaration to a line when there are several, each as `prop: value;`.
+// Bodies with anything nested (a comment, a block) are left as they were.
+export function tidy(body) {
+  const m = /^\{([^{}]*)\}$/.exec(body.trim());
+  if (!m || m[1].includes('/*')) return body;
+  const decls = declsOf(m[1]).map((d) => d.trim()).filter(Boolean).map((d) => { const at = d.indexOf(':'); return at < 1 ? null : `${d.slice(0, at).trim()}: ${d.slice(at + 1).trim()};`; });
+  if (decls.some((d) => d === null)) return body;
+  return decls.length > 1 ? `{\n${decls.map((d) => `  ${d}`).join('\n')}\n}` : decls.length ? `{ ${decls[0]} }` : '{}';
+}
+
 export function componentCss({ el, html = '', rules, textOf, dir = '.', scope = 'component-context', width = null, height = null }) {
   const subtree = []; (function walk(e) { subtree.push(e); e.children.forEach(walk); })(el);
   const ancestors = []; for (let a = el.parent; a; a = a.parent) ancestors.unshift(a);
   const before = el.parent ? el.parent.children.slice(0, el.parent.children.indexOf(el)) : [];
-  const body = (r) => { const t = textOf(r); return rebase(t.slice(t.indexOf('{')), r.file, dir); };
+  const body = (r) => { const t = textOf(r); return tidy(rebase(t.slice(t.indexOf('{')), r.file, dir)); };
 
   // (1) the rules that reach the selection. Every selector is written inside the wrapper (.scope ...), so nothing leaks
   // into a page that uses the component, and each form is checked against the component as it will stand (its root the
