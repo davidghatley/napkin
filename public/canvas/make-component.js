@@ -6,6 +6,8 @@
 //   initMakeComponent(ctx) -> ctx.makeComponent = { can() -> { ok, why }, run() -> Promise<{ path, name } | null> }
 import { plain } from './words.js';
 
+const WHOLE = 'Double-click into the frame and select the part you want; the whole frame cannot be a component.';
+
 export function initMakeComponent(ctx) {
   const until = (f, ms = 4000) => new Promise((res) => { const t0 = performance.now(); (function poll() { const v = f(); if (v || performance.now() - t0 > ms) res(v || null); else requestAnimationFrame(poll); })(); });
   let busy = false;
@@ -16,10 +18,11 @@ export function initMakeComponent(ctx) {
     if (!sel || !c) return { ok: false, why: 'Select an element in a frame first.' };
     if ((ctx.state.selections?.length || 1) > 1) return { ok: false, why: 'Select one element; a component is made from one element and what is inside it.' };
     if ((c.fileKind || c.kind) !== 'html') return { ok: false, why: `${c.name} is already a component.` };
+    if (sel.card) return { ok: false, why: WHOLE }; // the frame's card itself (its label, its file row): the whole frame
     const sec = ctx.stage.sections.get(sel.component), tree = sec?.docFrame?.tree?.();
     const node = (function find(l) { for (const n of l || []) { if (String(n.node) === String(sel.node)) return n; const f = find(n.children); if (f) return f; } return null; })(tree?.tree);
     if (!node) return { ok: false, why: 'Select an element in a frame first.' };
-    if (['html', 'head', 'body'].includes(String(node.tag).toLowerCase())) return { ok: false, why: 'Double-click into the frame and select the part you want; the whole frame cannot be a component.' };
+    if (['html', 'head', 'body'].includes(String(node.tag).toLowerCase())) return { ok: false, why: WHOLE };
     return { ok: true, from: sel.component, node: String(sel.node), tag: node.tag };
   }
 

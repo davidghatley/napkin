@@ -18,6 +18,7 @@ import { classLiteral, planNodeEdit, planInsert, planMove, planRule, planVar, Ed
 import { writeAtomic, cleanStaleTmp, sweepDir, removeFile, moveFile } from '../atomic.js';
 import { buildDom, matches as selMatches } from './select.js';
 import { toComponent, componentName } from './to-component.js';
+import { componentCss } from './component-css.js';
 import { createCascade } from '../../public/canvas/inspector-cascade.js';
 import { explainError } from '../errors.js';
 
@@ -629,55 +630,17 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     if (['html', 'head', 'body'].includes(el.tag)) throw new DocError('select an element inside the frame, not the whole frame. Next: double-click into the frame and pick the part you want', 400);
     const entry = read(comp.path);
     const html = fromL(entry.s.slice(el.src.start, el.src.end));
-    // every element of the selection, and the rules whose selector reaches any of them, in cascade order
-    const subtree = []; (function walk(e) { subtree.push(e); e.children.forEach(walk); })(el);
-    const base = rulesOf(comp.id);
-    const textOf = (r) => fromL(read(r.file).s.slice(r.start, r.end));
-    const css = [];
-    for (const r of base.rules) {
-      if (r.kind !== 'style') continue;
-      if (r.parts.some((p) => subtree.some((e) => { try { return selMatches(e, p.selector); } catch { return false; } }))) css.push({ text: textOf(r), context: r.context });
-    }
-    // what the selection gets from outside itself, so it looks the same on its own:
-    // (1) animations its rules name
-    const all = () => css.map((c) => c.text).join('\n') + '\n' + html;
-    const frames = new Map();
-    for (const r of base.rules) {
-      const at = r.kind === 'keyframe' && r.context.find((c) => /^@(-\w+-)?keyframes\s/.test(c));
-      if (at) (frames.get(at) || frames.set(at, []).get(at)).push(textOf(r));
-    }
-    for (const [at, steps] of frames) {
-      const nm = at.replace(/^@(-\w+-)?keyframes\s+/, '').trim();
-      if (new RegExp(`(^|[\\s,:])${nm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[\\s,;])`).test(all())) css.push({ text: `${at} {\n${steps.map((x) => '  ' + x).join('\n')}\n}`, context: [] });
-    }
-    // (2) what it inherits from the elements around it (type and colour), and (3) the custom properties it reads. Both are
-    // written once on the component's own root, before its rules, so nothing leaks onto the page that uses it.
-    const INHERITED = /^(color|font|font-(family|size|weight|style|stretch|variant|variant-numeric|feature-settings|kerning)|line-height|letter-spacing|word-spacing|text-align|text-transform|text-indent|white-space|direction|-webkit-font-smoothing|-moz-osx-font-smoothing)$/;
-    const decls = (text) => [...text.slice(text.indexOf('{') + 1).matchAll(/([\w-]+)\s*:\s*([^;}]+)/g)].map((m) => [m[1].toLowerCase() === m[1] ? m[1] : m[1], m[2].trim()]);
-    const around = []; for (let a = el.parent; a; a = a.parent) around.unshift(a);
-    const got = new Map();
-    const vars = new Set([...all().matchAll(/var\(\s*(--[\w-]+)/g)].map((m) => m[1]));
-    const ownVars = new Set([...all().matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]));
-    for (const a of around) {
-      for (const r of base.rules) {
-        if (r.kind !== 'style' || r.context.length) continue;
-        if (!r.parts.some((p) => { try { return selMatches(a, p.selector); } catch { return false; } })) continue;
-        for (const [k, v] of decls(textOf(r))) if (INHERITED.test(k) || (k.startsWith('--') && vars.has(k) && !ownVars.has(k))) { got.delete(k); got.set(k, v); }
-      }
-      for (const [k, v] of decls(`{${a.attrs.style || ''}}`)) if (INHERITED.test(k) || (k.startsWith('--') && vars.has(k) && !ownVars.has(k))) { got.delete(k); got.set(k, v); }
-    }
-    if (got.size) {
-      const cls = (el.attrs.class || '').trim().split(/\s+/)[0];
-      const sel = cls && /^-?[_a-zA-Z][\w-]*$/.test(cls) ? `.${cls}` : el.attrs.id && /^[_a-zA-Z][\w-]*$/.test(el.attrs.id) ? `#${el.attrs.id}` : el.tag;
-      css.unshift({ text: `${sel} {\n${[...got].map(([k, v]) => `  ${k}: ${v};`).join('\n')}\n}`, context: [] });
-    }
     const dir = dirname(comp.path);
     let taken = []; try { taken = readdirSync(abs(dir)).filter((n) => /\.(tsx|jsx)$/i.test(n)).map((n) => n.replace(/\.(tsx|jsx)$/i, '')); } catch { /* new folder */ }
     const seed = (el.attrs.class || '').trim().split(/\s+/)[0] || el.attrs.id || el.tag;
     const wanted = name === undefined || name === null || name === '' ? componentName(seed, taken) : String(name).trim();
     if (!/^[A-Z][A-Za-z0-9]*$/.test(wanted)) throw new DocError(`"${wanted}" cannot be a component name. Next: use letters and digits starting with a capital, like Card`, 400);
     if (taken.some((x) => x.toLowerCase() === wanted.toLowerCase())) throw new DocError(`${wanted} already exists in this folder; napkin never overwrites a file. Next: choose another name`, 409);
-    let made; try { made = toComponent({ name: wanted, html, css, from: `${comp.path}:${el.src.line}` }); } catch (e) { throw new DocError(e.message, 400); }
+    // the CSS that makes it look the same on its own (src/doc/component-css.js): the rules that reach it, rewritten where
+    // they name ancestors it will not have, and what the elements around it gave it, on a wrapper that stands in for them
+    const base = rulesOf(comp.id);
+    const { css, scope } = componentCss({ el, html, rules: base.rules, textOf: (r) => fromL(read(r.file).s.slice(r.start, r.end)), dir: posix.normalize(dir), scope: `${wanted.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context` });
+    let made; try { made = toComponent({ name: wanted, html, css, wrap: scope, from: `${comp.path}:${el.src.line}` }); } catch (e) { throw new DocError(e.message, 400); }
     const p = posix.join(dir, `${wanted}.tsx`).replace(/^\.\//, '');
     const text = toL(made.source);
     const at = layout[comp.path];
