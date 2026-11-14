@@ -3,7 +3,8 @@
 //   HTML: the file's own bytes. Only two things are added, at the top of <head>: the folder's applied stylesheets
 //         (contract ruling 3: first, so the file's own CSS wins) and a <base> so its relative URLs resolve as on disk.
 //   TSX/JSX: a plain page (doctype, UTF-8, the applied stylesheets, <div id="root">) that renders the component with
-//         no props (contract ruling 5), bundled by esbuild with the folder's own node_modules first.
+//         no props (contract ruling 5), bundled by esbuild with the folder's own node_modules first. A <base> at the
+//         file's folder, so <img src="assets/a.png"> in the component loads the file beside it, as it did in its frame.
 // The query's width and theme are the frame's: the browser (or the canvas's iframe) supplies both; nothing is rewritten.
 import { join, dirname, posix, extname, relative, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -118,7 +119,8 @@ else createRoot(document.getElementById('root')).render(createElement(Guard, nul
     return out;
   }
   async function view(comp, over = null, props = null) {
-    const links = engine.applied().map((p) => `<link rel="stylesheet" href="${href(p)}">`).join('');
+    const dir = posix.dirname(comp.path);
+    const links = engine.applied().map((p) => `<link rel="stylesheet" href="${href(p)}">`).join('') + `<base href="${href(dir === '.' ? '' : dir + '/')}">`;
     const b = comp.broken && !over ? { error: explainError(comp.broken, { next: 'fix the syntax error, then save; napkin reads it again.' }) } : await bundle(comp, over);
     if (b.error) {
       // The frame still draws: it says why the component could not be built (the canvas shows the same page).
