@@ -29,7 +29,7 @@ export function initMakeComponent(ctx) {
 
   // Select the new card so the panel shows it. Its frame may still be drawing, and a card drops a selection it cannot
   // find yet, so this keeps trying for a few seconds in the background and gives up the moment the person selects
-  // something else. Focus is not moved.
+  // something else, or clears the selection once it was there. Focus is not moved.
   async function selectWhenDrawn(path, renamed = false) {
     const key = (x) => (x ? `${x.component}\n${x.node}` : ''), t0 = performance.now(); let held = 0;
     const was = key(ctx.state.selection);
@@ -38,6 +38,7 @@ export function initMakeComponent(ctx) {
       if (id == null || ctx.stage.sections.get(id)?.el?.dataset.ready !== '1') { await new Promise((r) => setTimeout(r, 80)); continue; }
       const now = ctx.state.selection;
       if (now?.component === id) held++;
+      else if (!now && held) return; // the person cleared it after it was shown (a card drops a selection only before it holds)
       else if (now && key(now) !== was && !(renamed && !ctx.state.components.has(now.component))) return; // the person moved on
       else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) ctx.select({ component: id, node: root, variant: {}, card: true }); }
       await new Promise((r) => setTimeout(r, 80));
