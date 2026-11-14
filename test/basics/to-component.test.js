@@ -111,3 +111,17 @@ test('component CSS: selectors split into compounds, and urls rebased from the s
     `.b { background: url('assets/a.png'), url(/x.png), url("data:image/png;base64,AA"), url(#f); }`);
   assert.equal(rebase('a { b: url(i.png) }', 'pages/x.html', 'pages'), 'a { b: url(i.png) }');
 });
+
+test('an inline !important keeps its priority: React drops it from a style object, so it moves into the component\'s CSS', async () => {
+  const html = '<section class="cascade" style="color:#c24!important; margin: 0 ;padding : 4px !IMPORTANT"><p style="color: red">one</p><strong style="font-weight:700 !important">two</strong></section>';
+  const { source } = toComponent({ name: 'Cascade', html, css: [{ text: '.cascade { color: blue; }', context: [] }] });
+  assert.doesNotMatch(source, /style=\{\{[^}]*important/i, 'no !important inside a style object');
+  assert.match(source, /<p style=\{\{ color: "red" \}\}>/, 'what is not important stays inline');
+  assert.match(source, /style=\{\{ margin: "0" \}\}/);
+  const css = /const css = `\n([\s\S]*?)\n`;/.exec(source)[1];
+  assert.match(css, /\.cascade-imp-1\.cascade-imp-1\.cascade-imp-1 \{ color: #c24 !important; padding: 4px !important; \}/);
+  assert.match(css, /\.cascade-imp-2\.cascade-imp-2\.cascade-imp-2 \{ font-weight: 700 !important; \}/);
+  const out = await shown(source);
+  assert.match(out, /<section class="cascade cascade-imp-1" style="margin:0">/, 'the element carries its class beside its own');
+  assert.match(out, /<strong class="cascade-imp-2">two<\/strong>/);
+});
