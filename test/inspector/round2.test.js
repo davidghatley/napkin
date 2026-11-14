@@ -43,11 +43,12 @@ test('round 2: inherited values are listed with a link that selects the ancestor
   try {
     const span = await a.node('p.html', (x) => x.attrs.id === 's'), card = await a.node('p.html', (x) => x.attrs.id === 'c');
     await a.select('p.html', span.node);
-    const inh = JSON.parse(await a.q(`JSON.stringify([...document.querySelectorAll('#doc-inherited .vrow')].map((r) => ({ label: r.querySelector('label').textContent, link: r.querySelector('.plink')?.textContent.replace(/\\s+/g, ' ').trim(), value: r.querySelector('input').value })))`));
+    // (inherited type values sit in Typography, the rest under Inherited: one ordered list, standards section 7)
+    const inh = JSON.parse(await a.q(`JSON.stringify([...document.querySelectorAll('#panel .vrow.inh')].map((r) => ({ label: r.querySelector('label').textContent, link: r.querySelector('.plink')?.textContent.replace(/\\s+/g, ' ').trim(), value: r.querySelector('input').value })))`));
     assert.ok(inh.some((r) => r.label === 'color' && /\.card\.dark c\.css:1/.test(r.link) && r.value === 'var(--fg)'), JSON.stringify(inh));
     assert.ok(inh.some((r) => r.label === 'font' && /\.card\.dark/.test(r.link) && /14px\/20px/.test(r.value)), 'the font shorthand on the ancestor is one row');
-    assert.equal(await a.q(`/Nothing styles/.test(document.querySelector('#doc-values').innerText)`), false);
-    await a.q(`document.querySelector('#doc-inherited .plink').click()`);
+    assert.equal(await a.q(`/Nothing styles/.test(document.querySelector('#panel').innerText)`), false);
+    await a.q(`document.querySelector('#panel .vrow.inh .plink').click()`);
     await a.browser.waitFor(`!!document.querySelector('#panel .doc-body[data-node="${card.node}"]')`);
     // server and canvas agree on what is inherited
     const srv = (await (await fetch(`${a.app.url}api/component/p.html/rules?node=${span.node}`)).json()).node.inherited;
@@ -62,16 +63,16 @@ test('round 2: tab order is field, scope, Apply; one Tab stop per strip with arr
     await a.select('Note/preview.html', n.node);
     // a field focused by a script, then a chip clicked: the binding still stages
     await a.q(`document.querySelector('#pv-padding').focus()`);
-    await a.q(`document.querySelector('#doc-vars').scrollIntoView()`);
+    await a.q(`(() => { const s = document.querySelector('[data-sec=vars]'); if (!s.open) s.open = true; document.querySelector('#doc-vars').scrollIntoView(); })()`); // "Your variables" starts folded
     const c = await a.center('.ivchip[data-var="--space-2"]');
     await a.io.click(c.x, c.y);
     await a.browser.waitFor(`!!document.querySelector('#doc-staged .scope')`);
     assert.equal(await a.q(`napkin.inspector.state().prop`), 'padding');
     await a.io.key('Escape');
-    // type a value; one Tab reaches the scope, the next Apply, and Shift+Tab goes back to the field
-    await a.typeIn('#pv-padding', 'var(--space-1) 16');
+    // the scope chooser opened on a typed value (Alt+C): its options take arrows, then Tab reaches Apply and Cancel; Shift+Tab goes back
+    await a.typeIn('#pv-padding', 'var(--space-1) 16', { choose: false });
+    await a.io.key('c', { alt: true, code: 'KeyC' });
     await a.browser.waitFor(`!!document.querySelector('#doc-staged .scope')`);
-    await a.io.key('Tab');
     assert.equal(await a.q(`document.activeElement.dataset.scope`), 'class');
     await a.io.key('ArrowDown');
     assert.equal(await a.q(`napkin.inspector.state().scope`), 'variable');
@@ -82,6 +83,16 @@ test('round 2: tab order is field, scope, Apply; one Tab stop per strip with arr
     await a.q(`document.querySelector('[data-scope=variable]').focus()`);
     await a.io.key('Tab', { shift: true });
     assert.equal(await a.q(`document.activeElement.id`), 'pv-padding');
+    await a.io.key('Escape');
+    // an ordinary typed value: no chooser, and Tab is the field's (standards section 7 rule 10): it writes the value to this element
+    // and moves on to the next field, never to a scope option
+    const before = readAll(a.dir)['Note/preview.html'];
+    await a.typeIn('#pv-padding', '7px', { choose: false });
+    assert.equal(await a.q(`!!document.querySelector('#doc-staged .scope')`), false, 'no chooser for an ordinary edit');
+    await a.io.key('Tab');
+    await a.browser.waitFor(`document.activeElement.matches('#panel input') && document.activeElement.id !== 'pv-padding' && !document.activeElement.dataset.scope`, 5000);
+    for (let i = 0; i < 50 && readAll(a.dir)['Note/preview.html'] === before; i++) await sleep(100);
+    assert.match(readAll(a.dir)['Note/preview.html'], /class="ss-note__tag" style="padding: 7px"/, 'Tab wrote it to the element');
     await a.io.key('Escape');
     // strips: one tab stop each, arrows move
     assert.equal(await a.q(`document.querySelectorAll('#doc-vars .ivchip[tabindex="0"]').length === document.querySelectorAll('#doc-vars .ivstrip').length`), true);
@@ -115,7 +126,7 @@ test('round 2: on the real Note and the primary button nothing is flagged by mis
     const row = await a.q(`document.querySelector('.vrow[data-prop="border"]').innerText.replace(/\\s+/g, ' ')`);
     assert.match(row, /partly overridden/); assert.match(row, /border-color from \.ss-button--primary components\.css:\d+/);
     // the variable strips wrap inside the panel: no chip is cut by the panel edge, and no nested scroller
-    await a.q(`document.querySelector('#doc-vars').scrollIntoView()`);
+    await a.q(`(() => { const s = document.querySelector('[data-sec=vars]'); if (!s.open) s.querySelector('.pp-sec-h').click(); document.querySelector('#doc-vars').scrollIntoView(); })()`);
     const clip = await a.q(`(() => { const p = document.querySelector('#inspector').getBoundingClientRect(); return [...document.querySelectorAll('.ivchip')].filter((c) => { const r = c.getBoundingClientRect(); return r.right > p.right + 0.5 || r.left < p.left - 0.5; }).length; })()`);
     assert.equal(clip, 0);
     assert.equal(await a.q(`getComputedStyle(document.querySelector('#doc-vars-body')).overflowY`), 'visible');

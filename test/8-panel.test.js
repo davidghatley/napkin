@@ -30,7 +30,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
   const settled = async (rev) => browser.waitFor(`${sec('Button')}.dataset.revision !== "${rev}" && document.body.dataset.ready === "1"`);
   try {
     // Settings and Variants start closed (rarely used); this test works in them, so it opens them the way a person would: the choice is remembered
-    await browser.send('Page.addScriptToEvaluateOnNewDocument', { source: "try { localStorage.setItem('napkin.panel.opened', JSON.stringify(['props', 'variants'])); } catch {}" });
+    await browser.send('Page.addScriptToEvaluateOnNewDocument', { source: "try { localStorage.setItem('napkin.sections', JSON.stringify({ 'tsx.props': true, 'tsx.variants': true })); } catch {}" });
     await browser.goto(server.url);
     await browser.waitFor('document.body.dataset.ready === "1"');
 

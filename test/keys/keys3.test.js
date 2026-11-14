@@ -57,9 +57,10 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
       assert.ok(found.filter((f) => !f.natural).length <= 8, 'few exceptions');
       const none = found.filter((f) => !f.q);
       assert.deepEqual(none.map((f) => f.label), [], 'every control has a query of at most 3 characters');
-      const total = await b.eval(`[...document.querySelectorAll('#panel input, #panel select, #panel textarea, #panel button, #panel summary')].filter((e) => { if (e.tabIndex < 0 || e.disabled || e.type === 'color' || e.closest('[hidden]')) return false; for (let x = e; x && x.id !== 'panel'; x = x.parentElement) if (getComputedStyle(x).display === 'none') return false; return true; }).length`);
+      const total = await b.eval(`[...document.querySelectorAll('#panel input, #panel select, #panel textarea, #panel button, #panel summary')].filter((e) => { if (e.tabIndex < 0 || e.disabled || e.type === 'color' || e.closest('[hidden]') || e.closest('#instruments')) return false; for (let x = e; x && x.id !== 'panel'; x = x.parentElement) if (getComputedStyle(x).display === 'none') return false; return true; }).length`);
+      // (the file's own sections at the end of the one list, #instruments, are dials: reached by their own keys and "Control <label>", quick.js)
       const ids = new Set(found.map((f) => f.field));
-      const missing = JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#panel input, #panel select, #panel textarea, #panel button, #panel summary')].filter((e) => { if (e.tabIndex < 0 || e.disabled || e.type === 'color' || e.closest('[hidden]')) return false; for (let x = e; x && x.id !== 'panel'; x = x.parentElement) if (getComputedStyle(x).display === 'none') return false; return true; }).map((e) => e.id || e.tagName + ':' + e.textContent.trim().slice(0, 20)).filter((id) => !${JSON.stringify([...[]])}.includes(id)))`));
+      const missing = JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#panel input, #panel select, #panel textarea, #panel button, #panel summary')].filter((e) => { if (e.tabIndex < 0 || e.disabled || e.type === 'color' || e.closest('[hidden]') || e.closest('#instruments')) return false; for (let x = e; x && x.id !== 'panel'; x = x.parentElement) if (getComputedStyle(x).display === 'none') return false; return true; }).map((e) => e.id || e.tagName + ':' + e.textContent.trim().slice(0, 20)).filter((id) => !${JSON.stringify([...[]])}.includes(id)))`));
       const notIndexed = missing.filter((id) => !ids.has(id));
       assert.deepEqual(notIndexed, [], `controls in the panel that Cmd-K does not know (${total} focusable, ${found.length} indexed)`);
       let worst = 0;
@@ -71,7 +72,7 @@ test('WPC-07: every focusable inspector control is <= 5 real keys away (Button r
         await io.key('Enter'); keys++;
         await sleep(80);
         let want0 = null;
-        if (/^sum-/.test(f.field)) want0 = await b.eval(`(() => { const s = document.getElementById(${JSON.stringify(f.field)}); const all = [...(s?.closest('details')?.querySelectorAll('input, select, textarea, button') ?? [])].filter((e) => !e.disabled && e.tabIndex >= 0 && e.type !== 'color' && getComputedStyle(e).display !== 'none' && !e.closest('[hidden]')); const x = all.find((e) => e.tagName !== 'BUTTON') || all[0]; return x ? x.id : ''; })()`); // Enter on a section moves into its first field
+        if (/^sum-/.test(f.field)) want0 = await b.eval(`(() => { const s = document.getElementById(${JSON.stringify(f.field)}); const all = [...(s?.closest('details, .pp-sec')?.querySelectorAll('input, select, textarea, button') ?? [])].filter((e) => e !== s && !e.disabled && e.tabIndex >= 0 && e.type !== 'color' && getComputedStyle(e).display !== 'none' && !e.closest('[hidden]')); const x = all.find((e) => e.tagName !== 'BUTTON') || all[0]; return x ? x.id : ''; })()`); // Enter on a section moves into its first field (the head is a button now, standards 7: not counted)
         const want = want0 ? want0 : f.add ? (f.field === 'add-prop' ? 'new-prop-name' : f.field === 'add-axis' ? 'new-axis-name' : `new-value-${f.field.replace(/^add-value-/, '')}`) : f.field;
         const got = await b.eval(`document.activeElement.id`);
         assert.equal(got, want, `${c}.${n} "${f.label}" via "${f.q}"`);

@@ -38,7 +38,9 @@ test('surface: palette phrases, one instrument panel, spatial focus, groups, key
   assert.deepEqual((await board()).selection, ['a.css']);
   assert.equal(await b.eval('document.activeElement.dataset.itemId'), 'a.css');
   assert.equal(await b.eval('document.querySelectorAll("#instruments .d-section").length > 0'), true, 'the panel is drawn by dials');
-  assert.equal(await b.eval('document.querySelector("#panel").hidden'), true, 'a file item has no second panel');
+  // one panel (standards section 7): the file's sections are in the one list (#panel), and no element panel stands beside them
+  assert.equal(await b.eval('document.querySelector("#instruments").closest("#panel") === document.querySelector("#panel") && !document.querySelector("#panel").hidden'), true, 'the file\'s sections are in the one list');
+  assert.equal(await b.eval('document.querySelectorAll("#panel .fbox, #panel .doc-body").length'), 0, 'a file item has no second panel');
 
   // Control <label>: a typed value reaches the file through the panel.
   const schema = await (await fetch(server.url + 'api/controls/a.css')).json();
@@ -51,7 +53,8 @@ test('surface: palette phrases, one instrument panel, spatial focus, groups, key
   await io.key('Enter');
   await b.waitFor(`fetch('/api/controls/a.css').then(r=>r.json()).then(j=>j.sections.flatMap(s=>s.controls).find(c=>c.id===${JSON.stringify(num.id)}).value===${num.value + 5})`, 5000);
   assert.ok(readdirSync(files).some((f) => f.startsWith('a.css') && (f !== 'a.css' || readFileSync(join(files, f), 'utf8') !== CSS)), 'the file or the recipe beside it changed');
-  assert.equal(await b.eval(`document.activeElement.classList.contains('d-label')`), true, 'Enter hands focus to the label, where arrows step');
+  // the field contract (standards 7.9): Enter applies and keeps the focus in the field, all of it selected
+  assert.equal(await b.eval(`document.activeElement.closest('[data-control-id]')?.dataset.controlId === ${JSON.stringify(num.id)} && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName) && document.activeElement.selectionStart === 0 && document.activeElement.selectionEnd === document.activeElement.value.length`), true, 'Enter keeps the focus in the field, selected');
   await palette('Undo the last instrument change'); // the panel's Undo button went with its second header: G U, Ctrl+Z, or the palette
   await b.waitFor(`fetch('/api/controls/a.css').then(r=>r.json()).then(j=>j.sections.flatMap(s=>s.controls).find(c=>c.id===${JSON.stringify(num.id)}).value===${num.value})`, 5000);
 

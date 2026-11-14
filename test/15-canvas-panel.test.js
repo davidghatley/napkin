@@ -42,7 +42,7 @@ test('the design panel reads like a design tool and every control is one small e
       assert.equal(await q(`document.querySelector('label[for=borderRadius]').textContent`), 'Radius');
       assert.equal(await q(`document.querySelector('label[for=fontSize]').textContent`), 'Size');
       assert.equal(await q(`document.querySelector('label[for=lineHeight]').textContent`), 'Line height');
-      assert.deepEqual(JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('#panel .pp-sec > .pp-sec-t .pp-sec-l')].map((s) => s.textContent))`)).slice(0, 6), ['Layout', 'Auto layout', 'Appearance', 'Fill', 'Stroke', 'Typography']);
+      assert.deepEqual(JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('#panel .pp-sec > .pp-sec-t .pp-sec-l')].map((s) => s.textContent))`)).slice(0, 6), ['Layout', 'Auto layout', 'Appearance', 'Typography', 'Fill', 'Stroke'], 'standards section 7: Typography before Fill');
       const visible = await q(`[...document.querySelectorAll('#panel .flabel:not(.mono)')].map((l) => l.textContent).filter((x) => /[a-z][A-Z]/.test(x)).length`);
       assert.equal(visible, 0, 'no camelCase property names among the design labels');
       assert.equal(await q(`document.querySelector('#borderRadius').closest('.fbox').querySelector('.unit').textContent`), 'px');
@@ -138,10 +138,10 @@ test('the design panel reads like a design tool and every control is one small e
     });
 
     await t.test('Advanced: all CSS lists everything the design controls do not cover, and still edits', async () => {
-      assert.equal(await q(`document.querySelector('details.adv').open`), false);
-      assert.equal(await q(`!!document.querySelector('details.adv #cursor')`), true, 'cursor is in there');
+      assert.equal(await q(`document.querySelector('.pp-sec.adv').open`), false);
+      assert.equal(await q(`!!document.querySelector('.pp-sec.adv #cursor')`), true, 'cursor is in there');
       await q(`document.querySelector('.pp-sec.adv .pp-sec-h').click()`);
-      await browser.waitFor(`document.querySelector('details.adv').open`);
+      await browser.waitFor(`document.querySelector('.pp-sec.adv').open`);
       const r0 = await rev();
       await browser.type('#cursor', 'default');
       await settled('Button', r0 + 1); // (the canvas previews while you type, so the pixels can lead the file)

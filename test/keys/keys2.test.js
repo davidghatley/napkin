@@ -54,12 +54,14 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
       for (const l of ['Fill Colour', 'Stroke Colour', 'Shadow', 'Align top left', 'Settings label', 'Radius', 'Gap', 'Editing']) assert.ok(lower.includes(l.toLowerCase()), `${l} in ${labels.join(', ')}`);
     });
     await t.test('a folded section opens when the search lands in it', async () => {
-      await b.eval(`document.querySelector('details[data-sec="stroke"]').open = false; document.querySelector('details[data-sec="stroke"]').dispatchEvent(new Event('toggle'))`);
+      // (a section is a .pp-sec whose head folds it, standards section 7: one ordered list)
+      await b.eval(`document.querySelector('.pp-sec[data-sec="stroke"]').open = false`);
       await selectButton(b);
-      await b.eval(`(() => { const d = document.querySelector('details[data-sec="stroke"]'); d.open = false; d.dispatchEvent(new Event('toggle')); })()`);
+      await b.eval(`document.querySelector('.pp-sec[data-sec="stroke"]').open = false`);
+      assert.equal(await b.eval(`document.querySelector('.pp-sec[data-sec="stroke"]').open`), false);
       await palette(io, b, 'sc');
       assert.equal(await b.eval(`document.activeElement.id`), 'stroke-color');
-      assert.equal(await b.eval(`document.activeElement.closest('details').open`), true);
+      assert.equal(await b.eval(`document.activeElement.closest('.pp-sec').open`), true);
     });
     await t.test('with a variant cell selected, a property search lands in that variant\'s scope', async () => {
       await selectButton(b, { size: 'sm', state: 'default' });
@@ -69,10 +71,12 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
       assert.equal(await b.eval(`document.activeElement.id`), 'borderRadius');
       await b.eval(`document.querySelector('#scope').value = 'base'; document.querySelector('#scope').dispatchEvent(new Event('change', { bubbles: true }))`);
     });
-    await t.test('the empty panel lists Alt+I and property search', async () => {
+    await t.test('the empty panel is one line; Alt+I with nothing selected says how to reach the properties', async () => {
       await b.eval(`napkin.select(null)`); await sleep(200);
-      const text = await b.eval(`document.querySelector('#panel').innerText`);
-      assert.match(text, /Alt\+I/); assert.match(text, /type a property/);
+      assert.equal(await b.eval(`document.querySelector('#pp-empty')?.textContent`), 'Select something to edit it.');
+      await b.eval(`document.activeElement.blur()`);
+      await io.key('i', { alt: true, code: 'KeyI' }); await sleep(150);
+      assert.match(await b.eval(`document.querySelector('#hint').textContent`), /Alt\+I/);
     });
   } finally { await r.close(); }
 });

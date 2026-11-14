@@ -35,7 +35,12 @@ export function initFields(ctx, root = document.querySelector('#inspector')) {
   const start = new WeakMap(); // the value a field had when it was focused (math is relative to it, Escape goes back to it)
   let passing = false, pointer = null;
   const fields = () => [...root.querySelectorAll(FIELD)].filter((f) => isField(f) && f.getClientRects().length && !f.closest('[hidden], [inert]'));
-  const remember = (t) => start.set(t, t.value !== '' ? t.value : t.placeholder);
+  // what the field was drawn with (its value attribute, the file's value), not text typed into it before the focus came back
+  const remember = (t, now = false) => {
+    const drawn = now ? null : t.localName === 'input' && t.hasAttribute('value') ? t.getAttribute('value') : t.localName === 'textarea' ? t.defaultValue : null;
+    const v = drawn ?? t.value;
+    start.set(t, v !== '' ? v : t.placeholder);
+  };
   const fire = (t, type) => { passing = true; try { t.dispatchEvent(new Event(type, { bubbles: true })); } finally { passing = false; } };
   // Math waits for the commit: "+8" typed is not 8.
   const settle = (t) => {
@@ -53,7 +58,7 @@ export function initFields(ctx, root = document.querySelector('#inspector')) {
     if (t.localName === 'input') t.select();
   });
   // A commit (a field's change, a step that wrote) is the new value Escape goes back to.
-  root.addEventListener('change', (ev) => { if (!passing && isField(ev.target)) remember(ev.target); });
+  root.addEventListener('change', (ev) => { if (!passing && isField(ev.target)) remember(ev.target, true); });
   root.addEventListener('input', (ev) => {
     if (passing || !isField(ev.target)) return;
     if (relative(start.get(ev.target), ev.target.value) !== null) ev.stopPropagation();
@@ -74,7 +79,7 @@ export function initFields(ctx, root = document.querySelector('#inspector')) {
         if (a !== f && a && a !== document.body && root.contains(a) && isField(a)) return; // the field moved the focus on to another field
         if (a !== f) f.focus({ preventScroll: true });
         delete f.dataset.dirty;
-        remember(f);
+        remember(f, true);
         if (f.localName === 'input') f.select();
       }, 0);
       return;
@@ -99,7 +104,7 @@ export function initFields(ctx, root = document.querySelector('#inspector')) {
       setTimeout(() => {
         // the field, or its copy when the panel redrew it on Escape
         const f = t.isConnected ? t : key ? root.querySelector(`[data-key="${CSS.escape(key)}"], #${CSS.escape(key)}`) : null;
-        if (f && isField(f)) back(f);
+        if (f && f !== t && isField(f)) back(f); // (a redrawn copy; the field itself was put back at once)
         if (f) delete f.dataset.dirty;
         const a = document.activeElement;
         if (!a || a === document.body || a === t || a === f || !root.contains(a) || !isField(a)) toCanvas();

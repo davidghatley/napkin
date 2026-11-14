@@ -57,7 +57,9 @@ function wireKeys(el) {
       if (k === 'b') currentCtx?.inspector?.toggleBound(); else currentCtx?.inspector?.scope({ e: 'element', c: 'class', v: 'variable' }[k]);
       return;
     }
-    // (Tab is the field contract's: it commits and moves to the next field, fields.js. The scope chooser never takes it.)
+    // (Tab in the field is the field contract's: it commits and moves to the next field, fields.js. The scope chooser never takes it.)
+    // Shift+Tab from the chooser comes back to the value it is choosing for
+    if (staged && ev.key === 'Tab' && ev.shiftKey && t.classList?.contains('opt')) { const back = t.closest('#panel').querySelector(`.vrow input.val[data-prop="${CSS.escape(staged.prop)}"]`); if (back) { ev.preventDefault(); back.focus(); return; } }
     if (staged && t.classList?.contains('opt') && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(ev.key)) { ev.preventDefault(); currentCtx?.inspector?.step(ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' ? -1 : 1); return; }
     if (ev.key === 'Escape' && staged) { ev.preventDefault(); ev.stopPropagation(); if (isText(t)) t.value = t.defaultValue; currentCtx?.inspector?.cancel(); return; }
     if (ev.key === 'Enter' && staged && !isText(t) && (t.localName !== 'button' || t.classList.contains('opt'))) { ev.preventDefault(); currentCtx?.inspector?.apply(); return; }
@@ -123,6 +125,7 @@ export function initInspector(ctx) {
   ctx.on('select', (sel) => { if (!staged) return; const k = sel ? `${sel.component}|${sel.node}` : null; if (k !== staged.key) { const was = staged; dropStaged(ctx); ctx.hint(`Cancelled ${was.prop}: ${was.text}. Nothing was written.`); } });
   ctx.inspector = {
     scope: (id) => live?.setScope?.(id),            // 'element', 'class' or 'variable'
+    choose: () => live?.choose?.(),                 // open the scope chooser on the value being typed (its suggested scope)
     toggleBound: () => live?.toggleBound?.(),
     apply: () => live?.apply?.(),
     cancel: () => { if (live?.cancel && staged?.key === live.selKey) live.cancel(); else dropStaged(ctx); },
@@ -643,6 +646,13 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     renderStaged();
     return true;
   }
+  // Open the scope chooser on the value being typed, at the scope napkin would suggest (the class when it is the element's own).
+  function choose() {
+    if (!staged) return false;
+    if (!staged.explicit) { staged.explicit = true; staged.scope = defaultScope(optionsFor(), winners[staged.prop]); }
+    renderStaged();
+    return true;
+  }
   function setScope(id) {
     if (!staged) return false;
     const o = optionsFor().find((x) => x.id === id);
@@ -730,7 +740,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   el.querySelector('#chk-order')?.addEventListener('click', () => { measure.toggle('order'); syncChecks(); });
   syncChecks();
 
-  Object.assign(me, { stage, step, setScope, toggleBound, apply, cancel, syncChecks, bindHere, explain });
+  Object.assign(me, { stage, step, choose, setScope, toggleBound, apply, cancel, syncChecks, bindHere, explain });
   if (staged && staged.key === selKey && winners[staged.prop]) { // a redraw while a value was being edited: put it back
     const input = el.querySelector(`.vrow input[data-prop="${CSS.escape(staged.prop)}"]`);
     if (input) input.value = staged.text;

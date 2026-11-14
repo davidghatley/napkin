@@ -106,10 +106,12 @@ export async function open({ files = FILES, dir = writeFolder(files), width = 14
       await browser.waitFor(`!!napkin.inspector && !!document.querySelector('#panel .doc-body[data-node="${node}"]')`);
       await sleep(250);
     },
-    // type into a value field like a person (focus, select all, insert text); does not leave the field
-    async typeIn(selector, text) {
+    // type into a value field like a person (focus, select all, insert text); does not leave the field. A typed value is written to
+    // the element on commit; these tests are about where else it can go, so the scope chooser is opened on it (at its suggested scope).
+    async typeIn(selector, text, { choose = true } = {}) {
       await q(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); e.focus(); e.select(); })()`);
       await browser.send('Input.insertText', { text });
+      if (choose) await q(`napkin.inspector?.choose?.()`);
       await sleep(120);
     },
     async center(selector) { return JSON.parse(await q(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })())`)); },
