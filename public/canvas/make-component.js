@@ -40,7 +40,7 @@ export function initMakeComponent(ctx) {
       if (now?.component === id) held++;
       else if (!now && (held || (!asked && !renamed))) return; // the person cleared it (a card drops only a selection it cannot find yet, before it holds; a rename drops the old card's)
       else if (now && key(now) !== was && !(renamed && !ctx.state.components.has(now.component))) return; // the person moved on
-      else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) { asked = true; ctx.select({ component: id, node: root, variant: {}, card: true }); } }
+      else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) { asked = true; ctx.select({ component: id, node: root, variant: {}, card: true }); if (ctx.state.selection?.component === id) held = 1; } } // taken at once: a clear after this is the person's, not the card dropping it
       await new Promise((r) => setTimeout(r, 80));
     }
   }
