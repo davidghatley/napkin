@@ -50,8 +50,8 @@ const hint = () => q(`document.querySelector('#hint').textContent`);
 
 // the element of a frame with this class, by its node id (from the server's tree of the file)
 const nodeOf = (frame, cls) => json(`fetch('/api/component/${frame}').then((x) => x.json()).then((d) => { const walk = (l) => { for (const n of l || []) { if (String(n.attrs?.class || '').split(/\\s+/).includes('${cls}')) return String(n.node); const f = walk(n.children); if (f) return f; } return null; }; return walk(d.tree); })`);
-async function make(frame, cls) {
-  const node = await nodeOf(frame, cls);
+async function make(frame, cls, pick = (n) => n) {
+  const node = pick(await nodeOf(frame, cls));
   assert.ok(node, `${cls} is in ${frame}`);
   await q(`document.activeElement?.blur?.(); napkin.select({ component: '${frame}', node: '${node}', variant: {} }); 0`);
   await sleep(150);
@@ -86,12 +86,16 @@ before(async () => {
   writeFileSync(file('styles/audit.css'), AUDIT_CSS);
   writeFileSync(file('receipt.html'), RECEIPT);
   writeFileSync(file('assets/dot.png'), DOT);
+  // an audit's page (test/fixtures/component): an ancestor's hover, a positional rule, pre-wrap copy, a grid-sized card
+  writeFileSync(file('journey.html'), readFileSync(new URL('../fixtures/component/journey.html', import.meta.url)));
+  writeFileSync(file('styles/journey.css'), readFileSync(new URL('../fixtures/component/styles/journey.css', import.meta.url)));
+  writeFileSync(file('assets/landscape.png'), DOT);
   server = await startServer(r.compDir, { timeout: 20000, env: { NAPKIN_ALL_KINDS: '0' } });
   b = await launchChromium({ width: 1440, height: 900 });
   io = input(b);
   await b.goto(server.url);
   await b.waitFor('document.body.dataset.ready === "1"', 30000);
-  await b.waitFor(`!!document.querySelector('section.cmp[data-component="audit.html"]')?.dataset.ready && !!document.querySelector('section.cmp[data-component="receipt.html"]')?.dataset.ready`, 20000);
+  await b.waitFor(`!!document.querySelector('section.cmp[data-component="audit.html"]')?.dataset.ready && !!document.querySelector('section.cmp[data-component="receipt.html"]')?.dataset.ready && !!document.querySelector('section.cmp[data-component="journey.html"]')?.dataset.ready`, 20000);
   await sleep(400);
 });
 after(async () => { await b?.close(); await server?.stop(); rmSync(r.dir, { recursive: true, force: true }); });
@@ -166,4 +170,130 @@ test('basics pass 3: Create component is one command: one palette entry, the key
   const rows = await json(`[...document.querySelectorAll('#quick [role=option], #quick li')].filter((e) => e.getClientRects().length && /create component/i.test(e.textContent)).map((e) => e.textContent.trim())`);
   assert.equal(rows.length, 1, `one palette row for Create component: ${JSON.stringify(rows)}`);
   await io.key('Escape');
+});
+
+// the made component drawn by /view, with the elements of a page that uses it beside it: what each looks like
+const drawn = (id, sel, host = '') => json(`(async () => {
+  const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;left:0;top:0;width:800px;height:700px;border:0;opacity:0;pointer-events:none;z-index:-1';
+  await new Promise((res) => { f.addEventListener('load', res, { once: true }); f.src = '/view/' + encodeURIComponent(${JSON.stringify(id)}) + '?width=800'; document.body.append(f); });
+  const d = f.contentDocument; const t0 = performance.now();
+  while (!d.querySelector(${JSON.stringify(sel)}) && performance.now() - t0 < 8000) await new Promise((x) => setTimeout(x, 50));
+  const box = d.createElement('div'); box.id = 'host'; box.innerHTML = ${JSON.stringify(host)}; d.body.append(box);
+  await new Promise((x) => setTimeout(x, 100));
+  const pick = (el) => { const s = f.contentWindow.getComputedStyle(el); const r = el.getBoundingClientRect(); return { display: s.display, color: s.color, fontWeight: s.fontWeight, backgroundColor: s.backgroundColor, padding: s.padding, w: Math.round(r.width * 10) / 10, h: Math.round(r.height * 10) / 10, text: el.innerText }; };
+  const out = { root: pick(d.querySelector(${JSON.stringify(sel)})), host: [...box.querySelectorAll('span, section')].map(pick) };
+  f.remove(); return out;
+})()`);
+const madeAs = async (name) => { await until(() => existsSync(file(`${name}.tsx`))); await until(async () => (await q(`String([...napkin.state.components.values()].some((c) => c.path === '${name}.tsx'))`)) === 'true' || null); return `${name}.tsx#${name}`; };
+
+test('basics pass 3: a hover on an ancestor outside stays a hover, a positional rule keeps its look, and no rule reaches the page around the component', { timeout: 120000 }, async () => {
+  await make('journey.html', 'weather');
+  const weather = await drawn(await madeAs('Weather'), '.weather');
+  assert.equal(weather.root.backgroundColor, 'rgb(255, 255, 255)', 'at rest the forecast is white, as in the frame (.shell:hover .weather is a hover)');
+  // the first span of the forecast: :nth-child(2) of its section in the frame, red and bold
+  const forecast = await nodeOf('journey.html', 'weather');
+  await make('journey.html', 'weather', () => `${forecast}.1`);
+  const host = '<p><span>one</span><span>two</span></p><section class="weather"><h3>x</h3><span>a</span><span>b</span></section>';
+  const span = await drawn(await madeAs('Span'), '.span-context > span', host);
+  assert.equal(span.root.color, 'rgb(194, 29, 86)');
+  assert.equal(span.root.fontWeight, '700');
+  assert.equal(span.root.display, 'inline-block');
+  for (const h of span.host.filter((x, i) => i < 2)) {
+    assert.equal(h.display, 'inline', `a span of the page around it is untouched: ${JSON.stringify(h)}`);
+    assert.equal(h.padding, '0px');
+    assert.notEqual(h.color, 'rgb(194, 29, 86)');
+  }
+  for (const h of (await drawn('Weather.tsx#Weather', '.weather', host)).host) assert.equal(h.padding, '0px', `nor an element of the page that shares a class with it: ${JSON.stringify(h)}`);
+});
+
+test('basics pass 3: white space kept by CSS (pre-wrap) reads and measures the same', { timeout: 90000 }, async () => {
+  const { was, is, src } = await same('journey.html', 'scrollcopy', 'Scrollcopy');
+  assert.match(was[0].text, /First line\n {4}Keep four spaces/);
+  assert.deepEqual(is, was);
+  assert.match(src, /\\n {4}Keep/);
+});
+
+test('basics pass 3: a card a grid sized keeps the width it had in the frame', { timeout: 90000 }, async () => {
+  const w = await json(`(() => { const d = document.querySelector('section.cmp[data-component="journey.html"] iframe').contentDocument; return Math.round(d.querySelector('.teaser').getBoundingClientRect().width * 10) / 10; })()`);
+  await make('journey.html', 'teaser');
+  const t = await drawn(await madeAs('Teaser'), '.teaser');
+  assert.ok(w > 100 && w < 600, `the frame draws the teaser in its grid column: ${w}`);
+  assert.equal(t.root.w, w, 'the same width on its own');
+});
+
+// Where the new card is on screen, against the canvas (the area Layers and the right panel leave) and the message.
+const onScreen = (id) => json(`(() => { const s = document.querySelector('section.cmp[data-component=' + JSON.stringify(${JSON.stringify(id)}) + ']'); const st = document.getElementById('stage').getBoundingClientRect();
+  const r = s.getBoundingClientRect(), h = document.getElementById('hint'), hr = h.textContent && h.getClientRects().length ? h.getBoundingClientRect() : null;
+  const inside = r.left >= st.left && r.top >= st.top && r.right <= st.right && r.bottom <= st.bottom;
+  const covered = hr ? Math.max(0, Math.min(r.right, hr.right) - Math.max(r.left, hr.left)) * Math.max(0, Math.min(r.bottom, hr.bottom) - Math.max(r.top, hr.top)) : 0;
+  return { inside, covered, z: napkin.view.get().z, r: [r.left, r.top, r.right, r.bottom].map(Math.round), stage: [st.left, st.top, st.right, st.bottom].map(Math.round) }; })()`);
+
+test('basics pass 3: from a far, zoomed-out view the new card ends wholly on the canvas, readable, and the message does not cover it', { timeout: 90000 }, async () => {
+  // fit all, then far off to one side: the frame the selection is in is a speck
+  await q(`napkin.view.set({ x: -4000, y: -3000, z: 0.12 }); 0`);
+  await sleep(300);
+  await make('journey.html', 'banner');
+  const id = await madeAs('Banner');
+  await sleep(2500); // past its first draw, its measure and any move the layout makes
+  const at = await onScreen(id);
+  assert.ok(at.inside, `the card is inside the canvas: ${JSON.stringify(at)}`);
+  assert.equal(at.covered, 0, `the message covers none of it: ${JSON.stringify(at)}`);
+  assert.ok(at.z >= 0.99, `shown at 100%, since it fits: ${at.z}`);
+  await sleep(2500);
+  assert.ok((await onScreen(id)).inside, 'and it stays shown');
+});
+
+test('basics pass 3: clicking the made component\'s file row in Layers selects its root, and the panel follows', { timeout: 90000 }, async () => {
+  await make('journey.html', 'trip');
+  const id = await madeAs('Trip');
+  await sleep(1500);
+  const trip = await nodeOf('journey.html', 'trip');
+  await q(`napkin.select({ component: 'journey.html', node: '${trip}', variant: {} }); 0`);
+  await sleep(200);
+  const row = `document.querySelector('#layers .lrow[data-kind="component"][data-component=' + JSON.stringify(${JSON.stringify(id)}) + ']')`;
+  await b.waitFor(`!!${row}`, 10000);
+  await q(`${row}.scrollIntoView({ block: 'center' }); 0`);
+  await sleep(150);
+  const at = await json(`(() => { const r = ${row}.querySelector('.lname').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  await io.click(at.x, at.y);
+  await until(async () => (await q(`String(napkin.state.selection?.component || '')`)) === id || null, 5000);
+  const picked = await json(`(() => { const s = napkin.state.selection, el = napkin.stage.sections.get(s.component)?.docFrame?.element(s.node)?.el; return { tag: el?.tagName, cls: el?.className }; })()`);
+  assert.deepEqual(picked, { tag: 'ARTICLE', cls: 'trip card featured' }, 'its root, not the wrapper around it');
+  assert.match(await q(`document.querySelector('#inspector').textContent`), /article|trip/i, 'the panel shows it');
+});
+
+const field = () => json(`(() => { const i = document.activeElement; return i?.classList?.contains('nk-rename') ? { value: i.value, selected: i.value.slice(i.selectionStart, i.selectionEnd), card: i.closest('section.cmp')?.dataset.component, dialog: [...document.querySelectorAll('dialog[open], [role=dialog]')].some((d) => d.getClientRects().length > 0) } : null; })()`);
+
+test('basics pass 3: right after it is made the name is a field on its label, selected; Enter names the file and its export', { timeout: 90000 }, async () => {
+  const count = readdirSync(r.compDir).filter((n) => n.endsWith('.tsx')).length;
+  await make('journey.html', 'layout');
+  await until(() => existsSync(file('Layout.tsx')));
+  await until(field, 10000);
+  assert.deepEqual(await field(), { value: 'Layout', selected: 'Layout', card: 'Layout.tsx#Layout', dialog: false }, 'the automatic name, selected, in place; no dialog');
+  await io.type('TripGrid');
+  await io.key('Enter');
+  await until(() => existsSync(file('TripGrid.tsx')) && !existsSync(file('Layout.tsx')));
+  const src = readFileSync(file('TripGrid.tsx'), 'utf8');
+  assert.match(src, /export default function TripGrid\(\) \{/);
+  assert.match(src, /className="trip-grid-context"/);
+  assert.equal(readdirSync(r.compDir).filter((n) => n.endsWith('.tsx')).length, count + 1, 'renamed, not copied');
+  await until(async () => (await q(`String(napkin.state.selection?.component || '')`)) === 'TripGrid.tsx#TripGrid' || null, 10000);
+  // one undo takes the named component away
+  await q(`document.activeElement?.blur?.(); 0`);
+  await io.key('z', { ctrl: true });
+  await until(() => !existsSync(file('TripGrid.tsx')));
+  assert.equal(existsSync(file('Layout.tsx')), false);
+});
+
+test('basics pass 3: Escape in the name field keeps the automatic name', { timeout: 90000 }, async () => {
+  await make('journey.html', 'banner'); // a second Banner: Banner2
+  await until(() => existsSync(file('Banner2.tsx')));
+  await until(field, 10000);
+  await io.type('Nope');
+  await io.key('Escape');
+  await sleep(600);
+  assert.equal(await field(), null, 'the field is gone');
+  assert.ok(existsSync(file('Banner2.tsx')));
+  assert.equal(existsSync(file('Nope.tsx')), false);
+  assert.match(readFileSync(file('Banner2.tsx'), 'utf8'), /export default function Banner2\(\)/);
 });

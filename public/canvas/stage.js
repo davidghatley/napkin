@@ -1042,6 +1042,21 @@ export function createStage(ctx, root, world, view) {
   });
 
   // Bring a component into view if it is not (a new one, or a quick-open target); never moves a view that already shows it.
+  // The element a person means by a whole file: an HTML frame's first element in its body; a component's root, past a
+  // display: contents wrapper (a made component's context wrapper draws nothing, so its root is the element inside it).
+  function mainNode(id) {
+    const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null;
+    const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t);
+    const real = (n) => !['script', 'style', 'template', 'link', 'meta', 'title', 'head'].includes(n.tag);
+    let n = (body ? body.children : t).find(real);
+    for (let i = 0; n && i < 4; i++) {
+      const el = f.element(n.node)?.el, kid = n.children.filter(real);
+      if (!el || el.ownerDocument.defaultView.getComputedStyle(el).display !== 'contents' || kid.length !== 1) break;
+      n = kid[0];
+    }
+    return n?.node ?? null;
+  }
+
   function reveal(id) {
     live(id);
     const r = componentRect(id), v = view.get(), b = view.stageBox();
@@ -1052,7 +1067,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    pickNode, deeper, upOf, pathTo, rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    pickNode, deeper, upOf, pathTo, rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, mainNode, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     openingRect, componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

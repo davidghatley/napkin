@@ -5,6 +5,7 @@
 //     html  the element's outer HTML exactly as it is in the file
 //     css   [{ text, context: ['@media (min-width: 600px)'] }]  rules in cascade order
 //     from  'card.html:12'  where it came from, for the header comment
+//     keep  paths of the elements whose white space shows as written ('' the root, '0.1' ...): their text is kept exactly
 //     wrap  a class name: the root is wrapped in <div className={wrap}> (its CSS gives it display: contents)
 //     dropped  what could not come along, in plain words (scripts, inline event handlers)
 //   componentName(seed, taken) -> a free PascalCase name ("Card", then "Card2")
@@ -84,7 +85,7 @@ const plain = (t) => t.replace(/[{}<>&\u00a0]/g, (c) => ({ '{': "{'{'}", '}': "{
 // White space at the edges shows nothing only in a block; inside an inline element (Hello<strong> David </strong>) it is a
 // space the reader sees, so it stays.
 function phrase(s, n, dropped, open) {
-  if (n.children.some((c) => BLOCK.has(c.name) || c.name === 'script' || c.name === 'style' || c.name === 'pre' || c.name === 'textarea')) return null;
+  if (n.keepsInside || n.children.some((c) => BLOCK.has(c.name) || c.name === 'script' || c.name === 'style' || c.name === 'pre' || c.name === 'textarea')) return null;
   const fold = (raw) => decodeText(raw.replace(/<!--[\s\S]*?-->/g, '')).replace(/[ \t\n\r\f]+/g, ' ');
   let out = '', at = n.openEnd;
   for (const c of n.children) {
@@ -101,7 +102,7 @@ function phrase(s, n, dropped, open) {
   return line.length <= 110 && !line.includes('\n') ? line : null;
 }
 
-function render(s, n, depth, dropped, pre = false) {
+function render(s, n, depth, dropped, pre = false, keep = null, path = '') {
   const pad = '  '.repeat(depth);
   if (n.name === 'script') { dropped.add('a <script> element (scripts do not run in a component)'); return ''; }
   if (n.name === 'style') return ''; // its rules travel in the component's CSS
@@ -109,7 +110,8 @@ function render(s, n, depth, dropped, pre = false) {
   const attrs = n.attrs.map((a) => prop(n.name, a, foreign, dropped)).filter(Boolean);
   const open = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}`;
   if (VOID.has(n.name) || (n.selfClosing && foreign)) return `${pad}${open} />`;
-  const keepSpace = pre || n.name === 'pre' || n.name === 'textarea';
+  const keepSpace = pre || n.name === 'pre' || n.name === 'textarea' || !!keep?.has(path);
+  if (keep) n.keepsInside = [...keep].some((k) => k === path || path === '' || k.startsWith(`${path}.`));
   if (!keepSpace && !foreign && n.children.length) { const one = phrase(s, n, dropped, open); if (one !== null && pad.length + one.length <= 120) return `${pad}${one}`; }
   const parts = [];
   let at = n.openEnd;
@@ -117,7 +119,7 @@ function render(s, n, depth, dropped, pre = false) {
   for (const c of n.children) {
     const t = text(s.slice(at, c.start), keepSpace, edge && c === n.children[0]);
     if (t) parts.push({ text: t });
-    const el = render(s, c, depth + 1, dropped, keepSpace);
+    const el = render(s, c, depth + 1, dropped, keepSpace, keep, path === '' ? String(n.children.indexOf(c)) : `${path}.${n.children.indexOf(c)}`);
     if (el) parts.push({ el, block: BLOCK.has(c.name) });
     at = c.end;
   }
@@ -133,7 +135,7 @@ function render(s, n, depth, dropped, pre = false) {
 
 const literal = (css) => css.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
 
-export function toComponent({ name, html, css = [], from = '', wrap = null }) {
+export function toComponent({ name, html, css = [], from = '', wrap = null, keep = [] }) {
   if (!/^[A-Z][A-Za-z0-9]*$/.test(name)) throw new Error(`component name "${name}" must be PascalCase (letters and digits, starting with a capital). Next: try a name like Card`);
   const s = String(html);
   const parsed = parseHtml(s);
@@ -141,7 +143,8 @@ export function toComponent({ name, html, css = [], from = '', wrap = null }) {
   if (roots.length !== 1) throw new Error('select one element to make a component from. Next: select the element that wraps the part you want');
   const dropped = new Set();
   // `wrap`: a class for an element with display: contents around the root, standing in for the frame's elements around it
-  const jsx = wrap ? `    <div className="${wrap}">\n${render(s, roots[0], 3, dropped)}\n    </div>` : render(s, roots[0], 2, dropped);
+  const k = keep.length ? new Set(keep) : null;
+  const jsx = wrap ? `    <div className="${wrap}">\n${render(s, roots[0], 3, dropped, false, k)}\n    </div>` : render(s, roots[0], 2, dropped, false, k);
   const own = parsed.nodes.filter((n) => n.name === 'style').map((n) => ({ text: s.slice(n.openEnd, n.closeStart ?? n.end).trim(), context: [] }));
   const sheet = [...css, ...own].filter((r) => r.text && r.text.trim()).map((r) => (r.context || []).reduceRight((inner, c) => `${c} {\n${inner.replace(/^/gm, '  ')}\n}`, r.text.trim())).join('\n\n');
   const lines = [];
