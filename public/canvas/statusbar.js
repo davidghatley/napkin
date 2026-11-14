@@ -91,6 +91,7 @@ export function initStatusbar(ctx) {
   addEventListener('pointerdown', (ev) => { if (isOpen() && !menu.contains(ev.target) && !lvl.contains(ev.target)) close({ restore: false }); }, true);
   addEventListener('resize', () => close({ restore: false }));
   ctx.on('menu', ({ open: o } = {}) => { if (o) close({ restore: false }); });
+  ctx.on('view', () => close({ restore: false })); ctx.on('tool', () => close({ restore: false })); // the canvas moved or the tool changed: the presets no longer apply to what is shown
 
   document.addEventListener('keydown', (ev) => {
     if (ev.isComposing) return;
