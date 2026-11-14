@@ -6,7 +6,7 @@ import { index, VOID } from '/src/model.js';
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 // Row glyphs: 16 px grid, 1.5 px stroke, round caps and joins, as every chrome icon (canvas.css). Stroke and fill come from the row's CSS.
 const g = (d) => `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">${d}</svg>`;
-const ICON = {
+export const ICON = {
   frame: g('<path d="M5.25 2.25v11.5M10.75 2.25v11.5M2.25 5.25h11.5M2.25 10.75h11.5"/>'),
   text: g('<path d="M3.25 4.75v-2h9.5v2M8 2.75v10.5M6 13.25h4"/>'),
   image: g('<rect x="2.25" y="2.75" width="11.5" height="10.5" rx="1.5"/><path d="m2.25 11 3.25-3.25 2.75 2.75 1.75-1.75 3.75 3.75"/><circle cx="10.5" cy="5.75" r=".75"/>'),
@@ -20,15 +20,17 @@ const ICON = {
   more: g('<circle cx="4" cy="8" r="1"/><circle cx="8" cy="8" r="1"/><circle cx="12" cy="8" r="1"/>'),
   chevron: g('<path d="M5 6.5 8 9.5l3-3"/>'),
 };
-const iconFor = (n) => (n.tag === 'img' ? ICON.image : n.tag === 'button' ? ICON.button : n.children.length || !(n.text !== undefined || n.textProp) ? ICON.frame : ICON.text);
+export const iconFor = (n) => (n.tag === 'img' ? ICON.image : n.tag === 'button' ? ICON.button : n.children.length || !(n.text !== undefined || n.textProp) ? ICON.frame : ICON.text);
 // An element of an HTML file: a picture, a vector, text, a button, or a box (a frame, as Figma calls a container).
-const htmlIcon = (n, kids) => (/^(img|picture|video|canvas)$/.test(n.tag) ? ICON.image : n.tag === 'svg' ? ICON.vector : n.tag === 'button' ? ICON.button : !kids && n.text?.trim() ? ICON.text : ICON.frame);
+export const htmlIcon = (n, kids) => (/^(img|picture|video|canvas)$/.test(n.tag) ? ICON.image : n.tag === 'svg' ? ICON.vector : n.tag === 'button' ? ICON.button : !kids && n.text?.trim() ? ICON.text : ICON.frame);
 // A file row says what the file is: an HTML file is a frame, a TSX or JSX file a component, then CSS, SVG, pictures and text.
-const fileIcon = (c) => {
+export const fileIcon = (c) => {
   if (!c.item) return c.kind === 'html' && !/\.(tsx|jsx)$/i.test(c.path || '') ? ICON.frame : ICON.component;
   const fam = c.meta?.family, path = c.path || c.name || '';
   return /\.svg$/i.test(path) ? ICON.vector : fam === 'image' ? ICON.image : fam === 'css' ? ICON.css : ICON.doc;
 };
+// An HTML element's row name: its id and first classes, else its text, else its tag (the right panel's header says the same).
+export const htmlName = (n) => { const id = n.attrs?.id ? `#${n.attrs.id}` : '', cl = (n.attrs?.class || '').split(/\s+/).filter(Boolean); return `${id}${cl.slice(0, 2).map((x) => '.' + x).join('')}${cl.length > 2 ? ` +${cl.length - 2}` : ''}` || n.text?.trim().slice(0, 40) || (n.attrs?.['aria-label'] ? `${n.tag} “${n.attrs['aria-label']}”` : n.tag); };
 const twirl = (on) => `<span class="twirl" aria-hidden="true">${on ? ICON.chevron : ''}</span>`;
 const holdsText = (n) => n.text !== undefined || !!n.textProp;
 const canHold = (n) => !holdsText(n) && !VOID.has(n.tag);
@@ -44,6 +46,8 @@ export function initLayers(ctx, el) {
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; draw(); }); } };
   const selKey = (s) => `${s.component}|${s.node}`;
   const selected = () => new Set(ctx.state.selections.map(selKey));
+  // an HTML frame selected as itself (its <body>, what a click on it picks: standards 5.1) is its file's row
+  const frameNode = (c) => (c.kind === 'html' && !c.item ? ctx.create?.bodyOf(ctx.stage.sections.get(c.component)?.docFrame?.tree())?.node ?? null : null);
   const baseVariant = (c) => Object.fromEntries((c.doc?.props || []).filter((p) => p.type === 'enum').map((a) => [a.name, a.default]));
 
   function draw() {
@@ -56,7 +60,7 @@ export function initLayers(ctx, el) {
     for (const c of comps) {
       const open = expanded.has(c.component), canOpen = !c.item && (!!c.doc || c.kind === 'html');
       const has = ctx.state.selections.some((s) => s.component === c.component);
-      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1"${canOpen ? ` aria-expanded="${open}"` : ''} aria-selected="${has && [c.doc?.root.id, 'item', ''].some((n) => n != null && sel.has(`${c.component}|${n}`))}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0">${twirl(canOpen)}<span class="licon">${fileIcon(c)}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">${ICON.more}</button></div>`);
+      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1"${canOpen ? ` aria-expanded="${open}"` : ''} aria-selected="${has && [c.doc?.root.id, 'item', '', frameNode(c)].some((n) => n != null && sel.has(`${c.component}|${n}`))}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0">${twirl(canOpen)}<span class="licon">${fileIcon(c)}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">${ICON.more}</button></div>`);
       if (open && c.kind === 'html') { htmlRows(c, rows, sel, prim); continue; }
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
@@ -90,7 +94,7 @@ export function initLayers(ctx, el) {
     const mark = (list) => { let hit = false; for (const n of list || []) { const self = sel.has(`${c.component}|${n.node}`), under = mark(n.children); if (under) onPath.add(n.node); hit ||= self || under; } return hit; };
     mark(t?.tree);
     const SKIP = ['script', 'style', 'template', 'link', 'meta'];
-    const nameOf = (n) => { const id = n.attrs?.id ? `#${n.attrs.id}` : '', cl = (n.attrs?.class || '').split(/\s+/).filter(Boolean); return `${id}${cl.slice(0, 2).map((x) => '.' + x).join('')}${cl.length > 2 ? ` +${cl.length - 2}` : ''}` || n.text?.trim().slice(0, 40) || (n.attrs?.['aria-label'] ? `${n.tag} “${n.attrs['aria-label']}”` : n.tag); };
+    const nameOf = htmlName;
     const bare = (n) => !n.children.length && !n.attrs?.id && !n.attrs?.class && !n.text?.trim();
     const walkList = (list, depth) => {
       for (let i = 0; i < list.length; i++) {
@@ -171,19 +175,20 @@ export function initLayers(ctx, el) {
   });
 
   // ---- rename ----
-  function startRename(row) {
+  // `at` is the name to type over: the row's own, or the right panel's header (the same rename, wherever it is started); `done` runs after.
+  function startRename(row, at = row.querySelector('.lname'), done = null) {
     const c = ctx.state.components.get(row.dataset.component);
-    if (!c || c.readOnly || !row.dataset.node) return;
+    if (!c || c.readOnly || !row.dataset.node || !at) return false;
     const old = row.dataset.node;
-    const name = row.querySelector('.lname');
+    const name = at;
     const input = document.createElement('input');
     input.className = 'lrename'; input.value = old; input.setAttribute('aria-label', `Rename ${old}`); input.spellcheck = false;
     name.replaceWith(input);
     renaming = { row, old };
     input.focus(); input.select();
-    let done = false;
+    let ended = false;
     const finish = async (commit) => {
-      if (done) return; done = true;
+      if (ended) return; ended = true;
       const to = input.value.trim();
       renaming = null;
       if (commit && to && to !== old) {
@@ -193,8 +198,9 @@ export function initLayers(ctx, el) {
           ctx.selectMany(cur);
         }
       }
-      focusKey = `${c.component}|${ctx.state.selection?.node ?? old}`;
+      if (!done) focusKey = `${c.component}|${ctx.state.selection?.node ?? old}`;
       draw();
+      done?.();
     };
     input.addEventListener('keydown', (ev) => {
       ev.stopPropagation();
@@ -202,32 +208,33 @@ export function initLayers(ctx, el) {
       else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
     });
     input.addEventListener('blur', () => finish(true));
+    return true;
   }
 
   // An HTML frame file is renamed in its row, the same way as on the canvas (ctx.create.rename: the file moves on disk).
   const frameRow = (row) => !!ctx.create?.isFrameFile(ctx.state.components.get(row.dataset.component));
-  function fileRename(row) {
+  function fileRename(row, at = row.querySelector('.lname'), done = null) {
     const id = row.dataset.component, c = ctx.state.components.get(id);
-    if (!c || c.readOnly) return;
-    const name = row.querySelector('.lname'), old = String(c.path || id).split('/').pop().replace(/\.html?$/i, '');
+    if (!c || c.readOnly || !at) return false;
+    const name = at, old = String(c.path || id).split('/').pop().replace(/\.html?$/i, '');
     const input = document.createElement('input');
     input.className = 'lrename'; input.value = old; input.setAttribute('aria-label', `Rename ${old}`); input.spellcheck = false;
     const msg = document.createElement('span'); msg.className = 'nk-rename-msg'; msg.setAttribute('role', 'alert'); msg.hidden = true;
     name.replaceWith(input); input.after(msg);
     renaming = { row, old };
     input.focus(); input.select();
-    let done = false;
-    const close = () => { done = true; renaming = null; focusKey = `${ctx.state.selection?.component ?? id}|${ctx.state.selection?.node ?? ''}`; draw(); };
+    let ended = false;
+    const close = () => { ended = true; renaming = null; if (!done) focusKey = `${ctx.state.selection?.component ?? id}|${ctx.state.selection?.node ?? ''}`; draw(); done?.(); };
     const finish = async (commit, fromBlur) => {
-      if (done) return;
+      if (ended) return;
       if (!commit) { close(); return; }
       const k = ctx.create.check(id, input.value);
       if (k.same) { close(); return; }
       if (k.error) { if (fromBlur) { ctx.hint(plain(k.error)); close(); } else { msg.textContent = k.error; msg.hidden = false; } return; }
-      done = true; input.disabled = true;
+      ended = true; input.disabled = true;
       const r = await ctx.create.rename(id, k.name);
       if (!r.ok) ctx.hint(plain(r.error));
-      renaming = null; draw();
+      renaming = null; draw(); done?.();
     };
     input.addEventListener('input', () => { msg.hidden = true; });
     input.addEventListener('keydown', (ev) => {
@@ -236,6 +243,7 @@ export function initLayers(ctx, el) {
       else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
     });
     input.addEventListener('blur', () => finish(true, true));
+    return true;
   }
 
   // ---- keyboard ----
@@ -328,9 +336,14 @@ export function initLayers(ctx, el) {
   draw();
   // For the context menu and the palette: the row of a selection, select it as a click does, rename it, open or close it.
   const rowOf = (sel) => sel && [...el.querySelectorAll('.lrow')].find((r) => r.dataset.component === sel.component && (sel.card ? r.dataset.kind === 'component' : r.dataset.node === sel.node));
-  function rename(sel = ctx.state.selection) {
+  // { at, done }: rename in the right panel's header instead of the row (the header's name is typed over; done redraws it).
+  function rename(sel = ctx.state.selection, { at = null, done = null } = {}) {
     if (!sel) return false;
+    const c = ctx.state.components.get(sel.component);
+    if (at && c && sel.card && ctx.create?.isFrameFile(c)) return fileRename({ dataset: { component: sel.component } }, at, done);
+    if (at && c && !c.doc && !sel.card) return false; // an HTML element is named by its id and classes (its sections edit those)
     if (sel.card) { ctx.cmpOps.rename(sel.component, { fromRow: true }); return true; }
+    if (at) return startRename({ dataset: { component: sel.component, node: sel.node } }, at, done);
     let row = rowOf(sel);
     if (!row) { expanded.add(sel.component); lastHtml = ''; draw(); row = rowOf(sel); } // a row inside a closed file opens first
     if (!row) return false;

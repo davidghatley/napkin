@@ -134,7 +134,11 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       await select('Card', 'title');
       assert.equal(await q(`document.querySelectorAll('.sec.empty .addbtn').length`), 3, 'Fill, Stroke and Shadow are settled headers with a + at the end');
       assert.equal(await q(`document.querySelector('[data-sec=fill]').tagName`), 'DIV', 'a header, not an empty section to open');
-      assert.equal(await q(`[...document.querySelectorAll('details.sec')].slice(0, 1).map((d) => d.dataset.sec)[0]`), 'type', 'a text node starts with Text');
+      // one ordered list (standards section 7 rule 4): Layout, then Typography before Fill; on a text node Typography is open
+      const order = JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('#panel :is(.pp-sec, .sec)[data-sec]')].map((d) => d.dataset.sec))`));
+      assert.equal(order[0], 'size', `the list starts with Layout ${order}`);
+      assert.ok(order.indexOf('type') > 0 && order.indexOf('type') < order.indexOf('fill'), `Typography comes before Fill ${order}`);
+      assert.equal(await q(`document.querySelector('[data-sec=type]').open`), true, 'a text node has Typography open');
       assert.equal(await q(`document.querySelector('[data-sec=layout]').open`), false, 'Layout starts collapsed on a text node');
       await select('Button', 'root', { size: 'md', state: 'default' });
     });
@@ -152,8 +156,8 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     });
 
     await t.test('equal field heights and scrub labels advertise themselves', async () => {
-      const hs = JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('#panel .fbox')].map((e) => Math.round(e.getBoundingClientRect().height)))`));
-      assert.ok(hs.length > 8 && new Set(hs).size === 1, `fbox heights ${[...new Set(hs)]}`);
+      const hs = JSON.parse(await q(`JSON.stringify([...document.querySelectorAll('#panel .fbox')].filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().height)))`));
+      assert.ok(hs.length > 8 && new Set(hs).size === 1, `fbox heights of the fields on show ${[...new Set(hs)]}`);
       assert.equal(await q(`getComputedStyle(document.querySelector('label[data-scrub=borderRadius]')).cursor`), 'ew-resize');
     });
 
@@ -173,7 +177,7 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
     await t.test('fonts read as a name, and a picked family keeps the fallback stack', async () => {
       await select('Card', 'card');
       await browser.waitFor(`!!document.querySelector('[data-sec=type]')`);
-      if (!(await q(`document.querySelector('[data-sec=type]').open`))) await q(`document.querySelector('[data-sec=type] > summary').click()`); // Text starts closed on a frame
+      if (!(await q(`document.querySelector('[data-sec=type]').open`))) await q(`document.querySelector('[data-sec=type] .pp-sec-h').click()`); // Text starts closed on a frame
       await browser.waitFor(`document.querySelector('[data-sec=type]').open`);
       assert.equal(await q(`document.querySelector('#fontFamily').value`), 'Georgia');
       await q(`document.querySelector('#fontFamily').focus()`);

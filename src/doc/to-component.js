@@ -33,7 +33,7 @@ const str = (s) => JSON.stringify(s);
 // style="color: red; --gap: 4px" -> { color: "red", "--gap": "4px" }
 // A declaration with !important cannot live in a style object (React drops it), so those are returned apart:
 // styleParts(text) -> { object: '{ ... }' | null, important: [[name, value]] } (value without the !important)
-function declsOf(text) {
+export function declsOf(text) {
   let depth = 0, quote = '', start = 0;
   const decls = [];
   for (let i = 0; i <= text.length; i++) {
@@ -47,39 +47,66 @@ function declsOf(text) {
   return decls;
 }
 export function styleParts(text) {
-  const out = [], important = [];
+  const out = [], important = [], custom = [];
   for (const d of declsOf(text)) {
     const at = d.indexOf(':');
     if (at < 1) continue;
     const name = d.slice(0, at).trim(); let value = d.slice(at + 1).trim();
     if (!name || !value) continue;
+    if (name.startsWith('--') && !/\s*!\s*important$/i.test(value)) { custom.push([name, value]); continue; } // a style object cannot hold it in TypeScript
     if (/\s*!\s*important$/i.test(value)) { value = value.replace(/\s*!\s*important$/i, '').trim(); if (value) important.push([name, value]); continue; }
     const key = name.startsWith('--') ? str(name) : /^-ms-/i.test(name) ? camel(name.slice(1).toLowerCase()) : camel(name.toLowerCase().replace(/^-(webkit|moz|o)-/, (_, v) => `${v[0].toUpperCase()}${v.slice(1)}-`));
     out.push(`${key}: ${str(value)}`);
   }
-  return { object: out.length ? `{ ${out.join(', ')} }` : null, important };
+  return { object: out.length ? `{ ${out.join(', ')} }` : null, important, custom };
 }
 export const styleObject = (text) => styleParts(text).object;
 
-// Inline !important declarations of the component being made: each element that has them gets a class of its own, and the
-// rule is written in the component's CSS (three of the class, so nothing but another !important id rule outranks it).
-let IMPORTANT = null; // { prefix, rules: [], count } while toComponent runs
+// Inline !important declarations and custom properties of the component being made: each element that has them gets a class
+// of its own, and the rule is written in the component's CSS (three of the class, so nothing but another !important id rule
+// outranks it, as the inline style did).
+let IMPORTANT = null; // { prefix, rules: [], count, src } while toComponent runs
+const ATTRS = new WeakMap(); // a node's attributes are worked out once, however many times a line is tried
 function attrsOf(n, foreign, dropped) {
+  if (ATTRS.has(n)) return [...ATTRS.get(n)];
+  const attrs = attrsOf1(n, foreign, dropped); ATTRS.set(n, attrs); return [...attrs];
+}
+function attrsOf1(n, foreign, dropped) {
   const attrs = n.attrs.map((a) => prop(n.name, a, foreign, dropped)).filter(Boolean);
   const st = n.attrs.find((a) => a.lname === 'style' && a.valStart !== null);
-  const imp = st && IMPORTANT ? styleParts(decodeText(st.value)).important : [];
+  const parts = st && IMPORTANT ? styleParts(decodeText(st.value)) : null;
+  const imp = parts ? [...parts.custom.map(([k, v]) => [k, v, '']), ...parts.important.map(([k, v]) => [k, v, ' !important'])] : [];
+  if (n.name === 'select' && IMPORTANT) { const d = selectDefault(n); if (d) attrs.push(`defaultValue=${d}`); }
   if (!imp.length) return attrs;
   const cls = `${IMPORTANT.prefix}-imp-${++IMPORTANT.count}`;
-  IMPORTANT.rules.push(`.${cls}.${cls}.${cls} { ${imp.map(([k, v]) => `${k}: ${v} !important;`).join(' ')} }`);
+  IMPORTANT.rules.push(`.${cls}.${cls}.${cls} { ${imp.map(([k, v, i]) => `${k}: ${v}${i};`).join(' ')} }`);
   const at = attrs.findIndex((x) => /^className(=|$)/.test(x));
   if (at < 0) attrs.unshift(`className="${cls}"`);
   else { const m = /^className="([^"]*)"$/.exec(attrs[at]), j = /^className=\{("(?:[^"\\]|\\.)*")\}$/.exec(attrs[at]); attrs[at] = m ? `className="${m[1]} ${cls}"` : j ? `className=${str(JSON.parse(j[1]) + ' ' + cls)}` : `className="${cls}"`; }
   return attrs;
 }
 
+// <option selected> is how HTML starts a <select>; React asks for defaultValue on the select instead.
+function selectDefault(sel) {
+  const src = IMPORTANT.src, picked = [];
+  (function walk(n) {
+    for (const c of n.children) {
+      if (c.name === 'option') {
+        if (!c.attrs.some((a) => a.lname === 'selected')) continue;
+        const v = c.attrs.find((a) => a.lname === 'value' && a.valStart !== null);
+        picked.push(v ? decodeText(v.value) : decodeText(src.slice(c.openEnd, c.closeStart ?? c.end).replace(/<!--[\s\S]*?-->/g, '')).replace(/[ \t\n\r\f]+/g, ' ').trim());
+      } else if (c.name === 'optgroup') walk(c);
+    }
+  })(sel);
+  if (!picked.length) return null;
+  if (picked.length > 1 && sel.attrs.some((a) => a.lname === 'multiple')) return `{${JSON.stringify(picked)}}`;
+  return /^[^"{}\n\\<>&]*$/.test(picked[0]) ? `"${picked[0]}"` : `{${str(picked[0])}}`;
+}
+
 function prop(tag, a, foreign, dropped) {
   const lname = a.lname, raw = a.valStart === null ? null : decodeText(a.value);
   if (/^on[a-z]+$/.test(lname)) { dropped.add(`the ${lname} handler on <${tag}> (inline scripts do not run in a component)`); return null; }
+  if (tag === 'option' && lname === 'selected') return null; // the select carries it (defaultValue)
   if (lname === 'style') { const o = styleObject(raw || ''); return o ? `style={${o}}` : null; }
   let name = PROP[lname] || (/^(data|aria)-/.test(lname) ? lname : foreign && lname.includes('-') ? camel(lname) : lname.includes(':') ? camel(lname.replace(':', '-')) : lname);
   if ((tag === 'input' || tag === 'textarea' || tag === 'select') && INITIAL[lname]) name = INITIAL[lname];
@@ -131,8 +158,17 @@ function render(s, n, depth, dropped, pre = false, keep = null, path = '') {
   if (n.name === 'style') return ''; // its rules travel in the component's CSS
   const tag = n.tag, foreign = !!n.foreign || n.name === 'svg' || n.name === 'math';
   const attrs = attrsOf(n, foreign, dropped);
-  const open = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}`;
-  if (VOID.has(n.name) || (n.selfClosing && foreign)) return `${pad}${open} />`;
+  // a textarea's text is its starting value: React wants defaultValue (the first line break after the tag shows nothing)
+  if (n.name === 'textarea' && !n.selfClosing) {
+    const raw = decodeText(s.slice(n.openEnd, n.closeStart ?? n.end).replace(/<!--[\s\S]*?-->/g, '')).replace(/^\r?\n/, '');
+    if (raw) attrs.push(/^[^"{}\n\\<>&]*$/.test(raw) ? `defaultValue="${raw}"` : `defaultValue={${str(raw)}}`);
+    const one = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''} />`;
+    return pad.length + one.length <= 100 || attrs.length < 2 ? `${pad}${one}` : `${pad}<${tag}\n${attrs.map((a) => `${pad}  ${a}`).join('\n')}\n${pad}/>`;
+  }
+  // an opening tag too long for a line puts one attribute on each
+  const wide = attrs.length > 1 && pad.length + 1 + tag.length + attrs.reduce((t, a) => t + a.length + 1, 0) + 2 > 100;
+  const open = wide ? `<${tag}\n${attrs.map((a) => `${pad}  ${a}`).join('\n')}\n${pad}` : `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}`;
+  if (VOID.has(n.name) || (n.selfClosing && foreign)) return `${pad}${wide ? open + '/>' : open + ' />'}`;
   const keepSpace = pre || n.name === 'pre' || n.name === 'textarea' || !!keep?.has(path);
   if (keep) n.keepsInside = [...keep].some((k) => k === path || path === '' || k.startsWith(`${path}.`));
   if (!keepSpace && !foreign && n.children.length) { const one = phrase(s, n, dropped, open); if (one !== null && pad.length + one.length <= 120) return `${pad}${one}`; }
@@ -150,8 +186,8 @@ function render(s, n, depth, dropped, pre = false, keep = null, path = '') {
   if (tail) parts.push({ text: tail });
   // white space beside a block element shows nothing
   for (let i = parts.length - 1; i >= 0; i--) if (parts[i].text === "{' '}" && (parts[i - 1]?.block || parts[i + 1]?.block)) parts.splice(i, 1);
-  if (!parts.length) return `${pad}${open} />`;
-  if (parts.length === 1 && parts[0].text && parts[0].text.length < 90) return `${pad}${open}>${parts[0].text}</${tag}>`;
+  if (!parts.length) return `${pad}${wide ? open + '/>' : open + ' />'}`;
+  if (!wide && parts.length === 1 && parts[0].text && parts[0].text.length < 90) return `${pad}${open}>${parts[0].text}</${tag}>`;
   const inner = parts.map((p) => (p.el ? p.el : `${pad}  ${p.text}`)).join('\n');
   return `${pad}${open}>\n${inner}\n${pad}</${tag}>`;
 }
@@ -165,7 +201,7 @@ export function toComponent({ name, html, css = [], from = '', wrap = null, keep
   const roots = (parsed.root?.children || []).filter((n) => n.name !== 'script' && n.name !== 'style');
   if (roots.length !== 1) throw new Error('select one element to make a component from. Next: select the element that wraps the part you want');
   const dropped = new Set();
-  IMPORTANT = { prefix: name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase(), rules: [], count: 0 };
+  IMPORTANT = { prefix: name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase(), rules: [], count: 0, src: s };
   // `wrap`: a class for an element with display: contents around the root, standing in for the frame's elements around it
   const k = keep.length ? new Set(keep) : null;
   const jsx = wrap ? `    <div className="${wrap}">\n${render(s, roots[0], 3, dropped, false, k)}\n    </div>` : render(s, roots[0], 2, dropped, false, k);

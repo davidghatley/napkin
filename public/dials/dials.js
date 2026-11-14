@@ -453,7 +453,7 @@ export class Dials extends EventTarget {
       });
       input.value = format(c.value, c);
       input.addEventListener("focus", () => {
-        input.value = format(c.value, c);
+        input.value = c.mixed ? "" : format(c.value, c);
         this.begin(c.id, "entry");
       });
       input.addEventListener("input", () => {
@@ -586,6 +586,8 @@ export class Dials extends EventTarget {
     validateValue(value, r.c);
     if (r.c.type === "color") parseColor(value, this.root);
     if (!this.active.has(id)) this.begin(id);
+    if (r.c.mixed) this.active.get(id).mixed = true; // a value set on a mixed control is now every item's, even the first one's own
+    delete r.c.mixed;
     r.c.value = clone(value);
     this.paint(id);
     this.event(id, "change", this.active.get(id));
@@ -623,6 +625,7 @@ export class Dials extends EventTarget {
       source: edit.source,
       transaction: edit.transaction,
       baseRevision: edit.revision,
+      ...(edit.mixed && { wasMixed: true }),
     };
     // A finished motion edit carries the code it writes, so a host can save the file.
     const r = this.rows.get(id);
@@ -783,8 +786,16 @@ export class Dials extends EventTarget {
           ),
         );
     }
+    // Several items whose values differ (a host sets c.mixed): the field is empty and says Mixed, no choice is made; editing sets all.
+    r.node.toggleAttribute("data-mixed", !!c.mixed);
+    if (input?.classList.contains("d-choice")) input.mixed = !!c.mixed;
+    if (input && (input.tagName === "INPUT" || input.tagName === "TEXTAREA")) {
+      if (c.mixed && (input !== document.activeElement || !this.active.has(id))) input.value = "";
+      if (c.mixed) input.placeholder = "Mixed";
+      else if (input.placeholder === "Mixed") input.placeholder = c.placeholder ?? "";
+    }
     if (input?.getAttribute("role") === "switch") {
-      input.textContent = c.value ? "On" : "Off";
+      input.textContent = c.mixed ? "Mixed" : c.value ? "On" : "Off";
       input.setAttribute("aria-checked", String(c.value));
     }
     if (input?.getAttribute("role") === "radiogroup") {
@@ -794,8 +805,8 @@ export class Dials extends EventTarget {
             typeof option === "object" ? option.value : option,
             c.value,
           );
-        b.setAttribute("aria-checked", String(selected));
-        b.tabIndex = selected ? 0 : -1;
+        b.setAttribute("aria-checked", String(selected && !c.mixed));
+        b.tabIndex = (c.mixed ? i === 0 : selected) ? 0 : -1;
       });
       // With a drawn figure only the chosen word shows; keep focus on what is visible.
       if (input.contains(document.activeElement) && document.activeElement.getAttribute("aria-checked") !== "true")
@@ -1359,7 +1370,8 @@ export class Dials extends EventTarget {
       this.palette();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !editing) {
+    // A panel without its own history leaves Ctrl+Z to the page that hosts it: one key, one owner, one undo step.
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z" && !editing && this.options.history !== false) {
       e.preventDefault();
       this.undo(e.shiftKey);
       return;

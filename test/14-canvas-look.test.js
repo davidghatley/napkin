@@ -69,7 +69,7 @@ test('FEEL-03 axe-core also passes on an empty workspace, the palette offering N
     await check('palette offering New component Badge');
     await io.key('Enter');
     await browser.waitFor(`document.querySelector('section[data-name="Badge"]')?.dataset.ready === '1' && napkin.state.selection`);
-    await browser.eval(`document.querySelector('details.adv > summary').click()`);
+    await browser.eval(`document.querySelector('.pp-sec.adv .pp-sec-h').click()`);
     await browser.eval(`document.querySelector('#add-style').click()`);
     await browser.waitFor(`document.querySelector('#new-style-name')`);
     await check('Advanced list with the add-property form open');

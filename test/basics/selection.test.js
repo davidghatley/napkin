@@ -1,7 +1,9 @@
 // Basics, selection inside HTML frames (docs/basics/standards.md section 5): Figma's model, with real pointer and key input.
-// A click picks the frame's top-level element (a direct child of <body>); double-click goes one level in toward the pointer and
-// edits text at the deepest level; Escape goes up one level, then to the frame card, then clears; Ctrl/Cmd-click picks the
-// deepest element; Enter picks the first child; tool keys wait for a pointer drag to end; the hover outline shows what a click would pick.
+// One ladder: a click on a frame picks the frame (the scope starts at the canvas); double-click or Enter goes one level in (the
+// frame's top-level element, a direct child of <body>, then deeper) and edits text at the deepest level; a click then picks at
+// that level; Escape goes up one level, then to the frame, then clears; Ctrl/Cmd-click picks the deepest element; a marquee
+// on empty canvas picks the frames it touches; a click on a frame's label picks the frame; tool keys wait for a pointer drag
+// to end; the hover outline shows what a click would pick.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFileSync, existsSync, rmSync } from 'node:fs';
@@ -47,23 +49,31 @@ before(async () => {
 });
 after(async () => { await b?.close(); await server?.stop(); rmSync(r.dir, { recursive: true, force: true }); });
 
-test('selection: a click picks the top-level element under the pointer, and the hover outline showed exactly that', { timeout: 60000 }, async () => {
+test('selection: a first click on a frame picks the frame, and the hover outline showed exactly that', { timeout: 60000 }, async () => {
   await fresh();
-  const h1 = await at('h1'), main = await at('main');
+  const h1 = await at('h1'), page = await at('body');
   await io.move(h1.x, h1.y); await sleep(150);
   const hb = await hoverBox();
   assert.ok(hb, 'something is outlined on hover');
-  near(hb, main, 'the hover outline is the top-level <main>, not the <h1>');
+  near(hb, page, 'the hover outline is the whole frame, not the <main> or the <h1>');
   await io.click(h1.x, h1.y); await sleep(150);
-  assert.deepEqual(await sel(), ['main'], 'the click picked <main>');
+  assert.deepEqual(await sel(), ['body'], 'the click picked the frame');
+  assert.equal(await q(`!!napkin.ops.isFrame()`), true, 'it counts as the frame');
   const foot = await at('footer');
   await io.click(foot.cx, foot.cy); await sleep(150);
-  assert.deepEqual(await sel(), ['footer'], 'another top-level element replaces it');
+  assert.deepEqual(await sel(), ['body'], 'another click in the same frame keeps the frame (the scope is still the canvas)');
+  // one level in, a click picks at that level: the top-level elements
+  await io.dblclick(h1.x, h1.y); await sleep(200);
+  assert.deepEqual(await sel(), ['main'], 'double-click goes in to the top-level element');
+  await io.click(foot.cx, foot.cy); await sleep(150);
+  assert.deepEqual(await sel(), ['footer'], 'a click at that level picks the other top-level element');
 });
 
 test('selection: double-click goes one level in toward the pointer; at the deepest text it edits', { timeout: 60000 }, async () => {
   await fresh();
   const h1 = await at('h1');
+  await io.dblclick(h1.x, h1.y); await sleep(200);
+  assert.deepEqual(await sel(), ['main'], 'one level in from the frame');
   await io.dblclick(h1.x, h1.y); await sleep(200);
   assert.deepEqual(await sel(), ['section'], 'one level in from <main>');
   assert.equal(await q(`document.activeElement?.isContentEditable ?? false`), false, 'no text edit yet');
@@ -101,7 +111,8 @@ test('selection: Ctrl-click and Cmd-click pick the deepest element directly; Shi
   await io.click(h1.x, h1.y, { meta: true }); await sleep(150);
   assert.deepEqual(await sel(), ['h1'], 'Cmd-click');
   await fresh();
-  await io.click(h1.x, h1.y); await sleep(150);
+  await io.dblclick(h1.x, h1.y); await sleep(200);
+  assert.deepEqual(await sel(), ['main']);
   const foot = await at('footer');
   await io.click(foot.cx, foot.cy, { shift: true }); await sleep(150);
   assert.deepEqual((await sel()).sort(), ['footer', 'main'], 'Shift-click adds the top-level element');
@@ -111,7 +122,10 @@ test('selection: Enter picks the first child, one path at every level', { timeou
   await fresh();
   const h1 = await at('h1');
   await io.click(h1.x, h1.y); await sleep(150);
+  assert.deepEqual(await sel(), ['body'], 'the click picked the frame');
   await q(`document.activeElement?.blur?.(); 0`);
+  await io.key('Enter'); await sleep(150);
+  assert.deepEqual(await sel(), ['main'], 'Enter on the frame');
   await io.key('Enter'); await sleep(150);
   assert.deepEqual(await sel(), ['section'], 'Enter on <main>');
   await io.key('Enter'); await sleep(150);
@@ -126,7 +140,8 @@ test('selection: Enter picks the first child, one path at every level', { timeou
 test('selection: the Layers panel, the right-click menu and Create component follow the picked element', { timeout: 60000 }, async () => {
   await fresh();
   const h1 = await at('h1');
-  await io.click(h1.x, h1.y); await sleep(250);
+  await io.dblclick(h1.x, h1.y); await sleep(250);
+  assert.deepEqual(await sel(), ['main']);
   const rows = await json(`[...document.querySelectorAll('#layers .lrow[aria-selected="true"]')].map((r) => r.dataset.node)`);
   assert.deepEqual(rows, [await q('napkin.state.selection.node')], 'the one highlighted layer row is the picked <main>');
   // right-click an unselected element: it is picked by the same rule (its top-level element) before the menu opens
@@ -137,7 +152,7 @@ test('selection: the Layers panel, the right-click menu and Create component fol
   await io.key('Escape'); await sleep(150);
   // Create component makes a component of the picked element
   await io.click(h1.x, h1.y); await sleep(150);
-  assert.deepEqual(await sel(), ['main']);
+  assert.deepEqual(await sel(), ['main'], 'one level in already: a click picks the top-level element');
   await io.key('k', { ctrl: true, alt: true });
   await until(() => existsSync(join(r.compDir, 'Main.tsx')), 15000);
   await until(async () => /Main made from nest\.html/.test(await q(`document.querySelector('#hint').textContent`)) || null);
@@ -156,4 +171,45 @@ test('selection: tool keys wait while a pointer drag is in progress', { timeout:
   await until(async () => (await json(`[...napkin.state.components.keys()]`)).some((k) => !before.includes(k) && /^frame-\d+\.html$/.test(k)));
   assert.equal(await q(`!!document.querySelector('.nk-new-text')`), false, 'no text editor was made');
   assert.equal(existsSync(join(r.compDir, 'frame-1.html')), true, 'a frame file was made');
+});
+
+test('selection: a click on a frame\'s label picks the frame', { timeout: 60000 }, async () => {
+  await fresh();
+  // bring the label to (300, 200) on screen, measured (an earlier test's view move may still be landing), and wait until it holds still there
+  const headAt = () => json(`(() => { const r = document.querySelector('section.cmp[data-component="${ID}"] .cmp-title h3').getBoundingClientRect(); return { x: r.left + 6, y: r.top + r.height / 2 }; })()`);
+  await until(async () => {
+    const h = await headAt();
+    if (Math.abs(h.x - 306) < 2 && Math.abs(h.y - 200) < 8) { await sleep(150); const n = await headAt(); return (n.x === h.x && n.y === h.y) || null; }
+    await q(`(() => { const v = napkin.view.get(); napkin.view.set({ x: v.x + 306 - ${h.x}, y: v.y + 200 - ${h.y}, z: v.z }); })(); 0`);
+    await sleep(300); return null;
+  });
+  const head = await headAt();
+  await io.click(head.x, head.y); await sleep(200);
+  assert.deepEqual(await sel(), ['body'], 'the frame, not its first element');
+  assert.equal(await q(`!!napkin.ops.isFrame()`), true);
+});
+
+test('selection: a marquee on empty canvas picks the frames it touches', { timeout: 60000 }, async () => {
+  writeFileSync(join(r.compDir, 'side.html'), `<!doctype html><html lang="en"><head><title>side</title></head><body style="margin: 0; width: 200px; height: 160px"><p>Side</p></body></html>\n`);
+  await b.waitFor(`!!document.querySelector('section.cmp[data-component="side.html"]')?.dataset.ready && !!napkin.stage.sections.get('side.html')?.docFrame?.tree()`, 20000);
+  // the two frames side by side
+  await q(`napkin.select(null); 0`);
+  await sleep(300);
+  await q(`(() => { const p = napkin.stage.sections.get('${ID}').pos; napkin.stage.moveTo('side.html', p.x + 700, p.y); napkin.view.set({ x: 200 - p.x, y: 200 - p.y, z: 1 }); })(); 0`);
+  await sleep(500);
+  const empty = (x, y) => q(`!document.elementFromPoint(${x}, ${y})?.closest('section, #overlays, .nk-menu')`);
+  const box = (id) => json(`(() => { const r = napkin.stage.sections.get('${id}').frame.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; })()`);
+  const a = await box(ID), c = await box('side.html');
+  const x0 = a.l - 60, y0 = a.t + 60;
+  assert.equal(await empty(x0, y0), true, 'the press is on empty canvas');
+  await io.drag(x0, y0, a.l + 50, a.t + 100);
+  await sleep(200);
+  assert.deepEqual(await sel(), ['body'], 'one frame touched: that frame');
+  await io.click(x0, a.b + 80); await sleep(150);
+  assert.deepEqual(await sel(), [], 'a click on empty canvas clears');
+  await io.drag(x0, y0, c.l + 30, a.t + 100);
+  await sleep(200);
+  const both = await json(`napkin.state.selections.map((s) => s.component).sort()`);
+  assert.deepEqual(both, ['nest.html', 'side.html'], `both frames it touched (${JSON.stringify([a, c])})`);
+  assert.equal(await q(`document.querySelector('#marquee').hidden`), true, 'the marquee is gone');
 });

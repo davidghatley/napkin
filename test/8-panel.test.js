@@ -30,7 +30,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
   const settled = async (rev) => browser.waitFor(`${sec('Button')}.dataset.revision !== "${rev}" && document.body.dataset.ready === "1"`);
   try {
     // Settings and Variants start closed (rarely used); this test works in them, so it opens them the way a person would: the choice is remembered
-    await browser.send('Page.addScriptToEvaluateOnNewDocument', { source: "try { localStorage.setItem('napkin.panel.opened', JSON.stringify(['props', 'variants'])); } catch {}" });
+    await browser.send('Page.addScriptToEvaluateOnNewDocument', { source: "try { localStorage.setItem('napkin.sections', JSON.stringify({ 'tsx.props': true, 'tsx.variants': true })); } catch {}" });
     await browser.goto(server.url);
     await browser.waitFor('document.body.dataset.ready === "1"');
 
@@ -97,7 +97,7 @@ test('the panel edits base, variants, text settings, props and axes through the 
       assert.equal(await q(`document.querySelector('#override-axis').value`), 'size', 'defaults to the first non-base axis');
       await q(`(() => { const s = document.querySelector('#override-axis'); s.value = 'state'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
       await browser.waitFor(`document.querySelector('#override-axis').value === 'state'`);
-      if (!(await q(`document.querySelector('[data-sec=type]').open`))) await q(`document.querySelector('[data-sec=type] > summary').click()`); // Text starts closed on a frame
+      if (!(await q(`document.querySelector('[data-sec=type]').open`))) await q(`document.querySelector('[data-sec=type] .pp-sec-h').click()`); // Text starts closed on a frame
       await browser.waitFor(`document.querySelector('[data-sec=type]').open`);
       await browser.type('#color', 'tomato');
       await browser.waitFor(`${cells('Button')}.filter((c) => getComputedStyle(c.querySelector('[data-n="root"]')).color === 'rgb(255, 99, 71)').length === 3`);

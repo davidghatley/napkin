@@ -82,8 +82,7 @@ test('basics pass 1: the top bar has three zones in order, four tools on the cen
     assert.equal(g.at(-1).r, 1440 - 4, 'flush to the bar padding');
     assert.deepEqual(g.slice(1).map((x, i) => x.l - g[i].r), [4, 4], 'the gap of the tools');
     assert.equal(await b.eval(`document.querySelector('#quick-open kbd').textContent`), 'Ctrl K', 'Linux says Ctrl, not the Command sign');
-    assert.match(await b.eval(`document.querySelector('#panel .keys').textContent`), /Ctrl K/, 'the right-panel hints too');
-    assert.doesNotMatch(await b.eval(`document.querySelector('#panel .keys').textContent + document.querySelector('#statusbar').textContent`), /[⌘⇧⌫]/);
+    assert.doesNotMatch(await b.eval(`document.querySelector('#inspector').innerText + document.querySelector('#statusbar').textContent`), /[⌘⇧⌫]/, 'the right panel and status bar use Linux key names');
     await b.eval(`napkin.select({ component: napkin.find('Card').component, node: 'title', variant: {} })`); await sleep(200);
     g = await group();
     assert.deepEqual(g.map((x) => x.n), ['meta', 'avatars', 'quick-open', 'theme-toggle'], 'the revision joins at the left end');

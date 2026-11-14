@@ -6,7 +6,7 @@ const action = (id, label, key, codes, handlers, run, hint = 'view') => ({ id, k
 // default, rebindable binding (commands.js dispatches it). `key` stays the human line the key map shows next to it.
 const command = (id, label, phrase, keys, run, extra = {}) => ({ id, kind: 'action', label, phrase, keys, key: keys || `Ctrl/Cmd+K, "${phrase}"`, codes: [], handlers: [], run, hint: 'command', palette: true, command: true, ...extra });
 // The arrows nudge a selected HTML frame (frame-ops.js) before they walk; `n` is a count typed first ("3", then an arrow).
-const nudge = (c, dx, dy, n = 1) => !!c.frames?.nudge(dx * (n || 1), dy * (n || 1));
+const nudge = (c, dx, dy, n = 1) => !!(c.frames?.nudge(dx * (n || 1), dy * (n || 1)) || c.elements?.nudge(dx * (n || 1), dy * (n || 1))); // (or the selected element inside a frame: element-ops.js)
 export const ACTIONS = [
   action('fit', 'Fit all', 'Shift+1', ['Digit1', '!', '1'], refs('view', 'keydown'), (c) => c.view.fitAll({ animate: true })),
   action('fit-selection', 'Fit selection', 'Shift+2', ['Digit2', '@', '2'], refs('view', 'keydown'), (c) => c.view.fitSelection({ animate: true })),
@@ -36,6 +36,7 @@ export const ACTIONS = [
   action('new-text', 'Typing text: new line / finish', 'Enter · Escape or Ctrl/Cmd+Enter', ['Enter', 'Escape'], refs('rich-text', 'keydown'), null, 'draw'),
   action('text-format', 'Typing text: bold / italic / underline', 'Ctrl/Cmd+B · Ctrl/Cmd+I · Ctrl/Cmd+U', ['b', 'i', 'u'], refs('rich-text', 'keydown'), null, 'edit'),
   action('text-reedit', 'Edit the selected text in place (all of it selected); double-click a word to edit with that word selected', 'Enter · F2 · double-click', ['Enter', 'F2'], refs('text-edit', 'keydown'), (c) => { const s = c.state.selection; if (!s || !c.textEdit?.begin(s)) c.hint('Select text in an HTML frame first.'); }, 'edit'),
+  action('element-drag-cancel', 'Dragging an element inside a frame: put it back', 'Escape', ['Escape'], refs('element-ops', 'keydown'), null, 'edit'),
   action('frame-rename', 'Rename a frame file (double-click its label): finish / cancel', 'Enter / Escape', ['Enter', 'Escape'], refs('create', 'keydown'), null, 'edit'),
   action('measure', 'Measure to hovered node', 'Hold Alt', ['Alt'], refs('stage', 'keydown', 'keyup')),
   action('multi', 'Add / remove selection', 'Shift/Ctrl/Cmd + click · drag marquee', [], []),
@@ -47,7 +48,7 @@ export const ACTIONS = [
   action('component-rename', 'Rename frame or component (in its label)', 'F2 on a frame · Cmd-K "rename"', ['F2'], refs('text-edit', 'keydown'), (c) => c.cmpOps.rename(), 'edit'),
   action('component-undo', 'Undo a rename or delete of a component straight after', 'Ctrl/Cmd+Z', ['z'], refs('component-ops', 'keydown')),
   action('component-delete', 'Delete component…', 'Cmd-K "delete component" · row menu', [], [], (c) => c.cmpOps.remove(), 'edit'),
-  action('rename', 'Rename layer', 'F2 · double click', ['F2'], refs('layers', 'keydown'), (c) => c.layers?.rename() || c.hint('Select a layer of a TSX component to rename it'), 'edit'),
+  action('rename', 'Rename layer', 'F2 · double click', ['F2'], [...refs('layers', 'keydown'), ...refs('panel-head', 'keydown')], (c) => c.layers?.rename() || c.hint('Select a layer of a TSX component to rename it'), 'edit'),
   action('layer-nav', 'Layers: select / expand / collapse / focus', '↑ ↓ ← → · Enter', ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'], refs('layers', 'keydown')),
   action('context-menu', 'Context menu (canvas, layers): open, move, open a submenu, run, close', 'Right-click · Shift+F10 · Menu key, then ↑ ↓ · Home · End · → ← · a letter · Enter or Space · Escape', ['F10', 'ContextMenu', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' ', 'Escape', 'Tab'], refs('context-menu', 'keydown')),
   action('layer-toggle', 'Open or close a layer', '→ · ← in the layers', [], [], (c) => c.layers?.toggle(c.menu?.target()?.row), 'view'),
@@ -56,8 +57,9 @@ export const ACTIONS = [
   action('right-edge', 'Right panel edge, focused: widen / narrow (Shift ×8) / narrowest / widest / default', '← → · Home · End · Enter', ['ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter'], refs('right-panel', 'keydown')),
   action('list-height', 'Long list\'s bottom edge, focused: a row more / fewer · six more / fewer · six · all', '↓ ↑ · Page Down / Page Up · Home · End', ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End'], refs('panel-height', 'keydown')),
   action('panel-cancel', 'Cancel field edit or scrub', 'Escape', ['Escape'], refs('panel', 'keydown')),
+  action('panel-field', 'Panel field: commit and stay / commit and move on / put back and return to the canvas / step', 'Enter · Tab (Shift+Tab back) · Escape · ↑ ↓ (Shift ×10) · type +8, -4, *2, /2 for math', ['Enter', 'Tab', 'Escape', 'ArrowUp', 'ArrowDown'], refs('fields', 'keydown'), null, 'edit'),
   action('doc-field', 'Inspector: apply a value / put it back', 'Enter (Shift+Enter: new line in text) · Escape', ['Enter', 'Escape'], refs('doc-panel', 'keydown')),
-  action('scope-pick', 'Inspector: where an edit goes (this element, this class, this variable)', 'E · C · V (Alt+E, Alt+C, Alt+V while typing) · B uses the matching variable · Tab from the field goes to the scope, arrows change it', ['e', 'c', 'v', 'b', 'KeyE', 'KeyC', 'KeyV', 'KeyB', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'], refs('doc-panel', 'keydown'), null, 'edit'),
+  action('scope-pick', 'Inspector: send an edit to this class or variable instead of this element', 'Alt+C, Alt+V while typing open the chooser (E · C · V once it is open) · B uses the matching variable · arrows change it', ['e', 'c', 'v', 'b', 'KeyE', 'KeyC', 'KeyV', 'KeyB', 'Tab', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'], refs('doc-panel', 'keydown'), null, 'edit'),
   action('scope-element', 'Put the staged edit on this element', 'E, after typing a value', [], [], (c) => c.inspector?.scope('element') || c.hint('Type a value in the inspector first.'), 'edit'),
   action('scope-class', 'Put the staged edit on this class', 'C, after typing a value', [], [], (c) => c.inspector?.scope('class') || c.hint('Type a value in the inspector first.'), 'edit'),
   action('scope-variable', 'Put the staged edit on this variable', 'V, after typing a value', [], [], (c) => c.inspector?.scope('variable') || c.hint('Type a value in the inspector first.'), 'edit'),
@@ -145,6 +147,7 @@ export const ACTIONS = [
   command('send-backward', 'Send backward', 'Send backward', 'Ctrl+[', (c) => c.ops.order('backward'), { about: 'Move the element one place earlier among its siblings' }),
   command('bring-to-front', 'Bring to front', 'Bring to front', 'Ctrl+Alt+]', (c) => c.ops.order('front'), { about: 'Make the element the last of its siblings (drawn over all of them)' }),
   command('send-to-back', 'Send to back', 'Send to back', 'Ctrl+Alt+[', (c) => c.ops.order('back'), { about: 'Make the element the first of its siblings' }),
+  command('toggle-right', 'Show or hide the design panel', 'Toggle design panel', 'Ctrl+Shift+\\', (c) => c.rightPanel.toggle(), { about: 'The canvas takes the width while it is hidden; selecting something brings the panel back' }),
   command('toggle-left', 'Show or hide the layers panel', 'Toggle layers panel', 'Ctrl+\\', (c) => c.shell.toggleLeft(), { about: 'The canvas takes the width while it is hidden' }),
   command('rebind', 'Rebind', 'Rebind <command> to <keys>', '', (c, a) => c.surface.rebind(a), { arg: 'rebind', about: 'Give a command other keys' }),
   // The arrows: a selected HTML frame moves (1 px, Shift 10 px; frame-ops.js, standards 3.5); otherwise focus walks between cards.
@@ -164,7 +167,7 @@ export const ACTIONS = [
   command('item-undo', 'Undo the last instrument change', 'Undo the last instrument change', 'G U', (c) => c.surface.undo()),
   command('count', 'Repeat a move: type a number first (3, then ArrowRight)', 'Repeat a move', '', null, { handlers: refs('commands', 'keydown'), palette: false, codes: ['Escape', 'Shift', 'Control', 'Alt', 'Meta'] }),
   command('early-keys', 'Keys typed while the page is still waking are kept and played back; a typed character sent with an editing key\'s code replaces the selection', 'Early keys', '', null, { handlers: refs('early', 'keydown'), palette: false, key: 'any key' }),
-  command('instrument-keys', 'Instruments: step a value (Shift coarse, Alt fine), type a value and Enter, type the first letters of a choice', 'Instrument keys', '', null, { handlers: refs('surface-panel', 'keydown'), palette: false, key: '← → · Shift ×10 · Alt ×0.1 · Enter · letters', codes: ['Enter', ' '] }),
+  command('instrument-keys', 'Instruments: step a value (Shift coarse, Alt fine), type a value and Enter, type the first letters of a choice', 'Instrument keys', '', null, { handlers: refs('surface-panel', 'keydown'), palette: false, key: '← → ↑ ↓ · Shift ×10 · Alt ×0.1 · Enter · letters', codes: ['Enter', ' ', 'ArrowUp', 'ArrowDown'] }),
 ];
 
 // The context menu (context-menu.js) reads three more fields: `short`, the menu's word for the command (a function when it depends on
@@ -194,6 +197,7 @@ const MENU = {
   'component-delete': { short: 'Delete file…', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : x.doc || x.fileKind === 'html' ? true : 'Delete a React file in your editor for now: that comes in the next pass'; } },
   'open-code': { short: 'Show code', enabled: (c) => { const x = file(c); return !x ? 'Select something first' : x.item ? null : true; } },
   'select-all': { short: 'Select all' },
+  'toggle-right': { short: (c) => (c.rightPanel?.isOpen() === false ? 'Show design panel' : 'Hide design panel') },
   'toggle-left': { short: (c) => (c.shell?.leftOpen() === false ? 'Show layers' : 'Hide layers') },
   'layer-toggle': { short: (c) => (c.menu?.target()?.row?.getAttribute('aria-expanded') === 'true' ? 'Collapse' : 'Expand'), enabled: (c) => (c.menu?.target()?.row?.hasAttribute('aria-expanded') ? true : null) },
 };
@@ -201,7 +205,7 @@ for (const a of ACTIONS) if (MENU[a.id]) Object.assign(a, MENU[a.id]);
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'create.js:keydown': 1, 'rich-text.js:keydown': 1, 'text-edit.js:keydown': 1, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 5, 'right-panel.js:keydown': 1, 'panel-height.js:keydown': 1, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 2, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1, 'statusbar.js:keydown': 1,
+  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'create.js:keydown': 1, 'rich-text.js:keydown': 1, 'text-edit.js:keydown': 1, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 4, 'panel-head.js:keydown': 1, 'right-panel.js:keydown': 1, 'fields.js:keydown': 2, 'panel-height.js:keydown': 1, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 2, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1, 'statusbar.js:keydown': 1, 'element-ops.js:keydown': 1,
 };
 // A command that takes an argument ("Select <path>") puts its verb in the palette, where the argument is completed.
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run && a.palette !== false).map((a) => ({ ...a, boost: a.command ? -25 : a.boost, run: a.arg ? () => ctx.quick.prefill(a.phrase.replace(/\s*<.*$/, '') + ' ') : () => a.run(ctx) }));

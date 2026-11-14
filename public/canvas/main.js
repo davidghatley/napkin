@@ -38,6 +38,7 @@ import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
 import { initFrameOps } from './frame-ops.js';
+import { initElementOps } from './element-ops.js';
 import { initHandles } from './handles.js';
 import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
@@ -66,6 +67,8 @@ import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
 import { initContextMenu } from './context-menu.js';
 import { initRightPanel } from './right-panel.js';
+import { initFields } from './fields.js';
+import { initPanelHead } from './panel-head.js';
 import { initCreate } from './create.js';
 import { initStatusbar } from './statusbar.js';
 import { initTextEdit } from './text-edit.js';
@@ -159,12 +162,15 @@ initTextEdit(ctx); // edit text in an HTML frame again, in place; F2 renames a c
 initMakeComponent(ctx); // basics pass 3: an element selected in an HTML frame becomes a component file (make-component.js)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
+initFields(ctx); // one contract for every field in the right panel: select all, math, Enter, Tab, Escape, arrows (fields.js)
 initEditOps(ctx);
 initFrameOps(ctx); // a frame as an object: nudge and resize, each one undo step (frame-ops.js; delete and duplicate: file-ops.js)
+initElementOps(ctx); // an element inside an HTML frame as an object: drag, resize, nudge, each one undo step (element-ops.js)
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initFileOps(ctx); // an HTML file as a frame: rename on its label, duplicate beside it, delete to the trash, each undoable
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
+initPanelHead(ctx); // the right panel's one header (type glyph, name, tag) and its empty state
 initInstruments(ctx); // the one instrument panel (dials) for whatever is selected
 initSurface(ctx); // commands, bindings, spatial focus, board state (commands.js)
 initShortcuts(ctx);
