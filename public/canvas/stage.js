@@ -983,6 +983,7 @@ export function createStage(ctx, root, world, view) {
     const body = !head && ctx.state.tool === 'select' && ev.pointerType !== 'touch' && !ev.target.closest('.mount [data-n]') ? ev.target.closest?.('.frame') : null;
     if (ev.target.closest('details, summary, pre, [data-nodrag]')) return;
     if (!(head || body) || ev.button !== 0 || view.isPanning()) return;
+    if (body && ctx.elements?.grab(ev)) return; // on an element of an HTML frame that a click would pick: that element moves (element-ops.js)
     const id = (head || body).closest('.cmp, .item-card').dataset.component, sec = sections.get(id);
     if (!sec?.pos) return;
     ev.preventDefault();
