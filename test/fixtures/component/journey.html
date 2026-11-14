@@ -1,0 +1,30 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Weekend journeys</title><link rel="stylesheet" href="styles/journey.css"><style>
+:root { --ocean: #245fdb; --brand: var(--ocean); }
+body { margin:0; padding:24px; background:#f2f5fa; color:#17243a; font:16px/1.5 Arial,sans-serif; }
+.shell {display:grid;grid-template-columns:1fr;gap:24px;}
+.shell > .trip {max-width:360px;padding:20px;border:2px solid var(--brand);background:white;}
+.trip {border-radius:12px;color:var(--brand);}
+.shell .trip h2 {font-size:24px;margin:0 0 12px;}
+.trip::before {content:'FEATURED';display:block;font-size:11px;letter-spacing:2px;background:#dbe8ff;}
+.trip:hover {box-shadow:0 0 0 4px orange;}
+.trip img {width:100%;height:48px;object-fit:cover;}
+.trip .pill {display:inline-block;background:var(--brand);color:white;padding:4px 8px;}
+.trip .pill:hover {background:#122140;}
+.trip .pill:focus-visible {outline:3px solid orange;outline-offset:3px;}
+.shell > .weather {border:1px solid #97a2b5;padding:16px;max-width:360px;background:white;}
+.shell:hover .weather {background:#ffe2a0;}
+.weather span {display:inline-block;padding:4px;}
+.weather span:nth-child(2) {color:#c21d56;font-weight:bold;}
+.layout {display:grid;grid-template-columns:180px 1fr;gap:16px;}
+.layout .teaser {padding:16px;background:#e3e9f5;}
+.scrollcopy {width:300px;white-space:pre-wrap;background:#fff;padding:12px;}
+@media(min-width:500px){body{color:#8f2259;font-size:18px;}}
+</style></head><body><main class="shell">
+<article class="trip card featured" id="coastal-trip"><h2>Coastal weekend</h2><p>Hello<strong> David </strong>— the coast is waiting.</p><img src="assets/landscape.png" alt="Spectrum landscape"><a class="pill" href="#booking">Explore route</a></article>
+<section class="weather" id="forecast"><h3>Forecast</h3><span>Fri 18°</span><span>Sat 21°</span><span>Sun 19°</span></section>
+<div class="layout"><aside>Included in every trip</aside><article class="teaser"><h3>Stay curious</h3><p>A long nested grid card that shares space with a narrow sidebar.</p></article></div>
+<div class="banner">The sea at dawn</div>
+<p class="scrollcopy">First line
+    Keep four spaces and this new line. A long piece of copy carries enough words to wrap across the card and expose whether the generated source preserves deliberate line breaks.
+Final line.</p>
+</main></body></html>

@@ -77,15 +77,19 @@ test('basics pass 3: Ctrl+Alt+K on a selected element makes a component file bes
   assert.match(src, /<article className="card" id="promo">\n\s+<h2>Launch window<\/h2>\n\s+<p>Opens at <b>07:31<\/b> &amp; closes at noon\.<\/p>\n\s+<a className="btn" href="#go">Reserve a seat<\/a>\n\s+<\/article>/, 'the element reads like hand-written JSX');
   assert.doesNotMatch(src, /onclick|\.hero|\.footer/, 'no inline script, and no rule that never reached the selection');
   assert.match(src, /@keyframes pulse \{/, 'the animation it names comes along');
-  assert.match(src, /@media \(max-width: 500px\) \{\n\s+\.card \{ width: auto; \}/, 'inside its media query');
+  assert.match(src, /@media \(max-width: 500px\) \{\n\s+:where\(\.card-context \.card\) \{ width: auto; \}/, 'inside its media query, scoped to the component');
   assert.equal(readFileSync(file('page.html'), 'utf8'), PAGE, 'the frame is byte for byte what it was');
   await b.waitFor(`!!document.querySelector('section.cmp[data-component^="Card.tsx"]')`, 10000);
   await until(async () => /Card made from page\.html/.test(await hint()) || null);
   assert.match(await hint(), /the frame is unchanged/);
   assert.match(await hint(), /Left behind: the onclick handler on <a>/, 'what could not come along is said');
   await until(async () => (await q(`String(napkin.state.selection?.component || '')`)).startsWith('Card.tsx') || null);
+  // naming afterwards (standards 9, rule 4): the label is a field with the automatic name; a Ctrl+Alt command still runs from it
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename' || null);
   await make(); // the new card is selected, so the command now explains itself instead of making a copy of a copy
   await until(async () => /already a component/.test(await hint()) || null);
+  assert.equal(await q(`!!document.querySelector('.nk-rename')`), false, 'the field closed, keeping the name Card');
+  assert.ok(existsSync(file('Card.tsx')));
 });
 
 test('basics pass 3: the component looks the same as the selection did in its frame', { timeout: 60000 }, async () => {
@@ -118,6 +122,9 @@ test('basics pass 3: the palette runs it too, and a taken name gets the next fre
   await until(() => existsSync(file('Card2.tsx')));
   assert.equal(readFileSync(file('Card.tsx'), 'utf8'), 'export default function Card() { return <div>mine</div>; }\n', 'a file that was there is never overwritten');
   assert.match(readFileSync(file('Card2.tsx'), 'utf8'), /export default function Card2\(\)/);
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename' || null); // named afterwards (rule 4); Escape keeps Card2
+  await io.key('Escape');
+  await until(async () => !(await q(`!!document.querySelector('.nk-rename')`)) || null);
 });
 
 test('basics pass 3: when it cannot apply it says why, in a sentence, and makes nothing', { timeout: 60000 }, async () => {

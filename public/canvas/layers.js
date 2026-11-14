@@ -56,7 +56,7 @@ export function initLayers(ctx, el) {
     for (const c of comps) {
       const open = expanded.has(c.component), canOpen = !c.item && (!!c.doc || c.kind === 'html');
       const has = ctx.state.selections.some((s) => s.component === c.component);
-      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1"${canOpen ? ` aria-expanded="${open}"` : ''} aria-selected="${has && sel.has(`${c.component}|${c.doc?.root.id}`)}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0">${twirl(canOpen)}<span class="licon">${fileIcon(c)}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">${ICON.more}</button></div>`);
+      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1"${canOpen ? ` aria-expanded="${open}"` : ''} aria-selected="${has && [c.doc?.root.id, 'item', ''].some((n) => n != null && sel.has(`${c.component}|${n}`))}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0">${twirl(canOpen)}<span class="licon">${fileIcon(c)}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">${ICON.more}</button></div>`);
       if (open && c.kind === 'html') { htmlRows(c, rows, sel, prim); continue; }
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
@@ -116,9 +116,8 @@ export function initLayers(ctx, el) {
     const c = ctx.state.components.get(row.dataset.component);
     if (c?.item) { ctx.select({ component: c.component, node: 'item', variant: {} }); return; }
     if (c?.kind === 'html') { // the document engine: a node of the file, or its first element for the component row
-      const t = ctx.stage?.sections.get(c.component)?.docFrame?.tree();
-      const node = row.dataset.node || (function first(l) { for (const n of l || []) { if (n.tag === 'body') return n.children[0]?.node; const f = first(n.children); if (f) return f; } return null; })(t?.tree);
-      if (node) ctx.select({ component: c.component, node, variant: {} });
+      const node = row.dataset.node || ctx.stage?.mainNode?.(c.component);
+      ctx.select({ component: c.component, node: node ?? '', variant: {} }); // (nothing drawn: an empty or failed render is selected as its card)
       return;
     }
     if (!c?.doc) return;
@@ -161,7 +160,7 @@ export function initLayers(ctx, el) {
 
   // ---- hover: the row and the element light each other up ----
   el.addEventListener('mouseover', (ev) => {
-    const row = ev.target.closest('.lrow[data-node]');
+    const row = ev.target.closest('.lrow[data-component]'); // a file row outlines its card, an element row its element
     ctx.stage?.hoverNode(row ? { component: row.dataset.component, node: row.dataset.node } : null);
   });
   el.addEventListener('mouseleave', () => ctx.stage?.hoverNode(null));

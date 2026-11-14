@@ -42,7 +42,7 @@ export function createStage(ctx, root, world, view) {
   const sizeChip = document.createElement('span'); sizeChip.className = 'osize'; selectBox.append(sizeChip); // "128 × 36", in canvas pixels
   const extras = [];
   let shelf = { x: 0, y: 0, h: 0 };
-  let laidOut = false, hoverEl = null, measuring = false, tidy = false;
+  let laidOut = false, hoverEl = null, measuring = false, tidy = false, held = false; // held: a card or a marquee is being dragged (no hover outline, standards 5.9)
   const byName = (a, b) => (ctx.state.components.get(a)?.name ?? a).localeCompare(ctx.state.components.get(b)?.name ?? b);
 
   // ---------------------------------------------------------------------------------------------- lookup
@@ -50,7 +50,7 @@ export function createStage(ctx, root, world, view) {
   function cellElement(id, node, variant) {
     const sec = sections.get(id);
     if (!sec) return null;
-    if (sec.docFrame) return sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js)
+    if (sec.docFrame) return node === '' ? sec.frame : sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js); '' the card itself (nothing drawn in it)
     const css = `.mount [data-n="${CSS.escape(node)}"]`;
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
@@ -662,20 +662,20 @@ export function createStage(ctx, root, world, view) {
   };
   // On a frame of the engine the name and size sit above the box, or below it when that lands on fewer lines of text.
   function docTagSide(selEl) {
-    const r = selEl.getBoundingClientRect(), H = 22, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
+    const r = selEl.getBoundingClientRect(), H = 16, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
     const frame = selEl.closest('.doc-cell'), fr = frame?.querySelector('iframe.doc-frame')?.getBoundingClientRect(), z = view.get().z;
     if (!fr) return 'above';
     if (z < 0.45) { for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top'); return 'none'; } // an overview: the name is in the layers, the frame's title stays readable
     const card = selEl.el === doc.body || selEl.el === doc.documentElement; // the frame itself: its label never moves (standards 3.2), the tags go below
-    const sec = selEl.closest('section.cmp'), tight = !card && r.top - fr.top < H + 9;
+    const sec = selEl.closest('section.cmp'), tight = !card && r.top - fr.top < H + 8;
     for (const other of world.querySelectorAll('.cmp[data-chip-top]')) if (other !== sec || !tight) other.removeAttribute('data-chip-top');
     if (tight) sec.setAttribute('data-chip-top', '');
     const lines = [];
     try { const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), rg = doc.createRange(); for (let n = walker.nextNode(), i = 0; n && i < 600; n = walker.nextNode(), i++) { if (!/\S/.test(n.nodeValue)) continue; rg.selectNodeContents(n); for (const c of rg.getClientRects()) lines.push({ l: fr.left + c.left * z, r: fr.left + c.right * z, t: fr.top + c.top * z, b: fr.top + c.bottom * z }); } } catch { return 'above'; }
     const onText = (top) => lines.filter((c) => c.l < r.left + lw && c.r > r.left && c.t < top + H && c.b > top).length;
-    selectBox.style.setProperty('--nk-tagw', `${lw + 4 + sizeChip.textContent.length * 6.4 + 14}px`); // a small box: the size goes beside the name, never over the title
+    selectBox.style.setProperty('--nk-tagw', `${lw + 4 + sizeChip.textContent.length * 6.4 + 8}px`); // a small box: the size goes beside the name, never over the title
     if (card) return 'below';
-    return onText(r.top - 7 - H) <= onText(r.bottom + 7) ? 'above' : 'below';
+    return onText(r.top - 8 - H) <= onText(r.bottom + 8) ? 'above' : 'below';
   }
   function tagSide(selEl) {
     let side = 'below';
@@ -685,12 +685,12 @@ export function createStage(ctx, root, world, view) {
     else if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
       const caps = captionRects(selEl.closest('section.cmp'));
       if (caps.length) {
-        const r = selEl.getBoundingClientRect(), narrow = r.width < 190, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), cw = sizeChip.textContent.length * 6.4 + 14, H = 20, pad = 3;
+        const r = selEl.getBoundingClientRect(), narrow = r.width < 192, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), cw = sizeChip.textContent.length * 6.4 + 8, H = 16, pad = 4; // the tags: 16 px tall, 8 px from the box (canvas.css)
         const hits = (ys) => { // ys: [label top, chip top]
           const boxes = [{ x: r.left - 1, w: lw, y: ys[0] }, { x: r.right - cw, w: cw, y: ys[1] }];
           return caps.some((c) => boxes.some((b) => c.left < b.x + b.w + pad && c.right > b.x - pad && c.top < b.y + H + pad && c.bottom > b.y - pad));
         };
-        const below = [r.bottom + 7, r.bottom + 8 + (narrow ? 24 : 0)], above = [r.top - 7 - H, r.top - 7 - H - (narrow ? 24 : 0)];
+        const below = [r.bottom + 8, r.bottom + 8 + (narrow ? 24 : 0)], above = [r.top - 8 - H, r.top - 8 - H - (narrow ? 24 : 0)];
         side = !hits(below) ? 'below' : !hits(above) ? 'above' : 'inside'; // (inside the box never meets a caption: they sit outside the cells)
       }
     }
@@ -711,14 +711,14 @@ export function createStage(ctx, root, world, view) {
     if (!sels.length && !hoverEl && !measuring && !selectBox.style.display.includes('block') && !hoverBox.style.display.includes('block')) return; // nothing is shown, so there is nothing to place (and no layout to force)
     const base = overlays.getBoundingClientRect();
     const selEl = selectedElement(sel);
-    place(selectBox, selEl, sel && (selEl?.docFrame ? elementName(selEl.el) + (editNote?.chip ? ` ${editNote.chip}` : '') : `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`), base);
+    place(selectBox, selEl, sel && (selEl?.docFrame ? elementName(selEl.el) + (editNote?.chip ? ` ${editNote.chip}` : '') : `${ctx.state.components.get(sel.component)?.name}${sel.node ? ` · ${sel.node}` : ''}`), base);
     if (selEl?.isConnected && selectBox.style.display === 'block') { const r = selEl.getBoundingClientRect(), z = view.get().z; sizeChip.textContent = `${Math.round(r.width / z)} × ${Math.round(r.height / z)}`; }
     tagSide(selEl);
     const others = sels.filter((s) => s !== sel);
     while (extras.length < others.length) { const d = document.createElement('div'); d.className = 'overlay-extra'; overlays.append(d); extras.push(d); }
     extras.forEach((d, i) => (others[i] ? place(d, selectedElement(others[i]), undefined, base) : (d.style.display = 'none')));
     const cardSelected = hoverEl?.classList?.contains('frame') && hoverEl.parentElement?.dataset.sel; // a card hovered by its label is not outlined twice once selected
-    place(hoverBox, hoverEl && !cardSelected && !sels.some((s) => selectedElement(s) === hoverEl) ? hoverEl : null, undefined, base);
+    place(hoverBox, hoverEl && !held && !cardSelected && !sels.some((s) => selectedElement(s) === hoverEl) ? hoverEl : null, undefined, base);
     drawMeasure(base);
     selectBox.dataset.count = String(sels.length);
     ctx.emit('overlays', {});
@@ -847,11 +847,14 @@ export function createStage(ctx, root, world, view) {
     }
   }
   ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.el.style.removeProperty('--nk-ls'); sec.headLf = undefined; sec.chipLs = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
+  let viaKey = false; // the last input was a key (not a modifier alone), not a pointer: a selection made then rings its label
+  addEventListener('keydown', (ev) => { if (!/^(Shift|Control|Alt|Meta)$/.test(ev.key)) viaKey = true; }, true); addEventListener('pointerdown', () => { viaKey = false; }, true);
   ctx.on('select', () => {
     for (const [gid, gsec] of sections) if (gsec.docFrame) gsec.docFrame.grip.tabIndex = ctx.state.selections.some((q) => q.component === gid) ? 0 : -1; // only the selected frame's grip is a Tab stop
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
-    for (const [id, sec] of sections.all()) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }
+    const kf = viaKey;
+    for (const [id, sec] of sections.all()) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; if (on.has(id) && kf) sec.el.dataset.kfocus = '1'; else delete sec.el.dataset.kfocus; } // a selection made from the keyboard rings its label (standards 3, States)
     const n = ctx.state.selections.length;
     selectBox.dataset.more = String(n - 1);
     refreshOverlays();
@@ -900,6 +903,8 @@ export function createStage(ctx, root, world, view) {
       const dc = target.closest?.('.doc-cell');
       const id = dc?.closest('.cmp, .item-card')?.dataset.component;
       const f = id && sections.get(id)?.docFrame;
+      // an empty or failed card shows its state, not its page: the whole card is the object under the pointer, as from its label (standards 5.9)
+      if (dc?.dataset.state && id && !ctx.state.components.get(id)?.item && sections.get(id)?.frame) return { el: sections.get(id).frame, id, variant: {}, card: true };
       let p = f?.pick(ev.clientX, ev.clientY);
       if (p) { const n = pickNode(id, p.dataset.n, { deep: ev.ctrlKey || ev.metaKey }); if (n !== p.dataset.n) p = f.element(n) || p; }
       p = p || (id && ctx.state.components.get(id)?.item ? dc : null);
@@ -915,12 +920,13 @@ export function createStage(ctx, root, world, view) {
     // over a card's label: the whole card is outlined, as when the pointer is on it (standards 3, States); not when it is selected already
     const head = ev.target.closest?.('.cmp-head');
     if (head) { const card = head.parentElement; setHoverEl(card.dataset.sel ? null : card.querySelector(':scope > .frame'), null); return; }
-    const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h);
+    const h = hit(ev.target, ev); setHoverEl(h?.el ?? null, h?.card ? null : h);
   });
-  root.addEventListener('mousemove', (ev) => { if (document.body.dataset.play || !ev.target.closest?.('.doc-cell')) return; const h = hit(ev.target, ev); if ((h?.el ?? null) !== hoverEl) setHoverEl(h?.el ?? null, h); });
+  root.addEventListener('mousemove', (ev) => { if (document.body.dataset.play || !ev.target.closest?.('.doc-cell')) return; const h = hit(ev.target, ev); if ((h?.el ?? null) !== hoverEl) setHoverEl(h?.el ?? null, h?.card ? null : h); });
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
   function hoverNode(sel) {
+    if (sel && sel.node == null) { hoverEl = sections.get(sel.component)?.frame ?? null; refreshOverlays(); return; } // a file row: its whole card
     hoverEl = sel ? cellElement(sel.component, sel.node, ctx.state.selection?.component === sel.component ? ctx.state.selection.variant : undefined) : null;
     refreshOverlays();
   }
@@ -932,6 +938,7 @@ export function createStage(ctx, root, world, view) {
     if (h) ev.preventDefault();
     if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
+    if (h.card) { const s = cardSelection(h.id); if (s) { if (ev.shiftKey) ctx.toggle(s); else ctx.select(s); } return; } // an empty or failed card: selected as its label selects it
     const sel = { component: h.id, node: h.el.dataset.n, variant: h.variant };
     if (ev.shiftKey || (!h.doc && (ev.metaKey || ev.ctrlKey))) ctx.toggle(sel); else ctx.select(sel); // in a document frame Ctrl/Cmd picks the deepest (hit), Shift adds
   }, true);
@@ -948,7 +955,7 @@ export function createStage(ctx, root, world, view) {
   addEventListener('pointermove', (ev) => {
     if (!mq) return;
     if (!mq.moved && Math.hypot(ev.clientX - mq.x, ev.clientY - mq.y) < 4) return;
-    mq.moved = true;
+    if (!mq.moved) { mq.moved = held = true; refreshOverlays(); }
     const b = root.getBoundingClientRect();
     Object.assign(marquee.style, { left: `${Math.min(mq.x, ev.clientX) - b.left}px`, top: `${Math.min(mq.y, ev.clientY) - b.top}px`, width: `${Math.abs(ev.clientX - mq.x)}px`, height: `${Math.abs(ev.clientY - mq.y)}px` });
     marquee.hidden = false;
@@ -957,6 +964,7 @@ export function createStage(ctx, root, world, view) {
     if (!mq) return;
     const m = mq; mq = null; marquee.hidden = true;
     if (!m.moved) return;
+    held = false;
     suppressClick = Date.now();
     const x0 = Math.min(m.x, ev.clientX), x1 = Math.max(m.x, ev.clientX), y0 = Math.min(m.y, ev.clientY), y1 = Math.max(m.y, ev.clientY);
     let best = [];
@@ -986,6 +994,17 @@ export function createStage(ctx, root, world, view) {
   }, true);
 
   // Drag a frame by its title; a plain click on the title selects the component's root.
+  // What a click on a card's label selects: a component's root, a file item, an HTML page itself (its <body>; nothing drawn: an empty or failed render
+  // is selected as its card), or a read-only file as itself (nothing to edit: the panel says why). null when the card has none of these.
+  function cardSelection(id) {
+    const c = ctx.state.components.get(id);
+    if (c?.doc) return { component: id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] };
+    if (c?.item) return { component: id, node: 'item', variant: {} };
+    if (c?.kind === 'html') { const t = sections.get(id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const card = body || t?.tree?.[0]; return { component: id, node: card ? card.node : '', variant: {} }; } // the label picks the frame itself (standards 3.4)
+    if (c?.readOnly) return { component: id, node: '', variant: {} };
+    return null;
+  }
+  function selectCard(id) { const s = cardSelection(id); if (s) ctx.select(s); }
   let drag = null;
   root.addEventListener('pointerdown', (ev) => {
     // by the title, or by any empty part of the frame (never by a component's own elements)
@@ -1003,7 +1022,7 @@ export function createStage(ctx, root, world, view) {
   addEventListener('pointermove', (ev) => {
     if (!drag) return;
     if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < 3) return;
-    drag.moved = true;
+    drag.moved = held = true;
     const z = view.get().z;
     moveTo(drag.id, Math.round(drag.from.x + (ev.clientX - drag.x) / z), Math.round(drag.from.y + (ev.clientY - drag.y) / z));
     refreshOverlays();
@@ -1012,16 +1031,10 @@ export function createStage(ctx, root, world, view) {
   addEventListener('pointerup', async (ev) => {
     if (!drag) return;
     const d = drag; drag = null; delete document.body.dataset.dragging;
+    if (held) { held = false; refreshOverlays(); }
     ctx.emit('framedragend', {});
     if (d.moved && d.title && ctx.frameDrop?.(d.id, ev.clientX, ev.clientY)) { moveTo(d.id, d.from.x, d.from.y); suppressClick = Date.now(); refreshOverlays(); return; } // dropped onto another component: it became an instance there, and the frame stays where it was
-    if (!d.moved) {
-      const c = ctx.state.components.get(d.id);
-      if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
-      else if (d.title && c?.item) ctx.select({ component: d.id, node: 'item', variant: {} });
-      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const card = body || t?.tree?.[0]; if (card) ctx.select({ component: d.id, node: card.node, variant: {} }); } // the label picks the frame (standards 3.4)
-      else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
-      return;
-    }
+    if (!d.moved) { if (d.title) selectCard(d.id); return; }
     suppressClick = Date.now();
     const pos = sections.get(d.id)?.pos;
     if (!pos) return;
@@ -1040,6 +1053,21 @@ export function createStage(ctx, root, world, view) {
   });
 
   // Bring a component into view if it is not (a new one, or a quick-open target); never moves a view that already shows it.
+  // The element a person means by a whole file: an HTML frame's first element in its body; a component's root, past a
+  // display: contents wrapper (a made component's context wrapper draws nothing, so its root is the element inside it).
+  function mainNode(id) {
+    const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null;
+    const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t);
+    const real = (n) => !['script', 'style', 'template', 'link', 'meta', 'title', 'head'].includes(n.tag);
+    let n = (body ? body.children : t).find(real);
+    for (let i = 0; n && i < 4; i++) {
+      const el = f.element(n.node)?.el, kid = n.children.filter(real);
+      if (!el || el.ownerDocument.defaultView.getComputedStyle(el).display !== 'contents' || kid.length !== 1) break;
+      n = kid[0];
+    }
+    return n?.node ?? null;
+  }
+
   function reveal(id) {
     live(id);
     const r = componentRect(id), v = view.get(), b = view.stageBox();
@@ -1050,7 +1078,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    pickNode, deeper, upOf, pathTo, rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    pickNode, deeper, upOf, pathTo, rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, mainNode, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     openingRect, componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };
