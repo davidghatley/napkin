@@ -78,7 +78,7 @@ test('basics pass 2: text on empty canvas makes a frame file holding the text, w
   await q(`document.execCommand('insertText', false, 'Hello napkin')`);
   await io.key('Escape');
   await until(async () => existsSync(file('frame-2.html')) && (await q(`napkin.state.selection?.component`)) === 'frame-2.html');
-  assert.match(readFileSync(file('frame-2.html'), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif">Hello napkin<\/p>/);
+  assert.match(readFileSync(file('frame-2.html'), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif; white-space: pre">Hello napkin<\/p>/);
   assert.equal(await q('napkin.state.tool'), 'select');
 });
 
@@ -95,20 +95,34 @@ test('basics pass 2: text left empty leaves nothing behind', { timeout: 60000 },
   assert.equal(await q(`!!document.querySelector('.cmp-pending, .nk-new-text')`), false, 'no trace on the canvas');
 });
 
+// the middle of a frame's label, in page pixels
+const labelAt = (id) => json(`(() => { const r = document.querySelector('section.cmp[data-component="${id}"] .cmp-title h3').getBoundingClientRect(); return { x: r.left + Math.min(12, r.width / 2), y: r.top + r.height / 2, t: r.top }; })()`);
 test('basics pass 2: double-click the label to rename the file; a taken name is refused in place', { timeout: 60000 }, async () => {
-  await q(`document.querySelector('section.cmp[data-component="frame-2.html"] .cmp-title h3').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); 0`);
+  // a real double-click on the label of a frame that is not selected: the label stays put, the field opens
+  await q(`napkin.select(null); napkin.view.fitRect(napkin.stage.componentRect('frame-2.html'), { pad: 200, max: 1 }); 0`);
+  await sleep(400);
+  const lab = await labelAt('frame-2.html');
+  await io.dblclick(lab.x, lab.y);
   await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename');
   await q(`document.execCommand('insertText', false, 'page')`);
   await io.key('Enter');
   await sleep(150);
   assert.match(await q(`document.querySelector('.nk-rename-msg')?.textContent ?? ''`), /page\.html is already in this folder/);
   assert.equal(existsSync(file('frame-2.html')), true, 'nothing renamed');
+  // a click away with the taken name still there: the field stays open with what was typed, and says why
+  await io.click(lab.x + 40, lab.y + 400); await sleep(250);
+  assert.equal(await q(`document.querySelector('.nk-rename')?.value ?? null`), 'page', 'the field is still open with the typed name');
+  assert.match(await q(`document.querySelector('.nk-rename-msg:not([hidden])')?.textContent ?? ''`), /page\.html is already in this folder/, 'and says why');
+  assert.equal(existsSync(file('frame-2.html')), true, 'still nothing renamed');
+  await q(`document.querySelector('.nk-rename').focus(); 0`);
   await q(`(() => { const i = document.querySelector('.nk-rename'); i.select(); document.execCommand('insertText', false, 'greeting'); })()`);
   await io.key('Enter');
   await until(async () => existsSync(file('greeting.html')) && !existsSync(file('frame-2.html')) && (await q(`napkin.state.components.has('greeting.html')`)));
   await until(async () => (await q(`document.querySelector('section.cmp[data-component="greeting.html"] .cmp-title h3')?.textContent`)) === 'greeting');
   // Escape cancels
-  await q(`document.querySelector('section.cmp[data-component="greeting.html"] .cmp-title h3').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); 0`);
+  await q(`napkin.select(null); 0`); await sleep(150);
+  const g = await labelAt('greeting.html');
+  await io.dblclick(g.x, g.y);
   await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename');
   await q(`document.execCommand('insertText', false, 'nope')`);
   await io.key('Escape');
@@ -129,7 +143,7 @@ test('basics pass 2: a frame drawn inside an existing HTML frame inserts an elem
   assert.match(await q(`document.querySelector('#draw-size').textContent`), /^\d+ × \d+$/, 'the same readout');
   await io.release(x0 + 100, y0 + 60);
   // (main is a block in the flow: the new box joins it at the end, at the drawn size)
-  await until(async () => /<main[^>]*>[\s\S]*<div style="[^"]*width: \d+px; height: \d+px; background: #f4f4f5"><\/div><\/main>/.test(readFileSync(file('page.html'), 'utf8')));
+  await until(async () => /<main[^>]*>[\s\S]*<div style="[^"]*width: \d+px; height: \d+px; background: #f4f4f5; overflow: hidden"><\/div><\/main>/.test(readFileSync(file('page.html'), 'utf8')));
   await until(async () => (await q(`napkin.state.selection?.component`)) === 'page.html');
   assert.ok(!existsSync(file('frame-3.html')), 'no new file');
   assert.equal(await q('napkin.state.tool'), 'select');
@@ -152,6 +166,8 @@ const liveFrame = (id) => `document.querySelector('section.cmp[data-component="$
 const wordAt = (id, word) => json(`(() => { const f = ${liveFrame(id)}; const d = f?.contentDocument; if (!d?.body) return null; const w = d.createTreeWalker(d.body, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) { const i = n.data.indexOf(${JSON.stringify(word)}); if (i < 0) continue; const r = d.createRange(); r.setStart(n, i); r.setEnd(n, i + ${word.length}); const b = r.getBoundingClientRect(), fr = f.getBoundingClientRect(), z = fr.width / f.offsetWidth; return { x: fr.left + (b.left + b.width / 2) * z, y: fr.top + (b.top + b.height / 2) * z }; } return null; })()`);
 // what a person sees while editing: the caret is in the element in the frame, and what is highlighted
 const editState = (id) => json(`(() => { const f = ${liveFrame(id)}; const d = f?.contentDocument; const a = d?.activeElement; return { focused: document.activeElement === f && !!a?.isContentEditable, tag: a?.localName ?? null, selected: d?.getSelection().toString() ?? '', collapsed: d?.getSelection().isCollapsed ?? true, dialog: !!document.querySelector('dialog[open]') }; })()`);
+// the ladder (standards 5): a double-click on a frame goes in to its text, the next one edits it
+const editWord = async (w) => { await io.dblclick(w.x, w.y); await sleep(250); await io.dblclick(w.x, w.y); };
 const show = async (id) => { await q(`napkin.select(null); napkin.view.fitRect(napkin.stage.componentRect('${id}'), { pad: 160, max: 1 }); 0`); await sleep(400); };
 async function newText(words, at) {
   await emptyCanvas();
@@ -194,7 +210,7 @@ test('round 2: arrows move the caret while editing, they do not move the card', 
   await show(id);
   const card = await cardRect(id);
   const w = await wordAt(id, 'Good');
-  await io.dblclick(w.x, w.y);
+  await editWord(w);
   await until(async () => (await editState(id)).selected === 'Good');
   await io.key('ArrowRight'); // the caret goes to the end of "Good"
   await io.key('ArrowRight'); // and past the space
@@ -208,7 +224,7 @@ test('round 2: arrows move the caret while editing, they do not move the card', 
 test('round 2: Enter on selected text edits all of it; F2 does the same; no dialog', { timeout: 60000 }, async () => {
   await show('page.html');
   const h = await wordAt('page.html', 'Plan');
-  await io.click(h.x, h.y, { ctrl: true }); // (a plain click picks the top-level <main>: selection.test.js)
+  await io.click(h.x, h.y, { ctrl: true }); // (a plain click picks the frame: selection.test.js)
   await until(async () => (await q(`(() => { const s = napkin.state.selection; return s?.component === 'page.html' && napkin.stage.sections.get('page.html').docFrame.element(s.node)?.el.localName; })()`)) === 'h1');
   await io.key('Enter');
   await until(async () => (await editState('page.html')).focused);
@@ -254,7 +270,7 @@ test('round 2: Ctrl+B in text writes bold markup to the file; Ctrl+I and Ctrl+U 
     await io.key('Enter');
     await io.type('twice');
   }, { x: 900, y: 180 });
-  assert.match(readFileSync(file(id), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif">Say <em>soft<\/em> and <u>clear<\/u><br>twice<\/p>/);
+  assert.match(readFileSync(file(id), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif; white-space: pre">Say <em>soft<\/em> and <u>clear<\/u><br>twice<\/p>/);
   // Enter in text edited again is the same new line
   const t = await wordAt(id, 'twice');
   await io.dblclick(t.x, t.y);
@@ -270,7 +286,7 @@ test('round 2: pasted text arrives as plain text, without foreign styles', { tim
   const id = (await frames()).find((f) => />Good very morning<\/p>/.test(readFileSync(file(f), 'utf8')));
   await show(id);
   const w = await wordAt(id, 'very');
-  await io.dblclick(w.x, w.y);
+  await editWord(w);
   await until(async () => (await editState(id)).selected === 'very');
   // a paste the way the browser delivers one from another page: rich HTML and its plain text
   await q(`(() => { const f = ${liveFrame(id)}, d = f.contentDocument, dt = new DataTransfer(); dt.setData('text/html', '<span style="color: red; font-size: 40px">really</span>'); dt.setData('text/plain', 'really'); d.activeElement.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); })(); 0`);
@@ -451,4 +467,39 @@ test('round 2: Ctrl+D duplicates the frame file beside it and selects the copy; 
   await io.key('z', { ctrl: true });
   await until(async () => !existsSync(file(copy)) && !(await frames()).includes(copy));
   assert.ok(existsSync(file(id)), 'the original stays');
+});
+
+// ---- round 3: text made by a click keeps growing sideways when edited again; only a drawn box is fixed-width (standards 4.1, 4.2)
+test('round 3: click-made text stays auto-width when edited again: longer copy widens its frame, it does not wrap', { timeout: 90000 }, async () => {
+  const id = await newText(() => io.type('Hi there'), { x: 300, y: 500 });
+  const pRect = () => json(`(() => { const p = ${liveFrame(id)}.contentDocument.querySelector('p'); const r = p.getBoundingClientRect(); return { w: r.width, h: r.height, sw: p.scrollWidth }; })()`);
+  const first = await pRect();
+  assert.match(readFileSync(file(id), 'utf8'), /white-space: pre/, 'auto width is said in the file');
+  // edit it again (it is selected: Enter edits all of it) with a much longer line
+  await q('document.activeElement?.blur?.(); 0');
+  await io.key('Enter');
+  await until(async () => (await editState(id)).focused);
+  await q(`document.querySelector('section.cmp[data-component="${id}"] iframe.doc-frame:not(.doc-next)').contentDocument.execCommand('insertText', false, 'A much longer line of copy than the first one')`);
+  await io.key('Escape');
+  await until(async () => /A much longer line of copy than the first one<\/p>/.test(readFileSync(file(id), 'utf8')));
+  await until(async () => { const w = Number((/<body style="[^"]*width: (\d+)px/.exec(readFileSync(file(id), 'utf8')) || [])[1]); return w > first.w * 3; });
+  await until(async () => (await q(`napkin.state.components.get('${id}').revision`)) && (await pRect()).w > first.w * 3);
+  const now = await pRect();
+  assert.ok(now.h <= first.h + 1, `one line, not wrapped (${now.h} vs ${first.h})`);
+  assert.ok(now.sw <= now.w + 1, 'nothing runs past the frame');
+});
+
+test('round 3: text drawn as a box stays fixed-width and wraps', { timeout: 60000 }, async () => {
+  await emptyCanvas();
+  const before = await frames();
+  await io.key('t');
+  await io.drag(300, 600, 420, 620);
+  await until(async () => q(`!!document.activeElement?.classList.contains('nk-new-text')`));
+  await q(`document.execCommand('insertText', false, 'Words that will wrap inside the drawn box')`);
+  await io.key('Escape');
+  let id = null;
+  await until(async () => { id = (await frames()).find((f) => !before.includes(f)); return id && existsSync(file(id)); });
+  const html = readFileSync(file(id), 'utf8');
+  assert.match(html, /<body style="margin: 0; width: 120px">/, 'the drawn width');
+  assert.doesNotMatch(html, /white-space: pre/, 'a drawn box wraps');
 });
