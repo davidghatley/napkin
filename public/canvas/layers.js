@@ -44,6 +44,8 @@ export function initLayers(ctx, el) {
   const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; draw(); }); } };
   const selKey = (s) => `${s.component}|${s.node}`;
   const selected = () => new Set(ctx.state.selections.map(selKey));
+  // an HTML frame selected as itself (its <body>, what a click on it picks: standards 5.1) is its file's row
+  const frameNode = (c) => (c.kind === 'html' && !c.item ? ctx.create?.bodyOf(ctx.stage.sections.get(c.component)?.docFrame?.tree())?.node ?? null : null);
   const baseVariant = (c) => Object.fromEntries((c.doc?.props || []).filter((p) => p.type === 'enum').map((a) => [a.name, a.default]));
 
   function draw() {
@@ -56,7 +58,7 @@ export function initLayers(ctx, el) {
     for (const c of comps) {
       const open = expanded.has(c.component), canOpen = !c.item && (!!c.doc || c.kind === 'html');
       const has = ctx.state.selections.some((s) => s.component === c.component);
-      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1"${canOpen ? ` aria-expanded="${open}"` : ''} aria-selected="${has && [c.doc?.root.id, 'item', ''].some((n) => n != null && sel.has(`${c.component}|${n}`))}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0">${twirl(canOpen)}<span class="licon">${fileIcon(c)}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">${ICON.more}</button></div>`);
+      rows.push(`<div class="lrow lcomp${has ? ' has-sel' : ''}" role="treeitem" aria-level="1"${canOpen ? ` aria-expanded="${open}"` : ''} aria-selected="${has && [c.doc?.root.id, 'item', '', frameNode(c)].some((n) => n != null && sel.has(`${c.component}|${n}`))}" data-component="${esc(c.component)}" data-kind="component" tabindex="-1" style="--nk-d:0">${twirl(canOpen)}<span class="licon">${fileIcon(c)}</span><span class="lname">${esc(ctx.title(c))}</span>${c.readOnly ? '<span class="ltag">read-only</span>' : ''}${c.noComponent ? `<span class="lnote" title="${esc(c.noComponent)}">no component exported</span>` : ''}<button type="button" class="lmore" tabindex="-1" data-action="more" aria-label="More actions for ${esc(ctx.title(c))}" title="More">${ICON.more}</button></div>`);
       if (open && c.kind === 'html') { htmlRows(c, rows, sel, prim); continue; }
       if (!open || !c.doc) continue;
       (function walk(n, depth) {
