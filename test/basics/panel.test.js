@@ -385,10 +385,11 @@ async function clickRow(b, io, name) {
   assert.ok(r, `a layers row named ${name}`);
   await io.click(r.x, r.y); await sleep(700);
 }
+// (a plain click picks the top-level element in an HTML frame; Ctrl picks the deepest, as selection.test.js)
 async function clickIn(b, io, file, css) {
   await b.waitFor(`!!napkin.stage.sections.get(napkin.find(${JSON.stringify(file)})?.component)?.docFrame?.tree()?.tree`, 15000);
   const r = JSON.parse(await b.eval(`JSON.stringify((() => { const s = napkin.stage.sections.get(napkin.find(${JSON.stringify(file)}).component), fr = s.el.querySelector('iframe'), f = fr.getBoundingClientRect(), z = f.width / fr.offsetWidth, h = fr.contentDocument.querySelector(${JSON.stringify(css)}).getBoundingClientRect(); return { x: f.left + (h.left + Math.min(h.width / 4, 20)) * z, y: f.top + (h.top + h.height / 2) * z }; })())`));
-  await io.click(r.x, r.y); await sleep(700);
+  await io.click(r.x, r.y, { ctrl: true }); await sleep(700);
 }
 const headerOf = (b, label) => b.eval(`(() => { const l = [...document.querySelectorAll('#panel .pp-sec-l')].find((e) => e.textContent.trim() === ${JSON.stringify(label)}); return l ? l.closest('.pp-sec-h').getAttribute('aria-expanded') : null; })()`);
 async function clickHeader(b, io, label) {
@@ -608,7 +609,7 @@ test('fields: click selects all; +8 *2 -4 /2 work on the value; Enter keeps the 
     await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
     await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
     const h1 = `(() => { const c = napkin.find('landing').component, f = napkin.stage.sections.get(c).docFrame; return napkin.stage.cellElement(c, f.nodeOf(f.doc().querySelector('h1')), {}); })()`;
-    await clickOn(b, io, h1);
+    await clickOn(b, io, h1, { ctrl: true }); // (Ctrl picks the deepest; a plain click picks the top-level <main>)
     await until(() => b.eval(`!!document.querySelector('#inspector #pv-width')`), 10000, 'the h1 in the panel');
     assert.match(await b.eval(`napkin.stage.sections.get(napkin.state.selection.component).docFrame.element(napkin.state.selection.node)?.el.localName`), /^h1$/);
     const before = html();
