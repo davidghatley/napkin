@@ -33,11 +33,11 @@ export function initMakeComponent(ctx) {
     const key = (x) => (x ? `${x.component}\n${x.node}` : ''), was = key(ctx.state.selection), t0 = performance.now(); let held = 0;
     while (performance.now() - t0 < 8000 && held < 4) {
       let id = null; for (const [k, c] of ctx.state.components) if (c.path === path) id = k; // a new card's id settles after its first read, so follow the file
-      if (id == null) { await new Promise((r) => setTimeout(r, 80)); continue; }
+      if (id == null || ctx.stage.sections.get(id)?.el?.dataset.ready !== '1') { await new Promise((r) => setTimeout(r, 80)); continue; }
       const now = ctx.state.selection;
       if (now?.component === id) held++;
       else if (now && key(now) !== was) return; // the person moved on
-      else { held = 0; const root = ctx.state.components.get(id)?.doc?.root?.id ?? ctx.stage.rootNode?.(id); if (root != null) ctx.select({ component: id, node: root, variant: {}, card: true }); }
+      else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) ctx.select({ component: id, node: root, variant: {}, card: true }); }
       await new Promise((r) => setTimeout(r, 80));
     }
   }

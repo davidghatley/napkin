@@ -116,8 +116,7 @@ export function initLayers(ctx, el) {
     const c = ctx.state.components.get(row.dataset.component);
     if (c?.item) { ctx.select({ component: c.component, node: 'item', variant: {} }); return; }
     if (c?.kind === 'html') { // the document engine: a node of the file, or its first element for the component row
-      const t = ctx.stage?.sections.get(c.component)?.docFrame?.tree();
-      const node = row.dataset.node || (function first(l) { for (const n of l || []) { if (n.tag === 'body') return n.children[0]?.node; const f = first(n.children); if (f) return f; } return null; })(t?.tree);
+      const node = row.dataset.node || ctx.stage?.mainNode?.(c.component);
       if (node) ctx.select({ component: c.component, node, variant: {} });
       return;
     }

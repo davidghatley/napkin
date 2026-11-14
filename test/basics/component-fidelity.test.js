@@ -242,3 +242,22 @@ test('basics pass 3: from a far, zoomed-out view the new card ends wholly on the
   await sleep(2500);
   assert.ok((await onScreen(id)).inside, 'and it stays shown');
 });
+
+test('basics pass 3: clicking the made component\'s file row in Layers selects its root, and the panel follows', { timeout: 90000 }, async () => {
+  await make('journey.html', 'trip');
+  const id = await madeAs('Trip');
+  await sleep(1500);
+  const trip = await nodeOf('journey.html', 'trip');
+  await q(`napkin.select({ component: 'journey.html', node: '${trip}', variant: {} }); 0`);
+  await sleep(200);
+  const row = `document.querySelector('#layers .lrow[data-kind="component"][data-component=' + JSON.stringify(${JSON.stringify(id)}) + ']')`;
+  await b.waitFor(`!!${row}`, 10000);
+  await q(`${row}.scrollIntoView({ block: 'center' }); 0`);
+  await sleep(150);
+  const at = await json(`(() => { const r = ${row}.querySelector('.lname').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  await io.click(at.x, at.y);
+  await until(async () => (await q(`String(napkin.state.selection?.component || '')`)) === id || null, 5000);
+  const picked = await json(`(() => { const s = napkin.state.selection, el = napkin.stage.sections.get(s.component)?.docFrame?.element(s.node)?.el; return { tag: el?.tagName, cls: el?.className }; })()`);
+  assert.deepEqual(picked, { tag: 'ARTICLE', cls: 'trip card featured' }, 'its root, not the wrapper around it');
+  assert.match(await q(`document.querySelector('#inspector').textContent`), /article|trip/i, 'the panel shows it');
+});
