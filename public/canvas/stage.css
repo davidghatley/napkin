@@ -260,9 +260,6 @@ body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
 /* ---- the chrome around the new pieces: denser rows, one source of quiet ---- */
 body[data-bp] #hint { bottom: 126px; }
 #stage:not([data-zoom-band="near"]) .cmp[data-sel] .doc-cell:not([data-resizing]) figcaption { visibility: hidden !important; }
-/* the selection's name sits in the room just above the frame: the title and ruler make way for it */
-.cmp[data-chip-top] .cmp-head { transform: translateY(calc(-22px * var(--nk-ls, 1))) scale(var(--nk-lf, 1)); }
-.cmp[data-chip-top] .cell-ruler { transform: translateY(calc(-22px * var(--nk-ls, 1))); }
 #overlay-select[data-tags="none"]::after, #overlay-select[data-tags="none"] .osize { display: none; }
 body[data-wipe] #grid { visibility: hidden; }
 #stage[data-hdr="strip"] .cmp-title .cmp-note { display: none; } /* (the extension stays at every zoom: it tells Orbit.jsx from Orbit.tsx) */

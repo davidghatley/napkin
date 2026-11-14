@@ -665,10 +665,9 @@ export function createStage(ctx, root, world, view) {
     const r = selEl.getBoundingClientRect(), H = 16, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
     const frame = selEl.closest('.doc-cell'), fr = frame?.querySelector('iframe.doc-frame')?.getBoundingClientRect(), z = view.get().z;
     if (!fr) return 'above';
-    if (z < 0.45) { for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top'); return 'none'; } // an overview: the name is in the layers, the frame's title stays readable
-    const sec = selEl.closest('section.cmp'), tight = r.top - fr.top < H + 8;
-    for (const other of world.querySelectorAll('.cmp[data-chip-top]')) if (other !== sec || !tight) other.removeAttribute('data-chip-top');
-    if (tight) sec.setAttribute('data-chip-top', '');
+    if (z < 0.45) return 'none'; // an overview: the name is in the layers, the frame's title stays readable
+    // (a frame's label never moves for the selection, standards 3.2: a selection at the frame's own top takes its tags below, not above)
+    if (r.top - fr.top < H + 8) return 'below';
     const lines = [];
     try { const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), rg = doc.createRange(); for (let n = walker.nextNode(), i = 0; n && i < 600; n = walker.nextNode(), i++) { if (!/\S/.test(n.nodeValue)) continue; rg.selectNodeContents(n); for (const c of rg.getClientRects()) lines.push({ l: fr.left + c.left * z, r: fr.left + c.right * z, t: fr.top + c.top * z, b: fr.top + c.bottom * z }); } } catch { return 'above'; }
     const onText = (top) => lines.filter((c) => c.l < r.left + lw && c.r > r.left && c.t < top + H && c.b > top).length;
@@ -678,7 +677,6 @@ export function createStage(ctx, root, world, view) {
   function tagSide(selEl) {
     let side = 'below';
     selectBox.toggleAttribute('data-doc', !!selEl?.docFrame);
-    if (!selEl?.docFrame) for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top');
     if (selectBox.style.display === 'block' && selEl?.docFrame) side = docTagSide(selEl);
     else if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
       const caps = captionRects(selEl.closest('section.cmp'));
