@@ -101,3 +101,25 @@ test('polish: a card focused from the keyboard (G C) wears the shared 2 px ring 
     }
   } finally { await close(); }
 });
+
+test('polish: a blank HTML file is a bounded card that says it is empty, and selecting it selects that card', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot([1280, 720], { 'blank.html': '<!doctype html><html><body style="margin:0"></body></html>\n' }, 4);
+  try {
+    for (const th of ['light', 'dark']) {
+      await theme(b, th); await sleep(900);
+      await b.eval(`(() => { const r = napkin.view.rectToWorld(document.querySelector('section[data-component="blank.html"] > .frame').getBoundingClientRect()); return napkin.view.set({ x: 400 - r.x, y: 300 - r.y, z: 1 }); })()`); await sleep(500);
+      const card = JSON.parse(await b.eval(`JSON.stringify((() => {
+        const s = document.querySelector('section[data-component="blank.html"]'), f = s.querySelector(':scope > .frame').getBoundingClientRect(), st = s.querySelector('.card-state'), c = st && getComputedStyle(st);
+        return { w: f.width, h: f.height, x: f.left, y: f.top, text: st?.textContent.trim() ?? null, size: c?.fontSize, lh: c?.lineHeight };
+      })())`));
+      assert.equal(card.text, 'Empty page', `${th}: the blank page says so (${JSON.stringify(card)})`);
+      assert.deepEqual([card.size, card.lh], ['14px', '20px'], `${th}: in the empty-state type`);
+      assert.ok(card.h >= 64 && card.w >= 240, `${th}: a bounded card (${card.w} x ${card.h})`);
+      await io.click(card.x + card.w / 2, card.y + card.h / 2); await sleep(400);
+      const sel = JSON.parse(await b.eval(`JSON.stringify((() => { const r = document.querySelector('#overlay-select').getBoundingClientRect(); return { w: r.width, h: r.height, x: r.left, y: r.top, shown: getComputedStyle(document.querySelector('#overlay-select')).display !== 'none' }; })())`));
+      assert.ok(sel.shown, `${th}: selected`);
+      assert.ok(sel.h >= 64 && Math.abs(sel.w - card.w) <= 2 && Math.abs(sel.h - card.h) <= 2, `${th}: the selection is the visible card (${JSON.stringify(sel)} vs ${card.w} x ${card.h})`);
+      await io.key('Escape'); await io.move(4, 710);
+    }
+  } finally { await close(); }
+});

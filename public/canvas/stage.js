@@ -50,7 +50,7 @@ export function createStage(ctx, root, world, view) {
   function cellElement(id, node, variant) {
     const sec = sections.get(id);
     if (!sec) return null;
-    if (sec.docFrame) return node === '' ? sec.frame : sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js); '' the card itself (nothing drawn in it)
+    if (sec.docFrame) return node === '' || sec.el.querySelector(':scope > .frame > .doc-cell[data-state]') ? sec.frame : sec.docFrame.element(node); // (a page showing its empty or failed state has no visible elements: the card is what is selected) // an HTML component: the element inside its frame (doc-frames.js); '' the card itself (nothing drawn in it)
     const css = `.mount [data-n="${CSS.escape(node)}"]`;
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
