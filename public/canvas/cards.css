@@ -21,15 +21,17 @@
 :is(.cmp, .item-card)[data-component] > .frame { border-radius: 0; box-shadow: var(--nk-card-edge); }
 .item-card > .frame { padding: 0; background: var(--nk-frame); }
 
-/* empty and failed cards (card-state.js): the same label and surface; inside, the chrome's type, compact. The card is a white artboard in both
-   themes, so its words take the light values of the tokens. An error: what failed in danger ink, the first line of why under it, muted, at most
-   two lines (the whole text is the tooltip). Empty: one muted line, centred. */
+/* empty and failed cards (card-state.js): the same label and surface; inside, the chrome's type (standards 10), compact. The card is a white
+   artboard in both themes, so its words take the light values of the tokens. An error is body type (12 / 16): what failed in danger ink and the
+   strong weight, the first line of why under it, muted, at most two lines (the whole text is the tooltip). Empty: the empty-state type (14 / 20),
+   one muted line, centred. */
 .card-state { box-sizing: border-box; display: flex; flex-direction: column; gap: var(--nk-s1); margin: 0; padding: var(--nk-s3) var(--nk-s4);
   color-scheme: light; background: var(--nk-frame); color: var(--nk-ink-muted); text-align: left;
-  font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); letter-spacing: normal; }
+  font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans); letter-spacing: normal; }
 .card-state p { margin: 0; }
 .card-state[data-state="error"] { width: 320px; height: 80px; }
-.card-state[data-state="empty"] { width: 240px; height: 64px; align-items: center; justify-content: center; text-align: center; }
+.card-state[data-state="empty"] { width: 240px; height: 64px; align-items: center; justify-content: center; text-align: center;
+  font: var(--nk-w-regular) var(--nk-fs-empty)/var(--nk-lh-loose) var(--nk-sans); }
 .card-state-title { font: var(--nk-w-strong) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans); color: var(--nk-danger-ink); }
 .card-state-detail { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 /* a page that failed or draws nothing stays loaded, out of sight; nothing about its width (caption, grip, ruler) is shown */
