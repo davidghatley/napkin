@@ -42,7 +42,6 @@ import { initHandles } from './handles.js';
 import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
 import { plain } from './words.js';
-import { variantGrid } from '/src/model.js';
 import { initMatrix } from './matrix.js';
 import { initPlay } from './play.js';
 import { initTabs } from './tabs.js';
@@ -68,6 +67,7 @@ import { initShell } from './shell.js';
 import { initContextMenu } from './context-menu.js';
 import { initRightPanel } from './right-panel.js';
 import { initCreate } from './create.js';
+import { initStatusbar } from './statusbar.js';
 import { initTextEdit } from './text-edit.js';
 import { initMakeComponent } from './make-component.js';
 
@@ -154,6 +154,7 @@ initLegend(ctx);
 initHighlight(ctx); // M3: napkin.stage.highlight({ selector, file } | { variable }) (before nav: Escape clears it first)
 initTools(ctx);
 initCreate(ctx); // basics pass 2: draw a frame, text or image on the canvas or into an HTML frame (create.js)
+ctx.statusbar = initStatusbar(ctx); // counts, the legend slot and the zoom control (basics, b-polish)
 initTextEdit(ctx); // edit text in an HTML frame again, in place; F2 renames a card from its label (before nav: Enter on text edits it)
 initMakeComponent(ctx); // basics pass 3: an element selected in an HTML frame becomes a component file (make-component.js)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
@@ -206,12 +207,8 @@ const sync = id => {
   s ? seenIds.add(id) : seenIds.delete(id);
 };
 
-function counts() {
-  // WPC-35: counted from the documents, not from the cells on screen (frames far off screen are not drawn), so zoom never changes it
-  let cells = 0; for (const c of ctx.state.components.values()) if (c.doc) cells += variantGrid(c.doc).length;
-  const n = ctx.state.components.size;
-  $('#counts').textContent = `${n} component${n === 1 ? '' : 's'}${cells ? ` · ${cells} variant${cells === 1 ? '' : 's'}` : ''}`;
-}
+// The status bar's counts and zoom control: statusbar.js (counted from the documents, so zoom never changes them: WPC-35)
+function counts() { ctx.statusbar?.counts(); }
 
 // (The sidebar's change log is on hold since basics pass 1: who changed what is in the Activity drawer, and changes against git in Changes.)
 
