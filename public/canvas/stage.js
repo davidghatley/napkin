@@ -911,6 +911,13 @@ export function createStage(ctx, root, world, view) {
     }
     return el && cell && { el, id: cell.closest('.cmp, .item-card').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
+  // What a click at (x, y) on target selects, as one function: the click handler and the right-click menu (context-menu.js) both ask it, so
+  // the ladder (frame, top-level element, deeper; Ctrl/Cmd the deepest) has one copy. null for nothing under the point.
+  function clickPick(target, x, y, deep = false) {
+    const h = hit(target, { clientX: x, clientY: y, ctrlKey: deep, metaKey: false });
+    if (!h) return null;
+    return h.card ? cardSelection(h.id) : { component: h.id, node: h.el.dataset.n, variant: h.variant };
+  }
   // Clicking a component's own button must select it, not focus it (Enter and Space would then press it).
   root.addEventListener('mousedown', (ev) => { if (!document.body.dataset.play && ev.target.closest('.mount')) { ev.preventDefault(); if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur(); } });
   const setHoverEl = (el, h) => { hoverEl = el; ctx.emit('hover', h ? { component: h.id, node: h.el.dataset.n } : null); refreshOverlays(); };
@@ -937,8 +944,8 @@ export function createStage(ctx, root, world, view) {
     if (h) ev.preventDefault();
     if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
-    if (h.card) { const s = cardSelection(h.id); if (s) { if (ev.shiftKey) ctx.toggle(s); else ctx.select(s); } return; } // an empty or failed card: selected as its label selects it
-    const sel = { component: h.id, node: h.el.dataset.n, variant: h.variant };
+    const sel = clickPick(ev.target, ev.clientX, ev.clientY, ev.ctrlKey || ev.metaKey); // (an empty or failed card: selected as its label selects it)
+    if (h.card) { if (sel) { if (ev.shiftKey) ctx.toggle(sel); else ctx.select(sel); } return; }
     if (ev.shiftKey || (!h.doc && (ev.metaKey || ev.ctrlKey))) ctx.toggle(sel); else ctx.select(sel); // in a document frame Ctrl/Cmd picks the deepest (hit), Shift adds
   }, true);
   window.addEventListener('resize', refreshOverlays);
@@ -1077,7 +1084,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    pickNode, deeper, upOf, pathTo, rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, mainNode, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    pickNode, clickPick, cardSelection, deeper, upOf, pathTo, rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, mainNode, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     openingRect, componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };
