@@ -748,3 +748,38 @@ test('at 280 px no label or choice is cut to an ellipsis (HTML, TSX, CSS, SVG, P
     for (const [kind, n] of Object.entries(seen)) assert.ok(n > 2, `${kind}: the panel drew its controls (${n})`);
   } finally { await close(); }
 });
+
+// An HTML element's node, clicked the way a person picks it (Ctrl+click is the deepest).
+const elOf = (tag) => `(() => { const c = napkin.find('landing').component, f = napkin.stage.sections.get(c).docFrame; return napkin.stage.cellElement(c, f.nodeOf(f.doc().querySelector(${JSON.stringify(tag)})), {}); })()`;
+
+test('several HTML elements selected: the panel shows shared values and Mixed where they differ; one edit sets every one; one Ctrl+Z puts all back', { timeout: 150000 }, async () => {
+  const { b, io, dir, close } = await boot();
+  const html = () => readFileSync(join(dir, 'landing.html'), 'utf8');
+  try {
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await b.eval(COUNT_UNDO);
+    const before = html();
+    await clickOn(b, io, elOf('h1'), { ctrl: true });
+    await clickOn(b, io, elOf('button'), { ctrl: true, shift: true });
+    await until(() => b.eval(`napkin.state.selections.length === 2 && !!document.querySelector('#inspector #pv-padding')`), 10000, 'two elements in the panel');
+    await sleep(500);
+    const P = `document.querySelector('#inspector #pv-padding')`;
+    const mixed = await jv(b, `({ value: ${P}.value, placeholder: ${P}.placeholder, mixed: ${P}.closest('[data-mixed]') !== null })`);
+    assert.deepEqual(mixed, { value: '', placeholder: 'Mixed', mixed: true }, 'the h1 has 0 padding and the button 8px 16px: Mixed');
+    // a value they share shows as that value
+    const dis = await jv(b, `document.querySelector('#inspector #pv-display')?.value ?? null`);
+    assert.ok(dis === null || typeof dis === 'string');
+    await clickOn(b, io, P);
+    await typed(b, '10px'); await io.key('Enter');
+    await until(() => (html().match(/padding: 10px/g) || []).length >= 2, 8000, 'padding written on both');
+    assert.equal((html().match(/padding: 10px/g) || []).length, 2, 'one edit reached both elements');
+    await sleep(500);
+    assert.equal(await b.eval(`${P}.value`), '10px', 'now shared: the value shows');
+    const n0 = await b.eval('window.__undos');
+    await io.key('Escape'); await sleep(200);
+    await io.key('z', { ctrl: true });
+    await until(() => html() === before, 8000, 'both put back by one undo');
+    assert.equal(await b.eval('window.__undos') - n0, 1, 'one Ctrl+Z, one undo request');
+  } finally { await close(); }
+});

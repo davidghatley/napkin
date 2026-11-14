@@ -6,6 +6,7 @@
 // rebuild (ui.draft) until it is saved.
 import { plain, stripNext } from './words.js';
 import { renderDocPanel } from './doc-panel.js';
+import { renderDocMulti } from './doc-multi.js';
 import { sectionHtml, wireSections } from './sections.js';
 import { index, axes, resolveStyle, propOf } from '/src/model.js';
 import { isFlex, isGrid, mainProp, sizeMode, sizePatch, pinPatch, pinsOf, tracks, placementOf, placePatch } from '/src/layout.js';
@@ -192,6 +193,7 @@ export function renderPanel(ctx) {
     // A file item, or several cards: the instrument panel is the whole panel.
     if (c0?.item || new Set(ctx.state.selections.map((s) => s.component)).size > 1) { delete el.dataset.full; el.replaceChildren(); el.hidden = true; return; }
     el.hidden = false;
+    if (c0?.kind === 'html' && ctx.state.selections.length > 1) { renderDocMulti(ctx, el, ctx.state.selections, c0); return; }
     if (c0?.kind === 'html') { renderDocPanel(ctx, el, s0, c0).catch(console.error); return; }
   }
   const sel = ctx.state.selection;

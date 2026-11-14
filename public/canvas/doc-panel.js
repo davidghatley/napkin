@@ -45,7 +45,7 @@ let currentCtx = null;
 // cursor they need Alt (Option) so typing is never swallowed.
 const wired = new WeakSet();
 const isText = (t) => t && 'value' in t && !['button', 'checkbox', 'radio', 'submit'].includes(t.type) && t.localName !== 'button';
-function wireKeys(el) {
+export function wireKeys(el) {
   if (wired.has(el)) return; wired.add(el);
   el.addEventListener('keydown', (ev) => {
     const t = ev.target;
@@ -68,7 +68,7 @@ function wireKeys(el) {
     if (ev.key !== 'Enter' || (ev.shiftKey && t.id === 'doc-text')) return;
     ev.preventDefault();
     if (t.id === 'doc-class-add' || t.closest('.decl.add')) t.dispatchEvent(new CustomEvent('doc-commit', { bubbles: true }));
-    else if (t.closest('.vrow')) { if (staged) currentCtx?.inspector?.apply(); } // nothing typed: the focus stays
+    else if (t.closest('.vrow') && !t.closest('.doc-multi')) { if (staged) currentCtx?.inspector?.apply(); } // nothing typed: the focus stays
     else t.blur(); // its change event applies it
   });
 }
