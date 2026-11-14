@@ -203,7 +203,8 @@ export function initContextMenu(ctx) {
     if (!c) return null;
     if (c.item) return { component: id, node: 'item', variant: {}, card: true };
     if (c.doc) return { component: id, node: c.doc.root.id, variant: Object.fromEntries((c.doc.props || []).filter((p) => p.type === 'enum').map((p) => [p.name, p.default])), card: true };
-    return { component: id, node: ctx.stage.rootNode?.(id) ?? '', variant: {}, card: true };
+    const h = ctx.stage.cardSelection?.(id);
+    return h ? { ...h, card: true } : { component: id, node: ctx.stage.rootNode?.(id) ?? '', variant: {}, card: true };
   }
   // the menu that fits the selection as it is now
   function kindNow() {
@@ -222,23 +223,17 @@ export function initContextMenu(ctx) {
   // What is under a point of the canvas: an element of a frame, a frame (its title or its empty part), or the canvas.
   const TOP = new Set(['html', 'body', 'head']);
   function hitCanvas(t, x, y, deep = false) {
-    const el = t.closest?.('.mount [data-n]'), cell = el?.closest('.cell');
-    if (el && cell) return { component: cell.closest('.cmp, .item-card').dataset.component, node: el.dataset.n, variant: JSON.parse(cell.dataset.variant || '{}') };
     const card = t.closest?.('.cmp, .item-card');
     if (!card) return null;
     const id = card.dataset.component, f = ctx.stage.sections.get(id)?.docFrame;
-    if (f && t.closest('.doc-cell')) {
-      // what a click there would pick (stage.js: the top-level element, or the one beside the selection; Ctrl/Cmd the deepest),
-      // unless the pointer is inside something selected: then that, and the selection stays
-      const deepest = f.pick(x, y)?.dataset.n;
-      if (deepest) {
-        const path = ctx.stage.pathTo?.(id, deepest) ?? [];
-        const inside = !deep && [...path].reverse().find((n) => !TOP.has(n.tag) && ctx.state.selections.some((x) => !x.card && x.component === id && x.node === n.node)); // (a selected card is the frame, not its first element)
-        const node = inside ? inside.node : deep ? deepest : (ctx.stage.pickNode?.(id, deepest) ?? deepest), tag = f.node(node)?.tag;
-        if (!TOP.has(tag)) return { component: id, node, variant: {} };
-      }
+    // in a frame's page, unless the pointer is inside something selected (then that, and the selection stays): what a click there picks,
+    // from the one ladder in stage.js
+    if (f && t.closest('.doc-cell') && !deep) {
+      const deepest = f.pick(x, y)?.dataset.n, path = deepest ? ctx.stage.pathTo?.(id, deepest) ?? [] : [];
+      const inside = [...path].reverse().find((n) => !TOP.has(n.tag) && ctx.state.selections.some((s) => !s.card && s.component === id && s.node === n.node));
+      if (inside) return { component: id, node: inside.node, variant: {} };
     }
-    return cardSel(id);
+    return ctx.stage.clickPick(t, x, y, deep) ?? cardSel(id);
   }
   function openCanvas(t, x, y, deep) {
     const sel = hitCanvas(t, x, y, deep);
