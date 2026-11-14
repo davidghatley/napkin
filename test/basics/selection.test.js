@@ -175,9 +175,15 @@ test('selection: tool keys wait while a pointer drag is in progress', { timeout:
 
 test('selection: a click on a frame\'s label picks the frame', { timeout: 60000 }, async () => {
   await fresh();
-  await q(`(() => { const s = napkin.stage.sections.get('${ID}'); napkin.view.set({ x: 300 - s.pos.x, y: 200 - s.pos.y, z: 1 }); })(); 0`);
-  await sleep(300);
-  const head = await json(`(() => { const r = document.querySelector('section.cmp[data-component="${ID}"] .cmp-title h3').getBoundingClientRect(); return { x: r.left + 6, y: r.top + r.height / 2 }; })()`);
+  // bring the label to (300, 200) on screen, measured (an earlier test's view move may still be landing), and wait until it holds still there
+  const headAt = () => json(`(() => { const r = document.querySelector('section.cmp[data-component="${ID}"] .cmp-title h3').getBoundingClientRect(); return { x: r.left + 6, y: r.top + r.height / 2 }; })()`);
+  await until(async () => {
+    const h = await headAt();
+    if (Math.abs(h.x - 306) < 2 && Math.abs(h.y - 200) < 8) { await sleep(150); const n = await headAt(); return (n.x === h.x && n.y === h.y) || null; }
+    await q(`(() => { const v = napkin.view.get(); napkin.view.set({ x: v.x + 306 - ${h.x}, y: v.y + 200 - ${h.y}, z: v.z }); })(); 0`);
+    await sleep(300); return null;
+  });
+  const head = await headAt();
   await io.click(head.x, head.y); await sleep(200);
   assert.deepEqual(await sel(), ['body'], 'the frame, not its first element');
   assert.equal(await q(`!!napkin.ops.isFrame()`), true);
