@@ -803,3 +803,34 @@ test('a long dropdown: clicking an option with the pointer chooses it, once, and
     assert.equal(await b.eval(`document.activeElement === ${T}`), true, 'the focus is back on the field');
   } finally { await close(); }
 });
+
+test('typography: font, size, weight, line height, align and colour are separate effective fields; editing one leaves the others', { timeout: 150000 }, async () => {
+  const { b, io, dir, close } = await boot();
+  const html = () => readFileSync(join(dir, 'landing.html'), 'utf8');
+  try {
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await clickOn(b, io, elOf('h1'), { ctrl: true });
+    await until(() => b.eval(`!!document.querySelector('#inspector #pv-font-size')`), 10000, 'the h1 typography');
+    await sleep(400);
+    const show = (id) => b.eval(`(() => { const i = document.querySelector('#inspector #pv-${id}'); return i ? (i.value || i.placeholder).replace(/px$/, '') : null; })()`);
+    const px = (v) => v.replace(/px$/, '');
+    const computed = () => jv(b, `(() => { const c = napkin.find('landing').component, f = napkin.stage.sections.get(c).docFrame, cs = f.doc().defaultView.getComputedStyle(f.doc().querySelector('h1')); return { family: cs.fontFamily, size: cs.fontSize, weight: cs.fontWeight, lh: cs.lineHeight, align: cs.textAlign, color: cs.color }; })()`);
+    const c0 = await computed();
+    assert.equal(await b.eval(`!!document.querySelector('#inspector #pv-font')`), false, 'no inherited "font" shorthand standing in for the parts');
+    assert.equal(await show('font-size'), px(c0.size), 'size is what the browser draws');
+    assert.equal(await show('font-weight'), px(c0.weight), 'weight is what the browser draws');
+    assert.equal(await show('line-height'), px(c0.lh), 'line height is what the browser draws');
+    for (const id of ['font-family', 'text-align', 'color']) assert.ok(await show(id), `${id} has a field with a value`);
+    const P = `document.querySelector('#inspector #pv-font-size')`;
+    await clickOn(b, io, P);
+    await typed(b, '40px'); await io.key('Enter');
+    await until(() => html().includes('font-size: 40px'), 8000, 'font-size written');
+    await sleep(600);
+    const c1 = await computed();
+    assert.equal(c1.size, '40px');
+    assert.equal(c1.weight, px(c0.weight), 'weight is not reset');
+    assert.equal(c1.family, c0.family, 'family is not reset');
+    assert.doesNotMatch(html(), /font:/, 'no font shorthand written');
+  } finally { await close(); }
+});

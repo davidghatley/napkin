@@ -309,7 +309,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     for (const pw of props) if (!taken.has(pw[0])) by.get(groupOf(pw[0])).push(valueRow(pw));
     if (texty) {
       const covered = new Set(props.map(([p]) => p));
-      for (const e of explain.inherited) if (TYPE_GROUP.test(e.prop)) { typeInherited.add(e); by.get('type').push(inheritedRow(e)); covered.add(e.prop); for (const x of e.sets || []) covered.add(x); }
+      // (an inherited shorthand such as `font: 24px sans-serif` is not shown: it is not what this element draws. The parts are, each its own field.)
+      for (const e of explain.inherited) if (TYPE_GROUP.test(e.prop)) { typeInherited.add(e); if (e.prop === 'font') continue; by.get('type').push(inheritedRow(e)); covered.add(e.prop); for (const x of e.sets || []) covered.add(x); }
       for (const p of ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'text-align']) if (!covered.has(p)) by.get('type').push(valueRow([p, winOf(p)]));
     }
     const sideList = (names) => names.filter((p) => taken.has(p)).map(sidesBlock).join('');
