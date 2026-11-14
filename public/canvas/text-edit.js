@@ -67,11 +67,23 @@ export function initTextEdit(ctx) {
     const blur = () => setTimeout(() => { if (editing?.el === el && !(d.hasFocus() && d.activeElement === el)) done('away'); }, 0);
     addEventListener('pointerdown', outside, true);
     el.addEventListener('blur', blur);
+    // Auto-width text that is all a frame holds (made by a click with the Text tool: white-space pre, the body hugging it): the frame
+    // grows sideways with what is typed, and the new width is written with the text, in the same undo step (standards 4.1).
+    const hug = (() => {
+      const body = d.body, ws = win.getComputedStyle(el).whiteSpace;
+      if (!body || !/^(pre|nowrap)$/.test(ws) || el.parentElement !== body || !body.style.width) return null;
+      if ([...body.children].some((k) => k !== el && !['script', 'style', 'template'].includes(k.localName))) return null;
+      const bodyNode = df.nodeOf(body);
+      return bodyNode ? { body, bodyNode, was: body.style.width, wasFrame: df.width } : null;
+    })();
+    const fit = () => { if (!hug) return null; const w = Math.max(48, Math.ceil(el.scrollWidth) + 1); hug.body.style.width = `${w}px`; if (w !== df.width) df.setWidth(w); return w; };
+    if (hug) el.addEventListener('input', fit);
     let over = false;
     async function finish(how) {
       if (over) return; over = true;
       editing = null;
       const html = serialize(el), text = el.textContent;
+      const hugW = hug ? fit() : null; if (hug) el.removeEventListener('input', fit);
       detach(); removeEventListener('pointerdown', outside, true); el.removeEventListener('blur', blur);
       el.removeAttribute('contenteditable'); el.removeAttribute('spellcheck');
       for (const x of el.querySelectorAll('[data-nk-keep]')) x.removeAttribute('data-nk-keep');
@@ -79,15 +91,19 @@ export function initTextEdit(ctx) {
       win.getSelection()?.removeAllRanges();
       if (d.activeElement === el) el.blur();
       f.blur(); if (how === 'key') stageEl.focus({ preventScroll: true });
-      if (how === 'cancel' || html === before) { if (how === 'key') ctx.select({ component, node, variant: {} }); return; }
+      const putBack = () => { if (hug) { hug.body.style.width = hug.was; if (df.width !== hug.wasFrame) df.setWidth(hug.wasFrame); } };
+      if (how === 'cancel' || html === before) { putBack(); if (how === 'key') ctx.select({ component, node, variant: {} }); return; }
       const c = ctx.state.components.get(component);
       const flat = !/</.test(html) && !/</.test(before) && !el.children.length;
       const edits = !text.trim() ? [{ op: 'delete', node }]
         : flat && !/\u00a0/.test(text) ? [{ op: 'text', node, value: text.trim() }]
         : [{ op: 'inner', node, html: html.replace(/^\s+|\s+$/g, '') }];
-      const res = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component, baseRevision: c?.revision, edits, summary: edits[0].op === 'delete' ? 'Removed empty text' : 'Edited text' }) });
+      const widen = hug && edits[0].op !== 'delete' && hugW && `${hugW}px` !== hug.was;
+      if (widen) edits.push({ op: 'style', node: hug.bodyNode, prop: 'width', value: `${hugW}px` });
+      const res = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component, baseRevision: c?.revision, edits, summary: edits[0].op === 'delete' ? 'Removed empty text' : 'Edited text', ...(widen && { canvas: { width: hugW } }) }) });
       const r = await res.json().catch(() => ({ ok: false, error: `server answered ${res.status}` }));
-      if (!r.ok) { el.innerHTML = before; ctx.hint(`Could not change the text: ${plain(r.error)}`); return; }
+      if (!r.ok) { el.innerHTML = before; putBack(); ctx.hint(`Could not change the text: ${plain(r.error)}`); return; }
+      if (widen && c) c.width = hugW;
       if (how !== 'key' || edits[0].op === 'delete') return;
       // the text stays selected once the frame has drawn the new revision
       for (let i = 0; i < 300; i++) {

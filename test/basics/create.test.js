@@ -78,7 +78,7 @@ test('basics pass 2: text on empty canvas makes a frame file holding the text, w
   await q(`document.execCommand('insertText', false, 'Hello napkin')`);
   await io.key('Escape');
   await until(async () => existsSync(file('frame-2.html')) && (await q(`napkin.state.selection?.component`)) === 'frame-2.html');
-  assert.match(readFileSync(file('frame-2.html'), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif">Hello napkin<\/p>/);
+  assert.match(readFileSync(file('frame-2.html'), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif; white-space: pre">Hello napkin<\/p>/);
   assert.equal(await q('napkin.state.tool'), 'select');
 });
 
@@ -270,7 +270,7 @@ test('round 2: Ctrl+B in text writes bold markup to the file; Ctrl+I and Ctrl+U 
     await io.key('Enter');
     await io.type('twice');
   }, { x: 900, y: 180 });
-  assert.match(readFileSync(file(id), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif">Say <em>soft<\/em> and <u>clear<\/u><br>twice<\/p>/);
+  assert.match(readFileSync(file(id), 'utf8'), /<p style="margin: 0; font: 16px\/1\.4 system-ui, sans-serif; white-space: pre">Say <em>soft<\/em> and <u>clear<\/u><br>twice<\/p>/);
   // Enter in text edited again is the same new line
   const t = await wordAt(id, 'twice');
   await io.dblclick(t.x, t.y);
@@ -467,4 +467,39 @@ test('round 2: Ctrl+D duplicates the frame file beside it and selects the copy; 
   await io.key('z', { ctrl: true });
   await until(async () => !existsSync(file(copy)) && !(await frames()).includes(copy));
   assert.ok(existsSync(file(id)), 'the original stays');
+});
+
+// ---- round 3: text made by a click keeps growing sideways when edited again; only a drawn box is fixed-width (standards 4.1, 4.2)
+test('round 3: click-made text stays auto-width when edited again: longer copy widens its frame, it does not wrap', { timeout: 90000 }, async () => {
+  const id = await newText(() => io.type('Hi there'), { x: 300, y: 500 });
+  const pRect = () => json(`(() => { const p = ${liveFrame(id)}.contentDocument.querySelector('p'); const r = p.getBoundingClientRect(); return { w: r.width, h: r.height, sw: p.scrollWidth }; })()`);
+  const first = await pRect();
+  assert.match(readFileSync(file(id), 'utf8'), /white-space: pre/, 'auto width is said in the file');
+  // edit it again (it is selected: Enter edits all of it) with a much longer line
+  await q('document.activeElement?.blur?.(); 0');
+  await io.key('Enter');
+  await until(async () => (await editState(id)).focused);
+  await q(`document.querySelector('section.cmp[data-component="${id}"] iframe.doc-frame:not(.doc-next)').contentDocument.execCommand('insertText', false, 'A much longer line of copy than the first one')`);
+  await io.key('Escape');
+  await until(async () => /A much longer line of copy than the first one<\/p>/.test(readFileSync(file(id), 'utf8')));
+  await until(async () => { const w = Number((/<body style="[^"]*width: (\d+)px/.exec(readFileSync(file(id), 'utf8')) || [])[1]); return w > first.w * 3; });
+  await until(async () => (await q(`napkin.state.components.get('${id}').revision`)) && (await pRect()).w > first.w * 3);
+  const now = await pRect();
+  assert.ok(now.h <= first.h + 1, `one line, not wrapped (${now.h} vs ${first.h})`);
+  assert.ok(now.sw <= now.w + 1, 'nothing runs past the frame');
+});
+
+test('round 3: text drawn as a box stays fixed-width and wraps', { timeout: 60000 }, async () => {
+  await emptyCanvas();
+  const before = await frames();
+  await io.key('t');
+  await io.drag(300, 600, 420, 620);
+  await until(async () => q(`!!document.activeElement?.classList.contains('nk-new-text')`));
+  await q(`document.execCommand('insertText', false, 'Words that will wrap inside the drawn box')`);
+  await io.key('Escape');
+  let id = null;
+  await until(async () => { id = (await frames()).find((f) => !before.includes(f)); return id && existsSync(file(id)); });
+  const html = readFileSync(file(id), 'utf8');
+  assert.match(html, /<body style="margin: 0; width: 120px">/, 'the drawn width');
+  assert.doesNotMatch(html, /white-space: pre/, 'a drawn box wraps');
 });

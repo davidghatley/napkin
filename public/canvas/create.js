@@ -104,7 +104,8 @@ export function initCreate(ctx) {
     const { text, html } = await editUntilDone(ed);
     if (!text.trim()) { p.remove(); return null; } // nothing typed: no frame, no file, no undo step
     const w = width ?? Math.max(MIN.w, Math.ceil(ed.getBoundingClientRect().width / zoom()) + 1);
-    const r = await post('/api/frames', { x, y, width: w, body: `<p style="margin: 0; ${TEXT_FONT}">${html}</p>` });
+    // a click gives auto-width text (white-space: pre: it grows sideways when edited again, text-edit.js); a drawn box wraps at its width
+    const r = await post('/api/frames', { x, y, width: w, body: `<p style="margin: 0; ${TEXT_FONT}${width ? '' : '; white-space: pre'}">${html}</p>` });
     if (!r.ok) { p.remove(); ctx.hint(`Could not make the text: ${plain(r.error)}`); return null; }
     p.name(r.name);
     const sec = await adopt(r);
