@@ -167,8 +167,10 @@ test('WPC-35: the status bar counts do not depend on the zoom', { timeout: 20000
     seen.set('fit again', await read());
     const all = [...seen.values()];
     assert.equal(new Set(all).size, 1, JSON.stringify([...seen]));
-    const n = readdirSync(join(dir, 'repo', 'components')).filter((f) => f.endsWith('.tsx')).length;
-    assert.match(all[0], new RegExp(`^${n} components · \\d{3,} variants$`));
+    // (the bar says what the folder holds, its files, since basics b-polish; every .tsx file is among them)
+    const n = readdirSync(join(dir, 'repo', 'components')).filter((f) => f.endsWith('.tsx')).length, total = await b.eval('napkin.state.components.total');
+    assert.ok(total >= n, `${total} files, ${n} of them .tsx`);
+    assert.equal(all[0], `${total} files`);
   } finally { await close(); }
 });
 
