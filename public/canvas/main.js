@@ -37,6 +37,7 @@ import { initEmpty } from './empty.js';
 import { initShortcuts } from './shortcuts.js';
 import { initNav } from './nav.js';
 import { initEditOps } from './edit-ops.js';
+import { initFrameOps } from './frame-ops.js';
 import { initHandles } from './handles.js';
 import { initTokens } from './tokens.js';
 import { initHistoryLane } from './history-lane.js';
@@ -162,6 +163,7 @@ initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass
 initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
 initFields(ctx); // one contract for every field in the right panel: select all, math, Enter, Tab, Escape, arrows (fields.js)
 initEditOps(ctx);
+initFrameOps(ctx); // a frame as an object: nudge and resize, each one undo step (frame-ops.js; delete and duplicate: file-ops.js)
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initFileOps(ctx); // an HTML file as a frame: rename on its label, duplicate beside it, delete to the trash, each undoable
 initLayers(ctx, $('#layers'));

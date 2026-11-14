@@ -77,17 +77,31 @@ export function initNav(ctx) {
     if (!h) unfocus(); else if (ctx.find(h.name) && ctx.find(h.name).component !== focused) focus(h.name, h.node);
   });
 
+  // The first element inside a selected element of an HTML frame (what Enter selects), or null
+  const SKIP = new Set(['script', 'style', 'template', 'link', 'meta', 'title', 'head', 'base', 'noscript']);
+  function firstChild(sel) {
+    const c = ctx.state.components.get(sel.component), f = !c?.doc && !c?.item && stage.sections.get(sel.component)?.docFrame;
+    const path = f && stage.pathTo?.(sel.component, sel.node);
+    const n = path?.at(-1)?.children.find((x) => !SKIP.has(x.tag) && f.has(x.node));
+    return n?.node ?? null;
+  }
   // Registered first (capture on window), so Escape sees the tool before tools.js changes it.
   addEventListener('keydown', (ev) => {
     if (ev.defaultPrevented || ev.isComposing || typing(ev.target) || ev.target.closest?.('#time')) return; // the film strip keeps its own Escape and Enter (time-strip.js)
     if (document.body.dataset.modal || document.body.dataset.scrub || document.body.dataset.dragging) return;
-    if (ev.key === 'Enter' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && ((ev.target.closest?.('#stage') && !ev.target.closest?.('[data-nodrag]')) || !ev.target.closest?.('button, a, summary, [role=treeitem], [role=option], [role=tab]'))) {
+    if (ev.key === 'Enter' && !ev.ctrlKey && !ev.metaKey && !ev.altKey && ((ev.target.closest?.('#stage') && !ev.target.closest?.('[data-nodrag]')) || !ev.target.closest?.('button, a, summary, [role=treeitem], [role=option], [role=tab], [role=menuitem], [role=menu]'))) {
       const sel = ctx.state.selection;
-      if (sel && ctx.state.tool === 'select' && sel.component !== focused) { ev.preventDefault(); focus(sel.component, sel.node); }
+      const child = sel && ctx.state.tool === 'select' && firstChild(sel);
+      if (child) { ev.preventDefault(); ctx.select({ component: sel.component, node: child, variant: {} }); } // in an HTML frame Enter goes one level in (standards 3.12, 5.2)
+      else if (sel && ctx.state.tool === 'select' && sel.component !== focused) { ev.preventDefault(); focus(sel.component, sel.node); }
       else if (sel && focused) ev.preventDefault();
     } else if (ev.key === 'Escape' && ctx.state.tool === 'select') {
       if (focused) { ev.preventDefault(); unfocus(); }
-      else if (ctx.state.selections.length) { ev.preventDefault(); ctx.select(null); }
+      else if (ctx.state.selections.length) { // up one level in an HTML frame (to its card from the top level), then clear
+        ev.preventDefault();
+        const s = ctx.state.selection, up = ctx.state.selections.length === 1 && stage.upOf?.(s);
+        ctx.select(up ? { component: s.component, node: up, variant: {} } : null);
+      }
     }
   }, true);
   ctx.on('select', () => {

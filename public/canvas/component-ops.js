@@ -73,7 +73,7 @@ export function initComponentOps(ctx) {
   function rename(id) {
     const c = pick(id);
     if (!c) return false;
-    if (isFile(c) && c.fileKind !== 'html') { ctx.hint(`Rename ${c.path} in your editor for now: renaming a React file here comes in the next pass.`); return false; }
+    if (isFile(c) && c.fileKind !== 'html') return !!ctx.makeComponent?.rename(c.component); // a component napkin made: named in place
     if (c.readOnly) { ctx.hint(`${c.name} is read-only (${String(c.readOnly).replace(/\.$/, '')}), so it can't be renamed here. Rename it in your editor.`); return false; }
     if (ctx.create?.isFrameFile(c)) return !!ctx.create.startRename(c.component);
     ctx.stage.reveal?.(c.component);

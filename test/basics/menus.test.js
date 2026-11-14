@@ -311,21 +311,21 @@ test('menus: Cut of several and Paste, Undo with the selection, Show code, the f
     await sleep(400);
     assert.equal(await b.eval(`document.querySelector('.code .c-name').textContent`), LANDING);
 
-    // Duplicate: landing-2.html beside it; the original keeps its place and the view does not move or zoom
+    // Duplicate: the next free frame-N.html (standards 3.11) beside it; the original keeps its place and the view does not move or zoom
     await rclick(io, await centre(b, head(LANDING)));
     const v0 = await view(), p0 = await j(b, `napkin.stage.sections.get(${JSON.stringify(LANDING)}).pos`);
     await pick('Duplicate');
-    await b.waitFor(`napkin.state.selection?.component === 'landing-2.html'`, 10000);
-    assert.equal(readFileSync(join(r.compDir, 'landing-2.html'), 'utf8'), html(), 'a copy of the file, next to it');
+    await b.waitFor(`napkin.state.selection?.component === 'frame-1.html'`, 10000);
+    assert.equal(readFileSync(join(r.compDir, 'frame-1.html'), 'utf8'), html(), 'a copy of the file, next to it');
     assert.deepEqual(await j(b, `napkin.stage.sections.get(${JSON.stringify(LANDING)}).pos`), p0, 'the original did not move');
     assert.deepEqual(await view(), v0, 'the view did not move or zoom');
-    const p2 = await j(b, `napkin.stage.sections.get('landing-2.html').pos`);
+    const p2 = await j(b, `napkin.stage.sections.get('frame-1.html').pos`);
     assert.ok(p2.y === p0.y && p2.x > p0.x, `the copy is on the same row, to the right (${JSON.stringify(p2)} vs ${JSON.stringify(p0)})`);
     t.diagnostic(`duplicate: original ${JSON.stringify(p0)}, copy ${JSON.stringify(p2)}, view ${JSON.stringify(v0)}`);
     await b.eval(`document.activeElement?.blur()`);
     await io.key('z', { ctrl: true });
-    await b.waitFor(`!napkin.state.components.has('landing-2.html')`, 10000);
-    assert.equal(exists('landing-2.html'), false, 'Ctrl+Z removes the copy');
+    await b.waitFor(`!napkin.state.components.has('frame-1.html')`, 10000);
+    assert.equal(exists('frame-1.html'), false, 'Ctrl+Z removes the copy');
 
     // Rename: the label becomes a field; an empty name is refused; Enter renames the file; Ctrl+Z puts the name back
     await rclick(io, await centre(b, head(LANDING)));

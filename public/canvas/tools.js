@@ -295,8 +295,14 @@ export function initTools(ctx) {
     if (ev.key === 'Delete' || ev.key === 'Backspace') { ev.preventDefault(); deleteSelected(); return; }
     const key = ev.key.length === 1 ? ev.key.toUpperCase() : '';
     const t = TOOLS.find((x) => x.key === key);
+    if (t && (held || drag)) { ev.preventDefault(); return; } // a tool key waits for the pointer gesture to end (standards 2.10)
     if (t) { ev.preventDefault(); use(t.id); }
   });
+  // a pointer button held anywhere: a drawing, a move, a marquee or a resize is in progress
+  let held = false;
+  document.addEventListener('pointerdown', (ev) => { if (ev.pointerType !== 'touch') held = true; }, true);
+  for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, () => { held = false; }, true);
+  addEventListener('blur', () => { held = false; });
 
   const api = { tools, use, editText, createComponent };
   ctx.tools = api;

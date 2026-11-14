@@ -5,7 +5,8 @@
 //   Inside an HTML frame each tool inserts an element there instead (one /api/edit insert).
 // The card is drawn at once (a pending card in the world), the file follows; the pending card goes when the real one is drawn.
 // tools.js owns the gesture (outline and size readout); this module turns a finished gesture into files and edits.
-//   initCreate(ctx) -> ctx.create = { targetAt(ev), make({ tool, target, box, point }), atCentre(tool), rename(id, to), startRename(id) }
+//   initCreate(ctx) -> ctx.create = { targetAt(ev), make({ tool, target, box, point }), atCentre(tool), rename(id, to), startRename(id),
+//                                      adopt(response of POST /api/frames*): the new card, drawn; bodyOf(tree) }
 import { plain } from './words.js';
 import { VOID } from '/src/model.js';
 import { richText, serialize } from './rich-text.js';
@@ -345,7 +346,7 @@ export function initCreate(ctx) {
     startRename(id);
   }, true);
 
-  const api = { targetAt, make, atCentre, rename, startRename, check, isFrameFile: frameFile, editing: () => !!editing, finish: () => editing?.finish() };
+  const api = { targetAt, make, atCentre, rename, startRename, check, isFrameFile: frameFile, adopt, bodyOf, editing: () => !!editing, finish: () => editing?.finish() };
   ctx.create = api;
   return api;
 }

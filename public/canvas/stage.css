@@ -218,9 +218,9 @@ body[data-focus] .cmp:not([data-focused]) :is(figcaption, .cell-ruler, .hl-box b
 #bp-panel .bp-diff .bp-chg { font: 11px var(--nk-mono); overflow-wrap: anywhere; color: var(--nk-text); }
 
 /* the theme wipe: a frame's title, caption and ruler take the colour of the side they are on; a title the line crosses has a small backing so it reads on both */
-.cmp-title[data-wipe-side="dark"], .doc-cell[data-wipe-side="dark"] figcaption, .doc-cell[data-wipe-side="dark"] .cell-ruler { --nk-text: #eef0f4; --nk-text-2: #c4c9d2; --nk-text-3: #9da4b0; --nk-accent-text: #9db4ff; --nk-accent: #6f8fff; }
-.cmp-title[data-wipe-side="light"], .doc-cell[data-wipe-side="light"] figcaption, .doc-cell[data-wipe-side="light"] .cell-ruler { --nk-text: #1c1f27; --nk-text-2: #4f5663; --nk-text-3: #626a79; --nk-accent-text: #2c52d2; --nk-accent: #3459e2; }
-.cmp-title[data-wipe-side="cross"] { --nk-text: #1c1f27; --nk-accent-text: #2c52d2; padding: 1px 5px; border-radius: 4px; background: #fbfbfc; box-shadow: 0 0 0 1px #cdd1d9; }
+.cmp-title[data-wipe-side="dark"], .doc-cell[data-wipe-side="dark"] figcaption, .doc-cell[data-wipe-side="dark"] .cell-ruler { --nk-text: #eef0f4; --nk-text-2: #c4c9d2; --nk-text-3: #9da4b0; color-scheme: dark; }
+.cmp-title[data-wipe-side="light"], .doc-cell[data-wipe-side="light"] figcaption, .doc-cell[data-wipe-side="light"] .cell-ruler { --nk-text: #1c1f27; --nk-text-2: #4f5663; --nk-text-3: #626a79; color-scheme: light; }
+.cmp-title[data-wipe-side="cross"] { --nk-text: #1c1f27; padding: 1px 5px; border-radius: 4px; background: #fbfbfc; box-shadow: 0 0 0 1px #cdd1d9; }
 body[data-wipe] .cmp-title { color: var(--nk-text); }
 body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
 
@@ -232,8 +232,8 @@ body[data-wipe] .cmp[data-sel] .cmp-title h3 { color: var(--nk-accent-text); }
 .cmp-note[hidden] { display: none; }
 
 /* the selection's name and size, on a frame of a file */
-#overlay-select[data-doc][data-tags="above"] .osize { transform: translate(max(var(--nk-w, 0px), var(--nk-tagw, 0px)), calc(-100% - 7px)) translateX(-100%); }
-#overlay-select[data-doc][data-tags="below"] .osize { transform: translate(max(var(--nk-w, 0px), var(--nk-tagw, 0px)), calc(var(--nk-h, 0px) + 7px)) translateX(-100%); }
+#overlay-select[data-doc][data-tags="above"] .osize { transform: translate(max(var(--nk-w, 0px), var(--nk-tagw, 0px)), calc(-100% - var(--nk-s2))) translateX(-100%); }
+#overlay-select[data-doc][data-tags="below"] .osize { transform: translate(max(var(--nk-w, 0px), var(--nk-tagw, 0px)), calc(var(--nk-h, 0px) + var(--nk-s2))) translateX(-100%); }
 .cell-ruler { background-image: linear-gradient(var(--nk-text-3), var(--nk-text-3)), repeating-linear-gradient(90deg, var(--nk-text-3) 0 1px, transparent 1px 100px); background-size: 100% 1px, 100px 5px; background-repeat: no-repeat, repeat-x; opacity: .95; }
 
 /* ---- sidebar: Layers and Styles ---- */

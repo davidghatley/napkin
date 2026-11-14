@@ -13,8 +13,10 @@
 //   GET  /api/styles  -> { undefinedVars, applied, ... }    POST /api/styles { applied }  (kept outside the folder)
 //   POST   /api/frames  { path?, x, y, width, height?, body? } -> { ok, path, name, revision, canvas }: a new frame file (next free
 //                   frame-N.html when no path), placed at x, y in the layout state; one undo step (undo removes the file)
-//   POST   /api/frames/duplicate { from, x?, y? }          -> { ok, path, from, canvas }: a copy beside it (orbit-2.html); one undo step
 //   POST   /api/frames/component { from, node, name? }       -> { ok, path, name, dropped, canvas }: the element becomes <Name>.tsx beside the frame
+//   POST   /api/frames/duplicate { from, x?, y? }           -> { ok, path, name, canvas }: a copy of the file as the next free frame-N.html; one undo step
+//   POST   /api/layout { component, x?, y?, width?, undo? }  -> { ok, canvas }: where a frame sits; undo: true makes it one undo step (a move)
+//   POST   /api/edit also takes canvas: { x?, y?, width? }  the frame's place changes in the same undo step (a resize)
 //   POST   /api/frames/rename { from, to }                  -> { ok, component, from }: the file renamed in its folder, never over another
 //   DELETE /api/frames/<path>?revision=R                    -> { ok }: removes the file if it is still at R; one undo step (undo writes it back)
 // Writes need an identity (POST /api/session), as every write in napkin does.
@@ -36,6 +38,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
   engine.events.on('files', () => broadcast({ type: 'doc-files' }));
   engine.events.on('renamed', (r) => broadcast({ type: 'doc-renamed', from: r.from, to: r.to, by: r.by }));
   engine.events.on('styles', (s) => broadcast({ type: 'doc-styles', ...s }));
+  engine.events.on('layout', (l) => broadcast({ type: 'doc-layout', frame: l.component, canvas: l.canvas })); // a frame's place put back by an undo or a redo (no `component` key, as above)
   const safe = (fn, d) => { try { return fn(); } catch { return d; } };
 
   const json = (res, status, body) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
@@ -87,9 +90,9 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
       }
       if (path === '/api/layout') {
         if (method === 'GET') return json(res, 200, { ok: true, frames: engine.layout() }), true;
-        const m = await body(req); who(req);
+        const m = await body(req); const by = who(req);
         const n = (v) => (v === undefined || v === null ? v : Number(v));
-        return json(res, 200, engine.setLayout(m?.component, { x: n(m?.x), y: n(m?.y), width: n(m?.width) })), true;
+        return json(res, 200, engine.setLayout(m?.component, { x: n(m?.x), y: n(m?.y), width: n(m?.width) }, m?.undo === true ? { by } : {})), true;
       }
       if (path === '/api/frames' || path.startsWith('/api/frames/')) {
         const by = who(req);
@@ -103,7 +106,8 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
           const n = (v) => (v === undefined || v === null ? undefined : Number(v));
           return json(res, 201, engine.duplicateFrame(m?.from, { x: n(m?.x), y: n(m?.y), by })), true;
         }
-        if (method === 'POST' && path === '/api/frames/component') { const m = await body(req); return json(res, 201, engine.componentFrom({ from: m?.from, node: m?.node, name: m?.name, by })), true; }
+        if (method === 'POST' && path === '/api/frames/component/rename') { const m = await body(req); return json(res, 200, engine.renameMade({ path: m?.path, to: m?.to, by })), true; }
+        if (method === 'POST' && path === '/api/frames/component') { const m = await body(req); return json(res, 201, engine.componentFrom({ from: m?.from, node: m?.node, name: m?.name, width: m?.width, by })), true; }
         if (method === 'POST' && path === '/api/frames/rename') { const m = await body(req); return json(res, 200, engine.renameFrame(m?.from, m?.to, { by })), true; }
         if (method === 'DELETE' && path.length > '/api/frames/'.length) return json(res, 200, engine.removeFrame(decodeURIComponent(path.slice('/api/frames/'.length)), { revision: url.searchParams.get('revision') ?? undefined, by })), true;
         return fail(res, 405, 'method not allowed: POST /api/frames, POST /api/frames/duplicate, POST /api/frames/component, POST /api/frames/rename or DELETE /api/frames/<path>'), true;
@@ -112,7 +116,7 @@ export function createDocRoutes(engine, { identify = () => null, permission = ()
         const m = await body(req);
         const by = who(req);
         if (!m || typeof m.component !== 'string') throw new DocError('send { component, baseRevision, edits }', 400);
-        return json(res, 200, engine.edit(m.component, { baseRevision: m.baseRevision, edits: m.edits, by, summary: m.summary, dryRun: m.dryRun === true })), true;
+        return json(res, 200, engine.edit(m.component, { baseRevision: m.baseRevision, edits: m.edits, by, summary: m.summary, dryRun: m.dryRun === true, canvas: m.canvas })), true;
       }
       const step = /^\/api\/(undo|redo)$/.exec(path) || /^\/api\/components\/([^/]+)\/(undo|redo)$/.exec(path);
       if (method === 'POST' && step) {

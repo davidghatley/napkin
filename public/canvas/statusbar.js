@@ -37,6 +37,7 @@ export function initStatusbar(ctx) {
     if (t !== shown) { shown = t; lvl.textContent = t; lvl.setAttribute('aria-label', `Zoom ${t}, presets`); }
     off(out, atMin(z)); off(inn, atMax(z));
   }
+  out.dataset.tipOff = `Minimum zoom: ${Math.round(MIN_Z * 100)}%`; inn.dataset.tipOff = `Maximum zoom: ${Math.round(MAX_Z * 100)}%`; // the tooltip at an end of the range (shell.js)
   ctx.on('view', zoomShown);
   zoomShown(ctx.view.get());
   out.addEventListener('click', () => { if (!atMin(ctx.view.get().z)) run('zoom-out'); });
@@ -91,6 +92,7 @@ export function initStatusbar(ctx) {
   addEventListener('pointerdown', (ev) => { if (isOpen() && !menu.contains(ev.target) && !lvl.contains(ev.target)) close({ restore: false }); }, true);
   addEventListener('resize', () => close({ restore: false }));
   ctx.on('menu', ({ open: o } = {}) => { if (o) close({ restore: false }); });
+  ctx.on('view', () => close({ restore: false })); ctx.on('tool', () => close({ restore: false })); // the canvas moved or the tool changed: the presets no longer apply to what is shown
 
   document.addEventListener('keydown', (ev) => {
     if (ev.isComposing) return;

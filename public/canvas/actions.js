@@ -5,6 +5,8 @@ const action = (id, label, key, codes, handlers, run, hint = 'view') => ({ id, k
 // A canvas command: `phrase` is what the palette runs when typed exactly ("Arrange by kind", "Select <path>"); `keys` is its
 // default, rebindable binding (commands.js dispatches it). `key` stays the human line the key map shows next to it.
 const command = (id, label, phrase, keys, run, extra = {}) => ({ id, kind: 'action', label, phrase, keys, key: keys || `Ctrl/Cmd+K, "${phrase}"`, codes: [], handlers: [], run, hint: 'command', palette: true, command: true, ...extra });
+// The arrows nudge a selected HTML frame (frame-ops.js) before they walk; `n` is a count typed first ("3", then an arrow).
+const nudge = (c, dx, dy, n = 1) => !!c.frames?.nudge(dx * (n || 1), dy * (n || 1));
 export const ACTIONS = [
   action('fit', 'Fit all', 'Shift+1', ['Digit1', '!', '1'], refs('view', 'keydown'), (c) => c.view.fitAll({ animate: true })),
   action('fit-selection', 'Fit selection', 'Shift+2', ['Digit2', '@', '2'], refs('view', 'keydown'), (c) => c.view.fitSelection({ animate: true })),
@@ -18,8 +20,8 @@ export const ACTIONS = [
   action('model-keys', '3D model, focused: turn, zoom, play, wireframe', 'Arrows · + / − · Space · W · Home', ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', '+', '=', '-', '_', ' ', 'w', 'W', 'Home'], [...refs('model-view', 'keydown'), ...refs('model-three', 'keydown')]),
   action('animation-keys', 'Vector animation, focused: play, pause, step', 'Space · ← / → · Home', ['ArrowLeft', 'ArrowRight', ' ', 'Home'], refs('kind-viewer', 'keydown')),
   action('pinch', 'Zoom at cursor', 'Ctrl/Cmd + wheel · pinch', [], []),
-  action('focus', 'Focus selected component', 'Enter', ['Enter'], refs('nav', 'keydown'), (c) => { const s = c.state.selection; if (s) c.nav.focus(s.component, s.node); }),
-  action('leave', 'Leave focus / clear selection', 'Escape', ['Escape'], refs('nav', 'keydown'), (c) => c.nav.unfocus()),
+  action('focus', 'Select the first element inside (in an HTML frame); focus a component', 'Enter', ['Enter'], refs('nav', 'keydown'), (c) => { const s = c.state.selection; if (s) c.nav.focus(s.component, s.node); }),
+  action('leave', 'Leave focus / select one level up, then the frame, then nothing', 'Escape', ['Escape'], refs('nav', 'keydown'), (c) => c.nav.unfocus()),
   action('frame', 'Frame tool', 'F', ['F'], refs('tools', 'keydown'), (c) => c.tools?.use('frame'), 'draw'),
   action('text', 'Text tool', 'T', ['T'], refs('tools', 'keydown'), (c) => c.tools?.use('text'), 'draw'),
   action('image', 'Image tool', 'I', ['I'], refs('tools', 'keydown'), (c) => c.tools?.use('image'), 'draw'),
@@ -147,14 +149,17 @@ export const ACTIONS = [
   command('toggle-right', 'Show or hide the design panel', 'Toggle design panel', 'Ctrl+Shift+\\', (c) => c.rightPanel.toggle(), { about: 'The canvas takes the width while it is hidden; selecting something brings the panel back' }),
   command('toggle-left', 'Show or hide the layers panel', 'Toggle layers panel', 'Ctrl+\\', (c) => c.shell.toggleLeft(), { about: 'The canvas takes the width while it is hidden' }),
   command('rebind', 'Rebind', 'Rebind <command> to <keys>', '', (c, a) => c.surface.rebind(a), { arg: 'rebind', about: 'Give a command other keys' }),
-  command('focus-right', 'Focus the card to the right', 'Focus the card to the right', 'ArrowRight', (c, n) => c.surface.walk(1, 0, false, n), { about: 'Spatial focus: the nearest card that way, by position' }),
-  command('focus-left', 'Focus the card to the left', 'Focus the card to the left', 'ArrowLeft', (c, n) => c.surface.walk(-1, 0, false, n)),
-  command('focus-down', 'Focus the card below', 'Focus the card below', 'ArrowDown', (c, n) => c.surface.walk(0, 1, false, n)),
-  command('focus-up', 'Focus the card above', 'Focus the card above', 'ArrowUp', (c, n) => c.surface.walk(0, -1, false, n)),
-  command('extend-right', 'Add the card to the right to the selection', 'Add the card to the right', 'Shift+ArrowRight', (c, n) => c.surface.walk(1, 0, true, n)),
-  command('extend-left', 'Add the card to the left to the selection', 'Add the card to the left', 'Shift+ArrowLeft', (c, n) => c.surface.walk(-1, 0, true, n)),
-  command('extend-down', 'Add the card below to the selection', 'Add the card below', 'Shift+ArrowDown', (c, n) => c.surface.walk(0, 1, true, n)),
-  command('extend-up', 'Add the card above to the selection', 'Add the card above', 'Shift+ArrowUp', (c, n) => c.surface.walk(0, -1, true, n)),
+  // The arrows: a selected HTML frame moves (1 px, Shift 10 px; frame-ops.js, standards 3.5); otherwise focus walks between cards.
+  command('focus-right', 'Focus the card to the right', 'Focus the card to the right', 'ArrowRight', (c, n) => nudge(c, 1, 0, n) || c.surface.walk(1, 0, false, n), { about: 'Spatial focus: the nearest card that way, by position (a selected frame moves 1 px instead)' }),
+  command('focus-left', 'Focus the card to the left', 'Focus the card to the left', 'ArrowLeft', (c, n) => nudge(c, -1, 0, n) || c.surface.walk(-1, 0, false, n)),
+  command('focus-down', 'Focus the card below', 'Focus the card below', 'ArrowDown', (c, n) => nudge(c, 0, 1, n) || c.surface.walk(0, 1, false, n)),
+  command('focus-up', 'Focus the card above', 'Focus the card above', 'ArrowUp', (c, n) => nudge(c, 0, -1, n) || c.surface.walk(0, -1, false, n)),
+  command('extend-right', 'Add the card to the right to the selection', 'Add the card to the right', 'Shift+ArrowRight', (c, n) => nudge(c, 10, 0, n) || c.surface.walk(1, 0, true, n), { about: 'A selected frame moves 10 px instead' }),
+  command('extend-left', 'Add the card to the left to the selection', 'Add the card to the left', 'Shift+ArrowLeft', (c, n) => nudge(c, -10, 0, n) || c.surface.walk(-1, 0, true, n)),
+  command('extend-down', 'Add the card below to the selection', 'Add the card below', 'Shift+ArrowDown', (c, n) => nudge(c, 0, 10, n) || c.surface.walk(0, 1, true, n)),
+  command('extend-up', 'Add the card above to the selection', 'Add the card above', 'Shift+ArrowUp', (c, n) => nudge(c, 0, -10, n) || c.surface.walk(0, -1, true, n)),
+  action('nudge', 'Move the selected frame', 'Arrows 1 px · Shift+arrows 10 px', [], [], null, 'edit'),
+  action('frame-resize', 'Resize the selected frame (Shift keeps proportions, Alt from the centre)', 'Drag a handle', [], [], null, 'edit'),
   command('panel', 'Go to the instruments of the selection', 'Go to the instruments', 'G I', (c) => c.surface.focusPanel(), { about: 'Move focus into the instrument panel' }),
   command('canvas', 'Back to the canvas', 'Back to the canvas', 'G C', (c) => c.surface.focusCanvas(), { about: 'Move focus from the panel back to the selected card' }),
   command('select-all', 'Select all', 'Select all', 'Ctrl+A', (c) => (c.ops ? c.ops.selectAll() : c.surface.selectAll()), { about: 'Every card on the canvas; with an element selected, every element beside it (standards 5.8)' }),
@@ -187,7 +192,7 @@ const MENU = {
   'bring-forward': { enabled: can('forward') }, 'send-backward': { enabled: can('backward') }, 'bring-to-front': { enabled: can('front') }, 'send-to-back': { enabled: can('back') },
   'make-component': { short: 'Create component', enabled: (c) => { const t = c.makeComponent.can(); return t.ok || t.why; } },
   // a component renames in place on its label (a TSX file's function and Props type change too)
-  'component-rename': { short: (c) => (file(c)?.doc ? 'Rename…' : 'Rename'), spec: 'F2', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : x.doc || x.fileKind === 'html' ? true : 'Rename a React file in your editor for now: that comes in the next pass'; } },
+  'component-rename': { short: (c) => (file(c)?.doc ? 'Rename…' : 'Rename'), spec: 'F2', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : true; } },
   'component-delete': { short: 'Delete file…', enabled: (c) => { const x = file(c); return !x ? 'Select a component first' : x.readOnly ? `${x.name} is read-only` : x.doc || x.fileKind === 'html' ? true : 'Delete a React file in your editor for now: that comes in the next pass'; } },
   'open-code': { short: 'Show code', enabled: (c) => { const x = file(c); return !x ? 'Select something first' : x.item ? null : true; } },
   'select-all': { short: 'Select all' },
@@ -199,7 +204,7 @@ for (const a of ACTIONS) if (MENU[a.id]) Object.assign(a, MENU[a.id]);
 
 // Counts prevent an unkeyed or delegated keyboard handler from escaping the audit.
 export const KEYBOARD_HANDLERS = {
-  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'create.js:keydown': 1, 'rich-text.js:keydown': 1, 'text-edit.js:keydown': 1, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 4, 'panel-head.js:keydown': 1, 'right-panel.js:keydown': 1, 'fields.js:keydown': 2, 'panel-height.js:keydown': 1, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 1, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1, 'statusbar.js:keydown': 1,
+  'colorpop.js:keydown': 2, 'commands.js:keydown': 1, 'early.js:keydown': 2, 'surface-panel.js:keydown': 1, 'component-ops.js:keydown': 1, 'doc-frames.js:keydown': 2, 'doc-panel.js:keydown': 1, 'drawer.js:keydown': 1, 'edit-ops.js:keydown': 1, 'handles.js:keydown': 3, 'history.js:keydown': 2, 'inspector-vars.js:keydown': 1, 'layers.js:keydown': 4, 'create.js:keydown': 1, 'rich-text.js:keydown': 1, 'text-edit.js:keydown': 1, 'context-menu.js:keydown': 1, 'legend.js:keydown': 1, 'matrix.js:keydown': 1, 'measure-overlay.js:keydown': 2, 'measure-overlay.js:keyup': 2, 'nav.js:keydown': 1, 'shell.js:keydown': 1, 'panel.js:keydown': 4, 'panel-head.js:keydown': 1, 'right-panel.js:keydown': 1, 'fields.js:keydown': 2, 'panel-height.js:keydown': 1, 'play.js:keydown': 1, 'proposals.js:keydown': 2, 'quick.js:keydown': 2, 'shortcuts.js:keydown': 1, 'stage-breakpoints.js:keydown': 2, 'stage-chrome.js:keydown': 1, 'stage-highlight.js:keydown': 3, 'stage-live.js:keydown': 1, 'stage-live.js:keyup': 1, 'stage-theme.js:keydown': 1, 'stage.js:keydown': 2, 'styles-tab.js:keydown': 2, 'stage.js:keyup': 1, 'time-strip.js:keydown': 2, 'tokens.js:keydown': 1, 'tools.js:keydown': 3, 'view.js:keydown': 1, 'view.js:keyup': 1, 'model-view.js:keydown': 1, 'model-three.js:keydown': 1, 'kind-viewer.js:keydown': 1, 'statusbar.js:keydown': 1,
 };
 // A command that takes an argument ("Select <path>") puts its verb in the palette, where the argument is completed.
 export const actionsFor = (ctx) => ACTIONS.filter((a) => a.run && a.palette !== false).map((a) => ({ ...a, boost: a.command ? -25 : a.boost, run: a.arg ? () => ctx.quick.prefill(a.phrase.replace(/\s*<.*$/, '') + ' ') : () => a.run(ctx) }));

@@ -208,7 +208,7 @@ test('round 2: arrows move the caret while editing, they do not move the card', 
 test('round 2: Enter on selected text edits all of it; F2 does the same; no dialog', { timeout: 60000 }, async () => {
   await show('page.html');
   const h = await wordAt('page.html', 'Plan');
-  await io.click(h.x, h.y);
+  await io.click(h.x, h.y, { ctrl: true }); // (a plain click picks the top-level <main>: selection.test.js)
   await until(async () => (await q(`(() => { const s = napkin.state.selection; return s?.component === 'page.html' && napkin.stage.sections.get('page.html').docFrame.element(s.node)?.el.localName; })()`)) === 'h1');
   await io.key('Enter');
   await until(async () => (await editState('page.html')).focused);
@@ -306,4 +306,149 @@ test('round 2: F2 on a frame renames it in place with no dialog; F2 on a compone
   await io.key('Escape');
   await until(async () => !(await q(`!!document.querySelector('.nk-rename')`)));
   assert.equal(await q(`napkin.find('Card')?.component`), cid, 'still called Card');
+});
+
+// ---- round 2, frames as objects (standards 3.5, 3.6, 3.8, 3.11): handles, resize, nudge, delete, duplicate, exact undo ----------
+const SHOTS = process.env.NAPKIN_SHOTS; // a folder: the frame tests save what they show there (t2-*.png)
+const shot = async (name) => { if (SHOTS) writeFileSync(join(SHOTS, name), await b.screenshot()); };
+const place = async (id) => JSON.parse(await q(`fetch('/api/layout').then((r) => r.json()).then((j) => JSON.stringify(j.frames[${JSON.stringify(id)}] ?? null))`));
+const handles = () => json(`[...document.querySelectorAll('#handles .hdl-frame')].map((d) => { const r = d.getBoundingClientRect(); return { h: d.dataset.h, x: r.left + r.width / 2, y: r.top + r.height / 2 }; })`);
+// draw a frame with the real pointer on empty canvas (a stretch of its own each time); it comes back selected
+let stretch = 0;
+async function drawFrame(x0 = 500, y0 = 300, x1 = 740, y1 = 450) {
+  stretch++;
+  await q(`napkin.select(null); napkin.view.set({ x: ${-20000 - 3000 * stretch}, y: -20000, z: 1 }); 0`);
+  await sleep(250);
+  const before = await frames();
+  await io.key('f');
+  await io.move(x0, y0); await io.press(x0, y0);
+  for (let i = 1; i <= 6; i++) { await io.move(x0 + ((x1 - x0) * i) / 6, y0 + ((y1 - y0) * i) / 6, { buttons: 1 }); await sleep(16); }
+  await io.release(x1, y1);
+  let id = null;
+  await until(async () => { id = (await frames()).find((f) => !before.includes(f)); return id && existsSync(file(id)) && (await q(`napkin.state.selection?.component`)) === id; });
+  await q('document.activeElement?.blur?.(); 0');
+  return id;
+}
+
+test('round 2: a selected frame shows eight handles at its corners and edge middles', { timeout: 60000 }, async () => {
+  const id = await drawFrame();
+  await until(async () => (await handles()).length === 8);
+  const hs = await handles(), r = await cardRect(id);
+  const at = Object.fromEntries(hs.map((h) => [h.h, h]));
+  const near = (a, b) => Math.abs(a - b) <= 1.5;
+  for (const [h, fx, fy] of [['nw', 0, 0], ['n', 0.5, 0], ['ne', 1, 0], ['e', 1, 0.5], ['se', 1, 1], ['s', 0.5, 1], ['sw', 0, 1], ['w', 0, 0.5]]) {
+    assert.ok(near(at[h].x, r.l + fx * r.w) && near(at[h].y, r.t + fy * r.h), `handle ${h} sits on the frame (${at[h].x}, ${at[h].y})`);
+  }
+  await shot('t2-frame-handles.png');
+  await q('napkin.select(null); 0');
+  await until(async () => (await handles()).length === 0);
+});
+
+test('round 2: dragging a corner handle resizes the frame; the size is written; one undo puts it back exactly', { timeout: 60000 }, async () => {
+  const id = await drawFrame();
+  const original = readFileSync(file(id), 'utf8'), was = await place(id);
+  await until(async () => (await handles()).length === 8);
+  const se = (await handles()).find((h) => h.h === 'se');
+  await io.move(se.x, se.y); await io.press(se.x, se.y);
+  for (let i = 1; i <= 5; i++) { await io.move(se.x + 12 * i, se.y + 8 * i, { buttons: 1 }); await sleep(16); }
+  await until(async () => (await q(`document.querySelector('#handles .hdl-chip')?.textContent ?? ''`)) === '300 × 190'); // the size shows while dragging
+  await shot('t2-frame-resizing.png');
+  await io.release(se.x + 60, se.y + 40);
+  await until(async () => /width: 300px; height: 190px/.test(readFileSync(file(id), 'utf8')));
+  await until(async () => (await place(id))?.width === 300);
+  const r = await cardRect(id);
+  assert.ok(Math.abs(r.w - 300) <= 1.5 && Math.abs(r.h - 190) <= 1.5, `the card is 300 × 190 (${r.w} × ${r.h})`);
+  // the north-west handle moves the top-left corner and keeps the size floor (48 × 32)
+  const nw = (await handles()).find((h) => h.h === 'nw');
+  await io.move(nw.x, nw.y); await io.press(nw.x, nw.y);
+  for (let i = 1; i <= 5; i++) { await io.move(nw.x + 80 * i, nw.y + 50 * i, { buttons: 1 }); await sleep(16); }
+  await io.release(nw.x + 400, nw.y + 250);
+  await until(async () => /width: 48px; height: 32px/.test(readFileSync(file(id), 'utf8')));
+  const small = await place(id);
+  assert.deepEqual([small.x, small.y, small.width], [was.x + 300 - 48, was.y + 190 - 32, 48], 'the corner moved, the opposite corner stayed');
+  // two undos: back to 300 × 190, then to what was drawn, file and place both
+  await io.key('z', { ctrl: true });
+  await until(async () => /width: 300px; height: 190px/.test(readFileSync(file(id), 'utf8')));
+  await io.key('z', { ctrl: true });
+  await until(async () => readFileSync(file(id), 'utf8') === original);
+  await until(async () => JSON.stringify(await place(id)) === JSON.stringify(was));
+  await until(async () => { const c = await cardRect(id); return Math.abs(c.w - 240) <= 1.5 && Math.abs(c.h - 150) <= 1.5; });
+});
+
+test('round 2: arrows nudge a selected frame 1 px, Shift+arrows 10 px; undo steps back exactly', { timeout: 60000 }, async () => {
+  const id = await drawFrame();
+  const was = await place(id), card = await cardRect(id);
+  await io.key('ArrowRight');
+  await io.key('ArrowDown');
+  await io.key('ArrowRight', { shift: true });
+  await io.key('ArrowUp', { shift: true });
+  await until(async () => { const p = await place(id); return p.x === was.x + 11 && p.y === was.y - 9; });
+  const moved = await cardRect(id);
+  assert.ok(Math.abs(moved.l - card.l - 11) <= 0.5 && Math.abs(moved.t - card.t + 9) <= 0.5, 'the card moved 11 right and 9 up on screen');
+  assert.equal(await q(`napkin.state.selection?.component`), id, 'the frame stays selected (the arrows did not walk away)');
+  await io.key('z', { ctrl: true });
+  await until(async () => { const p = await place(id); return p.x === was.x + 11 && p.y === was.y + 1; });
+  for (let i = 0; i < 3; i++) await io.key('z', { ctrl: true });
+  await until(async () => { const p = await place(id); return p.x === was.x && p.y === was.y; });
+  await until(async () => { const c = await cardRect(id); return Math.abs(c.l - card.l) <= 0.5 && Math.abs(c.t - card.t) <= 0.5; });
+  // redo comes forward again
+  await io.key('z', { ctrl: true, shift: true });
+  await until(async () => { const p = await place(id); return p.x === was.x + 1 && p.y === was.y; });
+});
+
+test('round 2: dragging a frame, then one undo, puts it back at its exact x and y', { timeout: 60000 }, async () => {
+  const id = await drawFrame();
+  const was = await place(id), r = await cardRect(id);
+  const x = r.l + r.w / 2, y = r.t + r.h / 2; // its empty background
+  await io.move(x, y); await io.press(x, y);
+  for (let i = 1; i <= 6; i++) { await io.move(x + 5 * i, y + 3 * i, { buttons: 1 }); await sleep(16); }
+  await io.release(x + 30, y + 18);
+  await until(async () => { const p = await place(id); return p.x === was.x + 30 && p.y === was.y + 18; });
+  await io.key('z', { ctrl: true });
+  await until(async () => { const p = await place(id); return p.x === was.x && p.y === was.y; });
+  await until(async () => { const c = await cardRect(id); return Math.abs(c.l - r.l) <= 0.5 && Math.abs(c.t - r.t) <= 0.5; });
+});
+
+test('round 2: Delete removes the frame file; one undo brings back the same file in the same place', { timeout: 60000 }, async () => {
+  const id = await drawFrame();
+  const p0 = await place(id);
+  await io.key('ArrowRight', { shift: true }); // a place of its own, so "the same place" means something
+  await until(async () => (await place(id)).x === p0.x + 10);
+  const text = readFileSync(file(id), 'utf8'), was = await place(id);
+  await io.key('Delete');
+  await until(async () => !existsSync(file(id)) && !(await frames()).includes(id));
+  assert.equal(await q(`!!document.querySelector('section.cmp[data-component="${id}"]')`), false, 'the card is gone');
+  await io.key('z', { ctrl: true });
+  await until(async () => existsSync(file(id)) && !!(await cardRect(id)));
+  assert.equal(readFileSync(file(id), 'utf8'), text, 'the file, byte for byte');
+  assert.deepEqual(await place(id), was, 'the same place and width');
+  // Backspace does the same
+  const back = await cardRect(id);
+  await io.click(back.l + back.w / 2, back.t + back.h / 2); // a click on its background selects it
+  await until(async () => (await q(`napkin.state.selection?.component`)) === id);
+  await io.key('Backspace');
+  await until(async () => !existsSync(file(id)));
+  await io.key('z', { ctrl: true });
+  await until(async () => existsSync(file(id)) && readFileSync(file(id), 'utf8') === text);
+});
+
+test('round 2: Ctrl+D duplicates the frame file beside it and selects the copy; undo removes the copy', { timeout: 60000 }, async () => {
+  const id = await drawFrame();
+  const was = await place(id), text = readFileSync(file(id), 'utf8');
+  const before = await frames();
+  await io.key('d', { ctrl: true });
+  let copy = null;
+  await until(async () => { copy = (await frames()).find((f) => !before.includes(f)); return copy && existsSync(file(copy)) && (await q(`napkin.state.selection?.component`)) === copy; });
+  assert.match(copy, /^frame-\d+\.html$/, 'the next free frame-N.html');
+  const name = copy.replace(/\.html$/, '');
+  assert.equal(readFileSync(file(copy), 'utf8'), text.replace(`<title>${id.replace(/\.html$/, '')}</title>`, `<title>${name}</title>`), 'the same file, titled with its own name');
+  const p = await place(copy);
+  assert.equal(p.y, was.y, 'level with the original');
+  assert.ok(p.x >= was.x + was.width, `to the right of it (${p.x} >= ${was.x + was.width})`);
+  await until(async () => !!(await cardRect(copy)));
+  await shot('t2-frame-duplicate.png');
+  await q('document.activeElement?.blur?.(); 0');
+  await io.key('z', { ctrl: true });
+  await until(async () => !existsSync(file(copy)) && !(await frames()).includes(copy));
+  assert.ok(existsSync(file(id)), 'the original stays');
 });
