@@ -18,6 +18,7 @@ import { createDocFrame } from './doc-frames.js';
 import { createItemFrame, compactItem, glanceCard, cardSize } from './kinds.js';
 import { cardLabel } from './card-label.js';
 import { tidyLayout, GUTTER } from './tidy.js';
+import { MIN_Z } from './view.js';
 
 let SHELF_W = 2400; const MASONRY_GAP = 72, GAP_X = 120, GAP_Y = 170, CULL_AFTER = 40, DOC_BUDGET = 40, DOC_BATCH = 6; // up to 40 components all draw and all follow the files (PRF-01, REL-05); beyond that, frames far off screen wait until they are revealed
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -348,10 +349,10 @@ export function createStage(ctx, root, world, view) {
   const CLEAR = 24, RESERVE_Z = 0.25;
   const headBox = (sec, z) => {
     if (ctx.state.components.get(sec.el.dataset.component)?.item) {
-      const lf = Math.min(16, Math.max(1, 1 / z));
+      const lf = Math.min(1 / MIN_Z, Math.max(1, 1 / z));
       return { w: Math.max(sec.size.w, Math.ceil((sec.el.dataset.name.length * 7 + 20) * lf)), top: Math.ceil(36 * lf) + CLEAR };
     }
-    const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
+    const head = sec.el.querySelector('.cmp-head'), lf = Math.min(1 / MIN_Z, Math.max(1, 1 / z));
     const nat = head ? { w: head.offsetWidth, h: head.offsetHeight } : { w: 0, h: 28 };
     const bar = head && ctx.matrix?.natural(sec.el); // WPC-32: a filter bar too big for its frame is hidden, so it takes no room above it
     if (bar) {
@@ -665,11 +666,10 @@ export function createStage(ctx, root, world, view) {
     const r = selEl.getBoundingClientRect(), H = 16, lw = Math.min(360, (selectBox.dataset.label || '').length * 6.8 + 18), doc = selEl.el.ownerDocument;
     const frame = selEl.closest('.doc-cell'), fr = frame?.querySelector('iframe.doc-frame')?.getBoundingClientRect(), z = view.get().z;
     if (!fr) return 'above';
-    if (z < 0.45) { for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top'); return 'none'; } // an overview: the name is in the layers, the frame's title stays readable
-    const card = selEl.el === doc.body || selEl.el === doc.documentElement; // the frame itself: its label never moves (standards 3.2), the tags go below
-    const sec = selEl.closest('section.cmp'), tight = !card && r.top - fr.top < H + 8;
-    for (const other of world.querySelectorAll('.cmp[data-chip-top]')) if (other !== sec || !tight) other.removeAttribute('data-chip-top');
-    if (tight) sec.setAttribute('data-chip-top', '');
+    if (z < 0.45) return 'none'; // an overview: the name is in the layers, the frame's title stays readable
+    // (a frame's label never moves for the selection, standards 3.2: a selection at the frame's own top takes its tags below, not above)
+    const card = selEl.el === doc.body || selEl.el === doc.documentElement; // the frame itself: the tags go below
+    if (r.top - fr.top < H + 8) return 'below';
     const lines = [];
     try { const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT), rg = doc.createRange(); for (let n = walker.nextNode(), i = 0; n && i < 600; n = walker.nextNode(), i++) { if (!/\S/.test(n.nodeValue)) continue; rg.selectNodeContents(n); for (const c of rg.getClientRects()) lines.push({ l: fr.left + c.left * z, r: fr.left + c.right * z, t: fr.top + c.top * z, b: fr.top + c.bottom * z }); } } catch { return 'above'; }
     const onText = (top) => lines.filter((c) => c.l < r.left + lw && c.r > r.left && c.t < top + H && c.b > top).length;
@@ -680,7 +680,6 @@ export function createStage(ctx, root, world, view) {
   function tagSide(selEl) {
     let side = 'below';
     selectBox.toggleAttribute('data-doc', !!selEl?.docFrame);
-    if (!selEl?.docFrame) for (const other of world.querySelectorAll('.cmp[data-chip-top]')) other.removeAttribute('data-chip-top');
     if (selectBox.style.display === 'block' && selEl?.docFrame) side = docTagSide(selEl);
     else if (selectBox.style.display === 'block' && selEl?.isConnected && root.dataset.zoomBand === 'near') {
       const caps = captionRects(selEl.closest('section.cmp'));
@@ -846,6 +845,29 @@ export function createStage(ctx, root, world, view) {
     }
   }
   ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.el.style.removeProperty('--nk-ls'); sec.headLf = undefined; sec.chipLs = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
+  // The label rule below 25 % (standards 3.2): a label is 11 px with a 4 px gap at every zoom, so where cards sit closer than a label is tall the labels
+  // cannot all fit. One rule: a label is hidden when its card is narrower than 24 px on screen, or when it would touch another card or come within 4 px of a label already
+  // placed (cards are taken top to bottom, left to right). A label that is drawn is whole: name cut by an ellipsis if need be, extension kept. Hidden labels are named in the layers.
+  let fitQueued = 0;
+  function fitLabels() {
+    fitQueued = 0;
+    const far = view.get().z < 0.25, cards = [];
+    for (const [, sec] of sections.all()) {
+      const el = sec.el;
+      if (!far || sec.culled || !sec.pos || !sec.size.w || el.hasAttribute('data-far')) { if (el.hasAttribute('data-lbl-off')) el.removeAttribute('data-lbl-off'); continue; }
+      const t = el.querySelector('.cmp-title')?.getBoundingClientRect(), f = el.querySelector(':scope > .frame')?.getBoundingClientRect();
+      if (t && f) cards.push({ el, t, f });
+    }
+    cards.sort((a, b) => a.f.top - b.f.top || a.f.left - b.f.left);
+    const hit = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5, placed = [];
+    for (const c of cards) {
+      const off = c.f.width < 24 || cards.some((o) => o !== c && hit(c.t, o.f)) || placed.some((p) => hit(c.t, { left: p.left - 4, right: p.right + 4, top: p.top, bottom: p.bottom })); // (labels keep 4 px apart)
+      if (!off) placed.push(c.t);
+      if (c.el.hasAttribute('data-lbl-off') !== off) c.el.toggleAttribute('data-lbl-off', off);
+    }
+  }
+  const queueFit = () => { if (!fitQueued) fitQueued = requestAnimationFrame(fitLabels); };
+  for (const e of ['viewsettle', 'layout', 'render']) ctx.on(e, queueFit);
   let viaKey = false; // the last input was a key (not a modifier alone), not a pointer: a selection made then rings its label
   addEventListener('keydown', (ev) => { if (!/^(Shift|Control|Alt|Meta)$/.test(ev.key)) viaKey = true; }, true); addEventListener('pointerdown', () => { viaKey = false; }, true);
   ctx.on('select', () => {

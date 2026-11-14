@@ -14,7 +14,7 @@ const typing = (el) => !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || 
 // The labels' scale (--nk-lf) at a zoom: 1 / zoom, so a card's label is 11 px with a 4 px gap on screen at every zoom (docs/basics/standards.md 3.2):
 // counter-scaled up when zoomed out (to 16x, the 200-component fit) and down when zoomed in. Quantised so it changes rarely: in 1/20 steps of
 // 1 / zoom below 100%, of the zoom above it (within 1% of exact either way).
-export const labelScale = (z) => z <= 1 ? Math.round(clamp(1 / z, 1, 16) * 20) / 20 : 1 / (Math.round(clamp(z, 1, MAX_Z) * 20) / 20);
+export const labelScale = (z) => z <= 1 ? Math.round(clamp(1 / z, 1, 1 / MIN_Z) * 20) / 20 : 1 / (Math.round(clamp(z, 1, MAX_Z) * 20) / 20);
 export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 export function createView(ctx, stageEl, worldEl) {

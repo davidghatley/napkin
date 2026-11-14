@@ -303,15 +303,16 @@ const sight = (b) => b.eval(`JSON.stringify((() => {
   const stage = R(document.querySelector('#stage')), side = document.querySelector('#sidebar'), insp = document.querySelector('#inspector');
   const area = { l: Math.max(stage.l, shown(side) ? R(side).r : 0), r: Math.min(stage.r, shown(insp) ? R(insp).l : innerWidth),
     t: Math.max(stage.t, R(document.querySelector('#topbar')).b), b: Math.min(stage.b, R(document.querySelector('#statusbar')).t) };
-  const cards = [...document.querySelectorAll('#world > section[data-component]')].filter(shown).map((s) => {
+  const all = [...document.querySelectorAll('#world > section[data-component]')].filter(shown), hidden = all.filter((s) => s.hasAttribute('data-lbl-off')).map((s) => s.querySelector('.cmp-title h3').textContent + s.querySelector('.cmp-path').textContent); // (far out the one low-zoom rule hides a label that would touch a card: lane b-polish)
+  const cards = all.filter((s) => !s.hasAttribute('data-lbl-off')).map((s) => {
     const f = R(s.querySelector(':scope > .frame')), t = s.querySelector('.cmp-title'), tr = R(t), h = t.querySelector('h3'), p = t.querySelector('.cmp-path'), pr = p.getBoundingClientRect();
     const ext = pr.width > 0 && shown(p) && pr.right <= tr.r + 0.5 && pr.left >= tr.l - 0.5 ? p.textContent : ''; // the extension as drawn: there, not hidden, not cut off
     return { id: s.dataset.component, l: Math.min(f.l, tr.l), r: Math.max(f.r, tr.r), t: Math.min(f.t, tr.t), b: Math.max(f.b, tr.b), text: h.textContent + ext, ext, path: p.textContent, cut: h.scrollWidth > h.clientWidth + 0.5 };
   });
-  return { area, cards, z: napkin.view.get().z, sideOpen: shown(side) };
+  return { area, cards, hidden, z: napkin.view.get().z, sideOpen: shown(side) };
 })())`).then(JSON.parse);
 function framed(g, what) {
-  assert.ok(g.cards.length >= CLASH_COUNT, `${what}: every card is drawn (${g.cards.length})`);
+  assert.ok(g.cards.length + g.hidden.length >= CLASH_COUNT, `${what}: every card is drawn (${g.cards.length})`);
   const { area } = g, ext = { l: Math.min(...g.cards.map((c) => c.l)), r: Math.max(...g.cards.map((c) => c.r)), t: Math.min(...g.cards.map((c) => c.t)), b: Math.max(...g.cards.map((c) => c.b)) };
   for (const c of g.cards) assert.ok(c.l >= area.l - 0.5 && c.r <= area.r + 0.5 && c.t >= area.t - 0.5 && c.b <= area.b + 0.5,
     `${what}: ${c.id} is inside the visible canvas (card ${JSON.stringify([c.l, c.t, c.r, c.b].map(Math.round))}, canvas ${JSON.stringify([area.l, area.t, area.r, area.b].map(Math.round))})`);
@@ -380,7 +381,7 @@ test('cards: labels keep their extension at every zoom, so same-named files stay
       // (far out a narrow card's name is cut first, "Or… .jsx"; the extension stays)
       unique(g, `at ${Math.round(g.z * 100)}%`, { whole: false });
       const want = ['Orbit.jsx', 'Orbit.tsx', 'spectrum.png', 'spectrum.gif', 'spectrum.svg', 'notes.md', 'notes.txt'];
-      for (const w of want) assert.ok(g.cards.some((c) => c.text === w), `"${w}" keeps its extension at ${Math.round(g.z * 100)}%: ${g.cards.map((c) => c.text)}`);
+      for (const w of want) assert.ok(g.cards.some((c) => c.text === w) || g.hidden.includes(w), `"${w}" keeps its extension at ${Math.round(g.z * 100)}%: ${g.cards.map((c) => c.text)}`);
     }
     const label = () => b.eval(`JSON.stringify([...document.querySelectorAll('#world > section[data-component]:not([data-awaiting])')].map((s) => {
       const t = s.querySelector('.cmp-title'), h = t.querySelector('h3'), tr = t.getBoundingClientRect(), fr = s.querySelector(':scope > .frame').getBoundingClientRect();

@@ -70,13 +70,14 @@ test('polish: below 25% every card label, file cards and HTML and component card
   try {
     const labels = () => b.eval(`JSON.stringify([...document.querySelectorAll('#world > section[data-component]:not([data-awaiting])')].map((s) => {
       const t = s.querySelector('.cmp-title'), h = t.querySelector('h3'), tr = t.getBoundingClientRect(), fr = s.querySelector(':scope > .frame').getBoundingClientRect();
-      return { id: s.dataset.component, far: s.hasAttribute('data-far'), cull: s.hasAttribute('data-cull'), px: parseFloat(getComputedStyle(h).fontSize) * tr.height / t.offsetHeight, gap: fr.top - tr.bottom };
+      return { id: s.dataset.component, hidden: s.hasAttribute('data-lbl-off'), far: s.hasAttribute('data-far'), cull: s.hasAttribute('data-cull'), px: parseFloat(getComputedStyle(h).fontSize) * tr.height / t.offsetHeight, gap: fr.top - tr.bottom };
     }))`).then(JSON.parse);
     for (const z of [0.2, 0.17, 0.1, 0.07]) {
       await b.eval(`napkin.view.set({ x: 640, y: 300, z: ${z} })`); await sleep(600);
       const all = (await labels()).filter((l) => !l.far && !l.cull); // (a card a viewport away is not drawn, and its label rides unscaled)
+      const drawn = all.filter((l) => !l.hidden); // (the labels the one low-zoom rule hides are checked in label-rename.test.js)
       assert.ok(all.length >= 6, `every card is drawn (${all.length})`);
-      for (const l of all) {
+      for (const l of drawn) {
         assert.ok(Math.abs(l.px - 11) <= 0.25, `${l.id} at ${z * 100}%: the label is drawn at 11 px (${l.px.toFixed(2)})`);
         assert.ok(Math.abs(l.gap - 4) <= 0.5, `${l.id} at ${z * 100}%: 4 px under it (${l.gap.toFixed(2)})`);
       }
