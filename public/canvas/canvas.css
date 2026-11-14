@@ -343,7 +343,7 @@ body[data-tool] #stage .cmp-head { cursor: grab; }
 /* rename in place: the label becomes a field of the same size */
 .nk-rename { box-sizing: border-box; height: var(--nk-h-field); min-width: 4ch; margin: calc((var(--nk-lh-tight) - var(--nk-h-field)) / 2) 0 calc((var(--nk-lh-tight) - var(--nk-h-field)) / 2) calc(var(--nk-s1) * -1); padding: 0 var(--nk-s1); border: 1px solid var(--nk-line); border-radius: var(--nk-radius); background: var(--nk-panel); color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans); } /* the shared field: 24 px, the one focus ring */
 .nk-rename:focus-visible, .nk-rename:focus { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: var(--nk-ring-offset); }
-.nk-rename-msg { font: var(--nk-fs-label)/1.3 var(--nk-sans); color: var(--nk-measure); white-space: nowrap; }
+.nk-rename-msg { font: var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); color: var(--nk-measure); white-space: nowrap; }
 .nk-rename-msg[hidden] { display: none; }
 .cmp-head:has(.nk-rename) { max-width: none; } .cmp-title:has(.nk-rename) { overflow: visible; } .cmp-title:has(.nk-rename) .cmp-path { margin-left: var(--nk-s1); } /* (a narrow frame's label is clipped to its width; the field never is, and the extension clears its ring) */
 #draw-rect[hidden] { display: none; }
