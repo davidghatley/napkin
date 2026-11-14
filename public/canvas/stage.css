@@ -11,13 +11,13 @@ body[data-play] [data-sel] .frame { outline: 0; box-shadow: none; }
 
 /* ---- M4 ruler: the file's own @media breakpoints, under the frame ---- */
 /* one ruler and one caption, for the frame you are on */
-.doc-cell figcaption { white-space: nowrap; font: 11px/1.3 var(--nk-mono); color: var(--nk-text-2); padding: 1px 0; width: max-content; visibility: hidden !important; transform: scale(var(--nk-ls, 1)); transform-origin: 0 0; }
+.doc-cell figcaption { white-space: nowrap; font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); font-variant-numeric: tabular-nums; color: var(--nk-text-2); padding: 0; width: max-content; visibility: hidden !important; transform: scale(var(--nk-lf, 1)); transform-origin: 0 0; }
 .cmp[data-sel] .doc-cell figcaption, .doc-cell[data-resizing] figcaption { visibility: visible !important; }
 .cmp[data-sel] .cell-ruler, .doc-cell[data-resizing] .cell-ruler { visibility: visible; }
 /* while dragging, the width sits at the grip and says what it crossed */
-.doc-cell[data-resizing] figcaption { position: absolute; left: calc(100% + 16px); top: 50%; padding: 4px 9px; border-radius: 6px; background: var(--nk-accent); color: var(--nk-on-accent); font: 500 12px/1.3 var(--nk-mono); z-index: 4; }
+.doc-cell[data-resizing] figcaption { position: absolute; left: calc(100% + var(--nk-s4) * var(--nk-lf, 1)); top: 50%; padding: 0 var(--nk-s1); border-radius: var(--nk-radius); background: var(--nk-accent); color: var(--nk-on-accent); font-weight: var(--nk-w-strong); z-index: 4; } /* (the same badge as the distance label: 11/16, strong, 4 px padding, 4 px radius) */
 .cell-was { position: absolute; left: 0; top: 0; box-sizing: border-box; border: 1px dashed var(--nk-text-3); pointer-events: none; z-index: 3; }
-.cell-was span { position: absolute; right: 6px; bottom: 4px; font: 10.5px var(--nk-mono); color: var(--nk-text-3); transform: scale(var(--nk-ls, 1)); transform-origin: 100% 100%; white-space: nowrap; }
+.cell-was span { position: absolute; left: 0; top: calc(100% + var(--nk-s1) * var(--nk-lf, 1)); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); font-variant-numeric: tabular-nums; color: var(--nk-text-2); transform: scale(var(--nk-lf, 1)); transform-origin: 0 0; white-space: nowrap; } /* (under the dashed box: clear of the artwork and of the grip on the right edge) */
 #stage[data-zoom-band="far"] .cell-ruler { display: none; }
 .cell-ruler { position: absolute; left: 0; bottom: calc(100% + 30px); height: 20px; pointer-events: auto; visibility: hidden;
   background-image: repeating-linear-gradient(90deg, var(--nk-text-3) 0 1px, transparent 1px 100px); background-size: 100px 5px; background-repeat: repeat-x; }
@@ -202,7 +202,7 @@ body.insp-frame #panel { display: none; }
 .bp-thumb iframe { border: 0; height: 900px; transform: scale(calc(96 / var(--w))); transform-origin: 0 0; pointer-events: none; background: transparent; }
 body[data-chrome="hidden"] #bp-panel, body[data-chrome="hidden"] #bp-strip { display: none !important; }
 body[data-chrome="hidden"] .hl-box b { display: none !important; }
-.cell-grip:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 2px; }
+.cell-grip:focus-visible { outline: calc(var(--nk-ring-width) * var(--nk-lf, 1)) solid var(--nk-accent); outline-offset: calc(var(--nk-ring-offset) * var(--nk-lf, 1)); } /* (the shared ring, 2 px at 2 px on screen at every zoom) */
 .cell-grip:focus-visible::after { opacity: 1; }
 .cell-ruler .rt-more { position: absolute; top: 0; transform: translateX(-100%); height: 20px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--nk-accent-text); font: 600 10.5px/20px var(--nk-mono); cursor: pointer; }
 .cell-ruler .rt[hidden] { display: none; }

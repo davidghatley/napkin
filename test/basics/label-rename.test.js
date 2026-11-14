@@ -54,3 +54,62 @@ test('round 6: a real double-click on an UNSELECTED label opens rename on an HTM
     }
   } finally { await close(); }
 });
+
+// ---- the selected frame's width chrome: the grip, its ring, the width caption, the drag badge, the "before" note, the rename message ----
+test('round 6: the width grip, its caption and the drag badge use the chrome tokens at 100% and 200%, in both themes', { timeout: 280000 }, async () => {
+  const { b, io, close } = await boot({}, 2);
+  try {
+    for (const th of ['light', 'dark']) {
+      await theme(b, th); await sleep(500);
+      for (const z of [1, 2]) {
+        const tag = `${th} at ${z * 100}%`;
+        // the frame's right edge (the grip) at x = 800, whatever the zoom; the frame is selected by a click on its empty background
+        await b.eval(`(() => { const r = napkin.view.rectToWorld(document.querySelector('${S('orbit.html')} > .frame').getBoundingClientRect()); return napkin.view.set({ x: 800 - (r.x + r.w) * ${z}, y: 300 - r.y * ${z}, z: ${z} }); })()`); await sleep(500);
+        await b.eval(`(() => { const g = document.querySelector('${S('orbit.html')} .cell-grip').getBoundingClientRect(); napkin.view.panBy(800 - (g.left + g.width / 2), 0); })()`); await sleep(400);
+        { const f = JSON.parse(await b.eval(`JSON.stringify((() => { const r = document.querySelector('${S('orbit.html')} > .frame').getBoundingClientRect(); return { x: Math.min(r.right - 60, 760), y: r.top + r.height * 0.9 }; })())`)); await io.click(f.x, f.y); await sleep(500); } // (empty background of the frame: selects it)
+        await io.key('Shift'); await b.eval(`document.querySelector('${S('orbit.html')} .cell-grip').focus()`); await sleep(300); // (a key was the last input: the focus is a keyboard focus)
+        const m = JSON.parse(await b.eval(`JSON.stringify((() => {
+          const g = document.querySelector('${S('orbit.html')} .cell-grip'), gs = getComputedStyle(g), r = g.getBoundingClientRect(), cap = document.querySelector('${S('orbit.html')} figcaption'), cs = getComputedStyle(cap), cr = cap.getBoundingClientRect();
+          return { w: r.width, ring: parseFloat(gs.outlineWidth) * ${z}, off: parseFloat(gs.outlineOffset) * ${z}, capPx: parseFloat(cs.fontSize) * cr.width / cap.offsetWidth, capLh: parseFloat(cs.lineHeight) * cr.width / cap.offsetWidth, capFam: cs.fontFamily,
+                   dur: getComputedStyle(g, '::after').transitionDuration };
+        })())`));
+        assert.ok(m.w >= 24 - 0.5, `${tag}: the grip is at least 24 px wide on screen (${m.w})`);
+        assert.ok(Math.abs(m.ring - 2) <= 0.3 && Math.abs(m.off - 2) <= 0.3, `${tag}: the focus ring is 2 px at a 2 px offset on screen (${m.ring} / ${m.off})`);
+        assert.ok(Math.abs(m.capPx - 11) <= 0.3 && Math.abs(m.capLh - 16) <= 0.5, `${tag}: the width caption is 11/16 px on screen (${m.capPx}/${m.capLh})`);
+        const sans = await b.eval(`getComputedStyle(document.querySelector('${S('orbit.html')} .cmp-title h3')).fontFamily`);
+        assert.equal(m.capFam, sans, `${tag}: the caption is in the chrome face`);
+        // reduced motion: no transition on the grip
+        await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }); await sleep(200);
+        assert.equal(await b.eval(`getComputedStyle(document.querySelector('${S('orbit.html')} .cell-grip'), '::after').transitionDuration`), '0s', `${tag}: no transition on the grip under reduced motion`);
+        await b.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }] });
+        // dragging: the badge and the "before" note
+        const g = JSON.parse(await b.eval(`JSON.stringify((() => { const r = document.querySelector('${S('orbit.html')} .cell-grip').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 12 }; })())`)); // (near the top of the grip: the middle of the edge is the selected element's own size handle)
+        await io.move(g.x, g.y); await io.press(g.x, g.y); await io.move(g.x - 30 * z, g.y, { buttons: 1 }); await io.move(g.x - 50 * z, g.y, { buttons: 1 }); await sleep(400);
+        const d = JSON.parse(await b.eval(`JSON.stringify((() => {
+          const c = document.querySelector('${S('orbit.html')} .doc-cell'), cap = c.querySelector('figcaption'), cs = getComputedStyle(cap), k = cap.getBoundingClientRect() , sc = k.width / cap.offsetWidth;
+          const was = c.querySelector('.cell-was'), ws = was.querySelector('span').getBoundingClientRect(), wb = was.getBoundingClientRect(), fr = c.querySelector('iframe').getBoundingClientRect();
+          return { px: parseFloat(cs.fontSize) * sc, weight: cs.fontWeight, padY: parseFloat(cs.paddingTop) * sc, padX: parseFloat(cs.paddingLeft) * sc, radius: parseFloat(cs.borderTopLeftRadius) * sc, fam: cs.fontFamily,
+                   wasInside: ws.top < fr.bottom - 0.5 && ws.bottom > fr.top && ws.left < fr.right && ws.right > fr.left, wasPx: parseFloat(getComputedStyle(was.querySelector('span')).fontSize) * ws.width / was.querySelector('span').offsetWidth };
+        })())`));
+        await io.release(g.x - 50 * z, g.y); await sleep(300);
+        assert.ok(Math.abs(d.px - 11) <= 0.3, `${tag}: the drag badge text is 11 px on screen (${d.px})`);
+        assert.equal(d.weight, '600', `${tag}: the badge uses the strong weight token`);
+        assert.ok(Math.abs(d.padY - 0) <= 0.3 && Math.abs(d.padX - 4) <= 0.3 && Math.abs(d.radius - 4) <= 0.3, `${tag}: badge padding 0 4 and radius 4 on screen (${d.padY}, ${d.padX}, ${d.radius})`);
+        assert.equal(d.fam, sans, `${tag}: the badge is in the chrome face`);
+        assert.ok(Math.abs(d.wasPx - 11) <= 0.3, `${tag}: the before note is 11 px on screen (${d.wasPx})`);
+        assert.equal(d.wasInside, false, `${tag}: the before note sits clear of the artwork`);
+      }
+    }
+  } finally { await close(); }
+});
+
+test('round 6: a refused rename says so at 11/16 px', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot({ 'taken.html': page }, 3);
+  try {
+    await place(b, 'orbit.html', 1); await b.eval('napkin.select(null)'); await sleep(200);
+    const L = await labelBox(b, 'orbit.html'); await io.dblclick(L.x, L.y); await sleep(400);
+    await b.eval(`(() => { const i = document.querySelector('.nk-rename'); i.select(); document.execCommand('insertText', false, 'taken'); })()`); await io.key('Enter'); await sleep(400);
+    const lh = await b.eval(`getComputedStyle(document.querySelector('.nk-rename-msg')).lineHeight + ' ' + getComputedStyle(document.querySelector('.nk-rename-msg')).fontSize`);
+    assert.equal(lh, '16px 11px', 'the refusal reads at the label size and the chrome line height');
+  } finally { await close(); }
+});
