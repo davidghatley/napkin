@@ -104,7 +104,8 @@ export function initCreate(ctx) {
     const { text, html } = await editUntilDone(ed);
     if (!text.trim()) { p.remove(); return null; } // nothing typed: no frame, no file, no undo step
     const w = width ?? Math.max(MIN.w, Math.ceil(ed.getBoundingClientRect().width / zoom()) + 1);
-    const r = await post('/api/frames', { x, y, width: w, body: `<p style="margin: 0; ${TEXT_FONT}">${html}</p>` });
+    // a click gives auto-width text (white-space: pre: it grows sideways when edited again, text-edit.js); a drawn box wraps at its width
+    const r = await post('/api/frames', { x, y, width: w, body: `<p style="margin: 0; ${TEXT_FONT}${width ? '' : '; white-space: pre'}">${html}</p>` });
     if (!r.ok) { p.remove(); ctx.hint(`Could not make the text: ${plain(r.error)}`); return null; }
     p.name(r.name);
     const sec = await adopt(r);
@@ -197,8 +198,8 @@ export function initCreate(ctx) {
     const s = spot(t, box ? box.left : point.x, box ? box.top : point.y);
     if (!s) { ctx.hint('Nothing here can hold a new element.'); return null; }
     if (tool === 'frame') {
-      const [w, h] = box ? [Math.max(8, Math.round(box.w / z)), Math.max(8, Math.round(box.h / z))] : DEFAULT.nested;
-      return insert(t, s, `<div style="${placeCss(s, w, h)}background: ${FILL}"></div>`, 'Added a frame', box && holdBox(box));
+      const [w, h] = box ? [Math.max(MIN.w, Math.round(box.w / z)), Math.max(MIN.h, Math.round(box.h / z))] : DEFAULT.nested; // the same floor as a top-level frame (standards 2.5)
+      return insert(t, s, `<div style="${placeCss(s, w, h)}background: ${FILL}; overflow: hidden"></div>`, 'Added a frame', box && holdBox(box)); // a frame clips what it holds (standards 3.10)
     }
     if (tool === 'text') {
       const w = box ? Math.max(MIN.w, Math.round(box.w / z)) : null;
@@ -321,11 +322,11 @@ export function initCreate(ctx) {
       if (done) return;
       const k = checkTo(input.value);
       if (k.same) { close(); return; }
-      if (k.error) { if (fromBlur) { close(); ctx.hint(plain(k.error)); return; } msg.textContent = k.error; msg.hidden = false; input.focus(); return; }
+      if (k.error) { msg.textContent = k.error; msg.hidden = false; if (!fromBlur) input.focus(); return; } // refused: the field stays open with what was typed and says why (standards 3.3)
       done = true; h3.textContent = k.name; input.disabled = true;
       const r = await renameTo(k.name);
       input.remove(); msg.remove(); h3.hidden = false;
-      if (!r.ok) { h3.textContent = was; if (!fromBlur) startRename(id, opts)?.error?.(r.error); else ctx.hint(plain(r.error)); }
+      if (!r.ok) { h3.textContent = was; const again = startRename(id, opts); if (again) { again.input.value = k.name; again.error(plain(r.error)); } }
     };
     input.addEventListener('input', () => { fit(); msg.hidden = true; });
     input.addEventListener('keydown', (ev) => {

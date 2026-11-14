@@ -96,7 +96,16 @@ export function initHandles(ctx) {
     if (list.length !== 8) { list.forEach((d) => d.remove()); list = Object.keys(HANDLES).map((h) => { const d = mkdiv('hdl hdl-resize hdl-frame', { 'data-h': h, 'aria-hidden': 'true' }); layer.append(d); return d; }); }
     for (const d of list) { const [fx, fy] = HANDLES[d.dataset.h]; place(d, x + fx * rect.width, y + fy * rect.height); }
   }
+  // A selected element inside an HTML frame (element-ops.js): the same eight handles on its box.
+  function elemHandles(rect) {
+    const base = overlays.getBoundingClientRect(), x = rect.left - base.left, y = rect.top - base.top;
+    let list = [...layer.querySelectorAll('.hdl-elem')];
+    if (list.length !== 8) { list.forEach((d) => d.remove()); list = Object.keys(HANDLES).map((h) => { const d = mkdiv('hdl hdl-resize hdl-elem', { 'data-h': h, 'aria-hidden': 'true' }); layer.append(d); return d; }); }
+    for (const d of list) { const [fx, fy] = HANDLES[d.dataset.h]; place(d, x + fx * rect.width, y + fy * rect.height); }
+  }
   function drawFrame() {
+    const es = ctx.elements?.selected();
+    if (es) { if (!es.sec.culled) elemHandles(es.el.getBoundingClientRect()); return; }
     const fs = ctx.frames?.selected();
     if (!fs || fs.sec.culled || fs.sec.el.querySelector(':scope > .frame > .doc-cell[data-state]')) return;
     frameHandles(fs.f.iframe().getBoundingClientRect());
@@ -200,7 +209,7 @@ export function initHandles(ctx) {
     const h = ev.target.closest('.hdl-resize'), pad = ev.target.closest('.hdl-pad'), gap = ev.target.closest('.hdl-gap');
     if (!h && !pad && !gap) return;
     ev.preventDefault(); ev.stopPropagation();
-    if (h?.classList.contains('hdl-frame')) startFrameResize(ev, h.dataset.h); else if (h) startResize(ev, h.dataset.h); else if (pad) startPadding(ev, pad.dataset.side); else startGap(ev, Number(gap.dataset.i));
+    if (h?.classList.contains('hdl-frame')) startFrameResize(ev, h.dataset.h); else if (h?.classList.contains('hdl-elem')) startElemResize(ev, h.dataset.h); else if (h) startResize(ev, h.dataset.h); else if (pad) startPadding(ev, pad.dataset.side); else startGap(ev, Number(gap.dataset.i));
   });
   // Resize a frame from a handle: the page reflows as you drag (its body takes the size, its viewport the width), a tag below says
   // the size, Shift keeps the proportions, Alt resizes from the centre, never under MIN; on release one undoable write (frame-ops.js).
@@ -233,6 +242,37 @@ export function initHandles(ctx) {
     };
     g.end = async () => { if (g.result) await ctx.frames.resize(id, g.result); };
     g.undo = () => { const page = f.doc()?.body; if (page) { page.style.width = was.w; page.style.height = was.h; } f.setWidth(b0.w); ctx.stage.moveTo(id, b0.x, b0.y); ctx.stage.refreshOverlays(); };
+  }
+  // Resize an element inside a frame from a handle: it takes the size as you drag (Shift keeps the proportions, Alt from the centre when
+  // it is placed), a tag below says the size; on release one undoable write of its inline style (element-ops.js).
+  function startElemResize(ev, hd) {
+    const es = ctx.elements?.selected();
+    if (!es || !begin('resize', ev, { info: es })) return;
+    const el = es.el.el, f = es.f, fr = f.iframe().getBoundingClientRect(), k = f.iframe().offsetWidth ? fr.width / f.iframe().offsetWidth : 1;
+    const p0 = ctx.elements.place(el), placed = p0.mode !== 'static';
+    const was = { width: el.style.width, height: el.style.height, position: el.style.position, left: el.style.left, top: el.style.top };
+    const west = hd.includes('w'), east = hd.includes('e'), north = hd.includes('n'), south = hd.includes('s');
+    g.result = null;
+    g.move = (ev2) => {
+      const dx = (ev2.clientX - g.x0) / k, dy = (ev2.clientY - g.y0) / k, m = ev2.altKey && placed ? 2 : 1;
+      let w = p0.w + (east ? dx : west ? -dx : 0) * m, h = p0.h + (south ? dy : north ? -dy : 0) * m;
+      if (ev2.shiftKey && p0.w && p0.h) {
+        const r = (east || west) && (north || south) ? Math.max(w / p0.w, h / p0.h) : east || west ? w / p0.w : h / p0.h;
+        w = p0.w * r; h = p0.h * r;
+      }
+      w = Math.max(1, Math.round(w)); h = Math.max(1, Math.round(h));
+      const ox = !placed ? 0 : ev2.altKey ? Math.round((p0.w - w) / 2) : west ? p0.w - w : 0;
+      const oy = !placed ? 0 : ev2.altKey ? Math.round((p0.h - h) / 2) : north ? p0.h - h : 0;
+      el.style.width = `${w}px`; el.style.height = `${h}px`;
+      if (ox || oy) { el.style.left = `${Math.round(p0.left + ox)}px`; el.style.top = `${Math.round(p0.top + oy)}px`; }
+      g.result = { w, h, dx: ox, dy: oy };
+      const r = es.el.getBoundingClientRect(), base = baseBox();
+      elemHandles(r);
+      chip(`${w} × ${h}`, r.left - base.left, r.bottom - base.top + 8);
+      ctx.stage.refreshOverlays();
+    };
+    g.end = async () => { if (g.result) await ctx.elements.resize(es, g.result, p0); };
+    g.undo = () => { Object.assign(el.style, was); ctx.stage.refreshOverlays(); };
   }
   function startResize(ev, hd) {
     const z = zoom();
