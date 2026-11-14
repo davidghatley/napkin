@@ -113,3 +113,35 @@ test('round 6: a refused rename says so at 11/16 px', { timeout: 120000 }, async
     assert.equal(lh, '16px 11px', 'the refusal reads at the label size and the chrome line height');
   } finally { await close(); }
 });
+
+// ---- the supported minimum zoom: the label contract holds, or a label is hidden by the one stated rule ----
+test('round 6: at 5% to 20% every drawn label is 11 px with a 4 px gap, and no label meets another label or another card', { timeout: 200000 }, async () => {
+  const files = {}; for (let i = 0; i < 14; i++) files[`page-${i}.html`] = `<!doctype html><html><body style="margin:0;background:#eee;width:${200 + i * 30}px;height:${100 + (i % 4) * 40}px"></body></html>\n`;
+  files['notes.md'] = '# Notes\n'; files['theme.css'] = ':root { --a: #123; }\n'; files['readme.txt'] = 'plain\n';
+  const { b, close } = await boot(files, 10);
+  try {
+    for (const th of ['light', 'dark']) {
+      await theme(b, th); await sleep(500);
+      for (const z of [0.2, 0.1, 0.05]) {
+        await b.eval(`napkin.view.set({ x: 640, y: 300, z: ${z} })`); await sleep(1200);
+        const cards = JSON.parse(await b.eval(`JSON.stringify([...document.querySelectorAll('#world > section[data-component]:not([data-awaiting])')].filter((s) => !s.hasAttribute('data-far') && !s.hasAttribute('data-cull')).map((s) => {
+          const t = s.querySelector('.cmp-title'), h = t.querySelector('h3'), tr = t.getBoundingClientRect(), fr = s.querySelector(':scope > .frame').getBoundingClientRect();
+          return { id: s.dataset.component, shown: getComputedStyle(s.querySelector('.cmp-head')).visibility !== 'hidden', px: parseFloat(getComputedStyle(h).fontSize) * tr.height / t.offsetHeight, gap: fr.top - tr.bottom, t: [tr.left, tr.top, tr.right, tr.bottom], f: [fr.left, fr.top, fr.right, fr.bottom] };
+        }))`));
+        assert.ok(cards.length >= 15, `${th} ${z * 100}%: every card is drawn (${cards.length})`);
+        const hit = (a, c) => a[0] < c[2] - 0.5 && a[2] > c[0] + 0.5 && a[1] < c[3] - 0.5 && a[3] > c[1] + 0.5;
+        const shown = cards.filter((c) => c.shown);
+        assert.ok(shown.length >= 1, `${th} ${z * 100}%: some labels are shown`);
+        for (const c of shown) {
+          assert.ok(Math.abs(c.px - 11) <= 0.25, `${th} ${z * 100}% ${c.id}: the label is 11 px (${c.px.toFixed(2)})`);
+          assert.ok(Math.abs(c.gap - 4) <= 0.5, `${th} ${z * 100}% ${c.id}: 4 px above its card (${c.gap.toFixed(2)})`);
+          for (const o of cards) {
+            if (o.id !== c.id) assert.ok(!hit(c.t, o.f), `${th} ${z * 100}% ${c.id}: its label is clear of ${o.id}'s card`);
+            if (o.id !== c.id && o.shown) assert.ok(!hit(c.t, o.t), `${th} ${z * 100}% ${c.id}: its label is clear of ${o.id}'s label`);
+          }
+        }
+        if (z <= 0.05) assert.ok(cards.some((c) => !c.shown), 'at 5% the crowded labels step aside');
+      }
+    }
+  } finally { await close(); }
+});
