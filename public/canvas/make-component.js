@@ -30,16 +30,23 @@ export function initMakeComponent(ctx) {
   // Select the new card so the panel shows it. Its frame may still be drawing, and a card drops a selection it cannot
   // find yet, so this keeps trying for a few seconds in the background and gives up the moment the person selects
   // something else, or clears the selection once it was there. Focus is not moved.
-  async function selectWhenDrawn(path, renamed = false) {
+  // One loop follows a made component: a rename (Enter in the name field) takes over from the loop that was still waiting
+  // for the card to be drawn (it can be, on a loaded machine) and inherits what the person had selected before, so the
+  // old loop cannot select the card under its old name after the rename, and the new one does not mistake that for the
+  // person moving on. `from` is the file's name before the rename: a selection on a card of that file is still ours.
+  let following = null;
+  async function selectWhenDrawn(path, renamed = false, from = null) {
     const key = (x) => (x ? `${x.component}\n${x.node}` : ''), t0 = performance.now(); let held = 0, asked = false;
-    const was = key(ctx.state.selection);
-    while (performance.now() - t0 < 8000 && held < 4) {
+    const prev = following, me = following = { stop: false, was: renamed && prev ? prev.was : key(ctx.state.selection) };
+    if (renamed && prev) prev.stop = true;
+    const was = me.was, ours = (comp) => ctx.state.components.get(comp)?.path === from;
+    while (!me.stop && performance.now() - t0 < 8000 && held < 4) {
       let id = null; for (const [k, c] of ctx.state.components) if (c.path === path) id = k; // a new card's id settles after its first read, so follow the file
       if (id == null || ctx.stage.sections.get(id)?.el?.dataset.ready !== '1') { await new Promise((r) => setTimeout(r, 80)); continue; }
       const now = ctx.state.selection;
       if (now?.component === id) held++;
       else if (!now && (held || (!asked && !renamed))) return; // the person cleared it (a card drops only a selection it cannot find yet, before it holds; a rename drops the old card's)
-      else if (now && key(now) !== was && !(renamed && !ctx.state.components.has(now.component))) return; // the person moved on
+      else if (now && key(now) !== was && !(renamed && (!ctx.state.components.has(now.component) || ours(now.component)))) return; // the person moved on
       else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) { asked = true; ctx.select({ component: id, node: root, variant: {}, card: true }); if (ctx.state.selection?.component === id) held = 1; } } // taken at once: a clear after this is the person's, not the card dropping it
       await new Promise((r) => setTimeout(r, 80));
     }
@@ -115,7 +122,7 @@ export function initMakeComponent(ctx) {
         const j = await res.json().catch(() => ({ ok: false, error: `napkin answered ${res.status}` }));
         if (!j.ok) return { ok: false, error: plain(j.error) };
         ctx.hint(`Named ${j.name}: ${j.path}.`);
-        selectWhenDrawn(j.path, true);
+        selectWhenDrawn(j.path, true, c.path);
         return j;
       },
     });
@@ -159,10 +166,38 @@ export function initMakeComponent(ctx) {
       const left = r.dropped?.length ? ` Left behind: ${r.dropped.join('; ')}.` : '';
       ctx.hint(`${r.name} made from ${r.from}. It is ${r.path}; the frame is unchanged.${left}`);
       if (made) { revealWhenSettled(r.path); selectWhenDrawn(r.path); nameWhenDrawn(r.path); }
+      for (let i = steps.length - 1; i >= 0; i--) if (steps[i].undone) steps.splice(i, 1); // a new step ends the redo line
+      steps.push({ path: r.path, from: t.from, node: t.node, undone: false });
       ctx.emit?.('component-made', { path: r.path, name: r.name, from: r.from });
       return { path: r.path, name: r.name, component: made?.id ?? null };
     } finally { busy = false; }
   }
+
+  // Undo and Redo of a made component (history.js emits 'undone' / 'redone' for the file): undo selects the element it was
+  // made from again (waiting for the frame to hold it), redo selects the new card once it is drawn. The same two events
+  // edit-ops.js uses for its own steps; a step that is not ours is left alone.
+  const steps = []; // { path, from, node, undone }
+  const fileOf = (u) => String(u.component ?? '').split('#')[0];
+  ctx.on?.('undone', (u) => {
+    const m = steps.findLast((x) => fileOf(u) === x.path && !x.undone); if (!m) return;
+    m.undone = true;
+    (async () => {
+      const f = () => ctx.stage.sections.get(m.from)?.docFrame, gone = () => ![...ctx.state.components.values()].some((c) => c.path === m.path);
+      for (let i = 0; i < 200 && !(f()?.has?.(m.node) && gone()); i++) await new Promise((r) => setTimeout(r, 25)); // the new card leaves, and the frame holds its element
+      const here = () => ctx.state.selection?.component === m.from && ctx.state.selection.node === m.node;
+      for (let i = 0; i < 8; i++) { // the removed card may clear the selection as it goes: put it back until it holds, unless the person picks something else
+        const now = ctx.state.selection;
+        if (now && now.component !== m.from && ctx.state.components.has(now.component) && i) return;
+        if (!here()) ctx.select({ component: m.from, node: m.node, variant: {} });
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    })();
+  });
+  ctx.on?.('redone', (u) => {
+    const m = steps.findLast((x) => fileOf(u) === x.path && x.undone); if (!m) return;
+    m.undone = false;
+    selectWhenDrawn(m.path);
+  });
 
   const api = { can, run, rename };
   ctx.makeComponent = api;

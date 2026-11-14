@@ -63,9 +63,13 @@ export function initPanelHead(ctx) {
     const width = d.frame && !sel.card ? `<button type="button" class="pp-tool pp-width" id="doc-frame-width" title="Frame width and breakpoints (B)" aria-keyshortcuts="B">${d.frame.width} px</button>` : '';
     const open = d.item && d.kind !== 'many' ? `<a class="icon-btn pp-tool" id="pp-open" href="/view/${enc(d.item)}" target="_blank" rel="noopener" aria-label="Open this file alone" data-tip="Open this file alone">${OPEN_ICON}</a>` : '';
     const hide = `<button type="button" class="icon-btn pp-tool" id="pp-collapse" aria-controls="inspector" aria-label="Hide the design panel" aria-keyshortcuts="Control+Shift+Backslash" data-tip="Hide panel" data-key="Ctrl+Shift+\\">${HIDE_ICON}</button>`;
+    // Create component under the name (standards 9 rule 2): the same command, enabled rule, reason and shortcut as the palette's.
+    const can = d.tag && !sel.card ? ctx.makeComponent?.can() : null;
+    const mkKeys = can ? ctx.surface?.bindings?.().find((x) => x.command === 'make-component')?.keys || '' : '';
+    const make = can ? `<div class="pp-acts"><button type="button" id="make-component" class="pp-make" data-command="make-component"${can.ok ? '' : ` aria-disabled="true" title="${esc(can.why)}"`}>Create component${mkKeys ? ` <kbd>${esc(keyLabel(mkKeys))}</kbd>` : ''}</button></div>` : '';
     const where = d.source ? `<span id="sel-component">${esc(c.name)}</span> · <span id="doc-source" title="${esc(d.where)}">${esc(d.where.split('/').pop())}</span>` : `<span id="sel-component">${esc(d.where)}</span>`;
     // The name has the first line to itself (it wraps rather than being cut); the tag leads the line under it, before where it lives.
-    const html = `<div class="pp-row"><span class="pp-glyph" aria-hidden="true">${d.icon}</span>${nameHtml}<span class="pp-tools">${width}${open}${hide}</span></div><p class="pp-where">${d.tag ? `<span class="pp-tag" title="The element’s tag">&lt;${esc(d.tag)}&gt;</span> ` : ''}${where}</p>`;
+    const html = `<div class="pp-row"><span class="pp-glyph" aria-hidden="true">${d.icon}</span>${nameHtml}<span class="pp-tools">${width}${open}${hide}</span></div><p class="pp-where">${d.tag ? `<span class="pp-tag" title="The element’s tag">&lt;${esc(d.tag)}&gt;</span> ` : ''}${where}</p>${make}`;
     head.hidden = false;
     head.dataset.kind = d.kind;
     if (html === last) return;
@@ -86,6 +90,7 @@ export function initPanelHead(ctx) {
     if (!t) return;
     if (t.matches('.pp-name')) rename();
     else if (t.id === 'doc-frame-width') ctx.breakpoints?.open?.();
+    else if (t.id === 'make-component') { if (t.getAttribute('aria-disabled') === 'true') ctx.hint(t.title); else ctx.makeComponent.run(); }
     else if (t.id === 'pp-collapse') ctx.rightPanel?.toggle(false);
   });
   head.addEventListener('keydown', (ev) => { if (ev.key === 'F2' && ev.target.matches?.('.pp-name')) { ev.preventDefault(); ev.stopPropagation(); rename(); } });

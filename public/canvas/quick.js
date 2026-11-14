@@ -70,7 +70,7 @@ const KEYS = { Stroke: ['border'], Fill: ['background'], Appearance: ['corner'],
     const seenIn = new Map();
     for (const el of panel.querySelectorAll('input, select, textarea, button, summary')) {
       if (el.closest('#instruments')) continue; // the file's own sections (dials) have their own keys
-      if (el.disabled || el.type === 'color' || el.tabIndex < 0 || hiddenIn(el) || notRendered(el, panel)) continue;
+      if (el.disabled || el.dataset.command || el.type === 'color' || el.tabIndex < 0 || hiddenIn(el) || notRendered(el, panel)) continue; // (a button with data-command is a command the palette already lists)
       const det = secOf(el), section = secName(det);
       if (!el.id) el.id = isHead(el) ? `sum-${(det?.dataset.sec || section).toLowerCase().replace(/\W+/g, '-')}` : `ctl-${(el.textContent.trim() || el.type || el.tagName).toLowerCase().replace(/\W+/g, '-')}-${list.length}`; // controls with no id of their own get one, so they can be focused by id
       const name = nameOf(el, panel);

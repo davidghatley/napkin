@@ -41,11 +41,13 @@ test('white space between inline elements survives; braces and entities are text
   assert.equal(out, '<p><b>one</b> <i>two</i> {three} &lt;four&gt; five six</p>');
 });
 
-test('inline styles become a style object, custom properties and vendor prefixes included', async () => {
+test('inline styles become a style object, vendor prefixes included; custom properties go to a class, a style object cannot hold them in TypeScript', async () => {
   assert.equal(styleObject('color: red; --gap: 4px; -webkit-line-clamp: 2; background: url("a;b.png") no-repeat; font-size:12px'),
-    '{ color: "red", "--gap": "4px", WebkitLineClamp: "2", background: "url(\\"a;b.png\\") no-repeat", fontSize: "12px" }');
-  const out = await shown(toComponent({ name: 'Box', html: '<div style="padding: 8px 12px; --tone: #f0bd45; background: var(--tone)">x</div>' }).source);
-  assert.equal(out, '<div style="padding:8px 12px;--tone:#f0bd45;background:var(--tone)">x</div>');
+    '{ color: "red", WebkitLineClamp: "2", background: "url(\\"a;b.png\\") no-repeat", fontSize: "12px" }');
+  const { source } = toComponent({ name: 'Box', html: '<div style="padding: 8px 12px; --tone: #f0bd45; background: var(--tone)">x</div>' });
+  assert.doesNotMatch(source, /"--tone"/, 'no custom property inside a style object: TypeScript refuses it');
+  assert.match(source, /\.box-imp-1\.box-imp-1\.box-imp-1 \{ --tone: #f0bd45; \}/, 'it is set by a rule of the component instead');
+  assert.equal(await shown(source), '<style>\n' + /const css = `\n([\s\S]*?)\n`;/.exec(source)[1] + '\n</style><div class="box-imp-1" style="padding:8px 12px;background:var(--tone)">x</div>');
 });
 
 test('void elements, boolean attributes, form values and SVG come through', async () => {
@@ -124,4 +126,22 @@ test('an inline !important keeps its priority: React drops it from a style objec
   const out = await shown(source);
   assert.match(out, /<section class="cascade cascade-imp-1" style="margin:0">/, 'the element carries its class beside its own');
   assert.match(out, /<strong class="cascade-imp-2">two<\/strong>/);
+});
+
+test('form defaults the React way: <option selected> becomes defaultValue on the select, a textarea\'s text its defaultValue', async () => {
+  const html = '<form><select name="s"><option>Morning</option><option value="pm" selected>Afternoon</option></select><textarea name="n">\nWindow seat, please.</textarea></form>';
+  const { source } = toComponent({ name: 'Booking', html });
+  assert.match(source, /<select name="s" defaultValue="pm">/);
+  assert.doesNotMatch(source, /<option[^>]* selected/);
+  assert.match(source, /<textarea name="n" defaultValue="Window seat, please\." \/>/);
+  const out = await shown(source);
+  assert.match(out, /<option value="pm" selected="">Afternoon<\/option>/, 'the afternoon starts selected');
+  assert.match(out, /<textarea name="n">Window seat, please\.<\/textarea>/);
+});
+
+test('generated source reads like hand-written code: a long opening tag takes a line per attribute, a rule a line per declaration', () => {
+  const html = '<a class="cta" href="https://example.com/a/rather/long/address" style="border-radius: 6px; padding: 8px 16px" target="_blank" rel="noreferrer" title="Book a place at the weekend workshop">Book</a>';
+  const { source } = toComponent({ name: 'Cta', html, css: [{ text: '.cta {display:inline-block;color:white;background:#165d83}', context: [] }] });
+  for (const line of source.split('\n')) assert.ok(line.length <= 100, `line is ${line.length} wide: ${line}`);
+  assert.match(source, /<a\n\s+className="cta"\n\s+href=/);
 });

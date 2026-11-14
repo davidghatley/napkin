@@ -311,3 +311,9 @@ button.pp-name:hover { border-color: var(--nk-line-2); }
 :root[data-right="closed"] #inspector, :root[data-right="closed"] #right-edge { visibility: hidden; border-left-width: 0; }
 @media (prefers-reduced-motion: reduce) { #panel .pp-chev { transition: none; } }
 #instruments .d-section-head { padding-left: var(--nk-s2); }
+/* Create component, under the selection name (standards 9 rule 2) */
+#pp-head .pp-acts { margin-top: var(--nk-s1); }
+#pp-head .pp-make { display: inline-flex; align-items: center; gap: var(--nk-s1); max-width: 100%; height: var(--nk-h-field); padding: 0 var(--nk-s2); border: var(--nk-border); border-radius: var(--nk-radius); background: var(--nk-chrome-2); color: var(--nk-text); font: var(--nk-w-strong) var(--nk-fs-body) var(--nk-sans); cursor: pointer; }
+#pp-head .pp-make:hover { background: var(--nk-chrome-3); }
+#pp-head .pp-make[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+#pp-head .pp-make kbd { font: 11px var(--nk-mono); color: var(--nk-text-3); }
