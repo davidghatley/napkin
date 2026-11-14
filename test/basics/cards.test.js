@@ -386,3 +386,109 @@ test('cards: labels keep their extension at every zoom, so same-named files stay
     }
   } finally { await close(); }
 });
+
+// The status bar (brief item 3; standards sections 1 and 10): quiet counts of what the folder holds, the drawers as toggle buttons,
+// a real zoom control with presets, every control 24 px with a ring the window never cuts, two weights, no monospace, no key-hint row.
+test('status bar: counts, drawer toggles and a zoom control with presets, each with a name, a 24 px target, a whole focus ring and its states', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot();
+  const bar = () => b.eval(`JSON.stringify((() => {
+    const vw = innerWidth, vh = innerHeight, out = [];
+    for (const e of document.querySelectorAll('#statusbar button')) {
+      if (!e.getBoundingClientRect().width) continue;
+      e.focus({ preventScroll: true });
+      const r = e.getBoundingClientRect(), s = getComputedStyle(e), ring = parseFloat(s.outlineWidth) + parseFloat(s.outlineOffset);
+      out.push({ id: e.id, name: (e.getAttribute('aria-label') || e.textContent).trim(), w: r.width, h: r.height, fv: e.matches(':focus-visible'), style: s.outlineStyle,
+        ring: { l: r.left - ring, t: r.top - ring, r: r.right + ring, b: r.bottom + ring }, inside: r.left - ring >= 0 && r.top - ring >= 0 && r.right + ring <= vw && r.bottom + ring <= vh });
+    }
+    document.activeElement.blur();
+    const type = [...document.querySelectorAll('#statusbar, #statusbar *')].filter((e) => e.getBoundingClientRect().width && getComputedStyle(e).visibility !== 'hidden')
+      .map((e) => ({ n: e.id || e.className?.baseVal || e.className || e.tagName, family: getComputedStyle(e).fontFamily, weight: getComputedStyle(e).fontWeight }));
+    return { out, type };
+  })())`).then(JSON.parse);
+  const z = () => b.eval('napkin.view.get().z');
+  const level = () => b.eval(`document.querySelector('#zoom-level').textContent`);
+  const menuOpen = () => b.eval(`!document.querySelector('#zoom-menu').hidden && document.querySelector('#zoom-level').getAttribute('aria-expanded') === 'true'`);
+  const active = () => b.eval(`document.activeElement.id || document.activeElement.textContent.trim()`);
+  const centre = async (sel) => JSON.parse(await b.eval(`JSON.stringify((() => { const r = document.querySelector(${JSON.stringify(sel)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })())`));
+  const item = async (label) => JSON.parse(await b.eval(`JSON.stringify((() => { const i = [...document.querySelectorAll('#zoom-menu .nk-mi')].find((x) => x.querySelector('.nk-ml').textContent === ${JSON.stringify(label)}); const r = i.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })())`));
+  try {
+    await b.waitFor(`document.querySelectorAll('#drawer-tabs button').length >= 7`, 10000);
+    // counts: the files, as a person counts them; a selection adds itself
+    const total = await b.eval('napkin.state.components.total');
+    assert.equal(total, await b.eval(`document.querySelectorAll('#world > section[data-component]').length`), 'every file is a card');
+    assert.equal(await b.eval(`document.querySelector('#counts').textContent`), `${total} files`);
+    const card = await centre('#world > section[data-component="notes.md"] .cmp-title');
+    await io.click(card.x, card.y); await sleep(300);
+    assert.equal(await b.eval(`document.querySelector('#counts').textContent`), `${total} files · 1 selected`);
+    await b.eval('napkin.select(null)'); await io.move(4, 896); await sleep(200);
+    assert.equal(await b.eval(`document.querySelector('#counts').textContent`), `${total} files`);
+    // no key-hint row at rest: the keys are in the empty panel and the key map
+    assert.equal(await b.eval(`document.querySelector('#statusbar .hints').textContent.trim()`), '');
+    assert.doesNotMatch(await b.eval(`document.querySelector('#statusbar').innerText`), /fit all|fit selection|focus/i);
+
+    // every control: a name, at least 24 x 24, and the keyboard ring whole inside the window (Tab first, so focus is the keyboard's)
+    await io.key('Tab'); await sleep(100);
+    const { out, type } = await bar();
+    assert.deepEqual(out.map((c) => c.id), ['open-code', 'open-history', 'open-tokens', 'open-inspect', 'open-assets', 'open-changes', 'open-activity', 'zoom-out', 'zoom-level', 'zoom-in', 'zoom-fit']);
+    for (const c of out) {
+      assert.ok(c.name, `${c.id} has a name`);
+      assert.ok(c.w >= 24 && c.h >= 24, `${c.id} is ${c.w}x${c.h}`);
+      assert.ok(c.fv && c.style === 'solid', `${c.id} shows the ring on keyboard focus`);
+      assert.ok(c.inside, `${c.id}: the ring ${JSON.stringify(c.ring)} stays in the window`);
+    }
+    for (const t of type) {
+      assert.doesNotMatch(t.family, /mono/i, `${t.n}: no monospace in the bar`);
+      assert.ok(['400', '600'].includes(t.weight), `${t.n}: weight ${t.weight}`);
+    }
+
+    // drawers are toggle buttons: pressed while their drawer is open
+    const code = await centre('#open-code');
+    assert.equal(await b.eval(`document.querySelector('#open-code').getAttribute('aria-pressed')`), 'false');
+    await io.click(code.x, code.y); await sleep(300);
+    assert.equal(await b.eval(`document.querySelector('#open-code').getAttribute('aria-pressed')`), 'true');
+    assert.equal(await b.eval(`document.querySelectorAll('#drawer-tabs [aria-pressed="true"]').length`), 1);
+    await io.click(code.x, code.y); await sleep(300);
+    assert.equal(await b.eval(`document.querySelector('#open-code').getAttribute('aria-pressed')`), 'false');
+
+    // the percentage opens the presets with the pointer; a preset changes the zoom and the percentage
+    const lvl = await centre('#zoom-level');
+    await io.click(lvl.x, lvl.y); await sleep(250);
+    assert.ok(await menuOpen(), 'a click opens the presets');
+    const menu = JSON.parse(await b.eval(`JSON.stringify((() => { const m = document.querySelector('#zoom-menu'), s = getComputedStyle(m); return { role: m.getAttribute('role'), radius: s.borderRadius,
+      shadow: s.boxShadow, rows: [...m.querySelectorAll('.nk-mi')].map((i) => [i.querySelector('.nk-ml').textContent, i.querySelector('.nk-mk')?.textContent || '']), bottom: m.getBoundingClientRect().bottom, top: document.querySelector('#statusbar').getBoundingClientRect().top }; })())`));
+    assert.equal(menu.role, 'menu'); assert.equal(menu.radius, '8px');
+    assert.equal((menu.shadow.match(/-?[\d.]+px/g) || []).join(' '), '0px 4px 16px 0px', `the one menu shadow (${menu.shadow})`);
+    assert.deepEqual(menu.rows, [['Zoom to fit', 'Shift 1'], ['Zoom to selection', 'Shift 2'], ['Zoom to 50%', ''], ['Zoom to 100%', 'Shift 0'], ['Zoom to 200%', '']]);
+    assert.ok(menu.bottom <= menu.top, 'the presets open above the bar');
+    for (const th of ['light', 'dark']) { await theme(b, th); await sleep(250); assert.deepEqual(await axe(b, ['#statusbar', '#zoom-menu']), [], `${th}: axe, presets open`); }
+    const p200 = await item('Zoom to 200%');
+    await io.click(p200.x, p200.y); await sleep(700);
+    assert.ok(!(await menuOpen()), 'choosing closes the presets');
+    assert.ok(Math.abs((await z()) - 2) < 1e-6, `200% (${await z()})`); assert.equal(await level(), '200%');
+
+    // with the keyboard: Enter opens on the first item, Escape closes and gives the focus back; arrows and Enter choose
+    await b.eval(`document.querySelector('#zoom-level').focus()`);
+    await io.key('Enter'); await sleep(250);
+    assert.ok(await menuOpen(), 'Enter opens the presets'); assert.equal(await active(), 'Zoom to fitShift 1');
+    await io.key('Escape'); await sleep(150);
+    assert.ok(!(await menuOpen()), 'Escape closes'); assert.equal(await active(), 'zoom-level', 'the focus is back on the percentage');
+    await io.key('Enter'); await sleep(250);
+    await io.key('ArrowDown'); assert.equal(await active(), 'Zoom to 50%', 'Down skips the dimmed Zoom to selection');
+    await io.key('Enter'); await sleep(700);
+    assert.ok(Math.abs((await z()) - 0.5) < 1e-6, `50% (${await z()})`); assert.equal(await level(), '50%');
+    assert.equal(await active(), 'zoom-level');
+
+    // minus: dimmed at the smallest zoom, and a click there does nothing
+    const minus = await centre('#zoom-out');
+    for (let i = 0; i < 30 && (await b.eval(`document.querySelector('#zoom-out').getAttribute('aria-disabled')`)) !== 'true'; i++) { await io.click(minus.x, minus.y); await sleep(40); }
+    assert.equal(await b.eval(`document.querySelector('#zoom-out').getAttribute('aria-disabled')`), 'true', 'minus is disabled at the minimum');
+    assert.equal(await level(), '5%');
+    assert.equal(await b.eval(`getComputedStyle(document.querySelector('#zoom-out')).opacity`), '0.4', 'and looks it');
+    const at = await z(); await io.click(minus.x, minus.y); await sleep(200);
+    assert.equal(await z(), at, 'no zoom past the minimum');
+    assert.equal(await b.eval(`document.querySelector('#zoom-in').getAttribute('aria-disabled')`), 'false');
+
+    // axe on the bar at rest, light and dark
+    for (const th of ['light', 'dark']) { await theme(b, th); await sleep(250); assert.deepEqual(await axe(b, ['#statusbar']), [], `${th}: axe on the bar`); }
+  } finally { await close(); }
+});

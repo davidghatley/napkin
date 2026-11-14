@@ -67,13 +67,13 @@
   </section>
   <footer id="statusbar">
     <span id="counts" aria-live="off"></span>
-    <span id="drawer-tabs" role="group" aria-label="Panels"></span>
-    <span class="hints"><span class="h"><kbd data-keys="Shift+1">Shift 1</kbd> fit all</span> <span class="h"><kbd data-keys="Shift+2">Shift 2</kbd> fit selection</span> <span class="h"><kbd>Enter</kbd> focus</span></span>
+    <span id="drawer-tabs" role="group" aria-label="Drawers"></span>
+    <span class="hints" aria-live="polite"></span>
     <span class="zoomctl" role="group" aria-label="Zoom">
-      <button type="button" id="zoom-out" aria-label="Zoom out" title="Zoom out (−)">−</button>
-      <button type="button" id="zoom-level" aria-label="Zoom level, click for 100%" title="Zoom to 100% ({k})" data-title-keys="Shift+0">100%</button>
-      <button type="button" id="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
-      <button type="button" id="zoom-fit" aria-label="Fit all" title="Fit all ({k})" data-title-keys="Shift+1">Fit</button>
+      <button type="button" class="sb-btn sb-icon" id="zoom-out" aria-label="Zoom out" aria-disabled="false" data-tip="Zoom out" data-key="-"><svg class="ico" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.75 8h8.5"/></svg></button>
+      <button type="button" class="sb-btn" id="zoom-level" aria-label="Zoom 100%, presets">100%</button>
+      <button type="button" class="sb-btn sb-icon" id="zoom-in" aria-label="Zoom in" aria-disabled="false" data-tip="Zoom in" data-key="+"><svg class="ico" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.75 8h8.5M8 3.75v8.5"/></svg></button>
+      <button type="button" class="sb-btn" id="zoom-fit" aria-label="Zoom to fit" data-tip="Zoom to fit" data-key="Shift+1">Fit</button>
     </span>
   </footer>
   <script src="/canvas/early.js"></script>

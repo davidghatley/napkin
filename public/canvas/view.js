@@ -244,14 +244,7 @@ export function createView(ctx, stageEl, worldEl) {
   addEventListener('keyup', (ev) => { if (ev.code === 'Space') { space = false; grabbing(!!pan); } });
   addEventListener('blur', () => { space = false; pan = null; grabbing(false); });
 
-  // --- status bar controls ---
-  const $ = (s) => document.querySelector(s);
-  $('#zoom-in').addEventListener('click', () => view.zoomBy(1.25, box.left + box.width / 2, box.top + box.height / 2, { animate: true, duration: 120 }));
-  $('#zoom-out').addEventListener('click', () => view.zoomBy(0.8, box.left + box.width / 2, box.top + box.height / 2, { animate: true, duration: 120 }));
-  $('#zoom-level').addEventListener('click', () => view.zoomBy(1 / v.z, box.left + box.width / 2, box.top + box.height / 2, { animate: true }));
-  $('#zoom-fit').addEventListener('click', () => view.fitAll({ animate: true }));
-  let shown = '';
-  ctx.on('view', ({ z }) => { const t = `${Math.round(z * 100)}%`; if (t !== shown) { shown = t; $('#zoom-level').textContent = t; } });
+  // (the status bar's zoom control is statusbar.js: it runs the zoom actions and follows the view)
 
   apply();
   return view;
