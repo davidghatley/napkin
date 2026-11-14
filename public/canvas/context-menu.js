@@ -7,7 +7,7 @@
 //   middle of the canvas). Keys: Down / Up (wrap), Home / End, a letter jumps, Right or Enter opens the submenu, Left closes it,
 //   Enter or Space runs, Escape closes one level and puts the focus back where it was. Closes on a press outside, the wheel, a
 //   scroll, a zoom or pan, a tool change, the window losing focus or changing size.
-//   Text fields keep the browser's own menu; so does a component in play mode (it is live, the menu is its own).
+//   Text fields keep the browser's own menu, and so do code blocks outside a card; so does a component in play mode (it is live, the menu is its own).
 //   initContextMenu(ctx) -> ctx.menu = { open(kind, at, opts), openRow(row, at, opts), openAtSelection(), close(), isOpen(), target() }
 import { ACTIONS } from './actions.js';
 import { keyLabel, MAC } from './keylabel.js';
@@ -25,6 +25,7 @@ export const MENUS = {
 const ROW = ['layer-toggle']; // a layer row adds these to its item's view group
 const GAP = 2;                // the menu opens this far from the pointer, so the pointer is never on an item
 const EDGE = 8;               // and keeps this far inside the window
+const GRACE_MS = 400;         // a submenu stays this long while the pointer travels toward it
 const HOVER_MS = 150;         // a submenu opens after this long on its item
 
 const editable = (t) => !!t?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"], [contenteditable="plaintext-only"]') || !!t?.isContentEditable;
@@ -68,6 +69,15 @@ export function initContextMenu(ctx) {
     el.innerHTML = list.map((r, i) => (r.sep ? '<div role="separator" class="nk-msep"></div>'
       : r.sub ? `<div role="menuitem" class="nk-mi" tabindex="-1" aria-haspopup="menu" aria-expanded="false" aria-controls="ctxmenu-sub" data-sub="${i}"${r.kids.every((a) => enabled(a) !== true) ? ' aria-disabled="true" title="Nothing to reorder here"' : ''}><span class="nk-ml">${esc(r.sub)}</span>${CHEVRON}</div>`
       : itemHtml(r.a, i))).join('');
+  }
+  // Is the pointer, moving from `a` to `b`, inside the triangle from `a` to the submenu's near edge? (the corridor a diagonal move takes)
+  let lastPt = null;
+  function heading(a, b) {
+    const r = sub.getBoundingClientRect(), m = menu.getBoundingClientRect();
+    const x = r.left >= m.right - 8 ? r.left : r.right, p = { x, y: r.top }, q = { x, y: r.bottom };
+    const side = (u, v, w) => (v.x - u.x) * (w.y - u.y) - (v.y - u.y) * (w.x - u.x);
+    const d1 = side(a, p, b), d2 = side(p, q, b), d3 = side(q, a, b);
+    return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0));
   }
   const items = (el) => [...el.querySelectorAll('[role=menuitem]')];
 
@@ -264,7 +274,7 @@ export function initContextMenu(ctx) {
     keyEcho = 0;
     const row = t.closest?.('#layers .lrow[data-component]');
     if (row) { ev.preventDefault(); openRow(row, { x: ev.clientX, y: ev.clientY }); return; }
-    if (!t.closest?.('#stage') || document.body.dataset.play || t.closest('#doc-dock, #time, .proposal, details, pre')) return; // in play the component is live and the menu is its own
+    if (!t.closest?.('#stage') || document.body.dataset.play || t.closest('#doc-dock, #time, .proposal, details') || (t.closest('pre') && !t.closest('.item-card'))) return; // (a card's own code is the card: its file menu) // in play the component is live and the menu is its own
     ev.preventDefault();
     openCanvas(t, ev.clientX, ev.clientY, ev.ctrlKey && !MAC || ev.metaKey);
   }, true);
@@ -285,8 +295,11 @@ export function initContextMenu(ctx) {
   for (const el of [menu, sub]) {
     el.addEventListener('click', (ev) => { const it = ev.target.closest('[role=menuitem]'); if (it) run(it); });
     el.addEventListener('pointermove', (ev) => {
+      const from = lastPt; lastPt = { x: ev.clientX, y: ev.clientY };
       const it = ev.target.closest('[role=menuitem]');
       if (!it || it === document.activeElement) return;
+      // Travelling toward an open submenu: the rows crossed on the way neither take the highlight nor close it (a short grace, renewed by each move)
+      if (el === menu && !sub.hidden && from && !it.dataset.sub && heading(from, lastPt)) { clearTimeout(subTimer); subTimer = setTimeout(() => closeSub(false), GRACE_MS); return; }
       menu.dataset.input = sub.dataset.input = 'pointer'; // (the ring is the keyboard's; the pointer's item has the fill only)
       focusItem(el, it);
       if (el === menu) {

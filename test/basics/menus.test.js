@@ -684,3 +684,119 @@ test('menus: no dead right-click after Shift+F10 and Escape; text fields keep th
     await io.key('Escape');
   } finally { await close(); }
 });
+
+// ---- round 4: a command keeps what it was started on (target and revision taken when invoked), Undo restores the editing target ----
+function rig(b, io) {
+  const pick = async (label, from = '#ctxmenu') => { const p = await centre(b, `[...document.querySelectorAll('${from} [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === ${JSON.stringify(label)})`); await io.click(p.x, p.y); };
+  const rev = () => b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.tree()?.revision ?? null`);
+  const reloaded = async (before) => { await b.waitFor(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.tree()?.revision !== ${JSON.stringify(before)}`, 10000); await sleep(300); };
+  const selIs = async (want, why) => { try { await b.waitFor(`JSON.stringify(napkin.state.selections.map((s) => s.component + '|' + s.node)) === ${JSON.stringify(JSON.stringify(want))}`, 5000); } catch {} assert.deepEqual(await selection(b), want, why); };
+  const undo = async (redo = false) => { await b.eval(`document.activeElement?.blur()`); const r0 = await rev(); await io.key('z', { ctrl: true, shift: redo }); await reloaded(r0); };
+  return { pick, rev, reloaded, selIs, undo };
+}
+
+test('menus: Paste writes where it was started, even when another right-click lands while the clipboard is read', { timeout: 180000 }, async () => {
+  const { b, io, html, close } = await boot();
+  const { pick, rev, reloaded } = rig(b, io);
+  try {
+    await b.send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: new URL(await b.eval('location.href')).origin });
+    const [h1, main, sec] = [await node(b, 'h1'), await node(b, 'main'), await node(b, 'section.cards')];
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    await pick('Copy');
+    await sleep(300);
+    // the clipboard answers slowly: time enough for a second right-click to change the selection first
+    await b.eval(`(() => { const slow = (f) => async (...a) => { await new Promise((r) => setTimeout(r, 600)); return f(...a); }; navigator.clipboard.read = slow(navigator.clipboard.read.bind(navigator.clipboard)); navigator.clipboard.readText = slow(navigator.clipboard.readText.bind(navigator.clipboard)); })()`);
+    await rclick(io, await centre(b, el(main)));
+    assert.deepEqual(await selection(b), [`${LANDING}|${main}`]);
+    const p = await centre(b, el(sec)), r0 = await rev();
+    await pick('Paste here');
+    await io.move(p.x, p.y); await io.press(p.x, p.y, { button: 'right' }); await io.release(p.x, p.y, { button: 'right' });
+    await reloaded(r0);
+    const text = html();
+    assert.equal(text.match(/<h1>/g)?.length, 2, 'one copy was pasted');
+    assert.match(text, /<main class="hero">(?:(?!<\/main>).)*<h1>Plan the week<\/h1>(?:(?!<\/main>).)*<h1>Plan the week<\/h1>(?:(?!<\/main>).)*<\/main>/s, 'it went into the main whose menu was used');
+    assert.doesNotMatch(text, /<section class="cards">(?:(?!<\/section>).)*<h1>/s, 'not into the section picked meanwhile');
+  } finally { await close(); }
+});
+
+test('menus: Undo of Order and of Paste puts back the selection the step began with (by object, not by position)', { timeout: 180000 }, async () => {
+  const { b, io, html, close } = await boot();
+  const { pick, rev, reloaded, selIs, undo } = rig(b, io);
+  const tagOf = (n) => b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.node(${JSON.stringify(n)})?.tag ?? null`);
+  try {
+    await b.send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: new URL(await b.eval('location.href')).origin });
+    const S = (n) => `${LANDING}|${n}`;
+    const [h1, btn] = [await node(b, 'h1'), await node(b, 'button.cta')];
+    // Order > Bring to front on the heading: it moves last; Undo puts it back first and it is the selection (not the button now at its place)
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    await selIs([S(h1)]);
+    const sub = await centre(b, `document.querySelector('#ctxmenu [data-sub]')`);
+    await io.click(sub.x, sub.y); await sleep(100);
+    let r0 = await rev();
+    await pick('Bring to front', '#ctxmenu-sub'); await reloaded(r0);
+    assert.match(html(), /<p>One page, one list.<\/p><button class="cta">Start<\/button><h1>Plan the week<\/h1>/, 'the heading is last');
+    await undo();
+    assert.match(html(), /<main class="hero"><h1>Plan the week<\/h1><p>/, 'the heading is first again');
+    await selIs([S(h1)], 'Undo selects the heading, not what now sits at its old place');
+    assert.equal(await tagOf(h1), 'h1');
+    await undo(true);
+    assert.equal(await tagOf(await b.eval(`napkin.state.selection?.node`)), 'h1', 'Redo selects the heading where it went');
+    await undo();
+    // Copy the heading; Paste here on the button; Undo: the button is selected again
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    await pick('Copy'); await sleep(300);
+    await rclick(io, await centre(b, el(btn)), { ctrl: true });
+    await selIs([S(btn)]);
+    r0 = await rev(); await pick('Paste here'); await reloaded(r0);
+    assert.equal(html().match(/<h1>/g)?.length, 2);
+    await undo();
+    assert.equal(html().match(/<h1>/g)?.length, 1, 'the paste is undone');
+    await selIs([S(btn)], 'Undo of a paste selects the element it was pasted onto');
+  } finally { await close(); }
+});
+
+test('menus: Order stays open while the pointer travels diagonally to a command, across the rows between', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    const h1 = await node(b, 'h1');
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    const start = await centre(b, `document.querySelector('#ctxmenu [data-sub]')`);
+    await io.move(start.x, start.y); await sleep(400);
+    assert.equal(await b.eval(`!document.querySelector('#ctxmenu-sub').hidden`), true, 'hovering Order opens it');
+    const goal = await centre(b, `[...document.querySelectorAll('#ctxmenu-sub [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === 'Send to back')`);
+    // the neighbouring row (Wrap in frame, below) is crossed on the way: 20 real moves, 30 ms apart
+    const crossed = new Set();
+    for (let i = 1; i <= 20; i++) {
+      const x = start.x + (goal.x - start.x) * i / 20, y = start.y + (goal.y - start.y) * i / 20;
+      await io.move(Math.round(x), Math.round(y)); await sleep(30);
+      crossed.add(await b.eval(`document.elementFromPoint(${Math.round(x)}, ${Math.round(y)})?.closest('[role=menuitem]')?.querySelector('.nk-ml')?.textContent ?? ''`));
+    }
+    assert.ok(crossed.has('Wrap in frame'), `the path crosses the row below Order (${[...crossed]})`);
+    assert.equal(await b.eval(`!document.querySelector('#ctxmenu-sub').hidden`), true, 'the submenu is still open when the pointer arrives');
+    assert.equal(await b.eval(`document.elementFromPoint(${goal.x}, ${goal.y}).closest('[role=menuitem]').querySelector('.nk-ml').textContent`), 'Send to back');
+    // and a pointer that goes to the neighbouring row and stays there closes it
+    const wrap = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === 'Wrap in frame')`);
+    await io.move(start.x - 10, start.y); await io.move(wrap.x - 20, wrap.y); await sleep(700);
+    assert.equal(await b.eval(`document.querySelector('#ctxmenu-sub').hidden`), true, 'a pointer that rests on another row closes it');
+  } finally { await close(); }
+});
+
+test('menus: right-clicking the code of a CSS card gives the card its file menu, as its title does', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    await b.waitFor(`!!document.querySelector('.item-card pre')`, 20000);
+    const id = await b.eval(`document.querySelector('.item-card pre').closest('.item-card').dataset.component`);
+    const title = await centre(b, `document.querySelector('.item-card[data-component="${id}"] .cmp-head')`);
+    await rclick(io, title);
+    const byTitle = await labels(b);
+    await io.key('Escape'); await b.eval(`napkin.select(null)`);
+    await sleep(500); await b.waitFor(`!document.body.classList.contains('moving')`, 5000);
+    const sheet = await centre(b, `document.querySelector('.item-card[data-component="${id}"] pre')`);
+    await rclick(io, sheet);
+    assert.ok(await isOpen(b), 'the napkin menu opens on the code, not the browser one');
+    assert.deepEqual(await labels(b), byTitle, 'the same file menu as the title gives');
+    assert.deepEqual(await selection(b), [`${id}|item`], 'the card is selected');
+    const m = await menu(b);
+    assert.ok(m.items.every((x) => !x.off || x.why), 'anything dimmed says why');
+  } finally { await close(); }
+});
