@@ -48,7 +48,7 @@ export function initHistory(ctx, drawer) {
     if (j.ok) { hideToast(); if (verb === 'undo') { const st = document.querySelector('#snap-toast'); if (st) st.hidden = true; } ctx.hint(`${j.skipped ? `Skipped "${j.skipped.summary}". ` : ''}${verb === 'undo' ? 'Undid' : 'Redid'}: ${(j.undone || j.redone)?.summary ?? 'your last edit'}`); }
     else if (j.refused) showToast(`Can't ${verb}: ${j.refused.by} changed ${j.refused.keys.join(', ')} in revision ${j.refused.revision}. Skip this step to ${verb} the one before it.`, verb, component ?? j.component);
     else { hideToast(); ctx.hint(/nothing to/i.test(j.error) ? plain(j.error) : `Can't ${verb}: ${plain(j.error)}`); }
-    if (j.ok && verb === 'undo') ctx.emit('undone', { ...j, component: j.component ?? component ?? ctx.state.selection?.component }); // (edit-ops puts back the selection a delete took)
+    if (j.ok) ctx.emit(verb === 'undo' ? 'undone' : 'redone', { ...j, component: j.component ?? component ?? ctx.state.selection?.component }); // (edit-ops puts back the selection of its own steps)
     return j;
   }
   ctx.undo = () => step('undo'); ctx.redo = () => step('redo');

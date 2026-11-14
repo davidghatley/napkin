@@ -31,8 +31,9 @@ const camel = (s) => s.replace(/-+([a-z0-9])/gi, (_, c) => c.toUpperCase());
 const str = (s) => JSON.stringify(s);
 
 // style="color: red; --gap: 4px" -> { color: "red", "--gap": "4px" }
-export function styleObject(text) {
-  const out = [];
+// A declaration with !important cannot live in a style object (React drops it), so those are returned apart:
+// styleParts(text) -> { object: '{ ... }' | null, important: [[name, value]] } (value without the !important)
+function declsOf(text) {
   let depth = 0, quote = '', start = 0;
   const decls = [];
   for (let i = 0; i <= text.length; i++) {
@@ -43,15 +44,37 @@ export function styleObject(text) {
     else if (ch === ')') depth = Math.max(0, depth - 1);
     else if ((ch === ';' && !depth) || i === text.length) { decls.push(text.slice(start, i)); start = i + 1; }
   }
-  for (const d of decls) {
+  return decls;
+}
+export function styleParts(text) {
+  const out = [], important = [];
+  for (const d of declsOf(text)) {
     const at = d.indexOf(':');
     if (at < 1) continue;
-    const name = d.slice(0, at).trim(), value = d.slice(at + 1).trim();
+    const name = d.slice(0, at).trim(); let value = d.slice(at + 1).trim();
     if (!name || !value) continue;
+    if (/\s*!\s*important$/i.test(value)) { value = value.replace(/\s*!\s*important$/i, '').trim(); if (value) important.push([name, value]); continue; }
     const key = name.startsWith('--') ? str(name) : /^-ms-/i.test(name) ? camel(name.slice(1).toLowerCase()) : camel(name.toLowerCase().replace(/^-(webkit|moz|o)-/, (_, v) => `${v[0].toUpperCase()}${v.slice(1)}-`));
     out.push(`${key}: ${str(value)}`);
   }
-  return out.length ? `{ ${out.join(', ')} }` : null;
+  return { object: out.length ? `{ ${out.join(', ')} }` : null, important };
+}
+export const styleObject = (text) => styleParts(text).object;
+
+// Inline !important declarations of the component being made: each element that has them gets a class of its own, and the
+// rule is written in the component's CSS (three of the class, so nothing but another !important id rule outranks it).
+let IMPORTANT = null; // { prefix, rules: [], count } while toComponent runs
+function attrsOf(n, foreign, dropped) {
+  const attrs = n.attrs.map((a) => prop(n.name, a, foreign, dropped)).filter(Boolean);
+  const st = n.attrs.find((a) => a.lname === 'style' && a.valStart !== null);
+  const imp = st && IMPORTANT ? styleParts(decodeText(st.value)).important : [];
+  if (!imp.length) return attrs;
+  const cls = `${IMPORTANT.prefix}-imp-${++IMPORTANT.count}`;
+  IMPORTANT.rules.push(`.${cls}.${cls}.${cls} { ${imp.map(([k, v]) => `${k}: ${v} !important;`).join(' ')} }`);
+  const at = attrs.findIndex((x) => /^className(=|$)/.test(x));
+  if (at < 0) attrs.unshift(`className="${cls}"`);
+  else { const m = /^className="([^"]*)"$/.exec(attrs[at]), j = /^className=\{("(?:[^"\\]|\\.)*")\}$/.exec(attrs[at]); attrs[at] = m ? `className="${m[1]} ${cls}"` : j ? `className=${str(JSON.parse(j[1]) + ' ' + cls)}` : `className="${cls}"`; }
+  return attrs;
 }
 
 function prop(tag, a, foreign, dropped) {
@@ -90,7 +113,7 @@ function phrase(s, n, dropped, open) {
   let out = '', at = n.openEnd;
   for (const c of n.children) {
     out += plain(fold(s.slice(at, c.start)));
-    const attrs = c.attrs.map((a) => prop(c.name, a, !!c.foreign || c.name === 'svg', dropped)).filter(Boolean);
+    const attrs = attrsOf(c, !!c.foreign || c.name === 'svg', dropped);
     const o = `<${c.tag}${attrs.length ? ' ' + attrs.join(' ') : ''}`;
     if (VOID.has(c.name)) out += `${o} />`;
     else { const inner = phrase(s, c, dropped, o); if (inner === null) return null; out += inner; }
@@ -107,7 +130,7 @@ function render(s, n, depth, dropped, pre = false, keep = null, path = '') {
   if (n.name === 'script') { dropped.add('a <script> element (scripts do not run in a component)'); return ''; }
   if (n.name === 'style') return ''; // its rules travel in the component's CSS
   const tag = n.tag, foreign = !!n.foreign || n.name === 'svg' || n.name === 'math';
-  const attrs = n.attrs.map((a) => prop(n.name, a, foreign, dropped)).filter(Boolean);
+  const attrs = attrsOf(n, foreign, dropped);
   const open = `<${tag}${attrs.length ? ' ' + attrs.join(' ') : ''}`;
   if (VOID.has(n.name) || (n.selfClosing && foreign)) return `${pad}${open} />`;
   const keepSpace = pre || n.name === 'pre' || n.name === 'textarea' || !!keep?.has(path);
@@ -142,11 +165,13 @@ export function toComponent({ name, html, css = [], from = '', wrap = null, keep
   const roots = (parsed.root?.children || []).filter((n) => n.name !== 'script' && n.name !== 'style');
   if (roots.length !== 1) throw new Error('select one element to make a component from. Next: select the element that wraps the part you want');
   const dropped = new Set();
+  IMPORTANT = { prefix: name.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase(), rules: [], count: 0 };
   // `wrap`: a class for an element with display: contents around the root, standing in for the frame's elements around it
   const k = keep.length ? new Set(keep) : null;
   const jsx = wrap ? `    <div className="${wrap}">\n${render(s, roots[0], 3, dropped, false, k)}\n    </div>` : render(s, roots[0], 2, dropped, false, k);
   const own = parsed.nodes.filter((n) => n.name === 'style').map((n) => ({ text: s.slice(n.openEnd, n.closeStart ?? n.end).trim(), context: [] }));
-  const sheet = [...css, ...own].filter((r) => r.text && r.text.trim()).map((r) => (r.context || []).reduceRight((inner, c) => `${c} {\n${inner.replace(/^/gm, '  ')}\n}`, r.text.trim())).join('\n\n');
+  const important = IMPORTANT.rules; IMPORTANT = null;
+  const sheet = [...css, ...own].filter((r) => r.text && r.text.trim()).map((r) => (r.context || []).reduceRight((inner, c) => `${c} {\n${inner.replace(/^/gm, '  ')}\n}`, r.text.trim())).concat(important).join('\n\n');
   const lines = [];
   if (from) lines.push(`// Made from ${from}.`);
   if (sheet) lines.push(`const css = \`\n${literal(sheet)}\n\`;`, '');

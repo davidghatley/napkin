@@ -50,7 +50,7 @@ export function createStage(ctx, root, world, view) {
   function cellElement(id, node, variant) {
     const sec = sections.get(id);
     if (!sec) return null;
-    if (sec.docFrame) return node === '' ? sec.frame : sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js); '' the card itself (nothing drawn in it)
+    if (sec.docFrame) return node === '' || sec.el.querySelector(':scope > .frame > .doc-cell[data-state]') ? sec.frame : sec.docFrame.element(node); // (a page showing its empty or failed state has no visible elements: the card is what is selected) // an HTML component: the element inside its frame (doc-frames.js); '' the card itself (nothing drawn in it)
     const css = `.mount [data-n="${CSS.escape(node)}"]`;
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
@@ -348,7 +348,7 @@ export function createStage(ctx, root, world, view) {
   const CLEAR = 24, RESERVE_Z = 0.25;
   const headBox = (sec, z) => {
     if (ctx.state.components.get(sec.el.dataset.component)?.item) {
-      const lf = Math.min(4, Math.max(1, 1 / z));
+      const lf = Math.min(16, Math.max(1, 1 / z));
       return { w: Math.max(sec.size.w, Math.ceil((sec.el.dataset.name.length * 7 + 20) * lf)), top: Math.ceil(36 * lf) + CLEAR };
     }
     const head = sec.el.querySelector('.cmp-head'), lf = Math.min(16, Math.max(1, 1 / z));
@@ -371,7 +371,7 @@ export function createStage(ctx, root, world, view) {
   function labelRoom(sec, z) {
     const head = sec.el.querySelector('.cmp-head'), t = head?.querySelector('.cmp-title');
     if (!t || (!sec.item && (ctx.matrix?.natural(sec.el) || head.querySelector('.axes-strip')?.textContent || head.querySelector('.problem')?.textContent))) { const b = headBox(sec, z); return { top: b.top - CLEAR, w: b.w }; }
-    const lf = sec.item ? Math.min(4, view.labelScale(z)) : view.labelScale(z);
+    const lf = view.labelScale(z);
     if (!ch10) { const p = document.createElement('span'); p.style.cssText = 'position:absolute;visibility:hidden;width:10ch'; head.append(p); ch10 = p.offsetWidth || 66; p.remove(); }
     const path = t.querySelector('.cmp-path'), nat = (t.querySelector('h3')?.scrollWidth || 0) + (path && !path.hidden ? path.scrollWidth - 4 : 0);
     return { top: ((t.offsetHeight || 16) + 4) * lf, w: sec.item ? sec.size.w : Math.max(sec.size.w, Math.min(nat * lf, ch10 * lf, sec.size.w + 24)) }; // (cards.css: a label runs at most 24 units past its card)
@@ -825,7 +825,6 @@ export function createStage(ctx, root, world, view) {
   ctx.on('view', (v) => {
     if (v.gesture && gesturing) moveOverlays(v); else refreshOverlays();
     const was = lastZ; lastZ = v.z; gesturing = !!v.gesture;
-    if (world.dataset.far !== (v.z < 0.1 ? '1' : '')) { if (v.z < 0.1) world.dataset.far = '1'; else delete world.dataset.far; } // far out, a title is under 3 px tall: it is not drawn
     if (v.gesture) titlesNow(v);
     queueCull(v.gesture ? (v.z !== was ? 'zoom' : 'pan') : 'exact');
   });

@@ -62,7 +62,7 @@ test('WPC-28: the row menu deletes after a confirm, names what uses it, and Undo
     // More actions on the component row
     await L.q(`document.querySelector('#layers .lcomp[data-component=${JSON.stringify(id)}] .lmore').click()`);
     const items = await L.q(`[...document.querySelectorAll('#ctxmenu [role=menuitem]')].map((b) => b.querySelector('.nk-ml').textContent).join('|')`);
-    assert.match(items, /Rename…/); assert.match(items, /Delete file…$/);
+    assert.match(items, /(^|\|)Rename(\||$)/); assert.doesNotMatch(items, /Rename…/); assert.match(items, /Delete file…$/);
     await L.q(`document.querySelector('#ctxmenu [data-action=delete]').click()`);
     await waitFor(L, `document.querySelector('#cmp-dialog').open && document.querySelector('#cmp-ok')`);
     assert.match(await L.q(`document.querySelector('#cmp-dialog p').textContent`), /removes Button\.tsx.*Nothing else uses Button.*undo/);

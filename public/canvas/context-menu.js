@@ -36,7 +36,7 @@ export function initContextMenu(ctx) {
   const menu = make('ctxmenu'), sub = make('ctxmenu-sub');
   sub.setAttribute('aria-label', 'Order');
   let state = null;     // { kind, target, back: element focus returns to, backKey: a layer row's key, at }
-  let subTimer = 0, kbdAt = 0;
+  let subTimer = 0, keyEcho = 0; // keyEcho: until then, a contextmenu event with no pointer press before it is the one the opening key sent
 
   // ---------------------------------------------------------------------------------------------------- what an item shows
   const label = (a) => (typeof a.short === 'function' ? a.short(ctx) : a.short ?? a.label);
@@ -187,7 +187,7 @@ export function initContextMenu(ctx) {
   // ---------------------------------------------------------------------------------------------------- targets
   const comp = (id) => ctx.state.components.get(id);
   const keyOf = (s) => `${s.component}|${s.node}`;
-  const has = (sel) => ctx.state.selections.some((s) => keyOf(s) === keyOf(sel));
+  const has = (sel) => ctx.state.selections.some((s) => keyOf(s) === keyOf(sel) && !s.card === !sel.card); // a card and its first element share a node id, not a meaning
   function cardSel(id) {
     const c = comp(id);
     if (!c) return null;
@@ -210,20 +210,28 @@ export function initContextMenu(ctx) {
     return kind === 'canvas' ? 'Canvas' : kind === 'several' || (kind === 'file' && ctx.state.selections.length > 1) ? `${ctx.state.selections.length} selected` : kind === 'element' ? `${s.node} in ${name}` : name;
   };
   // What is under a point of the canvas: an element of a frame, a frame (its title or its empty part), or the canvas.
-  function hitCanvas(t, x, y) {
+  const TOP = new Set(['html', 'body', 'head']);
+  function hitCanvas(t, x, y, deep = false) {
     const el = t.closest?.('.mount [data-n]'), cell = el?.closest('.cell');
     if (el && cell) return { component: cell.closest('.cmp, .item-card').dataset.component, node: el.dataset.n, variant: JSON.parse(cell.dataset.variant || '{}') };
     const card = t.closest?.('.cmp, .item-card');
     if (!card) return null;
     const id = card.dataset.component, f = ctx.stage.sections.get(id)?.docFrame;
     if (f && t.closest('.doc-cell')) {
-      const p = f.pick(x, y), node = p?.dataset.n, tag = node && f.node(node)?.tag;
-      if (node && !['html', 'body', 'head'].includes(tag)) return { component: id, node, variant: {} };
+      // what a click there would pick (stage.js: the top-level element, or the one beside the selection; Ctrl/Cmd the deepest),
+      // unless the pointer is inside something selected: then that, and the selection stays
+      const deepest = f.pick(x, y)?.dataset.n;
+      if (deepest) {
+        const path = ctx.stage.pathTo?.(id, deepest) ?? [];
+        const inside = !deep && [...path].reverse().find((n) => !TOP.has(n.tag) && ctx.state.selections.some((x) => !x.card && x.component === id && x.node === n.node)); // (a selected card is the frame, not its first element)
+        const node = inside ? inside.node : deep ? deepest : (ctx.stage.pickNode?.(id, deepest) ?? deepest), tag = f.node(node)?.tag;
+        if (!TOP.has(tag)) return { component: id, node, variant: {} };
+      }
     }
     return cardSel(id);
   }
-  function openCanvas(t, x, y) {
-    const sel = hitCanvas(t, x, y);
+  function openCanvas(t, x, y, deep) {
+    const sel = hitCanvas(t, x, y, deep);
     if (!sel) { if (ctx.state.selections.length) ctx.select(null); } // the empty canvas: like a click there, the selection clears
     else if (!has(sel)) ctx.select(sel); // an unselected thing is selected first; a selected one keeps the whole selection
     const kind = kindNow();
@@ -254,15 +262,18 @@ export function initContextMenu(ctx) {
   // ---------------------------------------------------------------------------------------------------- events
   document.addEventListener('contextmenu', (ev) => {
     const t = ev.target;
-    if (performance.now() - kbdAt < 600) { ev.preventDefault(); return; } // the menu the key just opened (Shift+F10 and the Menu key also send this)
     if (menu.contains(t) || sub.contains(t)) { ev.preventDefault(); return; }
     if (editable(t)) return; // fields keep the browser's menu: spelling, paste, select all
+    // the echo of the key that just opened the menu (Shift+F10 and the Menu key also send this), once; a real press ends it
+    if (keyEcho && performance.now() < keyEcho) { keyEcho = 0; ev.preventDefault(); return; }
+    keyEcho = 0;
     const row = t.closest?.('#layers .lrow[data-component]');
     if (row) { ev.preventDefault(); openRow(row, { x: ev.clientX, y: ev.clientY }); return; }
     if (!t.closest?.('#stage') || document.body.dataset.play || t.closest('#doc-dock, #time, .proposal, details, pre')) return; // in play the component is live and the menu is its own
     ev.preventDefault();
-    openCanvas(t, ev.clientX, ev.clientY);
+    openCanvas(t, ev.clientX, ev.clientY, ev.ctrlKey && !MAC || ev.metaKey);
   }, true);
+  document.addEventListener('pointerdown', () => { keyEcho = 0; }, true);
   // The menu keeps the keyboard while it is open (registered before the other canvas keys, on the window, so it hears them first).
   addEventListener('keydown', (ev) => {
     if (state) { if (onKey(ev)) { ev.preventDefault(); ev.stopImmediatePropagation(); } return; }
@@ -273,7 +284,7 @@ export function initContextMenu(ctx) {
     const canvas = !t || t === document.body || t === document.documentElement || !!t.closest?.('#stage');
     if (!row && !canvas) return;
     ev.preventDefault(); ev.stopImmediatePropagation();
-    kbdAt = performance.now();
+    keyEcho = performance.now() + 600;
     if (row) openRow(row, null, { keyboard: true }); else openAtSelection();
   }, true);
   for (const el of [menu, sub]) {

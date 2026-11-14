@@ -30,7 +30,7 @@ export function initHandles(ctx) {
     const c = ctx.state.components.get(s.component);
     if (!c?.doc || c.readOnly) return null;
     const el = ctx.stage.selectedElement(s);
-    if (!el?.isConnected || el.closest('[data-cull]')) return null;
+    if (!el?.isConnected || el.closest('[data-cull]') || el.querySelector?.(':scope > .doc-cell[data-state]')) return null; // (a card showing its empty or failed state is selected whole: no handles of the hidden page)
     const { byId, parentOf } = index(c.doc), node = byId.get(s.node);
     if (!node) return null;
     const parent = parentOf.get(node.id) ?? null;
@@ -107,7 +107,7 @@ export function initHandles(ctx) {
     const es = ctx.elements?.selected();
     if (es) { if (!es.sec.culled) elemHandles(es.el.getBoundingClientRect()); return; }
     const fs = ctx.frames?.selected();
-    if (!fs || fs.sec.culled) return;
+    if (!fs || fs.sec.culled || fs.sec.el.querySelector(':scope > .frame > .doc-cell[data-state]')) return;
     frameHandles(fs.f.iframe().getBoundingClientRect());
   }
   function drawTracks(info, cs, base) {
