@@ -31,16 +31,16 @@ export function initMakeComponent(ctx) {
   // find yet, so this keeps trying for a few seconds in the background and gives up the moment the person selects
   // something else, or clears the selection once it was there. Focus is not moved.
   async function selectWhenDrawn(path, renamed = false) {
-    const key = (x) => (x ? `${x.component}\n${x.node}` : ''), t0 = performance.now(); let held = 0;
+    const key = (x) => (x ? `${x.component}\n${x.node}` : ''), t0 = performance.now(); let held = 0, asked = false;
     const was = key(ctx.state.selection);
     while (performance.now() - t0 < 8000 && held < 4) {
       let id = null; for (const [k, c] of ctx.state.components) if (c.path === path) id = k; // a new card's id settles after its first read, so follow the file
       if (id == null || ctx.stage.sections.get(id)?.el?.dataset.ready !== '1') { await new Promise((r) => setTimeout(r, 80)); continue; }
       const now = ctx.state.selection;
       if (now?.component === id) held++;
-      else if (!now && held) return; // the person cleared it after it was shown (a card drops a selection only before it holds)
+      else if (!now && (held || (!asked && !renamed))) return; // the person cleared it (a card drops only a selection it cannot find yet, before it holds; a rename drops the old card's)
       else if (now && key(now) !== was && !(renamed && !ctx.state.components.has(now.component))) return; // the person moved on
-      else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) ctx.select({ component: id, node: root, variant: {}, card: true }); }
+      else { held = 0; const root = ctx.stage.mainNode?.(id) ?? ctx.state.components.get(id)?.doc?.root?.id; if (root != null) { asked = true; ctx.select({ component: id, node: root, variant: {}, card: true }); } }
       await new Promise((r) => setTimeout(r, 80));
     }
   }
