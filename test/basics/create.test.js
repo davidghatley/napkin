@@ -95,20 +95,34 @@ test('basics pass 2: text left empty leaves nothing behind', { timeout: 60000 },
   assert.equal(await q(`!!document.querySelector('.cmp-pending, .nk-new-text')`), false, 'no trace on the canvas');
 });
 
+// the middle of a frame's label, in page pixels
+const labelAt = (id) => json(`(() => { const r = document.querySelector('section.cmp[data-component="${id}"] .cmp-title h3').getBoundingClientRect(); return { x: r.left + Math.min(12, r.width / 2), y: r.top + r.height / 2, t: r.top }; })()`);
 test('basics pass 2: double-click the label to rename the file; a taken name is refused in place', { timeout: 60000 }, async () => {
-  await q(`document.querySelector('section.cmp[data-component="frame-2.html"] .cmp-title h3').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); 0`);
+  // a real double-click on the label of a frame that is not selected: the label stays put, the field opens
+  await q(`napkin.select(null); napkin.view.fitRect(napkin.stage.componentRect('frame-2.html'), { pad: 200, max: 1 }); 0`);
+  await sleep(400);
+  const lab = await labelAt('frame-2.html');
+  await io.dblclick(lab.x, lab.y);
   await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename');
   await q(`document.execCommand('insertText', false, 'page')`);
   await io.key('Enter');
   await sleep(150);
   assert.match(await q(`document.querySelector('.nk-rename-msg')?.textContent ?? ''`), /page\.html is already in this folder/);
   assert.equal(existsSync(file('frame-2.html')), true, 'nothing renamed');
+  // a click away with the taken name still there: the field stays open with what was typed, and says why
+  await io.click(lab.x + 40, lab.y + 400); await sleep(250);
+  assert.equal(await q(`document.querySelector('.nk-rename')?.value ?? null`), 'page', 'the field is still open with the typed name');
+  assert.match(await q(`document.querySelector('.nk-rename-msg:not([hidden])')?.textContent ?? ''`), /page\.html is already in this folder/, 'and says why');
+  assert.equal(existsSync(file('frame-2.html')), true, 'still nothing renamed');
+  await q(`document.querySelector('.nk-rename').focus(); 0`);
   await q(`(() => { const i = document.querySelector('.nk-rename'); i.select(); document.execCommand('insertText', false, 'greeting'); })()`);
   await io.key('Enter');
   await until(async () => existsSync(file('greeting.html')) && !existsSync(file('frame-2.html')) && (await q(`napkin.state.components.has('greeting.html')`)));
   await until(async () => (await q(`document.querySelector('section.cmp[data-component="greeting.html"] .cmp-title h3')?.textContent`)) === 'greeting');
   // Escape cancels
-  await q(`document.querySelector('section.cmp[data-component="greeting.html"] .cmp-title h3').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })); 0`);
+  await q(`napkin.select(null); 0`); await sleep(150);
+  const g = await labelAt('greeting.html');
+  await io.dblclick(g.x, g.y);
   await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename');
   await q(`document.execCommand('insertText', false, 'nope')`);
   await io.key('Escape');

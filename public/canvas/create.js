@@ -321,11 +321,11 @@ export function initCreate(ctx) {
       if (done) return;
       const k = checkTo(input.value);
       if (k.same) { close(); return; }
-      if (k.error) { if (fromBlur) { close(); ctx.hint(plain(k.error)); return; } msg.textContent = k.error; msg.hidden = false; input.focus(); return; }
+      if (k.error) { msg.textContent = k.error; msg.hidden = false; if (!fromBlur) input.focus(); return; } // refused: the field stays open with what was typed and says why (standards 3.3)
       done = true; h3.textContent = k.name; input.disabled = true;
       const r = await renameTo(k.name);
       input.remove(); msg.remove(); h3.hidden = false;
-      if (!r.ok) { h3.textContent = was; if (!fromBlur) startRename(id, opts)?.error?.(r.error); else ctx.hint(plain(r.error)); }
+      if (!r.ok) { h3.textContent = was; const again = startRename(id, opts); if (again) { again.input.value = k.name; again.error(plain(r.error)); } }
     };
     input.addEventListener('input', () => { fit(); msg.hidden = true; });
     input.addEventListener('keydown', (ev) => {
