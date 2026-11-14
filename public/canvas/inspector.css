@@ -252,16 +252,16 @@ body[data-gesture="move"] #stage, body[data-gesture="reorder"] #stage { cursor: 
 .pp-row { display: flex; align-items: center; gap: var(--nk-s2); min-width: 0; min-height: var(--nk-h-field); }
 .pp-glyph { flex: none; display: grid; place-items: center; width: var(--nk-icon); height: var(--nk-icon); color: var(--nk-ink-muted); }
 .pp-glyph svg { width: var(--nk-icon); height: var(--nk-icon); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
-.pp-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; padding: 0 var(--nk-s1); border: 1px solid transparent; border-radius: var(--nk-radius); background: none; color: var(--nk-ink); font: var(--nk-w-strong) var(--nk-fs-title)/calc(var(--nk-h-field) - 2px) var(--nk-sans); text-align: left; }
+.pp-name { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; white-space: normal; margin: 0; padding: 0 var(--nk-s1); border: 1px solid transparent; border-radius: var(--nk-radius); background: none; color: var(--nk-ink); font: var(--nk-w-strong) var(--nk-fs-title)/calc(var(--nk-h-field) - 2px) var(--nk-sans); text-align: left; }
 button.pp-name { cursor: text; }
 button.pp-name:hover { border-color: var(--nk-line-2); }
 #pp-head input { flex: 1 1 auto; min-width: 0; height: var(--nk-h-field); padding: 0 var(--nk-s1); border: 1px solid var(--nk-accent); border-radius: var(--nk-radius); background: var(--nk-chrome); color: var(--nk-ink); font: var(--nk-w-strong) var(--nk-fs-title) var(--nk-sans); }
-.pp-tag { flex: none; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-mono); }
+.pp-tag { color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-mono); }
 .pp-tools { flex: none; display: flex; align-items: center; gap: var(--nk-s1); margin-left: auto; }
 .pp-tools .icon-btn { width: var(--nk-h-field); height: var(--nk-h-field); }
 .pp-width { height: var(--nk-h-field); padding: 0 var(--nk-s2); border: 0; border-radius: var(--nk-radius); background: none; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/1 var(--nk-mono); cursor: pointer; white-space: nowrap; }
 .pp-width:hover { background: var(--nk-hover); color: var(--nk-ink); }
-.pp-where { margin: 0; padding-left: calc(var(--nk-icon) + var(--nk-s2) + var(--nk-s1)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); }
+.pp-where { margin: 0; padding-left: calc(var(--nk-icon) + var(--nk-s2) + var(--nk-s1)); overflow-wrap: anywhere; white-space: normal; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); }
 .pp-where #doc-source { font-family: var(--nk-mono); }
 #pp-head :is(button, a):focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: 0; }
 

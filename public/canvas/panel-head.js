@@ -64,7 +64,8 @@ export function initPanelHead(ctx) {
     const open = d.item && d.kind !== 'many' ? `<a class="icon-btn pp-tool" id="pp-open" href="/view/${enc(d.item)}" target="_blank" rel="noopener" aria-label="Open this file alone" data-tip="Open this file alone">${OPEN_ICON}</a>` : '';
     const hide = `<button type="button" class="icon-btn pp-tool" id="pp-collapse" aria-controls="inspector" aria-label="Hide the design panel" aria-keyshortcuts="Control+Shift+Backslash" data-tip="Hide panel" data-key="Ctrl+Shift+\\">${HIDE_ICON}</button>`;
     const where = d.source ? `<span id="sel-component">${esc(c.name)}</span> · <span id="doc-source" title="${esc(d.where)}">${esc(d.where.split('/').pop())}</span>` : `<span id="sel-component">${esc(d.where)}</span>`;
-    const html = `<div class="pp-row"><span class="pp-glyph" aria-hidden="true">${d.icon}</span>${nameHtml}${d.tag ? `<span class="pp-tag" title="The element’s tag">&lt;${esc(d.tag)}&gt;</span>` : ''}<span class="pp-tools">${width}${open}${hide}</span></div><p class="pp-where">${where}</p>`;
+    // The name has the first line to itself (it wraps rather than being cut); the tag leads the line under it, before where it lives.
+    const html = `<div class="pp-row"><span class="pp-glyph" aria-hidden="true">${d.icon}</span>${nameHtml}<span class="pp-tools">${width}${open}${hide}</span></div><p class="pp-where">${d.tag ? `<span class="pp-tag" title="The element’s tag">&lt;${esc(d.tag)}&gt;</span> ` : ''}${where}</p>`;
     head.hidden = false;
     head.dataset.kind = d.kind;
     if (html === last) return;

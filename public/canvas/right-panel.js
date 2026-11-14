@@ -6,6 +6,8 @@
 // and clamped again when the window changes size.
 // Ctrl+Shift+\ (or the header's button) hides the panel and the canvas takes the width; the same key, or selecting something on the
 // canvas, brings it back. Hidden or not is remembered too ('napkin.right.open').
+// A wider panel never hides what is selected: if the selection was wholly in view before the canvas gave up the width, the camera
+// moves it back into view (by the width taken, or less), and only if it no longer fits is it fitted again (keep()).
 //   initRightPanel(ctx) -> ctx.rightPanel = { width(), setWidth(px, { save }), reset(), bounds(), toggle(open?), isOpen() }
 
 export const RIGHT_DEFAULT = 280, RIGHT_MIN = 240;
@@ -19,6 +21,34 @@ export function initRightPanel(ctx) {
   try { wanted = Number(localStorage.getItem(KEY)) || RIGHT_DEFAULT; } catch {}
   let shown = 0;
 
+  // The selection on screen (with room for its handles), in page pixels; null when nothing is selected or it is not drawn.
+  const HANDLE = 8;
+  function selBox() {
+    if (!ctx.state?.selections?.length || !ctx.view || !ctx.stage?.selectionRect) return null;
+    let r = null; try { r = ctx.stage.selectionRect(); } catch { return null; }
+    if (!r || !(r.w >= 0)) return null;
+    const v = ctx.view.get(), st = document.querySelector('#stage').getBoundingClientRect();
+    return { l: st.left + v.x + r.x * v.z - HANDLE, t: st.top + v.y + r.y * v.z - HANDLE, r: st.left + v.x + (r.x + r.w) * v.z + HANDLE, b: st.top + v.y + (r.y + r.h) * v.z + HANDLE, world: r };
+  }
+  const within = (s, b) => s.l >= b.left - 0.5 && s.r <= b.right + 0.5 && s.t >= b.top - 0.5 && s.b <= b.bottom + 0.5;
+  // Run a change of the canvas's width and keep the selection in view through it.
+  function keep(change) {
+    const stage = document.querySelector('#stage'), s0 = selBox(), b0 = stage?.getBoundingClientRect();
+    const out = change();
+    if (!s0 || !b0 || !within(s0, b0)) return out; // it was not wholly in view: the person's view is left alone
+    const b1 = stage.getBoundingClientRect(); // (a layout now: the grid has the new width)
+    if (within(s0, b1)) return out;
+    const room = b1.width - (s0.r - s0.l);
+    if (room >= 0) { // it fits: slide it left by what is missing (never past the left edge)
+      const dx = Math.max(b1.left - s0.l, b1.right - s0.r - Math.min(16, room / 2));
+      ctx.view.stop?.(); ctx.view.panBy(dx, 0);
+    } else { // it no longer fits at this zoom: fit it into the new width (never closer), its middle at the same height
+      const r = s0.world, v = ctx.view.get(), z = Math.min(v.z, (b1.width - 2 * (HANDLE + 16)) / Math.max(r.w, 1)), cy = v.y + (r.y + r.h / 2) * v.z;
+      ctx.view.stop?.(); ctx.view.set({ z, x: b1.width / 2 - (r.x + r.w / 2) * z, y: cy - (r.y + r.h / 2) * z });
+    }
+    return out;
+  }
+
   function apply(w) {
     const next = clampRight(w);
     edge.setAttribute('aria-valuemin', String(RIGHT_MIN));
@@ -27,7 +57,7 @@ export function initRightPanel(ctx) {
     edge.setAttribute('aria-valuetext', `${next} pixels`);
     if (next === shown) return next;
     shown = next;
-    root.style.setProperty('--nk-right-w', next + 'px');
+    keep(() => root.style.setProperty('--nk-right-w', next + 'px'));
     ctx.stage?.refreshOverlays?.();
     ctx.emit?.('shell', { right: next });
     return next;
@@ -95,7 +125,7 @@ export function initRightPanel(ctx) {
     if (!next && (insp.contains(document.activeElement) || edge === document.activeElement)) document.querySelector('#stage')?.focus({ preventScroll: true }); // focus never stays in a panel that is going away
     open = next;
     try { localStorage.setItem(KEY + '.open', open ? 'open' : 'closed'); } catch {}
-    show();
+    keep(show);
     ctx.stage?.refreshOverlays?.();
     ctx.emit?.('shell', { right: open ? shown : 0 });
     return open;

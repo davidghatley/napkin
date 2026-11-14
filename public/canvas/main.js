@@ -65,6 +65,7 @@ import { initSurface } from './commands.js';
 import { initShell } from './shell.js';
 import { initContextMenu } from './context-menu.js';
 import { initRightPanel } from './right-panel.js';
+import { initFields } from './fields.js';
 import { initPanelHead } from './panel-head.js';
 import { initCreate } from './create.js';
 import { initStatusbar } from './statusbar.js';
@@ -159,6 +160,7 @@ initTextEdit(ctx); // edit text in an HTML frame again, in place; F2 renames a c
 initMakeComponent(ctx); // basics pass 3: an element selected in an HTML frame becomes a component file (make-component.js)
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
+initFields(ctx); // one contract for every field in the right panel: select all, math, Enter, Tab, Escape, arrows (fields.js)
 initEditOps(ctx);
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
 initFileOps(ctx); // an HTML file as a frame: rename on its label, duplicate beside it, delete to the trash, each undoable

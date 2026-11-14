@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { deflateSync } from 'node:zlib';
 import { tempRepo, startServer, sleep, ROOT } from '../helpers/harness.js';
 import { launchChromium } from '../helpers/cdp.js';
 import { input } from '../helpers/input.js';
@@ -39,7 +40,7 @@ async function boot(size = [1440, 900], extra = {}) {
   await b.goto(server.url); // the width is restored before the first paint, so a clean start is a reload
   await b.waitFor('document.body.dataset.ready === "1"', 30000);
   await sleep(400);
-  return { b, io: input(b), url: server.url, close: async () => { await b.close(); await server.stop(); rmSync(r.dir, { recursive: true, force: true }); } };
+  return { b, io: input(b), url: server.url, dir: r.compDir, close: async () => { await b.close(); await server.stop(); rmSync(r.dir, { recursive: true, force: true }); } };
 }
 const reload = async (b, url) => { await b.goto(url); await b.waitFor('document.body.dataset.ready === "1"', 30000); await sleep(300); };
 const width = (b) => b.eval(`document.querySelector('#inspector').getBoundingClientRect().width`);
@@ -519,5 +520,230 @@ test('one panel: Ctrl+Shift+\\ hides the panel and the canvas takes the width; t
     const hb = JSON.parse(await b.eval(`JSON.stringify((() => { const q = document.querySelector('#pp-collapse').getBoundingClientRect(); return { x: q.left + q.width / 2, y: q.top + q.height / 2 }; })())`));
     await io.click(hb.x, hb.y); await sleep(300);
     assert.equal(await b.eval(`document.body.dataset.right`), 'closed');
+  } finally { await close(); }
+});
+
+// ------------------------------------------------------------------ the fields, Mixed, one undo, the width lever's camera, the labels at 280
+function png(w, h, top = [21, 79, 101]) {
+  const crc = (buf) => { let c = ~0; for (const b of buf) { c ^= b; for (let k = 0; k < 8; k++) c = (c >>> 1) ^ (0xedb88320 & -(c & 1)); } return ~c >>> 0; };
+  const chunk = (type, data) => { const t = Buffer.from(type), len = Buffer.alloc(4), sum = Buffer.alloc(4); len.writeUInt32BE(data.length); sum.writeUInt32BE(crc(Buffer.concat([t, data]))); return Buffer.concat([len, t, data, sum]); };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const rows = [];
+  for (let y = 0; y < h; y++) { const row = Buffer.alloc(1 + w * 3); for (let x = 0; x < w; x++) row.set(y < h / 2 ? top : [240, 189, 69], 1 + x * 3); rows.push(row); }
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
+}
+const PICTURES = { 'a.png': png(240, 160), 'b.png': png(240, 160, [192, 57, 43]) };
+// Typing as a keyboard does: the punctuation keys with their own key codes (math in a field is "+8", "*2", "1.5").
+const VK = { '.': 190, '-': 189, '+': 187, '*': 56, '/': 191 };
+async function typed(b, text) {
+  for (const ch of text) {
+    const vk = /[0-9a-z]/i.test(ch) ? ch.toUpperCase().charCodeAt(0) : VK[ch] ?? 0;
+    await b.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ch, text: ch, unmodifiedText: ch, windowsVirtualKeyCode: vk });
+    await b.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ch, windowsVirtualKeyCode: vk });
+  }
+}
+const jv = async (b, expr) => JSON.parse(await b.eval(`Promise.resolve(${expr}).then((v) => JSON.stringify(v ?? null))`));
+const until = async (fn, ms = 8000, what = 'condition') => { const t = Date.now(); for (;;) { const v = await fn(); if (v) return v; if (Date.now() - t > ms) assert.fail(`timed out waiting for ${what}`); await sleep(100); } };
+const centreOf = (b, expr) => jv(b, `(() => { const e = ${expr}; e.scrollIntoView?.({ block: 'nearest' }); const r = e.getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()`);
+const clickOn = async (b, io, expr, o) => { const p = await centreOf(b, expr); await io.click(p.x, p.y, o); await sleep(300); return p; };
+// A file's card on the canvas, and a row of the layers list, by what a person reads
+const card = (name) => `document.querySelector('#world [data-item-id=${JSON.stringify(name)}]')`;
+const row = (name) => `[...document.querySelectorAll('#layers .lrow')].find((r) => r.querySelector('.lname').textContent === ${JSON.stringify(name)})`;
+const active = (b) => jv(b, `(() => { const a = document.activeElement; return { id: a.id, key: a.dataset?.key ?? null, control: a.closest('[data-control]')?.dataset.control ?? null, value: a.value ?? null, all: a.value !== undefined && a.selectionStart === 0 && a.selectionEnd === a.value.length }; })()`);
+const contrast = (b, file) => jv(b, `fetch('/api/controls/${file}').then((r) => r.json()).then((j) => j.sections.flatMap((s) => s.controls).find((c) => c.id === 'view:contrast').value)`);
+// Count the undo requests the page sends (a wrapper on fetch: the resource-timing buffer fills up in a long test)
+const COUNT_UNDO = `(() => { if (window.__undos !== undefined) return; window.__undos = 0; const f = window.fetch; window.fetch = (u, o) => { if (/[/]api[/]undo$/.test(String(u?.url ?? u).split('?')[0])) window.__undos++; return f(u, o); }; })()`;
+
+test('one Ctrl+Z on an instrument is one undo request and one step; a multi-selection shows Mixed, an edit sets all, one Ctrl+Z puts all back', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot([1440, 900], PICTURES);
+  try {
+    await b.eval(COUNT_UNDO);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await clickOn(b, io, card('a.png'));
+    await b.waitFor(`!!document.querySelector('#instruments [data-control="view:contrast"] input')`, 10000);
+    const field = `document.querySelector('#instruments [data-control="view:contrast"] input')`;
+    await clickOn(b, io, field);
+    assert.ok((await active(b)).all, 'a click selects the whole value');
+    await typed(b, '1.5'); await io.key('Enter');
+    await until(async () => (await contrast(b, 'a.png')) === 1.5, 8000, 'Contrast 1.5 written');
+    assert.equal((await active(b)).control, 'view:contrast', 'Enter keeps the focus in the field');
+    await typed(b, '2'); await io.key('Enter');
+    await until(async () => (await contrast(b, 'a.png')) === 2, 8000, 'Contrast 2 written');
+    const n0 = await b.eval('window.__undos');
+    await io.key('z', { ctrl: true }); await sleep(1500);
+    assert.equal(await b.eval('window.__undos') - n0, 1, 'one Ctrl+Z, one undo request');
+    assert.equal(await contrast(b, 'a.png'), 1.5, 'one step back: 1.5, not 1');
+    assert.equal(await b.eval(`${field}.value`), '1.5', 'the field shows it');
+
+    // a second picture at Contrast 1 next to the first at 1.5: selected together (click, Shift+click), the field says Mixed
+    await io.key('Escape'); await sleep(200);
+    await clickOn(b, io, card('b.png'), { shift: true });
+    await until(() => b.eval(`napkin.state.selections.length === 2 && !!document.querySelector('#instruments [data-control="view:contrast"][data-mixed]')`), 8000, 'Mixed');
+    const mixed = await jv(b, `(() => { const i = ${field}, fit = document.querySelector('#instruments [data-control="view:fit"]'); return { value: i.value, placeholder: i.placeholder, fitMixed: fit.hasAttribute('data-mixed'), chosen: fit.querySelectorAll('[aria-pressed=true], [aria-checked=true], [aria-selected=true]').length }; })()`);
+    assert.deepEqual(mixed, { value: '', placeholder: 'Mixed', fitMixed: false, chosen: 1 }, 'Contrast differs (Mixed, empty); Fit is the same on both (one chosen)');
+    // Fit differs too once one picture is set to cover: then no choice is shown as chosen
+    await clickOn(b, io, card('b.png'));
+    await clickOn(b, io, `[...document.querySelectorAll('#instruments [data-control="view:fit"] button')].find((x) => x.textContent.trim() === 'cover')`);
+    await sleep(800);
+    await clickOn(b, io, card('a.png'), { shift: true });
+    await until(() => b.eval(`!!document.querySelector('#instruments [data-control="view:fit"][data-mixed]')`), 8000, 'Fit Mixed');
+    assert.equal(await b.eval(`document.querySelectorAll('#instruments [data-control="view:fit"] [aria-pressed=true], #instruments [data-control="view:fit"] [aria-checked=true]').length`), 0, 'a Mixed choice shows no option chosen');
+    // typing into the Mixed field sets both, one step; one Ctrl+Z puts both back
+    await clickOn(b, io, field);
+    await typed(b, '3'); await io.key('Enter');
+    await until(async () => (await contrast(b, 'a.png')) === 3 && (await contrast(b, 'b.png')) === 3, 8000, 'both at 3');
+    const n1 = await b.eval('window.__undos');
+    await io.key('Escape'); await sleep(200);
+    await io.key('z', { ctrl: true });
+    await until(async () => (await contrast(b, 'a.png')) === 1.5 && (await contrast(b, 'b.png')) === 1, 8000, 'both back');
+    assert.equal(await b.eval('window.__undos') - n1, 2, 'one Ctrl+Z: one request per picture, one step');
+  } finally { await close(); }
+});
+
+test('fields: click selects all; +8 *2 -4 /2 work on the value; Enter keeps the focus; Tab commits and moves on; Escape puts it back and goes to the canvas; Up/Down step; Ctrl+Z restores the HTML bytes', { timeout: 180000 }, async () => {
+  const { b, io, dir, close } = await boot();
+  const html = () => readFileSync(join(dir, 'landing.html'), 'utf8');
+  try {
+    // an HTML element, picked on the canvas
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    const h1 = `(() => { const c = napkin.find('landing').component, f = napkin.stage.sections.get(c).docFrame; return napkin.stage.cellElement(c, f.nodeOf(f.doc().querySelector('h1')), {}); })()`;
+    await clickOn(b, io, h1);
+    await until(() => b.eval(`!!document.querySelector('#inspector #pv-width')`), 10000, 'the h1 in the panel');
+    assert.match(await b.eval(`napkin.stage.sections.get(napkin.state.selection.component).docFrame.element(napkin.state.selection.node)?.el.localName`), /^h1$/);
+    const before = html();
+    const W = `document.querySelector('#inspector #pv-width')`;
+    await clickOn(b, io, W);
+    const a0 = await active(b);
+    assert.equal(a0.key, 'pv-width');
+    const w0 = Number(/^-?[\d.]+/.exec(await b.eval(`${W}.value || ${W}.placeholder`))[0]);
+    await typed(b, '+8'); await io.key('Enter');
+    await until(() => html().includes(`width: ${w0 + 8}px`), 8000, `width ${w0 + 8}px written`);
+    await sleep(300);
+    const a1 = await active(b);
+    assert.equal(a1.key, 'pv-width', 'Enter keeps the focus in the field');
+    assert.equal(a1.value, `${w0 + 8}px`); assert.ok(a1.all, 'all of it selected');
+    assert.equal(await b.eval(`!!document.querySelector('#doc-dock:not([hidden])') && getComputedStyle(document.querySelector('#doc-dock')).display !== 'none'`), false, 'no Apply/Cancel dock for an ordinary edit');
+    const after1 = html();
+    await typed(b, '*2'); await io.key('Tab');
+    await until(() => html().includes(`width: ${(w0 + 8) * 2}px`), 8000, 'Tab commits');
+    await sleep(300);
+    assert.equal((await active(b)).key, 'pv-height', 'Tab moves to the next field');
+    // Up/Down on a number, Shift for ten
+    await clickOn(b, io, W);
+    await io.key('ArrowUp'); assert.equal(await b.eval(`${W}.value`), `${(w0 + 8) * 2 + 1}px`);
+    await io.key('ArrowDown', { shift: true }); assert.equal(await b.eval(`${W}.value`), `${(w0 + 8) * 2 - 9}px`);
+    // Escape: the field goes back to what was written, the focus to the canvas, the selection stays
+    await io.key('Escape'); await sleep(400);
+    assert.equal((await active(b)).id, 'stage', 'Escape hands the focus to the canvas');
+    assert.equal(await b.eval(`${W}.value`), `${(w0 + 8) * 2}px`, 'Escape puts the field back');
+    assert.ok(html().includes(`width: ${(w0 + 8) * 2}px`), 'and nothing new was written');
+    assert.equal(await b.eval(`napkin.state.selections.length`), 1, 'the selection stays');
+    // each commit is one step; Ctrl+Z restores the bytes exactly
+    await io.key('z', { ctrl: true });
+    await until(() => html() === after1, 8000, 'one undo: the first commit\'s bytes');
+    await io.key('z', { ctrl: true });
+    await until(() => html() === before, 8000, 'two undos: the original bytes');
+
+    // -4 and /2 on a TSX component's field (panel.js), picked from the layers list
+    await clickOn(b, io, `document.querySelector('#layers .lrow[data-component][data-node="card"]') ?? ${row('Card')}`);
+    await until(() => b.eval(`!!document.querySelector('#panel #gap')`), 10000, 'the Card in the panel');
+    const tsx = () => readFileSync(join(dir, 'Card.tsx'), 'utf8');
+    await clickOn(b, io, `document.querySelector('#panel #gap')`);
+    assert.ok((await active(b)).all, 'a click selects all (TSX)');
+    await typed(b, '-4'); await io.key('Enter');
+    await until(() => /gap: '8px'|gap: 8\b/.test(tsx()), 8000, 'gap 12 - 4');
+    await sleep(300);
+    assert.equal((await active(b)).id, 'gap', 'Enter keeps the focus (TSX)');
+    await typed(b, '/2'); await io.key('Tab');
+    await until(() => /gap: '4px'|gap: 4\b/.test(tsx()), 8000, 'gap 8 / 2');
+    await sleep(300);
+    assert.notEqual((await active(b)).id, 'gap', 'Tab moves on (TSX)');
+    await typed(b, '99'); await io.key('Escape'); await sleep(400);
+    assert.equal((await active(b)).id, 'stage', 'Escape goes to the canvas (TSX)');
+    assert.doesNotMatch(tsx(), /99/, 'Escape wrote nothing');
+  } finally { await close(); }
+});
+
+test('a wider panel never hides the selection: dragged or keyed wider, a selection that was in view stays wholly in view', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot([1280, 800], PICTURES);
+  try {
+    const inStage = () => jv(b, `(() => { const s = document.querySelector('#stage').getBoundingClientRect(), r = ${card('a.png')}.getBoundingClientRect(); return { ok: r.left >= s.left - 0.5 && r.right <= s.right + 0.5 && r.top >= s.top - 0.5 && r.bottom <= s.bottom + 0.5, r: [r.left, r.right], s: [s.left, s.right] }; })()`);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await clickOn(b, io, card('a.png'));
+    // fitted to the selection (Shift+2): it fills the canvas, so any width taken would cut it
+    await b.eval(`document.querySelector('#stage').focus()`);
+    await io.key('@', { shift: true, code: 'Digit2' }); await sleep(900);
+    assert.ok((await inStage()).ok, 'in view before');
+    const edge = await box(b, '#right-edge'), x = edge.l + edge.w / 2, y = edge.t + 200;
+    await io.press(x, y);
+    for (let i = 1; i <= 8; i++) await io.move(x - i * 25, y, { buttons: 1 });
+    await io.release(x - 200, y); await sleep(500);
+    assert.equal(await width(b), 480);
+    const d = await inStage(); assert.ok(d.ok, `dragged wider, still wholly in view ${JSON.stringify(d)}`);
+
+    // keys: back to 280 (double-click), the picture pushed against the right edge of the canvas, then Shift+Left widens by steps
+    await b.eval(`document.querySelector('#right-edge').focus({ focusVisible: true })`);
+    await io.key('Home'); await sleep(300);
+    await b.eval(`document.querySelector('#stage').focus()`);
+    await io.key('@', { shift: true, code: 'Digit2' }); await sleep(900);
+    for (let i = 0; i < 4; i++) { await io.key('-', { ctrl: true, code: 'Minus' }); await sleep(200); }
+    await sleep(500);
+    const s = await box(b, '#stage'), r0 = await jv(b, `${card('a.png')}.getBoundingClientRect().toJSON()`);
+    await io.wheel(s.l + s.w / 2, s.t + s.h / 2, -(s.r - 24 - r0.right), 0, {}); await sleep(600);
+    const near = await inStage(); assert.ok(near.ok && near.s[1] - near.r[1] < 60, `at the right edge ${JSON.stringify(near)}`);
+    await b.eval(`document.querySelector('#right-edge').focus({ focusVisible: true })`);
+    for (let i = 0; i < 6; i++) { await io.key('ArrowLeft', { shift: true }); await sleep(120); }
+    await sleep(500);
+    assert.ok(await width(b) > 300, 'wider by keys');
+    const k = await inStage(); assert.ok(k.ok, `keyed wider, still wholly in view ${JSON.stringify(k)}`);
+  } finally { await close(); }
+});
+
+test('at 280 px no label or choice is cut to an ellipsis (HTML, TSX, CSS, SVG, PNG, MD); an SVG\'s rows are grouped under the element they edit', { timeout: 180000 }, async () => {
+  const { b, io, close } = await boot([1440, 900], PICTURES);
+  // every visible piece of text in the panel that is wider than its box (sr-only text is 1 px wide and skipped)
+  const CUT = `JSON.stringify([...document.querySelectorAll('#inspector *')].filter((e) => {
+    if (!e.getClientRects().length || e.clientWidth <= 1 || e.closest('[hidden], [inert]')) return false;
+    if (getComputedStyle(e).visibility === 'hidden' || !e.textContent.trim()) return false;
+    if ([...e.children].some((c) => !/^inline(?!-(block|flex|grid))/.test(getComputedStyle(c).display)) && !e.matches('button, label, .d-label, [role=radio], [role=tab], [role=option], summary, .lt')) return false;
+    return e.scrollWidth > e.clientWidth + 1;
+  }).map((e) => e.localName + '.' + String(e.className).slice(0, 30) + ' "' + e.textContent.trim().slice(0, 30) + '" ' + e.scrollWidth + '>' + e.clientWidth))`;
+  try {
+    assert.equal(await width(b), 280);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    const picks = {
+      HTML: `(() => { const c = napkin.find('landing').component, f = napkin.stage.sections.get(c).docFrame; return napkin.stage.cellElement(c, f.nodeOf(f.doc().querySelector('h1')), {}); })()`,
+      TSX: `document.querySelector('#layers .lrow[data-component][data-node="card"]') ?? ${row('Card')}`,
+      CSS: row('theme.css'), SVG: row('mark.svg'), PNG: row('a.png'), MD: row('notes.md'),
+    };
+    const FILE = { HTML: 'landing', TSX: 'Card', CSS: 'theme.css', SVG: 'mark.svg', PNG: 'a.png', MD: 'notes.md' };
+    const seen = {};
+    for (const [kind, expr] of Object.entries(picks)) {
+      await clickOn(b, io, expr);
+      await until(() => b.eval(`[${JSON.stringify(FILE[kind])}, napkin.find(${JSON.stringify(FILE[kind])})?.component].includes(napkin.state.selection?.component) && (!!napkin.instruments.panel() || document.querySelector('#panel').childElementCount > 0)`), 10000, `${kind} selected (${await b.eval("JSON.stringify(napkin.state.selections)")})`);
+      await sleep(900);
+      seen[kind] = await b.eval(`document.querySelectorAll('#inspector button, #inspector label, #inspector .d-label').length`);
+      assert.deepEqual(JSON.parse(await b.eval(CUT)), [], `${kind}: nothing cut at 280`);
+      if (kind === 'PNG') {
+        await until(() => b.eval(`!!document.querySelector('#instruments [data-control="view:fit"] button')`), 8000, `the Fit choices (${JSON.stringify(await b.eval('JSON.stringify(napkin.state.selections)'))})`);
+        const fit = await jv(b, `[...document.querySelectorAll('#instruments [data-control="view:fit"] .d-value button')].map((x) => x.textContent.trim())`);
+        assert.deepEqual(fit, ['contain', 'cover'], 'the image Fit choices read in full');
+      }
+      if (kind === 'SVG') {
+        const heads = await jv(b, `[...document.querySelectorAll('#instruments .d-section')].map((s) => ({ name: s.querySelector('.d-section-head')?.textContent.trim().split(/\\s{2,}|\\n/)[0], rows: [...s.querySelectorAll('.d-row .d-label')].map((l) => l.textContent.trim()) }))`);
+        const viewport = heads.find((h) => /^Viewport/.test(h.name)), path = heads.find((h) => /^path/.test(h.name));
+        assert.ok(viewport?.rows.includes('viewBox'), `the root's viewBox sits under "Viewport" ${JSON.stringify(heads)}`);
+        assert.ok(path?.rows.includes('fill'), `the path's fill sits under "path" ${JSON.stringify(heads)}`);
+      }
+    }
+    // two pictures selected together: the header's line and the shared rows read in full too
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await clickOn(b, io, card('a.png')); await clickOn(b, io, card('b.png'), { shift: true });
+    await until(() => b.eval(`napkin.state.selections.length === 2 && !!document.querySelector('#instruments [data-control="view:fit"]')`), 8000, 'two pictures');
+    await sleep(600);
+    assert.deepEqual(JSON.parse(await b.eval(CUT)), [], 'two selected: nothing cut at 280');
+    for (const [kind, n] of Object.entries(seen)) assert.ok(n > 2, `${kind}: the panel drew its controls (${n})`);
   } finally { await close(); }
 });

@@ -181,11 +181,13 @@ export function choiceBox(label, options, change, { none } = {}) {
   if (none !== undefined) list.unshift({ value: "", text: none });
   const root = el("div", { class: "d-choice", role: "group", "aria-label": label });
   let current = list[0]?.value ?? "";
-  const label_ = (v) => list.find((o) => o.value === v)?.text ?? String(v);
+  let mixed = false; // several items selected whose values differ: no choice is shown as made, and any choice sets them all
+  const label_ = (v) => (mixed ? "Mixed" : list.find((o) => o.value === v)?.text ?? String(v));
   const segmented =
     list.length <= 4 && list.reduce((n, o) => n + o.text.length, 0) <= 26;
   const pick = (v, emit) => {
-    if (v === current && emit) return;
+    if (v === current && emit && !mixed) return;
+    if (emit) mixed = false;
     current = v;
     paint();
     if (emit) change(v);
@@ -204,7 +206,7 @@ export function choiceBox(label, options, change, { none } = {}) {
     root.append(...buttons);
     paint = () =>
       buttons.forEach((b, i) =>
-        b.setAttribute("aria-pressed", String(list[i].value === current)),
+        b.setAttribute("aria-pressed", String(!mixed && list[i].value === current)),
       );
     root.addEventListener("keydown", (e) => {
       if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
@@ -298,10 +300,19 @@ export function choiceBox(label, options, change, { none } = {}) {
       trigger.title = `${label}: ${label_(current)}`;
       trigger.setAttribute("aria-label", `${label}: ${label_(current)}`);
       items.forEach((i) =>
-        i.setAttribute("aria-selected", String(i.dataset.value === String(current))),
+        i.setAttribute("aria-selected", String(!mixed && i.dataset.value === String(current))),
       );
     };
   }
+  Object.defineProperty(root, "mixed", {
+    get: () => mixed,
+    set: (m) => {
+      if (mixed === !!m) return;
+      mixed = !!m;
+      root.toggleAttribute("data-mixed", mixed);
+      paint();
+    },
+  });
   Object.defineProperty(root, "value", {
     get: () => current,
     set: (v) => {

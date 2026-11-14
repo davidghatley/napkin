@@ -89,6 +89,14 @@ body { font-family: var(--nk-sans); }
 /* ------------------------------------------------------------------ the width lever, host side (standards section 7 rule 6b) */
 /* Rows keep a gutter on the right like the one on the left: a select's arrow never meets the panel's edge. */
 #instruments .d-row { padding-right: var(--nk-s3); }
+/* A choice reads in full at every width (standards section 7 rule 12): below 360 px its figure (which only repeats the choice) steps
+   aside and the words take its room; words that still do not fit go to a second line, never to an ellipsis. */
+@container inspector (max-width: 359.98px) {
+  #instruments .d-row[data-kind="choice"] { grid-template-columns: 12px var(--d-label-w) minmax(0, 1fr); }
+  #instruments .d-row[data-kind="choice"] > .d-figure { display: none; }
+}
+#instruments .d-choice-seg, #instruments .d-segmented { flex-wrap: wrap; height: auto; }
+#instruments .dials :is(.d-segmented, .d-choice-seg) button { flex: 0 0 auto; overflow: visible; text-overflow: clip; }
 /* A colour is one line at every tier below the full editor: dot, label, swatch, value. The label wraps rather than being cut. */
 #instruments .d-section:not([data-depth="1"]):not([data-depth="3"]) .d-row[data-type="color"]:has(> .d-value > textarea) { grid-template-columns: 12px minmax(0, 1fr) var(--nk-h-field) minmax(0, 1.25fr); row-gap: 0; padding-bottom: 0; }
 #instruments .d-section:not([data-depth="1"]):not([data-depth="3"]) .d-row[data-type="color"] > .d-value { grid-column: auto; }

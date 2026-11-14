@@ -13,7 +13,7 @@
 //   ctx.instruments.undo()            undo the newest instrument change of the selection
 //
 // Keys inside the panel follow the dials library, with napkin's contract for modifiers: Shift+Arrow is coarse and
-// Alt+Arrow is fine. Enter on a typed value applies it and hands focus back to the control's label, where arrows step it.
+// Alt+Arrow is fine. A typed value follows the panel's one field contract (fields.js): Enter applies it and keeps the focus there.
 import { Dials, registerFigure } from '/dials/dials.js';
 import { colorObjects } from '/dials/studios.js';
 import { plain } from './words.js';
@@ -84,10 +84,12 @@ export function initInstruments(ctx) {
     schemas.set(id, j);
     return j;
   }
-  // The controls several items share (same id and type), with the first item's value.
+  // The controls several items share (same id and type). Where their values differ the control is marked mixed: it shows "Mixed"
+  // (dials), not the first item's value, and a value set on it goes to every item.
   function shared(list) {
     const [first, ...rest] = list;
-    const sections = first.sections.map((s) => ({ ...s, controls: s.controls.filter((c) => rest.every((o) => o.sections.some((t) => t.controls.some((d) => d.id === c.id && d.type === c.type)))) })).filter((s) => s.controls.length);
+    const twin = (o, c) => { for (const t of o.sections) { const d = t.controls.find((x) => x.id === c.id && x.type === c.type); if (d) return d; } return null; };
+    const sections = first.sections.map((s) => ({ ...s, controls: s.controls.filter((c) => rest.every((o) => twin(o, c))).map((c) => (rest.some((o) => !same(twin(o, c).value, c.value)) ? { ...c, mixed: true } : c)) })).filter((s) => s.controls.length);
     return { revision: first.revision, sections };
   }
   function prepare(id, schema) {
@@ -174,9 +176,14 @@ export function initInstruments(ctx) {
   }
   function values(fresh) {
     if (!panel) return;
-    const patch = {};
-    for (const s of fresh[0].sections) for (const c of s.controls) if (panel.rows.has(c.id) && !same(panel.get(c.id), c.value)) patch[c.id] = c.value;
-    try { panel.update(patch, { revision: fresh[0].revision }); } catch { draw(panel.items, fresh, token); }
+    const patch = {}, src = fresh.length > 1 ? shared(fresh) : fresh[0], mixed = [];
+    for (const s of src.sections) for (const c of s.controls) {
+      const row = panel.rows.get(c.id);
+      if (!row) continue;
+      if (!same(panel.get(c.id), c.value)) patch[c.id] = c.value;
+      if (!!row.c.mixed !== !!c.mixed && !panel.active?.has(c.id)) { if (c.mixed) row.c.mixed = true; else delete row.c.mixed; mixed.push(c.id); }
+    }
+    try { panel.update(patch, { revision: fresh[0].revision }); for (const id of mixed) panel.paint(id); } catch { draw(panel.items, fresh, token); }
   }
   async function refresh() {
     if (!panel) return;
@@ -188,7 +195,17 @@ export function initInstruments(ctx) {
   // How many instrument changes of each item are still standing, and when the newest was made: Ctrl+Z undoes them in order with other edits.
   const wrote = new Map();
   const canUndo = (id) => { const w = wrote.get(id); return !!w && w.n > 0 && w.at > (ctx.lastEditAt || 0); };
+  // One commit on several items (a multi-selection) is one step: Ctrl+Z on any of them undoes it on all of them.
+  const steps = []; // newest last: the items one commit wrote
   async function undoItem(id) {
+    const at = steps.findLastIndex((g) => g.includes(id));
+    if (at < 0 || steps[at].length < 2) { if (at >= 0) steps.splice(at, 1); return undoOne(id); }
+    const [group] = steps.splice(at, 1);
+    let ok = true;
+    for (const one of group) ok = (await undoOne(one)) && ok;
+    return ok;
+  }
+  async function undoOne(id) {
     const r = await ctx.fetch('/api/undo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: id }) });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || j.ok === false) { status(j.error || 'Nothing to undo.'); return false; }
@@ -200,12 +217,12 @@ export function initInstruments(ctx) {
 
   // One write at a time per item, each on the revision the last one returned.
   const queue = new Map();
-  function write(id, control, value) {
+  function write(id, control, value, step = null) {
     const run = async () => {
       const schema = schemas.get(id) || await read(id);
       const r = await ctx.fetch('/api/control', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ item: id, control, value, baseRevision: schema.revision }) });
       const j = await r.json().catch(() => ({}));
-      if (!r.ok || j.ok === false) { status(j.error || 'That change was not written.'); await read(id).catch(() => {}); refresh(); return false; }
+      if (!r.ok || j.ok === false) { status(j.error || 'That change was not written.'); if (step) { const k = step.indexOf(id); if (k >= 0) step.splice(k, 1); } /* not written: not undone either */ await read(id).catch(() => {}); refresh(); return false; }
       schema.revision = j.revision;
       gen.set(id, (gen.get(id) || 0) + 1);
       const w = wrote.get(id) ?? { n: 0, at: 0 }; wrote.set(id, { n: w.n + 1, at: performance.now() });
@@ -230,12 +247,13 @@ export function initInstruments(ctx) {
   }
   async function undo() {
     const list = panel?.items || ids();
-    for (const id of list) await undoItem(id);
+    if (list.length) await undoItem(list[0]);
   }
   function wire(p) {
     p.addEventListener('value', ({ detail: e }) => {
-      if (e.phase !== 'commit' || same(e.previous, e.value)) return;
-      for (const id of p.items) write(id, e.control, e.value);
+      if (e.phase !== 'commit' || (same(e.previous, e.value) && !e.wasMixed)) return;
+      const step = [...p.items]; steps.push(step); if (steps.length > 200) steps.shift();
+      for (const id of p.items) write(id, e.control, e.value, step);
     });
     p.addEventListener('command', ({ detail }) => { if (detail.command === 'undo') undo(); });
     // A colour bound to a token edits the token: the token source is written, and the control keeps var(--name).
@@ -249,7 +267,7 @@ export function initInstruments(ctx) {
     });
   }
 
-  // napkin's modifier contract (Shift coarse, Alt fine), type-ahead on choices, and Enter that hands focus back to the label.
+  // napkin's modifier contract (Shift coarse, Alt fine) and type-ahead on choices.
   let typed = '', typedAt = 0;
   host.addEventListener('keydown', (ev) => {
     if (!panel) return;
@@ -269,10 +287,16 @@ export function initInstruments(ctx) {
       let v = ev.target.value;
       if (ev.target.classList.contains('ki-source')) { try { v = JSON.parse(v); } catch (err) { status('That is not valid JSON. Fix it, then press Enter again.'); return; } }
       try { panel.transact(row.c.id, v); } catch (err) { status(err.message); return; }
-      row.label.focus({ focusVisible: true });
+      return; // the focus stays in the field (fields.js)
+    }
+    // Up and Down in a number being typed step it like everywhere in the panel: one step, Shift ten (fields.js), as one commit.
+    if (editing && (ev.key === 'ArrowUp' || ev.key === 'ArrowDown') && ev.target.tagName === 'INPUT' && typeof row.c.value === 'number' && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+      ev.preventDefault(); ev.stopPropagation();
+      try { panel.cancel(row.c.id); panel.adjust(row.c.id, ev.key === 'ArrowUp' ? 1 : -1, { altKey: ev.shiftKey }); } catch (err) { status(err.message); }
+      ev.target.value = panel.rows.get(row.c.id)?.input?.value ?? ev.target.value;
+      ev.target.select();
       return;
     }
-    if (ev.key === 'Enter' && editing && !ev.shiftKey) { setTimeout(() => { if (document.activeElement === ev.target && !ev.target.getAttribute('aria-invalid')) row.label.focus({ focusVisible: true }); }, 0); return; }
     if (['select', 'segmented'].includes(row.c.type) && !editing) {
       if (ev.key.length === 1 && !ev.ctrlKey && !ev.metaKey && !ev.altKey && ev.key !== ' ') { if (performance.now() - typedAt > 1500) typed = ''; typed += ev.key.toLowerCase(); typedAt = performance.now(); ev.preventDefault(); ev.stopPropagation(); return; }
       if (ev.key === 'Enter' && typed) {
