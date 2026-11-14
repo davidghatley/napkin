@@ -783,3 +783,23 @@ test('several HTML elements selected: the panel shows shared values and Mixed wh
     assert.equal(await b.eval('window.__undos') - n0, 1, 'one Ctrl+Z, one undo request');
   } finally { await close(); }
 });
+
+test('a long dropdown: clicking an option with the pointer chooses it, once, and the focus returns to the field', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    await clickRow(b, io, 'mark.svg');
+    await until(() => b.eval(`!!document.querySelector('#instruments [data-control="view:kind"] .d-choice-trigger')`), 10000, 'Open as');
+    const posts = () => b.eval(`performance.getEntriesByType('resource').filter((e) => /[/]api[/]control$/.test(new URL(e.name).pathname)).length`);
+    const p0 = await posts();
+    const T = `document.querySelector('#instruments [data-control="view:kind"] .d-choice-trigger')`;
+    const was = await b.eval(`${T}.textContent`);
+    await clickOn(b, io, T);
+    await until(() => b.eval(`!!document.querySelector('.d-choice-pop:not([hidden])')`), 5000, 'the list opens');
+    const pick = await jv(b, `[...document.querySelectorAll('.d-choice-pop [role=option]')].map((o) => o.textContent).find((t) => t !== ${JSON.stringify(was)})`);
+    await clickOn(b, io, `[...document.querySelectorAll('.d-choice-pop [role=option]')].find((o) => o.textContent === ${JSON.stringify(pick)})`);
+    await until(() => b.eval(`${T}.textContent === ${JSON.stringify(pick)}`), 8000, `the field shows ${pick}`);
+    assert.equal(await b.eval(`!!document.querySelector('.d-choice-pop')`), false, 'the list closes');
+    assert.equal(await posts() - p0, 1, 'one request');
+    assert.equal(await b.eval(`document.activeElement === ${T}`), true, 'the focus is back on the field');
+  } finally { await close(); }
+});
