@@ -175,9 +175,15 @@ export function initMakeComponent(ctx) {
     const m = steps.findLast((x) => fileOf(u) === x.path && !x.undone); if (!m) return;
     m.undone = true;
     (async () => {
-      const f = () => ctx.stage.sections.get(m.from)?.docFrame;
-      for (let i = 0; i < 160 && !(f()?.has?.(m.node)); i++) await new Promise((r) => setTimeout(r, 25));
-      ctx.select({ component: m.from, node: m.node, variant: {} });
+      const f = () => ctx.stage.sections.get(m.from)?.docFrame, gone = () => ![...ctx.state.components.values()].some((c) => c.path === m.path);
+      for (let i = 0; i < 200 && !(f()?.has?.(m.node) && gone()); i++) await new Promise((r) => setTimeout(r, 25)); // the new card leaves, and the frame holds its element
+      const here = () => ctx.state.selection?.component === m.from && ctx.state.selection.node === m.node;
+      for (let i = 0; i < 8; i++) { // the removed card may clear the selection as it goes: put it back until it holds, unless the person picks something else
+        const now = ctx.state.selection;
+        if (now && now.component !== m.from && ctx.state.components.has(now.component) && i) return;
+        if (!here()) ctx.select({ component: m.from, node: m.node, variant: {} });
+        await new Promise((r) => setTimeout(r, 100));
+      }
     })();
   });
   ctx.on?.('redone', (u) => {

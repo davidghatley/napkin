@@ -34,6 +34,7 @@ const file = (name) => join(r.compDir, name);
 const q = (e) => b.eval(e);
 const until = (fn, ms = 10000) => waitFor(fn, ms, 50);
 const select = async (node) => { await q(`napkin.select({ component: 'page.html', node: '${node}', variant: {} }); 0`); await sleep(150); };
+const sel_is = (v) => `(napkin.state.selection ? napkin.state.selection.component + '|' + napkin.state.selection.node : '') === '${v}'`;
 const sel = () => q(`napkin.state.selection ? napkin.state.selection.component + '|' + napkin.state.selection.node : ''`);
 
 before(async () => {
@@ -70,9 +71,10 @@ test('component history: undo selects the source element again; redo makes the c
 
 test('component header: the right panel carries a Create component action beside the selection name, with its shortcut', { timeout: 90000 }, async () => {
   await until(async () => !(await q(`!!document.querySelector('.nk-rename')`)) || null);
+  await sleep(1500); // the redo of the test before finishes selecting the card it made
   await select('0.1.1.0'); // the card's heading
   const btn = `document.querySelector('#panel .selhead #make-component')`;
-  await b.waitFor(`!!${btn}`, 8000);
+  await b.waitFor(`${sel_is('page.html|0.1.1.0')} && !!${btn}`, 8000);
   assert.match(await q(`${btn}.textContent`), /Create component/);
   assert.match(await q(`${btn}.querySelector('kbd')?.textContent || ''`), /Ctrl.*Alt.*K/i, 'its shortcut is shown');
   assert.equal(await q(`${btn}.getAttribute('aria-disabled')`), null, 'enabled on an element');
@@ -80,10 +82,13 @@ test('component header: the right panel carries a Create component action beside
   await b.waitFor(`${btn}?.getAttribute('aria-disabled') === 'true'`, 8000);
   assert.match(await q(`${btn}.title`), /whole frame/, 'dimmed, with the reason');
   await select('0.1.1.0');
-  await b.waitFor(`!!${btn} && ${btn}.getAttribute('aria-disabled') === null`, 8000);
+  await b.waitFor(`${sel_is('page.html|0.1.1.0')} && !!${btn} && ${btn}.getAttribute('aria-disabled') === null`, 8000);
   const x = await q(`(() => { const r = ${btn}.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; })()`);
   await io.click(x[0], x[1]);
-  await until(() => existsSync(file("Heading.tsx")) || existsSync(file("H2.tsx")) || existsSync(file("Card.tsx")));
+  await until(() => existsSync(file('H2.tsx')));
+  await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename' || null);
+  await io.key('Escape');
+  await until(async () => !(await q(`!!document.querySelector('.nk-rename')`)) || null);
 });
 
 test('component inspector: the made component shows the styling of its scoped style, not "no styles"', { timeout: 90000 }, async () => {

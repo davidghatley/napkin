@@ -352,12 +352,13 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const makeButton = () => {
     const can = ctx.makeComponent?.can(); if (!can) return '';
     const keys = ctx.surface?.bindings().find((x) => x.command === 'make-component')?.keys || '';
-    return `<button type="button" id="make-component" class="doc-make"${can.ok ? '' : ` aria-disabled="true" title="${esc(can.why)}"`}>Create component${keys ? ` <kbd>${esc(keyLabel(keys))}</kbd>` : ''}</button>`;
+    return `<button type="button" id="make-component" class="doc-make" data-command="make-component"${can.ok ? '' : ` aria-disabled="true" title="${esc(can.why)}"`}>Create component${keys ? ` <kbd>${esc(keyLabel(keys))}</kbd>` : ''}</button>`;
   };
   el.innerHTML = `
     <button type="button" class="doc-skip" id="doc-skip">Skip to your variables</button>
     <div class="selhead doc-head" data-node="${esc(sel.node)}">
-      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(labelShort)}</span>${makeButton()}</div>
+      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(labelShort)}</span></div>
+      ${makeButton()}
       <p class="hint mono doc-where"><span id="doc-source" title="${esc(comp.path)}:${node.line}">${esc(comp.path)}:${node.line}</span><button type="button" id="doc-frame-width" title="Frame width and breakpoints (B)">${frame.width} px <kbd>B</kbd></button></p>
     </div>
     <div class="doc-body">
