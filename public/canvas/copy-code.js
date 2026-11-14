@@ -167,12 +167,13 @@ export function initCopyCode(ctx) {
     return null;
   }
   // `target`: the node to paste into instead of the selected one (a frame's menu pastes into its body)
-  async function paste(plainText, html, target) {
-    const x = sel(); if (!x) return null;
+  // `from`: { s, c, tree, base }, the destination as it was when the command began (a menu reads the clipboard first)
+  async function paste(plainText, html, target, from = null) {
+    const x = from ?? sel(); if (!x) return null;
     const { s, c } = x;
     const code = markup(plainText, html, isReact(c));
     if (!code) { ctx.hint('Nothing to paste here: copy an element first'); return null; }
-    const fr = frameOf(s.component), tree = fr?.tree()?.tree;
+    const fr = frameOf(s.component), tree = from?.tree ?? fr?.tree()?.tree;
     const at = tree && find(tree, target ?? s.node);
     if (!at) { ctx.hint('Select an element to paste into'); return { ok: false }; }
     // onto a selected element: it becomes the last child. An element that cannot hold children takes it after itself.
@@ -182,7 +183,7 @@ export function initCopyCode(ctx) {
     const clip = ctx.clip?.parts?.length > 1 && code === String(ctx.clip.text || '').split(MARK)[0].trim() ? ctx.clip.parts : [code];
     const edits = clip.map((one, i) => (isReact(c) ? { op: 'insert', parent: into.node, index: index + i, jsx: one } : { op: 'insert', parent: into.node, index: index + i, html: one }));
     const what = clip.length > 1 ? `${clip.length} elements` : `the <${tagOf(code)}>`;
-    const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: s.component, baseRevision: c.revision, edits, summary: clip.length > 1 ? `Pasted ${clip.length} elements` : `Pasted <${tagOf(code)}>` }) });
+    const r = await ctx.fetch('/api/edit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ component: s.component, baseRevision: from?.base ?? c.revision, edits, summary: clip.length > 1 ? `Pasted ${clip.length} elements` : `Pasted <${tagOf(code)}>` }) });
     const j = await r.json().catch(() => ({ ok: false, error: `Paste failed (${r.status})` }));
     if (!j.ok) { ctx.hint(`Could not paste: ${plain(j.error)}`); return j; }
     ctx.hint(`Pasted ${what} into <${into.tag}>. Cmd-Z undoes it`);

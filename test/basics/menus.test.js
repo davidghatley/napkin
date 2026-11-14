@@ -667,3 +667,37 @@ test('menus: no dead right-click after Shift+F10 and Escape; text fields keep th
     await io.key('Escape');
   } finally { await close(); }
 });
+
+// ---- round 4: a command keeps what it was started on (target and revision taken when invoked), Undo restores the editing target ----
+function rig(b, io) {
+  const pick = async (label, from = '#ctxmenu') => { const p = await centre(b, `[...document.querySelectorAll('${from} [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === ${JSON.stringify(label)})`); await io.click(p.x, p.y); };
+  const rev = () => b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.tree()?.revision ?? null`);
+  const reloaded = async (before) => { await b.waitFor(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.tree()?.revision !== ${JSON.stringify(before)}`, 10000); await sleep(300); };
+  const selIs = async (want, why) => { try { await b.waitFor(`JSON.stringify(napkin.state.selections.map((s) => s.component + '|' + s.node)) === ${JSON.stringify(JSON.stringify(want))}`, 5000); } catch {} assert.deepEqual(await selection(b), want, why); };
+  const undo = async (redo = false) => { await b.eval(`document.activeElement?.blur()`); const r0 = await rev(); await io.key('z', { ctrl: true, shift: redo }); await reloaded(r0); };
+  return { pick, rev, reloaded, selIs, undo };
+}
+
+test('menus: Paste writes where it was started, even when another right-click lands while the clipboard is read', { timeout: 180000 }, async () => {
+  const { b, io, html, close } = await boot();
+  const { pick, rev, reloaded } = rig(b, io);
+  try {
+    await b.send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: new URL(await b.eval('location.href')).origin });
+    const [h1, main, sec] = [await node(b, 'h1'), await node(b, 'main'), await node(b, 'section.cards')];
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    await pick('Copy');
+    await sleep(300);
+    // the clipboard answers slowly: time enough for a second right-click to change the selection first
+    await b.eval(`(() => { const slow = (f) => async (...a) => { await new Promise((r) => setTimeout(r, 600)); return f(...a); }; navigator.clipboard.read = slow(navigator.clipboard.read.bind(navigator.clipboard)); navigator.clipboard.readText = slow(navigator.clipboard.readText.bind(navigator.clipboard)); })()`);
+    await rclick(io, await centre(b, el(main)));
+    assert.deepEqual(await selection(b), [`${LANDING}|${main}`]);
+    const p = await centre(b, el(sec)), r0 = await rev();
+    await pick('Paste here');
+    await io.move(p.x, p.y); await io.press(p.x, p.y, { button: 'right' }); await io.release(p.x, p.y, { button: 'right' });
+    await reloaded(r0);
+    const text = html();
+    assert.equal(text.match(/<h1>/g)?.length, 2, 'one copy was pasted');
+    assert.match(text, /<main class="hero">(?:(?!<\/main>).)*<h1>Plan the week<\/h1>(?:(?!<\/main>).)*<h1>Plan the week<\/h1>(?:(?!<\/main>).)*<\/main>/s, 'it went into the main whose menu was used');
+    assert.doesNotMatch(text, /<section class="cards">(?:(?!<\/section>).)*<h1>/s, 'not into the section picked meanwhile');
+  } finally { await close(); }
+});

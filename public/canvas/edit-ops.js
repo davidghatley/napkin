@@ -128,8 +128,8 @@ export function initEditOps(ctx) {
     }
     return new Promise((res) => { const i = new Image(); i.onload = () => res(fit(i.naturalWidth, i.naturalHeight)); i.onerror = () => res([120, 120]); i.src = '/' + src; });
   }
-  async function paste(data) {
-    const t = target();
+  async function paste(data, dest) {
+    const t = dest ?? target();
     if (!t) { say('Select a layer to paste into'); return null; }
     const mine = data.getData?.(MIME) || (data.getData?.('text/plain') || '').startsWith(PREFIX) && data.getData('text/plain').slice(PREFIX.length);
     if (mine) {
@@ -412,30 +412,32 @@ export function initEditOps(ctx) {
     return r;
   }
   // The clipboard as a paste event would give it; napkin's own last copy when the page may not read the clipboard.
-  async function readClipboard() {
+  async function readClipboard(engine = kind() === 'engine') {
     try {
       const items = await Promise.race([navigator.clipboard.read(), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 10000))]);
       const text = {}, files = [];
       for (const it of items) for (const t of it.types) { const b = await it.getType(t); if (t.startsWith('text/')) text[t] = await b.text(); else if (/^image\//.test(t)) files.push(new File([b], 'pasted', { type: t })); }
       if (Object.keys(text).length || files.length) return { getData: (t) => text[t] ?? '', files };
     } catch {}
-    if (kind() === 'engine' && ctx.clip) return { getData: (t) => (t === 'text/plain' ? ctx.clip.text : t === 'text/html' ? ctx.clip.html : ''), files: [] };
+    if (engine && ctx.clip) return { getData: (t) => (t === 'text/plain' ? ctx.clip.text : t === 'text/html' ? ctx.clip.html : ''), files: [] };
     if (ops.clip) { const text = JSON.stringify(ops.clip); return { getData: (t) => (t === MIME ? text : t === 'text/plain' ? PREFIX + text : ''), files: [] }; }
     if (ctx.clip) return { getData: (t) => (t === 'text/plain' ? ctx.clip.text : t === 'text/html' ? ctx.clip.html : ''), files: [] };
     return null;
   }
   async function pasteNow() {
     if (refuse('paste')) return null;
-    const data = await readClipboard();
+    // the destination (component, node, tree and revision) is taken now, before the clipboard is read: a right-click meanwhile does not redirect the write
+    const engine = kind() === 'engine', e = engine ? eng() : null, t = engine ? null : target();
+    const cap = e && { s: { ...e.s }, c: e.c, tree: e.tree, base: e.base };
+    const data = await readClipboard(engine);
     if (!data) { say(`Nothing to paste yet. Copy something first, or use ${'Ctrl/Cmd+V'}`); return null; }
-    if (kind() === 'engine') {
-      const e = eng();
+    if (engine) {
       // onto a frame (its card): into the body; onto an element: into it, as the keys do
       const top = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(e.tree) ?? e.tree.find((n) => n.tag === 'html');
-      const into = isFrame(e.s) ? (top?.node ?? e.at.parent?.node ?? null) : null;
-      return ctx.copyCode?.paste(data.getData('text/plain'), data.getData('text/html'), into);
+      const into = isFrame(cap.s) ? (top?.node ?? e.at.parent?.node ?? null) : null;
+      return ctx.copyCode?.paste(data.getData('text/plain'), data.getData('text/html'), into, cap);
     }
-    return paste(data);
+    return paste(data, t);
   }
 
   Object.assign(ops, { duplicate: async () => (oneFrame() ? frameDuplicate() : kind() === 'engine' ? engDuplicate() : duplicate()), wrap, unwrap, hide, copy, paste, payload, can, kind, remove, order, selectParent, selectChildren, selectAll, copyNow, cutNow, pasteNow, isFrame });
