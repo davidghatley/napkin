@@ -42,7 +42,7 @@ export function createStage(ctx, root, world, view) {
   const sizeChip = document.createElement('span'); sizeChip.className = 'osize'; selectBox.append(sizeChip); // "128 × 36", in canvas pixels
   const extras = [];
   let shelf = { x: 0, y: 0, h: 0 };
-  let laidOut = false, hoverEl = null, measuring = false, tidy = false;
+  let laidOut = false, hoverEl = null, measuring = false, tidy = false, held = false; // held: a card or a marquee is being dragged (no hover outline, standards 5.9)
   const byName = (a, b) => (ctx.state.components.get(a)?.name ?? a).localeCompare(ctx.state.components.get(b)?.name ?? b);
 
   // ---------------------------------------------------------------------------------------------- lookup
@@ -50,7 +50,7 @@ export function createStage(ctx, root, world, view) {
   function cellElement(id, node, variant) {
     const sec = sections.get(id);
     if (!sec) return null;
-    if (sec.docFrame) return sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js)
+    if (sec.docFrame) return node === '' ? sec.frame : sec.docFrame.element(node); // an HTML component: the element inside its frame (doc-frames.js); '' the card itself (nothing drawn in it)
     const css = `.mount [data-n="${CSS.escape(node)}"]`;
     return cellOf(sec, variant)?.querySelector(css) || sec.el.querySelector(css);
   }
@@ -709,14 +709,14 @@ export function createStage(ctx, root, world, view) {
     if (!sels.length && !hoverEl && !measuring && !selectBox.style.display.includes('block') && !hoverBox.style.display.includes('block')) return; // nothing is shown, so there is nothing to place (and no layout to force)
     const base = overlays.getBoundingClientRect();
     const selEl = selectedElement(sel);
-    place(selectBox, selEl, sel && (selEl?.docFrame ? elementName(selEl.el) + (editNote?.chip ? ` ${editNote.chip}` : '') : `${ctx.state.components.get(sel.component)?.name} · ${sel.node}`), base);
+    place(selectBox, selEl, sel && (selEl?.docFrame ? elementName(selEl.el) + (editNote?.chip ? ` ${editNote.chip}` : '') : `${ctx.state.components.get(sel.component)?.name}${sel.node ? ` · ${sel.node}` : ''}`), base);
     if (selEl?.isConnected && selectBox.style.display === 'block') { const r = selEl.getBoundingClientRect(), z = view.get().z; sizeChip.textContent = `${Math.round(r.width / z)} × ${Math.round(r.height / z)}`; }
     tagSide(selEl);
     const others = sels.filter((s) => s !== sel);
     while (extras.length < others.length) { const d = document.createElement('div'); d.className = 'overlay-extra'; overlays.append(d); extras.push(d); }
     extras.forEach((d, i) => (others[i] ? place(d, selectedElement(others[i]), undefined, base) : (d.style.display = 'none')));
     const cardSelected = hoverEl?.classList?.contains('frame') && hoverEl.parentElement?.dataset.sel; // a card hovered by its label is not outlined twice once selected
-    place(hoverBox, hoverEl && !cardSelected && !sels.some((s) => selectedElement(s) === hoverEl) ? hoverEl : null, undefined, base);
+    place(hoverBox, hoverEl && !held && !cardSelected && !sels.some((s) => selectedElement(s) === hoverEl) ? hoverEl : null, undefined, base);
     drawMeasure(base);
     selectBox.dataset.count = String(sels.length);
     ctx.emit('overlays', {});
@@ -845,11 +845,14 @@ export function createStage(ctx, root, world, view) {
     }
   }
   ctx.on('viewsettle', () => { for (const sec of titled) { sec.el.querySelector('.cmp-head')?.style.removeProperty('--nk-lf'); sec.el.style.removeProperty('--nk-ls'); sec.headLf = undefined; sec.chipLs = undefined; } titled.clear(); if (gesturing) { gesturing = false; refreshOverlays(); } queueCull('exact'); });
+  let viaKey = false; // the last input was a key (not a modifier alone), not a pointer: a selection made then rings its label
+  addEventListener('keydown', (ev) => { if (!/^(Shift|Control|Alt|Meta)$/.test(ev.key)) viaKey = true; }, true); addEventListener('pointerdown', () => { viaKey = false; }, true);
   ctx.on('select', () => {
     for (const [gid, gsec] of sections) if (gsec.docFrame) gsec.docFrame.grip.tabIndex = ctx.state.selections.some((q) => q.component === gid) ? 0 : -1; // only the selected frame's grip is a Tab stop
     for (const s of ctx.state.selections) live(s.component);
     const on = new Set(ctx.state.selections.map((s) => s.component));
-    for (const [id, sec] of sections.all()) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; }
+    const kf = viaKey;
+    for (const [id, sec] of sections.all()) { if (on.has(id)) sec.el.dataset.sel = '1'; else delete sec.el.dataset.sel; if (on.has(id) && kf) sec.el.dataset.kfocus = '1'; else delete sec.el.dataset.kfocus; } // a selection made from the keyboard rings its label (standards 3, States)
     const n = ctx.state.selections.length;
     selectBox.dataset.more = String(n - 1);
     refreshOverlays();
@@ -916,6 +919,7 @@ export function createStage(ctx, root, world, view) {
   root.addEventListener('mouseleave', () => setHoverEl(null, null));
   // the layers tree hovers a node on the canvas
   function hoverNode(sel) {
+    if (sel && sel.node == null) { hoverEl = sections.get(sel.component)?.frame ?? null; refreshOverlays(); return; } // a file row: its whole card
     hoverEl = sel ? cellElement(sel.component, sel.node, ctx.state.selection?.component === sel.component ? ctx.state.selection.variant : undefined) : null;
     refreshOverlays();
   }
@@ -943,7 +947,7 @@ export function createStage(ctx, root, world, view) {
   addEventListener('pointermove', (ev) => {
     if (!mq) return;
     if (!mq.moved && Math.hypot(ev.clientX - mq.x, ev.clientY - mq.y) < 4) return;
-    mq.moved = true;
+    if (!mq.moved) { mq.moved = held = true; refreshOverlays(); }
     const b = root.getBoundingClientRect();
     Object.assign(marquee.style, { left: `${Math.min(mq.x, ev.clientX) - b.left}px`, top: `${Math.min(mq.y, ev.clientY) - b.top}px`, width: `${Math.abs(ev.clientX - mq.x)}px`, height: `${Math.abs(ev.clientY - mq.y)}px` });
     marquee.hidden = false;
@@ -952,6 +956,7 @@ export function createStage(ctx, root, world, view) {
     if (!mq) return;
     const m = mq; mq = null; marquee.hidden = true;
     if (!m.moved) return;
+    held = false;
     suppressClick = Date.now();
     const x0 = Math.min(m.x, ev.clientX), x1 = Math.max(m.x, ev.clientX), y0 = Math.min(m.y, ev.clientY), y1 = Math.max(m.y, ev.clientY);
     let best = [];
@@ -992,7 +997,7 @@ export function createStage(ctx, root, world, view) {
   addEventListener('pointermove', (ev) => {
     if (!drag) return;
     if (!drag.moved && Math.hypot(ev.clientX - drag.x, ev.clientY - drag.y) < 3) return;
-    drag.moved = true;
+    drag.moved = held = true;
     const z = view.get().z;
     moveTo(drag.id, Math.round(drag.from.x + (ev.clientX - drag.x) / z), Math.round(drag.from.y + (ev.clientY - drag.y) / z));
     refreshOverlays();
@@ -1001,13 +1006,14 @@ export function createStage(ctx, root, world, view) {
   addEventListener('pointerup', async (ev) => {
     if (!drag) return;
     const d = drag; drag = null; delete document.body.dataset.dragging;
+    if (held) { held = false; refreshOverlays(); }
     ctx.emit('framedragend', {});
     if (d.moved && d.title && ctx.frameDrop?.(d.id, ev.clientX, ev.clientY)) { moveTo(d.id, d.from.x, d.from.y); suppressClick = Date.now(); refreshOverlays(); return; } // dropped onto another component: it became an instance there, and the frame stays where it was
     if (!d.moved) {
       const c = ctx.state.components.get(d.id);
       if (d.title && c?.doc) ctx.select({ component: d.id, node: c.doc.root.id, variant: variantGrid(c.doc)[0] });
       else if (d.title && c?.item) ctx.select({ component: d.id, node: 'item', variant: {} });
-      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; if (first) ctx.select({ component: d.id, node: first.node, variant: {} }); }
+      else if (d.title && c?.kind === 'html') { const t = sections.get(d.id)?.docFrame?.tree(); const body = (function find(l) { for (const n of l || []) { if (n.tag === 'body') return n; const f = find(n.children); if (f) return f; } return null; })(t?.tree); const first = body?.children[0] || body || t?.tree?.[0]; ctx.select({ component: d.id, node: first ? first.node : '', variant: {} }); } // (nothing drawn: an empty or failed render is selected as its card)
       else if (d.title && c?.readOnly) ctx.select({ component: d.id, node: '', variant: {} }); // nothing to edit: the panel says why
       return;
     }
