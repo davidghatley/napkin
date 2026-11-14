@@ -75,7 +75,7 @@
   --nk-panel: var(--nk-chrome);
   --nk-ink: var(--nk-text);
   --nk-ink-muted: light-dark(#5b6371, #a3aab7);  /* 6:1 on the panel, both themes */
-  --nk-hover: light-dark(rgb(28 31 39 / .06), rgb(232 234 240 / .07));
+  --nk-hover: light-dark(rgb(28 31 39 / .08), rgb(232 234 240 / .08));
   --nk-press: light-dark(rgb(28 31 39 / .11), rgb(232 234 240 / .13));
   --nk-armed: light-dark(rgb(52 89 226 / .12), rgb(123 155 255 / .18));
   --nk-armed-ink: light-dark(#2c52d2, #a9bfff);  /* icon on --nk-armed: 5:1 and 7:1 */

@@ -83,3 +83,21 @@ test('polish: below 25% every card label, file cards and HTML and component card
     }
   } finally { await close(); }
 });
+
+test('polish: a card focused from the keyboard (G C) wears the shared 2 px ring at a 2 px offset, and a hover fill is 8%', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot([1280, 720], { 'notes.md': '# Notes\n\nhello\n' }, 4);
+  try {
+    for (const th of ['light', 'dark']) {
+      await theme(b, th); await sleep(900);
+      await b.eval(`(() => { const r = napkin.view.rectToWorld(document.querySelector('section[data-component="notes.md"] > .frame').getBoundingClientRect()); return napkin.view.set({ x: 400 - r.x, y: 300 - r.y, z: 1 }); })()`); await sleep(400);
+      const L = await label(b, 'notes.md');
+      await io.click(L.x, L.y); await sleep(300);
+      await io.key('g'); await io.key('c'); await sleep(500);
+      const f = JSON.parse(await b.eval(`JSON.stringify((() => { const e = document.activeElement, s = getComputedStyle(e); return { id: e.dataset.itemId ?? e.className, width: s.outlineWidth, offset: s.outlineOffset, style: s.outlineStyle, lf: getComputedStyle(document.querySelector('#world')).getPropertyValue('--nk-lf') }; })())`));
+      assert.deepEqual([f.width, f.offset, f.style], ['2px', '2px', 'solid'], `${th}: the focused card (${JSON.stringify(f)})`);
+      const fill = await b.eval(`(() => { const e = document.createElement('i'); e.style.background = 'var(--nk-hover)'; document.body.append(e); const c = getComputedStyle(e).backgroundColor; e.remove(); return c; })()`);
+      assert.match(fill, /\/ 0\.08\)|, 0\.08\)/, `${th}: the hover fill is 8% (${fill})`);
+      await io.key('Escape'); await io.move(4, 710);
+    }
+  } finally { await close(); }
+});
