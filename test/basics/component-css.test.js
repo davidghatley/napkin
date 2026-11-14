@@ -20,6 +20,7 @@ function engine() {
 }
 const find = (eng, file, pred) => { const walk = (ns) => { for (const n of ns) { if (pred(n)) return n; const f = walk(n.children); if (f) return f; } return null; }; return walk(eng.tree(file).tree); };
 const cls = (c) => (n) => String(n.attrs?.class || '').split(/\s+/).includes(c);
+const made = (d) => readdirSync(d).filter((n) => /\.tsx$/.test(n));
 const cssOf = (src) => /const css = `\n([\s\S]*?)\n`;/.exec(src)?.[1] || '';
 // every selector of every rule (inside @media too), keyframe steps left out
 const selectors = (css) => [...css.matchAll(/(^|\n)\s*([^@{}\n][^{}\n]*?)\s*\{/g)].map((m) => m[2]).filter((s) => !/^(from|to|\d+%)/.test(s));
@@ -77,13 +78,24 @@ test('white space a rule keeps (white-space: pre-wrap) is written exactly, and s
   assert.match(out, /\{"\\n"\}/, 'the line break between the paragraphs is text the browser keeps');
 });
 
-test('a root that a grid or flex parent sized gets the width it had, first, so its own width rules still win', () => {
+test('a root keeps the size it had in the frame: width, and the height a grid or flex parent stretched it to, after its own rules', () => {
   const { d, eng } = engine();
   const node = find(eng, 'journey.html', cls('teaser'));
-  const css = cssOf(readFileSync(join(d, eng.componentFrom({ from: 'journey.html', node: node.node, width: 396.5 }).path), 'utf8'));
-  assert.match(css, /^\.teaser-context \{[\s\S]*?\}\n\n(@media[\s\S]*?\}\n\}\n\n)?:where\(\.teaser-context > \*\) \{ width: 396\.5px; \}\n\n:where\(\.teaser-context \.teaser\)/);
+  const css = cssOf(readFileSync(join(d, eng.componentFrom({ from: 'journey.html', node: node.node, width: 396.5, height: 120 }).path), 'utf8'));
+  assert.match(css, /:where\(\.teaser-context \.teaser\)[^]*:where\(\.teaser-context > \*\) \{ width: min\(396\.5px, 100%\); min-height: 120px; \}\s*$/, 'the lock is the last rule, so it beats the root\'s own width');
   const plain = cssOf(readFileSync(join(d, eng.componentFrom({ from: 'journey.html', node: node.node }).path), 'utf8'));
-  assert.doesNotMatch(plain, /width: \d/, 'no width when the frame sent none');
+  assert.doesNotMatch(plain, /width: \d/, 'no size when the frame sent none');
+});
+
+test('a table row or cell cannot stand alone: refused in one sentence, nothing made', () => {
+  const { d, eng } = engine();
+  const before = made(d);
+  for (const tag of ['tr', 'td', 'th', 'tbody', 'thead', 'caption']) {
+    const node = find(eng, 'workshop.html', (n) => n.tag === tag);
+    assert.throws(() => eng.componentFrom({ from: 'workshop.html', node: node.node }), (e) => e.status === 400 && /part of a table/.test(e.message) && /whole table/.test(e.message), tag);
+  }
+  assert.deepEqual(made(d), before);
+  assert.ok(eng.componentFrom({ from: 'workshop.html', node: find(eng, 'workshop.html', (n) => n.tag === 'table').node }).path);
 });
 
 test('naming afterwards: the file and its export take the new name, and one undo still takes the component away', () => {
@@ -109,7 +121,6 @@ test('naming afterwards: the file and its export take the new name, and one undo
 });
 
 // ---- round 4 ----
-const made = (d) => readdirSync(d).filter((n) => /\.tsx$/.test(n));
 
 test('a shape inside an inline <svg> is refused in one sentence and nothing is made; the whole <svg> still works', () => {
   const { d, eng } = engine();
