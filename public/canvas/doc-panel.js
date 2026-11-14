@@ -4,11 +4,11 @@
 //
 // The cascade is worked out the way the browser does it (inspector-cascade.js, decision 0015): the same code the server
 // uses for GET /api/component/<id>/rules?node=, here matching with the frame's own element.matches() and matchMedia().
-// A typed value is staged first: one key picks its scope (E this element, C this class, V this variable), the one-line
-// change is shown, and Apply writes it with one contract edit (POST /api/edit). The file is the source of truth; the
-// frame and this panel redraw from it when the engine says it changed.
+// A typed value shows on the canvas as it is typed and is written to this element when it is committed (Enter, Tab, or leaving the
+// field: the panel's one field contract, fields.js), one contract edit (POST /api/edit) and one undo step. Where else it could go
+// (this class, this variable) is a choice made on purpose: Alt+C / Alt+V while typing, or binding a variable, opens the scope chooser
+// with Apply. The file is the source of truth; the frame and this panel redraw from it when the engine says it changed.
 import { plain } from './words.js';
-import { keyLabel } from './keylabel.js';
 import { createCascade, longhandsOf } from './inspector-cascade.js';
 import { createPreview } from './inspector-preview.js';
 import { classify, offScale, bindExact, bindPieces, kindOfProp, parseColor, tokens, firstVar } from './inspector-model.js';
@@ -17,6 +17,7 @@ import { stripsHtml, wireStrips, askProp } from './inspector-vars.js';
 import { initMeasure } from './measure-overlay.js';
 import { usersOfVariable } from './stage-highlight.js';
 import { capList } from './panel-height.js';
+import { sectionHtml, wireSections, openAround } from './sections.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const normSel = (t) => String(t).replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\s+/g, ' ').replace(/\s*([,>+~])\s*/g, '$1').trim();
@@ -56,8 +57,8 @@ function wireKeys(el) {
       if (k === 'b') currentCtx?.inspector?.toggleBound(); else currentCtx?.inspector?.scope({ e: 'element', c: 'class', v: 'variable' }[k]);
       return;
     }
-    // Tab from the value being edited goes straight to where it will be written, then Apply; Shift+Tab comes back
-    if (staged && ev.key === 'Tab' && !ev.shiftKey && t.matches?.('.vrow input.val') && t.dataset.prop === staged.prop) { const to = t.closest('#panel').querySelector('#doc-staged .opt[tabindex="0"]'); if (to) { ev.preventDefault(); to.focus(); return; } }
+    // (Tab in the field is the field contract's: it commits and moves to the next field, fields.js. The scope chooser never takes it.)
+    // Shift+Tab from the chooser comes back to the value it is choosing for
     if (staged && ev.key === 'Tab' && ev.shiftKey && t.classList?.contains('opt')) { const back = t.closest('#panel').querySelector(`.vrow input.val[data-prop="${CSS.escape(staged.prop)}"]`); if (back) { ev.preventDefault(); back.focus(); return; } }
     if (staged && t.classList?.contains('opt') && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(ev.key)) { ev.preventDefault(); currentCtx?.inspector?.step(ev.key === 'ArrowLeft' || ev.key === 'ArrowUp' ? -1 : 1); return; }
     if (ev.key === 'Escape' && staged) { ev.preventDefault(); ev.stopPropagation(); if (isText(t)) t.value = t.defaultValue; currentCtx?.inspector?.cancel(); return; }
@@ -67,7 +68,7 @@ function wireKeys(el) {
     if (ev.key !== 'Enter' || (ev.shiftKey && t.id === 'doc-text')) return;
     ev.preventDefault();
     if (t.id === 'doc-class-add' || t.closest('.decl.add')) t.dispatchEvent(new CustomEvent('doc-commit', { bubbles: true }));
-    else if (t.closest('.vrow') && staged) currentCtx?.inspector?.apply();
+    else if (t.closest('.vrow')) { if (staged) currentCtx?.inspector?.apply(); } // nothing typed: the focus stays
     else t.blur(); // its change event applies it
   });
 }
@@ -124,6 +125,7 @@ export function initInspector(ctx) {
   ctx.on('select', (sel) => { if (!staged) return; const k = sel ? `${sel.component}|${sel.node}` : null; if (k !== staged.key) { const was = staged; dropStaged(ctx); ctx.hint(`Cancelled ${was.prop}: ${was.text}. Nothing was written.`); } });
   ctx.inspector = {
     scope: (id) => live?.setScope?.(id),            // 'element', 'class' or 'variable'
+    choose: () => live?.choose?.(),                 // open the scope chooser on the value being typed (its suggested scope)
     toggleBound: () => live?.toggleBound?.(),
     apply: () => live?.apply?.(),
     cancel: () => { if (live?.cancel && staged?.key === live.selKey) live.cancel(); else dropStaged(ctx); },
@@ -151,7 +153,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const node = frame?.node(sel.node);
   const target = frame?.element(sel.node)?.el;
   const key = `${comp.component}|${sel.node}|${comp.revision}|${stamp}`;
-  if (!node) { el.innerHTML = `<div class="selhead"><div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span></div><p class="hint">${esc(comp.path)} · loading…</p></div>`; return; }
+  if (!node) { el.innerHTML = `<p class="hint pp-note">${esc(comp.path)} · loading…</p>`; return; }
   const focus = document.activeElement && el.contains(document.activeElement) ? document.activeElement.dataset.key : null;
   if (el.dataset.full === key && focus) return; // a redraw would take the field from under the cursor
   el.dataset.full = key;
@@ -173,7 +175,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   const explain = cas ? cas.explain(target) : { rules: [], inline: [], props: {}, vars: {}, inherited: [] };
   const classes = (node.attrs?.class || '').split(/\s+/).filter(Boolean);
   const textOnly = !node.children.length && node.text !== undefined;
-  const label = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.map((c) => '.' + c).join('')}`, labelShort = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.slice(0, 2).map((c) => '.' + c).join('')}${classes.length > 2 ? ` +${classes.length - 2}` : ''}`;
+  const label = `${node.tag}${node.attrs?.id ? '#' + node.attrs.id : ''}${classes.map((c) => '.' + c).join('')}`;
   const computed = /^\{/.test(node.attrs?.className ?? '') ? String(node.attrs.className).replace(/^\{|\}$/g, '').replace(/\s+/g, ' ').slice(0, 70) : null; // classes a React file works out in code
   const index = (r) => { // which of the same-selector rules in that file this is (contract ruling 7)
     const same = data.rules.filter((x) => x.file === r.file && x.kind === 'style' && normSel(x.selector) === normSel(r.selector) && normMedia(x.media.at(-1)) === normMedia(r.media.at(-1)));
@@ -224,14 +226,14 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const flag = offs.map((off) => `<div class="pflag"><span class="k">${esc(off.token)} ${off.exact ? 'is exactly' : 'is close to'}</span><button type="button" class="pbind" data-prop="${esc(prop)}" data-token="${esc(off.token)}" data-var="${esc(off.name)}" title="Write var(${esc(off.name)}) in place of ${esc(off.token)}">${esc(off.name)} <span class="k">${esc(off.value)}</span></button></div>`).join('');
     const shown = w.resolved ?? w.value;
     return `<div class="vrow${lenCls(w.value)}${offs.length ? ' off' : ''}${w.state === 'partial' ? ' partial' : ''}" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}"${name !== prop ? ` title="${esc(prop)}"` : ''}>${esc(name)}</label>${w.state === 'partial' ? '<span class="pstate">partly overridden</span>' : ''}${w.important ? '<span class="imp">!important</span>' : ''}${w.resolved && w.resolved !== w.value ? `<span class="res${String(w.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(w.resolved)}">${esc(w.resolved)}</span>` : ''}</div>
-      <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="${esc(w.value)}" aria-label="${esc(prop)}" spellcheck="false" title="${esc(w.value)}">${advToggle(prop)}</div>
+      <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="${esc(w.value)}" aria-label="${esc(prop)}" spellcheck="false" autocomplete="off" title="${esc(w.value)}">${advToggle(prop)}</div>
       <div class="pmore">${line('', where(s2))}${part}${lost}${varLine}${flag}</div></div>`;
   }
   // A value nothing sets on this element: its field holds what the browser works out, dimmed, and typing in it stages a new
   // declaration like any other (the scope picker says where it goes).
   function ghostRow(prop, w, name = prop) {
     return `<div class="vrow ghost" data-prop="${esc(prop)}"><div class="phead"><label for="pv-${esc(prop)}"${name !== prop ? ` title="${esc(prop)}"` : ''}>${esc(name)}</label></div>
-      <div class="pval"><input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="" placeholder="${esc(w.shown ?? w.value)}" aria-label="${esc(prop)} (not set here, now ${esc(w.shown ?? w.value)})" spellcheck="false">${advToggle(prop)}</div></div>`;
+      <div class="pval"><input class="val" id="pv-${esc(prop)}" data-key="pv-${esc(prop)}" data-prop="${esc(prop)}" value="" placeholder="${esc(w.shown ?? w.value)}" aria-label="${esc(prop)} (not set here, now ${esc(w.shown ?? w.value)})" spellcheck="false" autocomplete="off">${advToggle(prop)}</div></div>`;
   }
 
   // ---------- the panel's width and height levers (standards section 7 rules 6 and 7) ----------
@@ -292,23 +294,35 @@ export async function renderDocPanel(ctx, el, sel, comp) {
       ${t(62, 52, 'padding', 'cap')}${t(160, 54, pd[0])}${t(160, 100, pd[2])}${t(80, 76, pd[3])}${t(240, 76, pd[1])}
       ${t(160, 76, `${cw} × ${ch}`, 'cnt')}</svg></figure>`;
   }
+  // The values, one section per group in the panel's order (Layout, Spacing, Appearance, Typography, Fill, Stroke, Effects). A text
+  // element always has its Typography: what is set here, what it inherits (with where from), and the rest as the browser works it out,
+  // each typed over like any value. What fits no group is "Other CSS", after the content sections.
+  const kindKey = /\.(tsx|jsx)$/i.test(comp.path || '') ? 'tsx' : 'html';
+  const sec = (id, title, body, o = {}) => (body ? sectionHtml({ kind: kindKey, id, title, body, ...o }) : '');
+  const texty = textOnly || !!node.runs?.length;
+  const TYPE_GROUP = GROUPS.find(([id]) => id === 'type')[2];
+  const typeInherited = new Set(); // inherited rows Typography shows (the Inherited section then leaves them out)
   function valuesHtml() {
     const by = new Map(GROUPS.map(([id]) => [id, []]).concat([['other', []]]));
     const taken = new Set(['width', 'height']);
     for (const prop of Object.keys(SIDES)) if (explain.props[prop] || SIDES[prop].some(([sd]) => explain.props[partProp(prop, sd)])) { taken.add(prop); for (const [sd] of SIDES[prop]) taken.add(partProp(prop, sd)); }
     for (const pw of props) if (!taken.has(pw[0])) by.get(groupOf(pw[0])).push(valueRow(pw));
-    const head = (name, extra = '') => `<h4 class="pl-gh">${name}${extra}</h4>`;
-    const groupHtml = (id, name, body) => (body ? `<div class="pl-group" data-group="${id}">${head(name)}${body}</div>` : '');
+    if (texty) {
+      const covered = new Set(props.map(([p]) => p));
+      for (const e of explain.inherited) if (TYPE_GROUP.test(e.prop)) { typeInherited.add(e); by.get('type').push(inheritedRow(e)); covered.add(e.prop); for (const x of e.sets || []) covered.add(x); }
+      for (const p of ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'text-align']) if (!covered.has(p)) by.get('type').push(valueRow([p, winOf(p)]));
+    }
     const sideList = (names) => names.filter((p) => taken.has(p)).map(sidesBlock).join('');
-    const out = [
-      groupHtml('layout', 'Layout', geometry() + by.get('layout').join('')),
-      // padding is offered on every element (Figma shows it on every frame); margin and a radius once something sets them
-      groupHtml('spacing', 'Spacing', (taken.has('padding') ? '' : sidesBlock('padding')) + sideList(['padding', 'margin']) + by.get('spacing').join('') + boxFigure()),
-      groupHtml('appearance', 'Appearance', sideList(['border-radius']) + by.get('appearance').join('')),
-      ...GROUPS.slice(3).map(([id, name]) => groupHtml(id, name, by.get(id).join(''))),
-      groupHtml('other', 'Other', by.get('other').join('')),
-    ];
-    return out.join('');
+    return {
+      main: [
+        sec('layout', 'Layout', geometry() + by.get('layout').join('')),
+        // padding is offered on every element (Figma shows it on every frame); margin and a radius once something sets them
+        sec('spacing', 'Spacing', (taken.has('padding') ? '' : sidesBlock('padding')) + sideList(['padding', 'margin']) + by.get('spacing').join('') + boxFigure()),
+        sec('appearance', 'Appearance', sideList(['border-radius']) + by.get('appearance').join('')),
+        ...GROUPS.slice(3).map(([id, name]) => sec(id, name, by.get(id).join(''))),
+      ].join(''),
+      other: sec('other', 'Other CSS', by.get('other').join(''), { open: false }),
+    };
   }
   // what this element takes from an ancestor because nothing sets it here, with a link that selects that ancestor
   // How long a value reads: a long one takes its own line under its name when the panel is too narrow for both (inspector-doc.css).
@@ -317,7 +331,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const link = typeof e.from === 'string' && frame.has(e.from) ? `<button type="button" class="plink" data-node="${esc(e.from)}" title="Select the element it comes from"><span class="selp">${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)}</span> ${e.source.kind === 'inline' ? '' : loc(`${base(e.source.file)}:${e.source.declLine ?? e.source.line}`)}</button>` : `<code class="selp">${esc(e.source.kind === 'inline' ? 'inline style' : e.source.selector)}</code>`;
     const shown = e.resolved ?? e.value, name = e.sets.length > 1 && e.sets.length < 6 ? e.sets.join(', ') : e.prop;
     return `<div class="vrow inh${lenCls(e.value)}" data-prop="${esc(e.prop)}"><div class="phead"><label for="pv-${esc(e.prop)}">${esc(name)}</label><span class="pstate">inherited</span>${e.resolved && e.resolved !== e.value ? `<span class="res${String(e.value).length >= 15 || parseColor(shown) ? ' longv' : ''}" title="${esc(e.resolved)}">${esc(e.resolved)}</span>` : ''}</div>
-      <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(e.prop)}" data-key="pv-${esc(e.prop)}" data-prop="${esc(e.prop)}" value="${esc(e.value)}" aria-label="${esc(e.prop)} (inherited)" spellcheck="false" title="${esc(e.value)}"></div>
+      <div class="pval">${swatch(shown)}<input class="val" id="pv-${esc(e.prop)}" data-key="pv-${esc(e.prop)}" data-prop="${esc(e.prop)}" value="${esc(e.value)}" aria-label="${esc(e.prop)} (inherited)" spellcheck="false" autocomplete="off" title="${esc(e.value)}"></div>
       <div class="pmore"><div class="pfrom"><span class="k">inherited from</span> ${link}</div></div></div>`;
   }
 
@@ -332,7 +346,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const bucket = defs.filter((x) => x.file === s.file && normMedia(x.media.at(-1)) === normMedia(s.media.at(-1)));
     const k = Math.max(0, bucket.findIndex((x) => x.line === s.declLine && normSel(x.selector) === normSel(s.selector)));
     return `<div class="decl${lenCls(v.raw)}" data-kind="var" data-prop="${esc(name)}" data-file="${esc(s.file)}" data-index="${k}" data-media="${esc(s.media.at(-1) ?? '')}">
-      <button type="button" class="lit prop" data-lit-var="${esc(name)}" title="Light up every place this variable is used"><code>${esc(name)}</code></button><input class="val" data-key="v-${esc(name)}" value="${esc(v.raw)}" aria-label="${esc(name)}" spellcheck="false" title="now ${esc(v.value)}"><span class="src" title="${esc(s.file)}:${s.declLine} · ${esc(s.selector)}">${esc(base(s.file))}:${s.declLine}${v.inherited ? ' ↑' : ''}</span></div>`;
+      <button type="button" class="lit prop" data-lit-var="${esc(name)}" title="Light up every place this variable is used"><code>${esc(name)}</code></button><input class="val" data-key="v-${esc(name)}" value="${esc(v.raw)}" aria-label="${esc(name)}" spellcheck="false" autocomplete="off" title="now ${esc(v.value)}"><span class="src" title="${esc(s.file)}:${s.declLine} · ${esc(s.selector)}">${esc(base(s.file))}:${s.declLine}${v.inherited ? ' ↑' : ''}</span></div>`;
   }
 
   function declRow({ prop, value, important, kind, rule, idx, line, over, partial, by, resolved }) {
@@ -340,70 +354,45 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const src = kind === 'rule' ? `<span class="src">:${line}</span>` : '';
     const why = (over || partial) && by ? `${partial ? 'partly overridden by' : 'beaten by'} ${by.kind === 'inline' ? 'the inline style' : `${by.selector} (${base(by.file)}:${by.declLine ?? by.line})`}` : '';
     return `<div class="decl${lenCls(value)}${over ? ' over' : ''}${partial ? ' partial' : ''}" data-kind="${kind}" data-prop="${esc(prop)}"${kind === 'rule' ? ` data-rule="${rule}" data-index="${idx}"` : ''}>
-      <code class="prop"${why ? ` title="${esc(why)}"` : ''}>${esc(prop)}</code><input class="val" data-key="${esc(k)}" value="${esc(value)}" aria-label="${esc(prop)}" spellcheck="false"${resolved ? ` title="now ${esc(resolved)}"` : why ? ` title="${esc(why)}"` : ''}>${important ? '<span class="imp">!important</span>' : ''}<button type="button" class="decl-x" aria-label="Remove ${esc(prop)}">×</button>${src}</div>`;
+      <code class="prop"${why ? ` title="${esc(why)}"` : ''}>${esc(prop)}</code><input class="val" data-key="${esc(k)}" value="${esc(value)}" aria-label="${esc(prop)}" spellcheck="false" autocomplete="off"${resolved ? ` title="now ${esc(resolved)}"` : why ? ` title="${esc(why)}"` : ''}>${important ? '<span class="imp">!important</span>' : ''}<button type="button" class="decl-x" aria-label="Remove ${esc(prop)}">×</button>${src}</div>`;
   }
   const rulesStrong = [...explain.rules].reverse();
-  // a soft fold: closed it takes no room, but what is in it stays in reach (Tab into it opens it)
-  const softOpen = (id) => !!openFolds.get(id);
-  const soft = (id) => (softOpen(id) ? ' data-open="1"' : '');
-  const fold = (id, dflt) => ((openFolds.has(id) ? openFolds.get(id) : dflt) ? ' open' : '');
 
-  // Create component beside the selection name (standards 9, rule 2): the same command, the same enabled rule and reason.
-  const makeButton = () => {
-    const can = ctx.makeComponent?.can(); if (!can) return '';
-    const keys = ctx.surface?.bindings().find((x) => x.command === 'make-component')?.keys || '';
-    return `<button type="button" id="make-component" class="doc-make" data-command="make-component"${can.ok ? '' : ` aria-disabled="true" title="${esc(can.why)}"`}>Create component${keys ? ` <kbd>${esc(keyLabel(keys))}</kbd>` : ''}</button>`;
-  };
+  const values = props.length || target ? valuesHtml() : { main: '', other: '' };
+  const inheritedRest = explain.inherited.filter((e) => !typeInherited.has(e));
+  const codeNote = !props.length && computed ? `<p class="hint">Its classes are worked out in code: <code>${esc(computed)}</code> at line ${node.line} of ${esc(base(comp.path))}. No stylesheet rule of this folder matches it here. Change them in that file.</p>` : '';
+  // One list, in the panel's order (standards section 7 rule 4): the design sections, then this element's content and where its
+  // values come from (Text, Classes, Other CSS, Inherited, Inline style, Rules, Variables), then the checks. The header is
+  // panel-head.js's; the file's own sections (Source, Viewer) follow from the instruments.
   el.innerHTML = `
     <button type="button" class="doc-skip" id="doc-skip">Skip to your variables</button>
-    <div class="selhead doc-head" data-node="${esc(sel.node)}">
-      <div class="crumb"><span class="chip" id="sel-component">${esc(comp.name)}</span><span class="crumb-sep" aria-hidden="true">›</span><span class="mono" id="sel-node" title="${esc(label)}">${esc(labelShort)}</span></div>
-      ${makeButton()}
-      <p class="hint mono doc-where"><span id="doc-source" title="${esc(comp.path)}:${node.line}">${esc(comp.path)}:${node.line}</span><button type="button" id="doc-frame-width" title="Frame width and breakpoints (B)">${frame.width} px <kbd>B</kbd></button></p>
-    </div>
-    <div class="doc-body">
-      ${textOnly ? `<section class="dsec"><h3>Text</h3><textarea id="doc-text" data-key="text" rows="${Math.min(4, Math.max(1, Math.ceil(node.text.length / 38)))}" aria-label="Text">${esc(node.text)}</textarea></section>` : ''}
-      ${node.runs?.length ? `<section class="dsec"><h3>Text <span class="where">${node.runs.length} run${node.runs.length === 1 ? '' : 's'} between its elements</span></h3>${node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join('')}</section>` : ''}
-      <section class="dsec"><h3>Classes</h3>
-        <div class="doc-classes" id="doc-classes">${classes.length > 12 ? `<span class="hint" title="${esc(classes.join(' '))}">first 12 of ${classes.length}</span>` : ''}${classes.slice(0, 12).map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
-          <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false"></div>
-      </section>
-      <section class="dsec" id="doc-values"><h3>Where each value comes from${mainFile ? `<span class="where hfile">${esc(mainFile)}</span>` : ''}</h3>
-        ${props.length || target ? valuesHtml() : ''}${props.length ? '' : computed ? `<p class="hint">Its classes are worked out in code: <code>${esc(computed)}</code> at line ${node.line} of ${esc(base(comp.path))}. No stylesheet rule of this folder matches it here. Change them in that file.</p>` : explain.inherited.length ? '<p class="hint">Nothing sets a value on this element itself.</p>' : '<p class="hint">Nothing styles this element yet.</p>'}
-      </section>
-      ${explain.inherited.length ? `<section class="dsec soft" id="doc-inherited" data-soft="inherited"${soft('inherited')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('inherited')}">Inherited <span class="where">${explain.inherited.length} from the elements around it</span></button></h3><div class="soft-b">${explain.inherited.map(inheritedRow).join('')}</div></section>` : ''}
-      <details class="dsec fold" data-fold="inline"${fold('inline', inlineDecls.length > 0)}><summary><h3>Inline style <span class="where">${inlineDecls.length ? `${inlineDecls.length} set` : 'none yet'}</span></h3></summary>
-        <div class="decls" id="doc-inline">${inlineDecls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'style', over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
-          <div class="decl add"><input class="prop" data-key="inline-new-prop" placeholder="property" aria-label="New inline property" spellcheck="false"><input class="val" data-key="inline-new-val" placeholder="value" aria-label="New inline value" spellcheck="false"></div></div>
-      </details>
-      <details class="dsec fold" data-fold="rules"${fold('rules', false)}><summary><h3>Rules <span class="where">${rulesStrong.length} matching, strongest first</span></h3></summary>
-        ${rulesStrong.length ? '<div class="rules-list">' + rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
+    <div class="doc-body" data-node="${esc(sel.node)}">
+      ${values.main}
+      ${textOnly ? sec('text', 'Text', `<textarea id="doc-text" data-key="text" rows="${Math.min(4, Math.max(1, Math.ceil(node.text.length / 38)))}" aria-label="Text">${esc(node.text)}</textarea>`) : ''}
+      ${node.runs?.length ? sec('runs', 'Text', node.runs.map((r) => `<textarea class="doc-run" data-run="${r.index}" data-key="run-${r.index}" rows="${Math.min(4, Math.max(1, Math.ceil(r.text.length / 34)))}" aria-label="Text run ${r.index + 1}"${r.editable ? '' : ' disabled title="Computed in code"'}>${esc(r.text)}</textarea>`).join(''), { note: `${node.runs.length} run${node.runs.length === 1 ? '' : 's'}` }) : ''}
+      ${sec('classes', 'Classes', `<div class="doc-classes" id="doc-classes">${classes.length > 12 ? `<span class="hint" title="${esc(classes.join(' '))}">first 12 of ${classes.length}</span>` : ''}${classes.slice(0, 12).map((c) => `<span class="cls"><code>.${esc(c)}</code><button type="button" class="cls-x" data-remove="${esc(c)}" aria-label="Remove class ${esc(c)}">×</button></span>`).join('')}
+          <input id="doc-class-add" data-key="class-add" placeholder="add class" aria-label="Add a class" spellcheck="false" autocomplete="off"></div>${codeNote}`)}
+      ${values.other}
+      ${inheritedRest.length ? sec('inherited', 'Inherited', `<div id="doc-inherited">${inheritedRest.map(inheritedRow).join('')}</div>`, { open: false, note: `${inheritedRest.length} from around it` }) : ''}
+      ${sec('inline', 'Inline style', `<div class="decls" id="doc-inline">${inlineDecls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'style', over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
+          <div class="decl add"><input class="prop" data-key="inline-new-prop" placeholder="property" aria-label="New inline property" spellcheck="false" autocomplete="off"><input class="val" data-key="inline-new-val" placeholder="value" aria-label="New inline value" spellcheck="false" autocomplete="off"></div></div>`, { open: false, note: inlineDecls.length ? `${inlineDecls.length} set` : 'none yet' })}
+      ${sec('rules', 'Rules', rulesStrong.length ? '<div class="rules-list">' + rulesStrong.map((r) => `<div class="rule" data-rule="${r.order}" data-selector="${esc(r.selector)}" data-file="${esc(r.file)}">
           <div class="rhead"><button type="button" class="lit" data-lit-sel="${esc(r.selector)}" data-lit-file="${esc(r.file)}" title="Light up every place this rule applies"><code class="sel">${esc(r.selector)}</code></button>${r.media.length ? `<span class="media">@media ${esc(r.media.join(' and '))}</span>` : ''}<span class="src" title="${esc(r.file)}:${r.line} · specificity ${r.specificity.join(',')}">${esc(base(r.file))}:${r.line}</span></div>
           <div class="decls">${r.decls.map((d) => declRow({ prop: d.prop, value: d.value, important: d.important, kind: 'rule', rule: r.order, idx: index(data.rules[r.order]), line: d.line, over: d.state === 'overridden', partial: d.state === 'partial', by: d.by, resolved: d.resolved })).join('')}
-            <div class="decl add"><input class="prop" data-key="r${r.order}-new-prop" data-rule="${r.order}" placeholder="property" aria-label="New property in ${esc(r.selector)}" spellcheck="false"><input class="val" data-key="r${r.order}-new-val" data-rule="${r.order}" placeholder="value" aria-label="New value in ${esc(r.selector)}" spellcheck="false"></div></div>
-        </div>`).join('') + '</div>' : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>'}
-      </details>
-      ${varNames.length ? `<section class="dsec soft" data-soft="vars-here"${soft('vars-here')}><h3><button type="button" class="soft-h" aria-expanded="${softOpen('vars-here')}">Variables here <span class="where">${varNames.length}, the definition that applies</span></button></h3><div class="soft-b"><div class="decls">${varNames.map(varRow).join('')}</div></div></section>` : ''}
-      <section class="dsec" id="doc-vars"><h3>Your variables <span class="where">${Object.keys(folderVars).length} in this folder</span></h3>
-        <input id="doc-vars-filter" data-key="vars-filter" class="vfilter" type="search" placeholder="find a variable" aria-label="Find a variable" spellcheck="false">
+            <div class="decl add"><input class="prop" data-key="r${r.order}-new-prop" data-rule="${r.order}" placeholder="property" aria-label="New property in ${esc(r.selector)}" spellcheck="false" autocomplete="off"><input class="val" data-key="r${r.order}-new-val" data-rule="${r.order}" placeholder="value" aria-label="New value in ${esc(r.selector)}" spellcheck="false" autocomplete="off"></div></div>
+        </div>`).join('') + '</div>' : '<p class="hint">No rule of this file’s stylesheets matches this element.</p>', { open: false, note: `${rulesStrong.length} matching${mainFile ? ' · ' + esc(mainFile) : ''}` })}
+      ${varNames.length ? sec('vars-here', 'Variables here', `<div class="decls">${varNames.map(varRow).join('')}</div>`, { open: false, note: String(varNames.length) }) : ''}
+      ${sec('vars', 'Your variables', `<div id="doc-vars"><input id="doc-vars-filter" data-key="vars-filter" class="vfilter" type="search" placeholder="find a variable" aria-label="Find a variable" spellcheck="false" autocomplete="off">
         <div id="doc-vars-body">${stripsHtml(groups, new Set(varNames))}</div>
-        <p class="hint">Click one to use it on the value you are in, or drag it onto an element.</p>
-      </section>
-      <section class="dsec" id="doc-checks"><h3>Check <span class="where">hold Alt over an element to measure it</span></h3>
-        <div class="mrow"><button type="button" class="mchip" id="chk-contrast" aria-pressed="false">Contrast</button><button type="button" class="mchip" id="chk-order" aria-pressed="false">Focus order</button><span class="hint" id="chk-sum"></span></div>
-      </section>
+        <p class="hint">Click one to use it on the value you are in, or drag it onto an element.</p></div>`, { open: false, note: `${Object.keys(folderVars).length} in this folder` })}
+      ${sec('checks', 'Check', `<div id="doc-checks"><div class="mrow"><button type="button" class="mchip" id="chk-contrast" aria-pressed="false">Contrast</button><button type="button" class="mchip" id="chk-order" aria-pressed="false">Focus order</button><span class="hint" id="chk-sum"></span></div><p class="hint">Hold Alt over an element to measure it.</p></div>`, { open: false })}
       <p class="field-error" id="doc-error" hidden></p>
     </div>
     <div id="doc-dock" hidden>
       <div id="doc-staged" aria-live="polite"></div>
       <div class="doc-foot" id="doc-foot"><button type="button" class="primary" id="doc-apply">Apply <kbd>↵</kbd></button><button type="button" id="doc-cancel">Cancel <kbd>Esc</kbd></button></div>
     </div>`;
-  el.querySelectorAll('details.fold').forEach((d) => d.addEventListener('toggle', () => openFolds.set(d.dataset.fold, d.open)));
-  el.querySelectorAll('.dsec.soft').forEach((sec) => {
-    const set = (on) => { openFolds.set(sec.dataset.soft, on); sec.toggleAttribute('data-open', on); sec.querySelector('.soft-h').setAttribute('aria-expanded', String(on)); };
-    sec.querySelector('.soft-h').addEventListener('click', () => set(!sec.hasAttribute('data-open')));
-    sec.querySelector('.soft-b').addEventListener('focusin', () => set(true));
-  });
+  wireSections(el);
   el.querySelectorAll('.pl-adv').forEach((b) => {
     const hostEl = b.closest('.pl-adv-host'), prop = b.dataset.adv;
     if (!hostEl) { b.remove(); return; }
@@ -411,9 +400,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     b.addEventListener('click', () => { const on = !hostEl.classList.contains('open'); hostEl.classList.toggle('open', on); b.setAttribute('aria-expanded', String(on)); openFolds.set('adv:' + prop, on); });
   });
   // the height lever: a long list shows six rows, its bottom edge drags for more (panel-height.js)
-  const kindKey = comp.fileKind || 'html';
-  const rl = el.querySelector('#doc-values ~ details[data-fold="rules"] .rules-list'); if (rl) capList(rl, { key: `${kindKey}.rules`, label: 'Rules', rows: () => [...rl.children] });
-  for (const [sel2, key2, name2] of [['#doc-inline', 'inline', 'Inline style'], ['[data-soft="vars-here"] .decls', 'vars-here', 'Variables here']]) { const l = el.querySelector(sel2); if (l) capList(l, { key: `${kindKey}.${key2}`, label: name2, rows: () => [...l.children].filter((r) => !r.classList.contains('add')) }); }
+  const rl = el.querySelector('[data-sec="rules"] .rules-list'); if (rl) capList(rl, { key: `${kindKey}.rules`, label: 'Rules', rows: () => [...rl.children] });
+  for (const [sel2, key2, name2] of [['#doc-inline', 'inline', 'Inline style'], ['[data-sec="vars-here"] .decls', 'vars-here', 'Variables here']]) { const l = el.querySelector(sel2); if (l) capList(l, { key: `${kindKey}.${key2}`, label: name2, rows: () => [...l.children].filter((r) => !r.classList.contains('add')) }); }
   if (focus) el.querySelector(`[data-key="${CSS.escape(focus)}"]`)?.focus();
   else if (backTo?.key === selKey) { el.querySelector(`.vrow input[data-prop="${CSS.escape(backTo.prop)}"]`)?.focus({ preventScroll: true }); backTo = null; }
   wireKeys(el);
@@ -469,9 +457,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     b.addEventListener('pointerenter', () => { if (!staged) light(spec()); }); b.addEventListener('pointerleave', () => { if (!staged) light(null); });
     b.addEventListener('focus', () => { if (!staged) light(spec()); }); b.addEventListener('blur', () => { if (!staged) light(null); });
   });
-  el.querySelector('#doc-skip')?.addEventListener('click', () => { const c = el.querySelector('#doc-vars .ivchip'); c?.scrollIntoView({ block: 'center' }); c?.focus({ preventScroll: true }); });
-  el.querySelector('#make-component')?.addEventListener('click', (ev) => { if (ev.currentTarget.getAttribute('aria-disabled') === 'true') ctx.hint(ev.currentTarget.title); else ctx.makeComponent.run(); });
-  el.querySelector('#doc-frame-width')?.addEventListener('click', () => ctx.breakpoints?.open?.());
+  el.querySelector('#doc-skip')?.addEventListener('click', () => { openAround(el.querySelector('#doc-vars')); const c = el.querySelector('#doc-vars .ivchip'); c?.scrollIntoView({ block: 'center' }); c?.focus({ preventScroll: true }); });
 
   // ---------- the staged value: scope, the change, Apply ----------
   const winners = explain.props;
@@ -585,6 +571,11 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (!host) return;
     el.querySelectorAll('.vrow').forEach((r) => r.classList.toggle('editing', !!staged && r.dataset.prop === staged.prop));
     if (!staged) { host.innerHTML = ''; dock.hidden = true; preview(null); light(null); ctx.stage?.setEditNote?.(null); ctx.legend?.pop('staged'); return; }
+    if (!staged.explicit) { // an ordinary edit: shown on the canvas, no dock; Enter, Tab or leaving the field writes it to this element
+      host.innerHTML = ''; dock.hidden = true; ctx.legend?.pop('staged');
+      preview(staged.invalid ? null : chosenOf(optionsFor())); light(null);
+      return;
+    }
     ctx.legend?.push('staged', [['E', 'this element'], ['C', 'this class'], ['V', 'this variable'], ['↵', 'apply'], ['Esc', 'cancel']]);
     const had = host.contains(document.activeElement) ? (document.activeElement.dataset.scope || document.activeElement.id) : null; // a redraw keeps the focus where it was
     const opts = optionsFor(), chosen = chosenOf(opts);
@@ -633,7 +624,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (v.z >= 0.6 && inView) return;
     ctx.view.flyTo(ctx.view.rectToWorld(r), { pad: 72, max: 1 });
   }
-  function stage(prop, text) {
+  function stage(prop, text, { typed = false } = {}) {
     const w = winners[prop];
     if (!w) return false;
     const raw = text.trim();
@@ -644,10 +635,21 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (!staged) legible();
     const field = el.querySelector(`.vrow input[data-prop="${CSS.escape(prop)}"]`); // a variable bound from the strips shows in the field
     if (field && field.value !== text) field.value = text;
-    const typed0 = normalizeTyped(prop, t);
-    staged = { key: selKey, prop, text, typed: typed0, important, invalid: !validValue(prop, typed0), raw: prev?.raw ?? false, scope: prev?.scope ?? null, forceRule: prev?.forceRule ?? null };
+    let typed0 = normalizeTyped(prop, t);
+    if (/^-?\d*\.?\d+$/.test(typed0) && !validValue(prop, typed0) && validValue(prop, typed0 + 'px')) typed0 += 'px'; // W 632 is 632px, as the field shows it
+    // typed into the field: an ordinary edit, written to this element, with no chooser (unless one was asked for while typing)
+    const explicit = prev?.explicit ?? !typed;
+    staged = { key: selKey, prop, text, typed: typed0, important, invalid: !validValue(prop, typed0), raw: prev?.raw ?? false, scope: prev?.scope ?? null, forceRule: prev?.forceRule ?? null, explicit };
     const opts = optionsFor();
+    if (!explicit && !staged.scope && opts.find((o) => o.id === 'element' && !o.disabled)) staged.scope = 'element';
     if (!staged.scope || !opts.find((o) => o.id === staged.scope && !o.disabled)) staged.scope = defaultScope(opts, w);
+    renderStaged();
+    return true;
+  }
+  // Open the scope chooser on the value being typed, at the scope napkin would suggest (the class when it is the element's own).
+  function choose() {
+    if (!staged) return false;
+    if (!staged.explicit) { staged.explicit = true; staged.scope = defaultScope(optionsFor(), winners[staged.prop]); }
     renderStaged();
     return true;
   }
@@ -655,7 +657,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (!staged) return false;
     const o = optionsFor().find((x) => x.id === id);
     if (!o || o.disabled) { showError(o ? o.why : ''); return false; }
-    showError(''); staged.scope = id; if (id !== 'class') staged.forceRule = null; renderStaged();
+    showError(''); staged.scope = id; staged.explicit = true; if (id !== 'class') staged.forceRule = null; renderStaged();
     el.querySelector(`[data-scope="${id}"]`)?.focus({ preventScroll: true });
     return true;
   }
@@ -665,7 +667,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     for (let i = order.indexOf(staged.scope) + d; i >= 0 && i < 3; i += d) if (!opts.find((o) => o.id === order[i])?.disabled) return setScope(order[i]);
     return false;
   }
-  function toggleBound() { if (staged) { staged.raw = !staged.raw; renderStaged(); } }
+  function toggleBound() { if (staged) { staged.raw = !staged.raw; staged.explicit = true; renderStaged(); } }
   function cancel() {
     if (!staged) return;
     const input = el.querySelector(`.vrow input[data-prop="${CSS.escape(staged.prop)}"]`); if (input) input.value = input.defaultValue;
@@ -675,16 +677,24 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     if (!staged || staged.invalid) { if (staged?.invalid) showError(`Not a value ${staged.prop} accepts`); return null; }
     const chosen = chosenOf(optionsFor());
     if (!chosen) return null;
-    if (document.activeElement && el.contains(document.activeElement)) document.activeElement.blur();
-    preview(null);
-    const refocus = staged.prop;
+    if (staged.applying) return null;
+    staged.applying = true;
+    const refocus = staged.prop, field = el.querySelector(`.vrow input[data-prop="${CSS.escape(refocus)}"]`);
+    // the focus comes back to the value unless the person has moved on (Tab to the next field, a click elsewhere in the panel)
+    const stay = () => { const a = document.activeElement; return !a || a === document.body || a === field || !!a.closest?.('#doc-dock') || (!el.contains(a) && !a.closest?.('#inspector')); };
     const j = await send(editsOf(chosen));
-    if (j.ok) { staged = null; renderStaged(); light(null); backTo = { key: selKey, prop: refocus }; el.querySelector(`.vrow input[data-prop="${CSS.escape(refocus)}"]`)?.focus({ preventScroll: true }); } else renderStaged();
+    preview(null);
+    if (j.ok) {
+      staged = null; renderStaged(); light(null);
+      if (stay()) { backTo = { key: selKey, prop: refocus }; const f = el.querySelector(`.vrow input[data-prop="${CSS.escape(refocus)}"]`); f?.focus({ preventScroll: true }); f?.select?.(); }
+    } else { if (staged) staged.applying = false; renderStaged(); }
     return j;
   }
   el.querySelectorAll('.vrow input.val').forEach((inp) => {
-    inp.addEventListener('input', () => stage(inp.dataset.prop, inp.value));
+    inp.addEventListener('input', () => stage(inp.dataset.prop, inp.value, { typed: true }));
     inp.addEventListener('focus', () => { lastProp = inp.dataset.prop; });
+    // leaving the field commits what was typed into it (an edit with its scope chooser open waits for Apply)
+    inp.addEventListener('blur', () => { if (staged && staged.prop === inp.dataset.prop && !staged.explicit && !staged.applying && !staged.invalid && live === me) apply(); });
   });
   el.addEventListener('pointerdown', () => { const a = document.activeElement; if (a?.matches?.('.vrow input.val') && el.contains(a)) lastProp = a.dataset.prop; }, true); // before the click moves the focus
   el.querySelectorAll('.plink').forEach((b) => b.addEventListener('click', () => ctx.select({ component: comp.component, node: b.dataset.node, variant: {} })));
@@ -730,7 +740,7 @@ export async function renderDocPanel(ctx, el, sel, comp) {
   el.querySelector('#chk-order')?.addEventListener('click', () => { measure.toggle('order'); syncChecks(); });
   syncChecks();
 
-  Object.assign(me, { stage, step, setScope, toggleBound, apply, cancel, syncChecks, bindHere, explain });
+  Object.assign(me, { stage, step, choose, setScope, toggleBound, apply, cancel, syncChecks, bindHere, explain });
   if (staged && staged.key === selKey && winners[staged.prop]) { // a redraw while a value was being edited: put it back
     const input = el.querySelector(`.vrow input[data-prop="${CSS.escape(staged.prop)}"]`);
     if (input) input.value = staged.text;

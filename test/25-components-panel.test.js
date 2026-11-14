@@ -13,7 +13,7 @@ const file = (L, n) => readFileSync(join(L.compDir, `${n}.tsx`), 'utf8');
 test('components panel: settings, axes, sources', { timeout: 180000 }, async (t) => {
   const L = await lab({ Button: fx('Button') }, { theme: 'light' });
   const { q, browser, io } = L;
-  const open = async (sec) => { if (!(await q(`document.querySelector('[data-sec=${sec}]').open`))) await q(`document.querySelector('[data-sec=${sec}] > summary').click()`); await sleep(60); };
+  const open = async (sec) => { if (!(await q(`document.querySelector('[data-sec=${sec}]').open`))) await q(`document.querySelector('[data-sec=${sec}] .pp-sec-h').click()`); await sleep(60); };
   const setField = async (sel, text) => { await q(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); i.focus(); i.value = ${JSON.stringify(text)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); })()`); };
   const edit = async (on) => { await browser.waitFor(`!!document.querySelector('#edit-settings')`); if ((await q(`document.querySelector('#edit-settings').getAttribute('aria-pressed')`)) !== String(on)) await q(`document.querySelector('#edit-settings').click()`); await sleep(80); };
   const names = async () => (await L.doc('Button')).props.map((p) => p.name);

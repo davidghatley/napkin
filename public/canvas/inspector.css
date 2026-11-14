@@ -244,3 +244,76 @@ body[data-gesture="move"] #stage, body[data-gesture="reorder"] #stage { cursor: 
 .nk-cap-all:hover { text-decoration: underline; text-underline-offset: 2px; }
 .nk-cap-all:focus-visible { outline: 2px solid var(--nk-accent); outline-offset: 0; }
 @media (prefers-reduced-motion: reduce) { .nk-cap-grip::after { transition: none; } }
+
+/* ---- one panel (standards section 7): one header, one ordered list of sections ----
+   #inspector > header#pp-head (sticky) + #panel > [#pp-element (the element's sections), #instruments (the file's sections)]. */
+#pp-head { position: sticky; top: 0; z-index: 3; padding: var(--nk-s2) var(--nk-s1) var(--nk-s2) var(--nk-s3); background: var(--nk-chrome); border-bottom: var(--nk-border); }
+#pp-head[hidden], body.insp-rule #pp-head, body.insp-frame #pp-head { display: none; }
+.pp-row { display: flex; align-items: center; gap: var(--nk-s2); min-width: 0; min-height: var(--nk-h-field); }
+.pp-glyph { flex: none; display: grid; place-items: center; width: var(--nk-icon); height: var(--nk-icon); color: var(--nk-ink-muted); }
+.pp-glyph svg { width: var(--nk-icon); height: var(--nk-icon); fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.pp-name { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; white-space: normal; margin: 0; padding: 0 var(--nk-s1); border: 1px solid transparent; border-radius: var(--nk-radius); background: none; color: var(--nk-ink); font: var(--nk-w-strong) var(--nk-fs-title)/calc(var(--nk-h-field) - 2px) var(--nk-sans); text-align: left; }
+button.pp-name { cursor: text; }
+button.pp-name:hover { border-color: var(--nk-line-2); }
+#pp-head input { flex: 1 1 auto; min-width: 0; height: var(--nk-h-field); padding: 0 var(--nk-s1); border: 1px solid var(--nk-accent); border-radius: var(--nk-radius); background: var(--nk-chrome); color: var(--nk-ink); font: var(--nk-w-strong) var(--nk-fs-title) var(--nk-sans); }
+.pp-tag { color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-mono); }
+.pp-tools { flex: none; display: flex; align-items: center; gap: var(--nk-s1); margin-left: auto; }
+.pp-tools .icon-btn { width: var(--nk-h-field); height: var(--nk-h-field); }
+.pp-width { height: var(--nk-h-field); padding: 0 var(--nk-s2); border: 0; border-radius: var(--nk-radius); background: none; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/1 var(--nk-mono); cursor: pointer; white-space: nowrap; }
+.pp-width:hover { background: var(--nk-hover); color: var(--nk-ink); }
+.pp-where { margin: 0; padding-left: calc(var(--nk-icon) + var(--nk-s2) + var(--nk-s1)); overflow-wrap: anywhere; white-space: normal; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); }
+.pp-where #doc-source { font-family: var(--nk-mono); }
+#pp-head :is(button, a):focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: 0; }
+
+/* A section: a heading with one button (chevron + label), 13 px medium; the body is hidden while closed. */
+#panel .pp-sec { border-top: var(--nk-border); }
+#panel #pp-element > .pp-sec:first-child, #panel .pp-context + .pp-sec { border-top: 0; }
+#panel .pp-sec-t { display: flex; align-items: center; gap: var(--nk-s1); margin: 0; padding-right: var(--nk-s2); font: inherit; }
+#panel .pp-sec-h { flex: 1 1 auto; display: flex; align-items: center; gap: var(--nk-s2); min-width: 0; height: var(--nk-h-control); padding: 0 var(--nk-s1) 0 var(--nk-s3); border: 0; border-radius: 0; background: none; color: var(--nk-ink); font: var(--nk-w-medium) var(--nk-fs-title)/var(--nk-lh-tight) var(--nk-sans); text-align: left; cursor: pointer; }
+#panel .pp-sec-h:hover { color: var(--nk-accent-text); }
+#panel .pp-sec-h:focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: calc(var(--nk-ring-width) * -1); }
+#panel .pp-chev { flex: none; width: 5px; height: 5px; margin: 0 var(--nk-s1) 2px 2px; border: solid var(--nk-ink-muted); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); transition: transform var(--nk-motion) var(--nk-ease); }
+#panel .pp-sec:not([data-open]) > .pp-sec-t .pp-chev { transform: rotate(-45deg); margin-bottom: 0; }
+#panel .pp-sec-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel .pp-sec-n { margin-left: auto; padding-left: var(--nk-s2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-label)/var(--nk-lh-tight) var(--nk-sans); }
+#panel .pp-sec-b[hidden] { display: none; }
+#panel .pp-sec .pp-sec { border-top: 0; }
+/* A section with nothing in it yet (Fill, Effects): the same heading, its + at the right, no chevron to open. */
+#panel .sec.empty { height: var(--nk-h-control); padding: 0 var(--nk-s2) 0 calc(var(--nk-s3) + 5px + var(--nk-s1) + 2px + var(--nk-s2)); border-top: var(--nk-border); font: var(--nk-w-medium) var(--nk-fs-title)/var(--nk-lh-tight) var(--nk-sans); color: var(--nk-ink); }
+#panel .pp-sec .pp-sec .pp-sec-h { padding-left: var(--nk-s2); font-weight: var(--nk-w-regular); }
+#panel .pp-context { display: grid; gap: var(--nk-s2); padding: var(--nk-s2) var(--nk-s3); }
+#panel .pp-context:empty, #panel .pp-context:not(:has(> :not([hidden]))) { display: none; }
+#panel .pp-note { margin: 0; padding: var(--nk-s3); color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans); }
+
+/* The file's sections continue the list: the same heading as the element's sections, the same rule between them. */
+#panel #pp-element:not(:empty) + #instruments .d-section:first-of-type, #panel #pp-element:not(:empty) + #instruments .dials { border-top: var(--nk-border); }
+#instruments .dials .d-section-name { font-weight: var(--nk-w-medium); font-size: var(--nk-fs-title); color: var(--nk-ink); }
+#instruments .dials .d-section-name:hover { color: var(--nk-accent-text); }
+
+/* Nothing selected: one line, then the canvas settings. */
+#panel .pp-empty { margin: 0; padding: var(--nk-s4) var(--nk-s3) var(--nk-s3); color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-empty)/var(--nk-lh-loose) var(--nk-sans); }
+#panel .pp-empty + .pp-sec { border-top: var(--nk-border); }
+#panel .pp-field { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: var(--nk-s2); min-height: var(--nk-h-control); }
+#panel .pp-label { color: var(--nk-ink-muted); font: var(--nk-w-regular) var(--nk-fs-body)/var(--nk-lh-tight) var(--nk-sans); }
+#panel .pp-ctl { display: flex; align-items: center; gap: var(--nk-s1); min-width: 0; }
+#panel .pp-btn { height: var(--nk-h-field); min-width: var(--nk-h-field); padding: 0 var(--nk-s2); border: 0; border-radius: var(--nk-radius); background: var(--nk-chrome-2); color: var(--nk-ink); font: var(--nk-w-regular) var(--nk-fs-body)/1 var(--nk-sans); cursor: pointer; }
+#panel .pp-btn:hover { background: var(--nk-chrome-3); }
+#panel .pp-btn:focus-visible { outline: var(--nk-ring-width) solid var(--nk-accent); outline-offset: 0; }
+#panel .pp-zl { min-width: 52px; font-variant-numeric: tabular-nums; }
+#panel .pp-seg { gap: 0; padding: 2px; border-radius: var(--nk-radius); background: var(--nk-chrome-2); width: max-content; }
+#panel .pp-seg .pp-btn { height: calc(var(--nk-h-field) - 4px); background: none; color: var(--nk-ink-muted); }
+#panel .pp-seg .pp-btn[aria-checked="true"] { background: var(--nk-chrome); color: var(--nk-ink); box-shadow: var(--nk-card-edge); }
+#panel .pp-link { background: none; padding: 0; color: var(--nk-accent-text); }
+#panel .pp-link:hover { background: none; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Hidden (Ctrl+Shift+\): the canvas takes the width. */
+:root[data-right="closed"] body { --nk-right-w: 0px; }
+:root[data-right="closed"] #inspector, :root[data-right="closed"] #right-edge { visibility: hidden; border-left-width: 0; }
+@media (prefers-reduced-motion: reduce) { #panel .pp-chev { transition: none; } }
+#instruments .d-section-head { padding-left: var(--nk-s2); }
+/* Create component, under the selection name (standards 9 rule 2) */
+#pp-head .pp-acts { margin-top: var(--nk-s1); }
+#pp-head .pp-make { display: inline-flex; align-items: center; gap: var(--nk-s1); max-width: 100%; height: var(--nk-h-field); padding: 0 var(--nk-s2); border: var(--nk-border); border-radius: var(--nk-radius); background: var(--nk-chrome-2); color: var(--nk-text); font: var(--nk-w-strong) var(--nk-fs-body) var(--nk-sans); cursor: pointer; }
+#pp-head .pp-make:hover { background: var(--nk-chrome-3); }
+#pp-head .pp-make[aria-disabled="true"] { opacity: 0.4; cursor: default; }
+#pp-head .pp-make kbd { font: 11px var(--nk-mono); color: var(--nk-text-3); }

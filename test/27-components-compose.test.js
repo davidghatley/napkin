@@ -21,7 +21,7 @@ test('composition on the canvas (0004 ops through the panel)', { timeout: 240000
   const seq = async (n = 'Card') => Number(await L.rev(n));
   const settle = async (b, n = 'Card') => { await browser.waitFor(`napkin.find('${n}').seq > ${b}`); await sleep(200); };
   const setField = async (sel, text) => { await q(`(() => { const i = document.querySelector(${JSON.stringify(sel)}); i.focus(); i.value = ${JSON.stringify(text)}; i.dispatchEvent(new Event('input', { bubbles: true })); i.dispatchEvent(new Event('change', { bubbles: true })); })()`); };
-  const open = async (sec) => { if (!(await q(`document.querySelector('[data-sec=${sec}]')?.open`))) await q(`document.querySelector('[data-sec=${sec}] > summary').click()`); await sleep(60); };
+  const open = async (sec) => { if (!(await q(`document.querySelector('[data-sec=${sec}]')?.open`))) await q(`document.querySelector('[data-sec=${sec}] .pp-sec-h').click()`); await sleep(60); };
   const cardEl = (n) => `document.querySelector('section[data-name=Card] figure.cell .mount [data-n="${n}"]')`;
   try {
     await L.select('Card', 'image');

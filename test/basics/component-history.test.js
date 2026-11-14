@@ -73,7 +73,7 @@ test('component header: the right panel carries a Create component action beside
   await until(async () => !(await q(`!!document.querySelector('.nk-rename')`)) || null);
   await sleep(1500); // the redo of the test before finishes selecting the card it made
   await select('0.1.1.0'); // the card's heading
-  const btn = `document.querySelector('#panel .selhead #make-component')`;
+  const btn = `document.querySelector('#inspector #pp-head #make-component')`;
   await b.waitFor(`${sel_is('page.html|0.1.1.0')} && !!${btn}`, 8000);
   assert.match(await q(`${btn}.textContent`), /Create component/);
   assert.match(await q(`${btn}.querySelector('kbd')?.textContent || ''`), /Ctrl.*Alt.*K/i, 'its shortcut is shown');

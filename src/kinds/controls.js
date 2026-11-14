@@ -99,15 +99,29 @@ export function nativeControls(ctx) {
       splice(`css:${m.index}`, m[1], m[2].trim(), start, start + m[2].trimEnd().length);
     }
   }
-  if (kind === 'svg')
+  if (kind === 'svg') {
+    // Each attribute is named by the element it is on (standards section 7 rule 12): the root <svg> is the Viewport, the rest go by
+    // their tag (and id), numbered when a tag repeats, so a panel can group "Viewport" width apart from a rect's.
+    const owners = new Map(), seen = new Map();
+    const ownerOf = (at) => {
+      const open = text.lastIndexOf('<', at), tag = /^<([\w:-]+)/.exec(text.slice(open))?.[1] ?? 'element';
+      if (!owners.has(open)) {
+        const id = /\sid\s*=\s*(["'])(.*?)\1/.exec(text.slice(open, text.indexOf('>', open) + 1))?.[2];
+        const n = (seen.get(tag) || 0) + 1; seen.set(tag, n);
+        owners.set(open, { key: `svg:${open}`, name: tag === 'svg' ? 'Viewport' : `${tag}${id ? ` #${id}` : n > 1 ? ` ${n}` : ''}` });
+      }
+      return owners.get(open);
+    };
     for (const m of text.matchAll(
       /\b(fill|stroke|stroke-width|opacity|width|height|viewBox|rx|ry|r|cx|cy|x|y)\s*=\s*(["'])(.*?)\2/g,
     )) {
       const start = m.index + m[0].indexOf(m[3], m[0].indexOf(m[2]) + 1);
       splice(`attr:${m.index}`, m[1], m[3], start, start + m[3].length, {
         target: { mode: 'attribute', start, end: start + m[3].length },
+        owner: ownerOf(m.index),
       });
     }
+  }
   if (kind === 'csv' || kind === 'tsv') {
     const delimiter = kind === 'tsv' ? '\t' : ',',
       rows = delimited(text, delimiter, { limit: 9 });
@@ -257,8 +271,15 @@ export function recipeControls(ctx) {
   );
 }
 export function sections(ctx, kindIds = []) {
-  const native = ctx.bytes <= 1024 * 1024 ? nativeControls(ctx) : [];
+  const all = ctx.bytes <= 1024 * 1024 ? nativeControls(ctx) : [];
+  // An SVG's attributes, one section per element (named by nativeControls); everything else is the file's values.
+  const native = all.filter((c) => !c.owner), owned = new Map();
+  for (const { owner, ...c } of all.filter((x) => x.owner)) {
+    if (!owned.has(owner.key)) owned.set(owner.key, { id: owner.key, label: owner.name, controls: [] });
+    owned.get(owner.key).controls.push(c);
+  }
   return [
+    ...owned.values(),
     ...(native.length ? [{ id: 'source', label: 'File values', controls: native }] : []),
     {
       id: 'view',

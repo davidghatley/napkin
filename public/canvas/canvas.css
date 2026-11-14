@@ -59,7 +59,7 @@
   --nk-icon: 16px;
   --nk-fs-label: 11px; --nk-fs-body: 12px; --nk-fs-title: 13px; --nk-fs-empty: 14px;
   --nk-lh-tight: 16px; --nk-lh-loose: 20px;
-  --nk-w-regular: 400; --nk-w-strong: 600;
+  --nk-w-regular: 400; --nk-w-medium: 500; --nk-w-strong: 600;
   --nk-border: 1px solid var(--nk-line);
   --nk-radius: 4px; --nk-radius-pop: 8px;
   --nk-ring-width: 2px; --nk-ring-offset: 2px;

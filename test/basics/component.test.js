@@ -125,6 +125,10 @@ test('basics pass 3: the palette runs it too, and a taken name gets the next fre
   await until(async () => (await q(`document.activeElement?.className`)) === 'nk-rename' || null); // named afterwards (rule 4); Escape keeps Card2
   await io.key('Escape');
   await until(async () => !(await q(`!!document.querySelector('.nk-rename')`)) || null);
+  // the new card is selected in the background (make-component.js selectWhenDrawn polls every 80 ms and stops once it holds it);
+  // let that finish, or a clear in the next test lands between its steps and is selected over
+  await until(async () => (await q(`napkin.state.selection?.component`)) === 'Card2.tsx#Card2' || null);
+  await sleep(600);
 });
 
 test('basics pass 3: when it cannot apply it says why, in a sentence, and makes nothing', { timeout: 60000 }, async () => {

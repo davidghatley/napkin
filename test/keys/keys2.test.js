@@ -24,7 +24,7 @@ async function repo(size = [1440, 900]) {
 const palette = async (io, b, text) => { await io.key('k', { ctrl: true }); await b.waitFor(`!document.querySelector('#quick').hidden && document.activeElement.id === 'q-input'`); for (const ch of text) await io.key(ch); await io.key('Enter'); await sleep(250); };
 // A real mouse click at the control's hit-tested coordinates (an element something else covers fails here, unlike .click()).
 async function mouseClick(b, io, selector) {
-  await b.eval(`document.querySelectorAll('#panel details').forEach((d) => (d.open = true)); document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'center' })`); await sleep(150);
+  await b.eval(`document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true)); document.querySelector(${JSON.stringify(selector)}).scrollIntoView({ block: 'center' })`); await sleep(150);
   const probe = async () => JSON.parse(await b.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}), r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, hit = document.elementFromPoint(x, y); window.__probe = e; return JSON.stringify({ x, y, ok: !!hit && (hit === e || e.contains(hit)), hit: hit && (hit.id || hit.className || hit.tagName) }); })()`));
   let r = await probe();
   for (let i = 0; i < 20; i++) { await sleep(120); const next = await probe(); const same = next.x === r.x && next.y === r.y; r = next; if (same) break; } // wait until the panel has stopped redrawing
@@ -54,12 +54,14 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
       for (const l of ['Fill Colour', 'Stroke Colour', 'Shadow', 'Align top left', 'Settings label', 'Radius', 'Gap', 'Editing']) assert.ok(lower.includes(l.toLowerCase()), `${l} in ${labels.join(', ')}`);
     });
     await t.test('a folded section opens when the search lands in it', async () => {
-      await b.eval(`document.querySelector('details[data-sec="stroke"]').open = false; document.querySelector('details[data-sec="stroke"]').dispatchEvent(new Event('toggle'))`);
+      // (a section is a .pp-sec whose head folds it, standards section 7: one ordered list)
+      await b.eval(`document.querySelector('.pp-sec[data-sec="stroke"]').open = false`);
       await selectButton(b);
-      await b.eval(`(() => { const d = document.querySelector('details[data-sec="stroke"]'); d.open = false; d.dispatchEvent(new Event('toggle')); })()`);
+      await b.eval(`document.querySelector('.pp-sec[data-sec="stroke"]').open = false`);
+      assert.equal(await b.eval(`document.querySelector('.pp-sec[data-sec="stroke"]').open`), false);
       await palette(io, b, 'sc');
       assert.equal(await b.eval(`document.activeElement.id`), 'stroke-color');
-      assert.equal(await b.eval(`document.activeElement.closest('details').open`), true);
+      assert.equal(await b.eval(`document.activeElement.closest('.pp-sec').open`), true);
     });
     await t.test('with a variant cell selected, a property search lands in that variant\'s scope', async () => {
       await selectButton(b, { size: 'sm', state: 'default' });
@@ -69,10 +71,12 @@ test('WPC-07: any inspector property in <= 5 keys, sections open, variant scope,
       assert.equal(await b.eval(`document.activeElement.id`), 'borderRadius');
       await b.eval(`document.querySelector('#scope').value = 'base'; document.querySelector('#scope').dispatchEvent(new Event('change', { bubbles: true }))`);
     });
-    await t.test('the empty panel lists Alt+I and property search', async () => {
+    await t.test('the empty panel is one line; Alt+I with nothing selected says how to reach the properties', async () => {
       await b.eval(`napkin.select(null)`); await sleep(200);
-      const text = await b.eval(`document.querySelector('#panel').innerText`);
-      assert.match(text, /Alt\+I/); assert.match(text, /type a property/);
+      assert.equal(await b.eval(`document.querySelector('#pp-empty')?.textContent`), 'Select something to edit it.');
+      await b.eval(`document.activeElement.blur()`);
+      await io.key('i', { alt: true, code: 'KeyI' }); await sleep(150);
+      assert.match(await b.eval(`document.querySelector('#hint').textContent`), /Alt\+I/);
     });
   } finally { await r.close(); }
 });
@@ -182,7 +186,7 @@ test('WPC-14: wording a person reads has no jargon: banners, connection loss, OS
       await selectButton(b);
       const before = readFileSync(file, 'utf8');
       for (const [id, bad] of [['background', 'banana'], ['width', 'NaN'], ['padding', 'abc def'], ['color', 'notacolor'], ['borderRadius', 'round']]) {
-        await b.eval(`(() => { document.querySelectorAll('#panel details').forEach((d) => (d.open = true)); const e = document.querySelector('#${id}'); e.scrollIntoView(); e.focus(); e.select(); })()`); assert.equal(await b.eval('document.activeElement.id'), id);
+        await b.eval(`(() => { document.querySelectorAll('#panel :is(details, .pp-sec)').forEach((d) => (d.open = true)); const e = document.querySelector('#${id}'); e.scrollIntoView(); e.focus(); e.select(); })()`); assert.equal(await b.eval('document.activeElement.id'), id);
         await b.send('Input.insertText', { text: bad }); await io.key('Enter'); await sleep(350);
         const msg = await b.eval(`document.querySelector('#err-style-${id}')?.textContent ?? ''`);
         assert.match(msg, new RegExp(`"${bad}" is not something`), `${id}: ${msg}`);

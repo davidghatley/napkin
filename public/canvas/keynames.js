@@ -32,7 +32,10 @@ export function eventChord(ev) {
   if (['Control', 'Alt', 'Shift', 'Meta'].includes(key)) return null;
   // With Alt or Ctrl held, some layouts send a symbol; the physical letter is in `code`.
   if ((ev.altKey || ev.ctrlKey || ev.metaKey) && /^Key[A-Z]$/.test(ev.code || '')) key = ev.code.slice(3);
-  const shifted = key.length === 1 && !/[a-z0-9]/i.test(key); // "?" already carries its Shift
+  // Ctrl+Shift+\ (the design panel) is the backslash key with Shift, whatever symbol the layout puts on it.
+  const slash = (ev.ctrlKey || ev.metaKey) && ev.code === 'Backslash';
+  if (slash) key = '\\';
+  const shifted = !slash && key.length === 1 && !/[a-z0-9]/i.test(key); // "?" already carries its Shift
   const mods = [ev.ctrlKey && 'Ctrl', ev.altKey && 'Alt', ev.shiftKey && !shifted && 'Shift', ev.metaKey && 'Meta'].filter(Boolean);
   return [...mods, key.length === 1 ? key.toUpperCase() : key].join('+');
 }
