@@ -99,6 +99,7 @@ export function initEditOps(ctx) {
   function target() {
     const k = cur() ?? (() => { const all = [...ctx.state.components.values()].filter((c) => c.doc && !c.readOnly); if (all.length !== 1) return null; const c = all[0]; return { s: { component: c.component, node: c.doc.root.id, variant: {} }, c, doc: c.doc, ...index(c.doc) }; })();
     if (!k) return null;
+    k.sels = [...ctx.state.selections]; k.before = k.c.revision; // what the step began with, for Undo
     const n = k.byId.get(k.s.node);
     const holds = (x) => x.text === undefined && !x.textProp && !VOID.has(x.tag);
     if (holds(n)) return { ...k, parent: n.id, index: undefined };
@@ -109,7 +110,7 @@ export function initEditOps(ctx) {
     const edits = trees.map((tree, i) => ({ op: 'paste', parent: t.parent, ...(t.index !== undefined && { index: t.index + i }), tree, ...(variants && { variants }) }));
     const r = await ctx.sendEdits(t.s.component, edits);
     ops.last = { ok: r.ok, kind, ...(r.ok ? {} : { reason: r.error }) };
-    if (r.ok) { const added = newIds(t.doc, r.doc); const tops = added.filter((id) => !added.includes(index(r.doc).parentOf.get(id)?.id)); select(t.s.component, tops, t.s.variant); }
+    if (r.ok) { const added = newIds(t.doc, r.doc); const tops = added.filter((id) => !added.includes(index(r.doc).parentOf.get(id)?.id)); select(t.s.component, tops, t.s.variant); remember(t.s.component, t.before, r, t.sels, [...ctx.state.selections]); }
     return r;
   }
   async function pasteImage(t, type, bytes) {
@@ -359,14 +360,17 @@ export function initEditOps(ctx) {
     if (kind() === 'dialect') {
       const k = picked({ root: true }), n = k.byId.get(k.s.node), par = k.parentOf.get(n.id), i = par.children.indexOf(n);
       const index = how === 'forward' ? i + 1 : how === 'backward' ? i - 1 : how === 'front' ? par.children.length - 1 : 0;
-      return ctx.sendEdits(k.s.component, [{ op: 'move', id: n.id, parent: par.id, index }]);
+      const sels = [...ctx.state.selections], before = k.c.revision;
+      const r = await ctx.sendEdits(k.s.component, [{ op: 'move', id: n.id, parent: par.id, index }]);
+      remember(k.s.component, before, r, sels, sels); // (a layer keeps its id: the same selection after)
+      return r;
     }
-    const e = eng(), n = e.at.n, list = e.at.parent ? e.at.parent.children : e.tree, sibs = visible(list), i = sibs.indexOf(n);
+    const e = eng(), sels = [...ctx.state.selections], n = e.at.n, list = e.at.parent ? e.at.parent.children : e.tree, sibs = visible(list), i = sibs.indexOf(n);
     // the place among the visible siblings, turned into the file's index (a <style> or <script> between them stays where it is)
     const to = how === 'forward' ? sibs[i + 1] : how === 'backward' ? sibs[i - 1] : how === 'front' ? sibs.at(-1) : sibs[0];
     const rest = list.filter((x) => x !== n), index = rest.indexOf(to) + (how === 'forward' || how === 'front' ? 1 : 0);
-    const j = await engEdit(e.c, [{ op: 'move', node: n.node, parent: e.at.parent.node, index }], `Moved <${n.tag}> ${how === 'front' ? 'to the front' : how === 'back' ? 'to the back' : how}`);
-    if (j.ok) { const node = (e.at.parent ? e.at.parent.node + '.' : '') + index; if (await drawn(e, j.revision, [node])) ctx.select({ component: e.c.component, node, variant: {} }); }
+    const j = await engEdit(e.c, [{ op: 'move', node: n.node, parent: e.at.parent.node, index }], `Moved <${n.tag}> ${how === 'front' ? 'to the front' : how === 'back' ? 'to the back' : how}`, e.base);
+    if (j.ok) { const node = (e.at.parent ? e.at.parent.node + '.' : '') + index, after = { component: e.c.component, node, variant: {} }; remember(e.c.component, e.base, j, sels, [after]); if (await drawn(e, j.revision, [node])) ctx.select(after); }
     return j;
   }
   function selectParent() {
@@ -428,7 +432,7 @@ export function initEditOps(ctx) {
     if (refuse('paste')) return null;
     // the destination (component, node, tree and revision) is taken now, before the clipboard is read: a right-click meanwhile does not redirect the write
     const engine = kind() === 'engine', e = engine ? eng() : null, t = engine ? null : target();
-    const cap = e && { s: { ...e.s }, c: e.c, tree: e.tree, base: e.base };
+    const cap = e && { s: { ...e.s }, c: e.c, tree: e.tree, base: e.base, sels: [...ctx.state.selections] };
     const data = await readClipboard(engine);
     if (!data) { say(`Nothing to paste yet. Copy something first, or use ${'Ctrl/Cmd+V'}`); return null; }
     if (engine) {
@@ -440,7 +444,7 @@ export function initEditOps(ctx) {
     return paste(data, t);
   }
 
-  Object.assign(ops, { duplicate: async () => (oneFrame() ? frameDuplicate() : kind() === 'engine' ? engDuplicate() : duplicate()), wrap, unwrap, hide, copy, paste, payload, can, kind, remove, order, selectParent, selectChildren, selectAll, copyNow, cutNow, pasteNow, isFrame });
+  Object.assign(ops, { remember, duplicate: async () => (oneFrame() ? frameDuplicate() : kind() === 'engine' ? engDuplicate() : duplicate()), wrap, unwrap, hide, copy, paste, payload, can, kind, remove, order, selectParent, selectChildren, selectAll, copyNow, cutNow, pasteNow, isFrame });
   ctx.ops = ops;
   return ops;
 }

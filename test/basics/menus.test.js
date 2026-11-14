@@ -701,3 +701,39 @@ test('menus: Paste writes where it was started, even when another right-click la
     assert.doesNotMatch(text, /<section class="cards">(?:(?!<\/section>).)*<h1>/s, 'not into the section picked meanwhile');
   } finally { await close(); }
 });
+
+test('menus: Undo of Order and of Paste puts back the selection the step began with (by object, not by position)', { timeout: 180000 }, async () => {
+  const { b, io, html, close } = await boot();
+  const { pick, rev, reloaded, selIs, undo } = rig(b, io);
+  const tagOf = (n) => b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame.node(${JSON.stringify(n)})?.tag ?? null`);
+  try {
+    await b.send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: new URL(await b.eval('location.href')).origin });
+    const S = (n) => `${LANDING}|${n}`;
+    const [h1, btn] = [await node(b, 'h1'), await node(b, 'button.cta')];
+    // Order > Bring to front on the heading: it moves last; Undo puts it back first and it is the selection (not the button now at its place)
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    await selIs([S(h1)]);
+    const sub = await centre(b, `document.querySelector('#ctxmenu [data-sub]')`);
+    await io.click(sub.x, sub.y); await sleep(100);
+    let r0 = await rev();
+    await pick('Bring to front', '#ctxmenu-sub'); await reloaded(r0);
+    assert.match(html(), /<p>One page, one list.<\/p><button class="cta">Start<\/button><h1>Plan the week<\/h1>/, 'the heading is last');
+    await undo();
+    assert.match(html(), /<main class="hero"><h1>Plan the week<\/h1><p>/, 'the heading is first again');
+    await selIs([S(h1)], 'Undo selects the heading, not what now sits at its old place');
+    assert.equal(await tagOf(h1), 'h1');
+    await undo(true);
+    assert.equal(await tagOf(await b.eval(`napkin.state.selection?.node`)), 'h1', 'Redo selects the heading where it went');
+    await undo();
+    // Copy the heading; Paste here on the button; Undo: the button is selected again
+    await rclick(io, await centre(b, el(h1)), { ctrl: true });
+    await pick('Copy'); await sleep(300);
+    await rclick(io, await centre(b, el(btn)), { ctrl: true });
+    await selIs([S(btn)]);
+    r0 = await rev(); await pick('Paste here'); await reloaded(r0);
+    assert.equal(html().match(/<h1>/g)?.length, 2);
+    await undo();
+    assert.equal(html().match(/<h1>/g)?.length, 1, 'the paste is undone');
+    await selIs([S(btn)], 'Undo of a paste selects the element it was pasted onto');
+  } finally { await close(); }
+});

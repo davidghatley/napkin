@@ -170,7 +170,7 @@ export function initCopyCode(ctx) {
   // `from`: { s, c, tree, base }, the destination as it was when the command began (a menu reads the clipboard first)
   async function paste(plainText, html, target, from = null) {
     const x = from ?? sel(); if (!x) return null;
-    const { s, c } = x;
+    const { s, c } = x, sels = (from?.sels ?? ctx.state.selections).map((y) => ({ ...y }));
     const code = markup(plainText, html, isReact(c));
     if (!code) { ctx.hint('Nothing to paste here: copy an element first'); return null; }
     const fr = frameOf(s.component), tree = from?.tree ?? fr?.tree()?.tree;
@@ -188,8 +188,9 @@ export function initCopyCode(ctx) {
     if (!j.ok) { ctx.hint(`Could not paste: ${plain(j.error)}`); return j; }
     ctx.hint(`Pasted ${what} into <${into.tag}>. Cmd-Z undoes it`);
     // what was pasted is selected once the frame has drawn it
-    const added = clip.map((_, i) => `${into.node}.${index + i}`);
-    (async () => { for (let k = 0; k < 160; k++) { const t = fr?.tree(); if (t?.revision === j.revision && added.every((n) => fr.has(n))) { ctx.selectMany(added.map((node) => ({ component: s.component, node, variant: {} }))); return; } await new Promise((res) => setTimeout(res, 25)); } })();
+    const added = clip.map((_, i) => `${into.node}.${index + i}`), picked = added.map((node) => ({ component: s.component, node, variant: {} }));
+    ctx.ops?.remember(s.component, from?.base ?? c.revision, j, sels, picked); // Undo puts back the selection the paste began with
+    (async () => { for (let k = 0; k < 160; k++) { const t = fr?.tree(); if (t?.revision === j.revision && added.every((n) => fr.has(n))) { ctx.selectMany(picked); return; } await new Promise((res) => setTimeout(res, 25)); } })();
     return j;
   }
   document.addEventListener('paste', (ev) => {
