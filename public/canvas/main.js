@@ -30,6 +30,7 @@ import { renderPanel } from './panel.js';
 import { initTools } from './tools.js';
 import { initLayers } from './layers.js';
 import { initComponentOps } from './component-ops.js';
+import { initFileOps } from './file-ops.js';
 import { initQuick } from './quick.js';
 import { initReadOnly } from './readonly.js';
 import { initEmpty } from './empty.js';
@@ -158,8 +159,9 @@ initMakeComponent(ctx); // basics pass 3: an element selected in an HTML frame b
 initShell(ctx); // the chrome tooltip and the left panel's collapse (basics pass 1)
 initRightPanel(ctx); // the right panel's resizable left edge (basics, b-panel)
 initEditOps(ctx);
-initFrameOps(ctx); // a frame as an object: nudge, resize, delete and duplicate its file, each one undo step (frame-ops.js)
+initFrameOps(ctx); // a frame as an object: nudge and resize, each one undo step (frame-ops.js; delete and duplicate: file-ops.js)
 initComponentOps(ctx); // WPC-28: rename and delete a component (Cmd-K, F2, row menu)
+initFileOps(ctx); // an HTML file as a frame: rename on its label, duplicate beside it, delete to the trash, each undoable
 initLayers(ctx, $('#layers'));
 initQuick(ctx);
 initInstruments(ctx); // the one instrument panel (dials) for whatever is selected

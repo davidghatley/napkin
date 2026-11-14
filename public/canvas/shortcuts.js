@@ -1,8 +1,9 @@
 // The key map (?): generated from the bindings in force (GET /api/keys: the registry in actions.js plus any rebinding),
 // then every other key of the canvas from the same registry. A command can be rebound here (Rebind, then press the keys)
-// or from the palette ("Rebind <command> to <keys>").
+// or from the palette ("Rebind <command> to <keys>"). A binding is spelled for the platform by keylabel.js, as the menus spell it.
 import { ACTIONS } from './actions.js';
 import { eventChord } from './keynames.js';
+import { keyLabel } from './keylabel.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
@@ -21,9 +22,9 @@ export function initShortcuts(ctx) {
   const name = (id) => byId.get(id)?.label ?? id;
   function paint() {
     const bindings = ctx.surface?.bindings() ?? [];
-    list.innerHTML = bindings.map((b) => `<li class="shortcut" data-command="${esc(b.command)}"><span class="km-label">${esc(name(b.command))}</span><kbd class="km-keys">${esc(b.keys)}</kbd><button type="button" class="km-rebind" data-rebind="${esc(b.command)}" aria-label="Rebind ${esc(name(b.command))}">Rebind</button></li>`).join('');
+    list.innerHTML = bindings.map((b) => `<li class="shortcut" data-command="${esc(b.command)}"><span class="km-label">${esc(name(b.command))}</span><kbd class="km-keys" data-keys="${esc(b.keys)}">${esc(keyLabel(b.keys))}</kbd><button type="button" class="km-rebind" data-rebind="${esc(b.command)}" aria-label="Rebind ${esc(name(b.command))}">Rebind</button></li>`).join('');
     const bound = new Set(bindings.map((b) => b.command));
-    more.innerHTML = ACTIONS.filter((a) => !bound.has(a.id) && !a.command && a.sheet !== false).map((a) => `<div class="shortcut"><dt>${esc(a.label)}</dt><dd>${esc(a.key)}</dd></div>`).join('');
+    more.innerHTML = ACTIONS.filter((a) => !bound.has(a.id) && !a.command && a.sheet !== false).map((a) => `<div class="shortcut" data-action="${esc(a.id)}"><dt>${esc(a.label)}</dt><dd>${esc(a.key)}</dd></div>`).join('');
   }
   let previous, recording = null;
   const close = () => dialog.close();

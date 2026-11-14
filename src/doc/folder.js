@@ -551,7 +551,19 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     return done2(comp, step, 'edit');
   }
 
-  // ---------- frame files: make, remove, rename (decision 0023) ----------
+  // ---------- the whole text of a component's file, and the lines each element spans (the code strip shows and highlights them) ----------
+  function source(id) {
+    const comp = component(id), e = read(comp.path);
+    let lines = {}, cols = {};
+    try {
+      const { flat } = nodesOf(comp), at = flat.filter((n) => n.id !== undefined && n.start !== undefined);
+      lines = Object.fromEntries(at.map((n) => [n.id, [lineOf(e.s, n.start), lineOf(e.s, Math.max(n.start, n.end - 1))]]));
+      cols = Object.fromEntries(at.map((n) => [n.id, fromL(e.s.slice(e.s.lastIndexOf('\n', n.start - 1) + 1, n.start)).length])); // its first character's column (text, not bytes)
+    } catch { /* a file that does not parse: the text alone */ }
+    return { ok: true, component: comp.id, file: comp.path, kind: comp.kind, revision: e.rev, source: fromL(e.s), lines, cols };
+  }
+
+  // ---------- frame files: make, duplicate, remove, rename (decision 0023) ----------
   // Each is one step on the caller's undo stack of that file, so Ctrl+Z after drawing a frame removes the file and its card,
   // and redo brings both back. Nothing is ever overwritten: a new file is written exclusively, a rename is a hard link then an
   // unlink (refused when the name is taken), and a removal or an undo checks the file still holds what napkin wrote.
@@ -806,7 +818,7 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
   scan(); watchDirs();
   return {
     root, state, events,
-    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout,
+    files: filesList, component, has, tree, rulesOf, rulesAt, sheetsOf, styles, setStyles, edit, restore, layout: () => ({ ...layout }), setLayout, source,
     latest(verb, by) { // the newest step this caller can undo (or redo) in any component: { component, at } | null
       let best = null;
       for (const [id, st] of verb === 'undo' ? undo : redo) for (const x of st) if (x.by === by && (!best || x.at > best.at)) best = { component: id, at: x.at };

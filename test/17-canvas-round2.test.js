@@ -220,12 +220,14 @@ test('round 2: compound controls, layer menu, hints', { timeout: 150000 }, async
       assert.equal(getValue(doc('Card'), 'image.visibility'), undefined);
     });
 
-    await t.test('layers: rows are 28 px, the menu says why an item is disabled, hover lights the row', async () => {
+    await t.test('layers: rows are 28 px, the root row has the frame menu and a dimmed item says why, hover lights the row', async () => {
       const row = (node) => `document.querySelector('#layers [data-component="' + napkin.find('Card').component + '"][data-node="${node}"]')`;
       assert.equal(await q(`Math.round(${row('title')}.getBoundingClientRect().height)`), 28);
       await q(`${row('card')}.querySelector('.lmore').click()`);
       await browser.waitFor(`!document.querySelector('#ctxmenu').hidden`);
-      assert.match(await q(`(() => { const e = document.querySelector('#ctxmenu [data-action=delete]'); return e.getAttribute('aria-disabled') + ' ' + e.title; })()`), /^true .*root/i);
+      // the root row is the file's frame (as its card is): Delete is the file's, after its dialog; Duplicate says why it is off
+      assert.equal(await q(`(() => { const e = document.querySelector('#ctxmenu [data-action=delete]'); return (e.getAttribute('aria-disabled') === 'true') + ' ' + e.querySelector('.nk-ml').textContent; })()`), 'false Delete file…');
+      assert.match(await q(`(() => { const e = document.querySelector('#ctxmenu [data-action=duplicate]'); return e.getAttribute('aria-disabled') + ' ' + e.title; })()`), /^true .*TSX component/);
       await io.key('Escape');
       const c = await centerOf(browser, row('title'));
       await io.move(c.x, c.y);

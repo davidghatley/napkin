@@ -43,10 +43,24 @@ const el = (node) => `napkin.stage.cellElement(${JSON.stringify(LANDING)}, ${JSO
 const node = (b, sel) => b.eval(`(() => { const f = napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame, d = f.doc(); const e = d.querySelector(${JSON.stringify(sel)}); return f.nodeOf(e); })()`);
 const emptyCanvas = (b) => j(b, `(() => { const s = document.querySelector('#stage').getBoundingClientRect(); for (let y = s.top + 48; y < s.bottom - 48; y += 12) for (let x = s.left + 48; x < s.right - 48; x += 12) { const e = document.elementFromPoint(x, y); if (e && e.closest('#stage') && !e.closest('.cmp, .item-card, #ctxmenu, button, [data-nodrag], .proposal, .sel-box, #presence')) return { x, y }; } return null; })()`);
 const selection = (b) => j(b, `napkin.state.selections.map((s) => s.component + '|' + s.node + (s.card ? ' card' : ''))`);
-// Each key at the right is the registry's: a command's binding in force (as the key map lists it), or the action's own spec, spelled by keylabel.js.
-async function keysMatchRegistry(b) {
-  const pairs = await j(b, `(async () => { const [{ ACTIONS }, { keyLabel }] = await Promise.all([import('/canvas/actions.js'), import('/canvas/keylabel.js')]); const bound = napkin.surface.bindings(); return [...document.querySelectorAll('#ctxmenu [data-action], #ctxmenu-sub [data-action]')].map((e) => { const a = ACTIONS.find((x) => x.id === e.dataset.action); const k = a.command ? bound.find((x) => x.command === a.id)?.keys : a.spec; return [a.id, e.querySelector('.nk-mk')?.textContent ?? '', k ? keyLabel(k) : '']; }); })()`);
-  for (const [id, shown, want] of pairs) assert.equal(shown, want, `${id}: the key shown is the registry's`);
+// The key map as a person reads it (the ? sheet, opened and read from its DOM): each command's keys and each other key's line.
+async function readSheet(b) {
+  await b.eval(`napkin.shortcuts.open()`);
+  const rows = await j(b, `Object.fromEntries([...document.querySelectorAll('#shortcuts .shortcut[data-command]')].map((e) => [e.dataset.command, e.querySelector('.km-keys').textContent]).concat([...document.querySelectorAll('#shortcuts .shortcut[data-action]')].map((e) => [e.dataset.action, e.querySelector('dd').textContent])))`);
+  await b.eval(`napkin.shortcuts.close()`);
+  assert.ok(Object.keys(rows).length > 20, 'the key map lists the keys');
+  return rows;
+}
+// A key-map line in the menu's spelling: the first of its alternatives ("Delete / Backspace"), Ctrl/Cmd as Ctrl (Linux).
+const spelled = (line) => line.replace(/Ctrl\/Cmd/g, 'Ctrl').split(/ \/ | or | · /)[0].replace(/ on .*$/, '').replace(/\s*\+\s*/g, ' ').trim();
+// Each key at the right of the open menu (and its submenu) is the one the key map shows for the same command.
+async function keysMatchSheet(b, sheet) {
+  const pairs = await j(b, `[...document.querySelectorAll('#ctxmenu [data-action], #ctxmenu-sub [data-action]')].map((e) => [e.dataset.action, e.querySelector('.nk-mk')?.textContent ?? ''])`);
+  for (const [id, shown] of pairs) {
+    if (!shown) continue;
+    assert.ok(sheet[id] !== undefined, `${id}: shows ${shown} and the key map lists it`);
+    assert.equal(shown, spelled(sheet[id]), `${id}: the menu's key is the key map's (${sheet[id]})`);
+  }
   return pairs;
 }
 const isOpen = (b) => b.eval(`!document.querySelector('#ctxmenu').hidden`);
@@ -54,6 +68,7 @@ const isOpen = (b) => b.eval(`!document.querySelector('#ctxmenu').hidden`);
 test('menus: each target has its own item set, in the group order, with the registry keys and dimmed items that say why', { timeout: 180000 }, async (t) => {
   const { b, io, close } = await boot();
   try {
+    const sheet = await readSheet(b);
     // empty canvas: the selection clears; paste, create, view
     await b.eval(`napkin.select({ component: napkin.find('Card').component, node: 'title', variant: {} })`);
     const empty = await emptyCanvas(b);
@@ -63,22 +78,23 @@ test('menus: each target has its own item set, in the group order, with the regi
     assert.equal(m.label, 'Canvas');
     assert.deepEqual(m.rows, ['Paste here', '---', 'Add frame', 'Add text', 'Add image', '---', 'Select all', 'Zoom to fit', 'Zoom to 100%', 'Hide layers']);
     assert.deepEqual(await selection(b), [], 'a right-click on the empty canvas clears the selection, as a click does');
-    await keysMatchRegistry(b);
-    assert.deepEqual(m.items.map((x) => x.key), ['Ctrl V', 'F', 'T', 'I', 'G A', 'Shift 1', 'Shift 0', 'Ctrl \\'], 'Linux spells Ctrl, not the Command sign');
+    await keysMatchSheet(b, sheet);
+    assert.deepEqual(m.items.map((x) => x.key), ['Ctrl V', 'F', 'T', 'I', 'Ctrl A', 'Shift 1', 'Shift 0', 'Ctrl \\'], 'Linux spells Ctrl, not the Command sign');
     const paste = m.items[0];
     assert.ok(paste.off && paste.why && paste.opacity === '0.4', `Paste here is dimmed with its reason: ${JSON.stringify(paste)}`);
     const box = await j(b, `(() => { const r = document.querySelector('#ctxmenu').getBoundingClientRect(); return { l: r.left, t: r.top }; })()`);
     assert.ok(box.l > empty.x && box.l - empty.x <= 4 && box.t > empty.y && box.t - empty.y <= 4, `opens at the pointer (${JSON.stringify(box)} vs ${JSON.stringify(empty)})`);
     t.diagnostic(`canvas: ${m.rows.join(' | ')}`);
 
-    // a frame (an HTML file's card, by its title): file-level items; what HTML cannot do yet is dimmed with the reason
+    // a frame (an HTML file's card, by its title): the file's items (standards section 8), all of which work for an HTML file
     await rclick(io, await centre(b, `document.querySelector('section.cmp[data-component="${LANDING}"] .cmp-head')`));
     m = await menu(b);
-    assert.deepEqual(m.rows, ['Paste here', 'Rename…', '---', 'Add frame', 'Add text', 'Add image', '---', 'Zoom to selection', 'Show code', '---', 'Delete file…']);
+    const FRAME = ['Copy', 'Paste inside', 'Duplicate', 'Rename', '---', 'Add frame', 'Add text', 'Add image', '---', 'Zoom to selection', 'Show code', '---', 'Delete file'];
+    assert.deepEqual(m.rows, FRAME);
     assert.match((await selection(b))[0], /^landing\.html\|.* card$/, 'the frame is selected first');
-    const rename = m.items.find((x) => x.label === 'Rename…');
-    assert.ok(rename.off && /HTML/.test(rename.why), 'renaming an HTML file: dimmed, with the reason');
-    await keysMatchRegistry(b);
+    assert.deepEqual(m.items.filter((x) => x.off).map((x) => x.label), [], 'nothing on an HTML frame is dimmed');
+    assert.deepEqual(m.items.map((x) => x.key), ['Ctrl C', 'Ctrl V', 'Ctrl D', 'F2', 'F', 'T', 'I', 'Shift 2', '', 'Delete']);
+    await keysMatchSheet(b, sheet);
     t.diagnostic(`frame: ${m.rows.join(' | ')}`);
 
     // an element inside a frame (the frame is an iframe that takes no pointer events: the right-click reaches the canvas)
@@ -92,7 +108,7 @@ test('menus: each target has its own item set, in the group order, with the regi
     assert.ok(by['Select children'].off && /Nothing inside/.test(by['Select children'].why), 'a heading has no elements inside');
     assert.ok(by['Wrap in frame'].off, 'wrapping HTML is not there yet: dimmed');
     assert.deepEqual([by.Cut.key, by.Copy.key, by.Duplicate.key, by['Select parent'].key, by.Delete.key], ['Ctrl X', 'Ctrl C', 'Ctrl D', 'Shift Enter', 'Delete']);
-    await keysMatchRegistry(b);
+    await keysMatchSheet(b, sheet);
     t.diagnostic(`element: ${m.rows.join(' | ')}`);
 
     // an element of a TSX component: the dialect names its layers, so Rename is there
@@ -133,8 +149,26 @@ test('menus: each target has its own item set, in the group order, with the regi
     await b.eval(`document.querySelector('#layers .lcomp[data-component="${LANDING}"]').scrollIntoView({ block: 'center' })`);
     await rclick(io, await centre(b, `document.querySelector('#layers .lcomp[data-component="${LANDING}"]')`));
     m = await menu(b);
-    assert.deepEqual(m.rows.slice(0, 2), ['Paste here', 'Rename…']);
+    assert.deepEqual(m.rows.filter((x) => x !== 'Collapse'), FRAME, 'the file row has the frame\'s items (and Collapse)');
     assert.ok(m.rows.includes('Collapse'), 'the file row collapses');
+    await keysMatchSheet(b, sheet);
+    // the same for a TSX component, reached by its card, its file row and its root layer row
+    await io.key('Escape');
+    const card = await b.eval(`napkin.find('Card').component`), root = await b.eval(`napkin.state.components.get(napkin.find('Card').component).doc.root.id`);
+    await rclick(io, await centre(b, `document.querySelector('section.cmp[data-component="${card}"] .cmp-head h3')`));
+    const tsx = (await menu(b)).rows;
+    assert.deepEqual(tsx.slice(0, 4), ['Copy', 'Paste inside', 'Duplicate', 'Rename…'], `a TSX frame: ${tsx.join(' | ')}`);
+    assert.equal(tsx.at(-1), 'Delete file…', 'a TSX file is deleted after its dialog');
+    await keysMatchSheet(b, sheet);
+    for (const row of [`#layers .lcomp[data-component="${card}"]`, `#layers .lrow[data-component="${card}"][data-node="${root}"]`]) {
+      await io.key('Escape');
+      await b.eval(`napkin.layers.expand(${JSON.stringify(card)})`);
+      await b.waitFor(`!!document.querySelector(${JSON.stringify(row)})`);
+      await b.eval(`document.querySelector(${JSON.stringify(row)}).scrollIntoView({ block: 'center' })`);
+      await rclick(io, await centre(b, `document.querySelector(${JSON.stringify(row)})`));
+      assert.deepEqual((await menu(b)).rows.filter((x) => x !== 'Collapse' && x !== 'Expand'), tsx, `${row}: the same items as the card`);
+      await keysMatchSheet(b, sheet);
+    }
     await io.key('Escape');
   } finally { await close(); }
 });
@@ -220,6 +254,158 @@ test('menus: the items do the thing (duplicate, delete, copy and paste here, ord
     await rclick(io, await emptyCanvas(b));
     assert.equal((await labels(b)).at(-1), 'Show layers');
     await pick('Show layers');
+  } finally { await close(); }
+});
+
+test('menus: Cut of several and Paste, Undo with the selection, Show code, the frame menu (Rename, Duplicate, Delete file)', { timeout: 240000 }, async (t) => {
+  const { b, io, r, html, close } = await boot();
+  const pick = async (label, from = '#ctxmenu') => { const p = await centre(b, `[...document.querySelectorAll('${from} [role=menuitem]')].find((e) => e.querySelector('.nk-ml').textContent === ${JSON.stringify(label)})`); await io.click(p.x, p.y); };
+  const rev = () => b.eval(`napkin.stage.sections.get(${JSON.stringify(LANDING)})?.docFrame.tree()?.revision ?? null`);
+  const reloaded = async (before) => { await b.waitFor(`napkin.stage.sections.get(${JSON.stringify(LANDING)})?.docFrame.tree()?.revision !== ${JSON.stringify(before)}`, 10000); await sleep(300); };
+  const head = (id) => `document.querySelector('section.cmp[data-component="${id}"] .cmp-head h3')`;
+  const has = (id) => b.eval(`napkin.state.components.has(${JSON.stringify(id)})`);
+  const view = () => j(b, `napkin.view.get()`);
+  const exists = (name) => { try { readFileSync(join(r.compDir, name)); return true; } catch { return false; } };
+  try {
+    await b.send('Browser.grantPermissions', { permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'], origin: new URL(await b.eval('location.href')).origin });
+    // Cut of two elements, picked in reverse order: both go to the clipboard in the file's order, then both leave the file
+    const [h1, btn] = [await node(b, 'h1'), await node(b, 'button.cta')];
+    await b.eval(`napkin.selectMany([${JSON.stringify(btn)}, ${JSON.stringify(h1)}].map((node) => ({ component: ${JSON.stringify(LANDING)}, node, variant: {} })))`);
+    let r0 = await rev();
+    await rclick(io, await centre(b, el(btn)));
+    assert.equal((await menu(b)).label, '2 selected');
+    await pick('Cut');
+    await reloaded(r0);
+    const clip = await b.eval(`navigator.clipboard.readText()`);
+    assert.match(clip, /^<h1>Plan the week<\/h1>\n<button class="cta">Start<\/button>/, `both on the clipboard, in the file's order:\n${clip}`);
+    assert.doesNotMatch(html(), /<h1>|class="cta"/, 'both cut from the file');
+    assert.match(html(), /<main class="hero"><p>One page, one list.<\/p><\/main>/);
+    // Paste inside the second card: both come back, in order, and are the selection
+    const tuesday = await b.eval(`(() => { const f = napkin.stage.sections.get(${JSON.stringify(LANDING)}).docFrame; return f.nodeOf(f.doc().querySelectorAll('article')[1]); })()`);
+    r0 = await rev();
+    await rclick(io, await centre(b, el(tuesday)));
+    await pick('Paste here');
+    await reloaded(r0);
+    assert.match(html(), /<p>Ship the shell<\/p><h1>Plan the week<\/h1><button class="cta">Start<\/button><\/article>/, 'both pasted, in order');
+    await b.waitFor(`napkin.state.selections.length === 2`, 5000);
+    // Undo the paste, then undo the cut: the two are back where they were and selected again, in one step
+    await b.eval(`document.activeElement?.blur()`);
+    r0 = await rev(); await io.key('z', { ctrl: true }); await reloaded(r0);
+    r0 = await rev(); await io.key('z', { ctrl: true }); await reloaded(r0);
+    assert.match(html(), /<main class="hero"><h1>Plan the week<\/h1><p>One page, one list.<\/p><button class="cta">Start<\/button><\/main>/, 'one undo puts both back');
+    await b.waitFor(`napkin.state.selections.length === 2`, 5000);
+    assert.deepEqual((await selection(b)).sort(), [`${LANDING}|${h1}`, `${LANDING}|${btn}`].sort(), 'and selects them again');
+
+    // Show code on an element: the file itself, by its name, with the element's line marked
+    await b.eval(`napkin.select({ component: ${JSON.stringify(LANDING)}, node: ${JSON.stringify(h1)}, variant: {} })`);
+    await rclick(io, await centre(b, el(h1)));
+    await pick('Show code');
+    await b.waitFor(`document.querySelector('#code-lines .cl.hl')`, 5000);
+    const code = await j(b, `({ name: document.querySelector('#pane-code .c-name, .code .c-name').textContent, text: [...document.querySelectorAll('#code-lines .cl .ct')].map((e) => e.textContent).join('\\n'), hl: [...document.querySelectorAll('#code-lines .cl.hl .ct')].map((e) => e.textContent).join('\\n') })`);
+    assert.equal(code.name, LANDING, 'the strip names the file');
+    assert.equal(code.text, html().replace(/\n$/, ''), 'the strip shows the file as it is on disk');
+    assert.match(code.hl, /<h1>Plan the week<\/h1>/, "the element's line is marked");
+    // and on the frame: the same file
+    await rclick(io, await centre(b, head(LANDING)));
+    await pick('Show code');
+    await sleep(400);
+    assert.equal(await b.eval(`document.querySelector('.code .c-name').textContent`), LANDING);
+
+    // Duplicate: the next free frame-N.html (standards 3.11) beside it; the original keeps its place and the view does not move or zoom
+    await rclick(io, await centre(b, head(LANDING)));
+    const v0 = await view(), p0 = await j(b, `napkin.stage.sections.get(${JSON.stringify(LANDING)}).pos`);
+    await pick('Duplicate');
+    await b.waitFor(`napkin.state.selection?.component === 'frame-1.html'`, 10000);
+    assert.equal(readFileSync(join(r.compDir, 'frame-1.html'), 'utf8'), html(), 'a copy of the file, next to it');
+    assert.deepEqual(await j(b, `napkin.stage.sections.get(${JSON.stringify(LANDING)}).pos`), p0, 'the original did not move');
+    assert.deepEqual(await view(), v0, 'the view did not move or zoom');
+    const p2 = await j(b, `napkin.stage.sections.get('frame-1.html').pos`);
+    assert.ok(p2.y === p0.y && p2.x > p0.x, `the copy is on the same row, to the right (${JSON.stringify(p2)} vs ${JSON.stringify(p0)})`);
+    t.diagnostic(`duplicate: original ${JSON.stringify(p0)}, copy ${JSON.stringify(p2)}, view ${JSON.stringify(v0)}`);
+    await b.eval(`document.activeElement?.blur()`);
+    await io.key('z', { ctrl: true });
+    await b.waitFor(`!napkin.state.components.has('frame-1.html')`, 10000);
+    assert.equal(exists('frame-1.html'), false, 'Ctrl+Z removes the copy');
+
+    // Rename: the label becomes a field; an empty name is refused; Enter renames the file; Ctrl+Z puts the name back
+    await rclick(io, await centre(b, head(LANDING)));
+    await pick('Rename');
+    await b.waitFor(`document.activeElement?.classList.contains('nk-rename')`, 3000);
+    assert.equal(await b.eval(`document.activeElement.value`), 'landing');
+    await b.eval(`(() => { const i = document.activeElement; i.value = '  '; i.dispatchEvent(new Event('input')); })()`);
+    await io.key('Enter');
+    await sleep(200);
+    assert.equal(await b.eval(`document.querySelector('.nk-rename-msg')?.textContent`), 'A file needs a name.', 'a refused name says why, and the field stays');
+    await b.eval(`(() => { const i = document.querySelector('.nk-rename'); i.value = 'plan'; i.dispatchEvent(new Event('input')); })()`);
+    await io.key('Enter');
+    await b.waitFor(`napkin.state.selection?.component === 'plan.html'`, 10000);
+    assert.ok(exists('plan.html') && !exists(LANDING), 'the file is renamed on disk');
+    assert.deepEqual(await j(b, `napkin.stage.sections.get('plan.html').pos`), p0, 'in the same place');
+    await b.eval(`document.activeElement?.blur()`);
+    await io.key('z', { ctrl: true });
+    await b.waitFor(`napkin.state.selection?.component === ${JSON.stringify(LANDING)}`, 10000);
+    assert.ok(exists(LANDING) && !exists('plan.html'), 'Ctrl+Z puts the old name back');
+    // F2 on the frame does the same
+    await io.key('F2');
+    await b.waitFor(`document.activeElement?.classList.contains('nk-rename')`, 3000);
+    await io.key('Escape');
+    assert.equal(await b.eval(`!!document.querySelector('.nk-rename')`), false, 'Escape keeps the name');
+
+    // Delete file: gone from the folder at once (no dialog), and Ctrl+Z brings it back in its place
+    const before = html();
+    await rclick(io, await centre(b, head(LANDING)));
+    await pick('Delete file');
+    await b.waitFor(`!napkin.state.components.has(${JSON.stringify(LANDING)})`, 10000);
+    assert.equal(exists(LANDING), false);
+    await b.eval(`document.activeElement?.blur()`);
+    await io.key('z', { ctrl: true });
+    await b.waitFor(`napkin.state.selection?.component === ${JSON.stringify(LANDING)}`, 10000);
+    assert.equal(html(), before, 'the same bytes back');
+    assert.deepEqual(await j(b, `napkin.stage.sections.get(${JSON.stringify(LANDING)}).pos`), p0, 'in the same place');
+    assert.ok(await has(LANDING));
+  } finally { await close(); }
+});
+
+test('menus: Escape after a hover-opened submenu closes one level; dimmed items get no fill; Ctrl+A selects all', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  const focused = () => b.eval(`(() => { const e = document.activeElement; return e?.closest('[role=menuitem]') ? e.querySelector('.nk-ml').textContent : e === document.body ? 'body' : (e.id || e.tagName); })()`);
+  const look = (label) => j(b, `(() => { const e = [...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((x) => x.querySelector('.nk-ml').textContent === ${JSON.stringify(label)}); const s = getComputedStyle(e); return { bg: s.backgroundColor, outline: s.outlineStyle === 'none' ? 'none' : s.outlineWidth + ' ' + s.outlineStyle }; })()`);
+  try {
+    const h1 = await node(b, 'h1');
+    await rclick(io, await centre(b, el(h1)));
+    const order = await centre(b, `document.querySelector('#ctxmenu [data-sub]')`);
+    await io.move(order.x, order.y);
+    await b.waitFor(`!document.querySelector('#ctxmenu-sub').hidden`, 1000);
+    await io.key('Escape');
+    assert.equal(await b.eval(`document.querySelector('#ctxmenu-sub').hidden`), true, 'the first Escape closes the submenu');
+    assert.ok(await isOpen(b), 'and only the submenu');
+    assert.equal(await focused(), 'Order', 'focus is on the item that opened it');
+    await io.key('Escape');
+    assert.equal(await isOpen(b), false, 'the second Escape closes the menu');
+    assert.equal(await focused(), 'stage', 'and focus goes back where it was (the canvas, pressed by the right-click)');
+
+    // the pointer over a dimmed item: no fill and no ring; over a live one: the hover fill
+    await rclick(io, await centre(b, el(h1)));
+    const off = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((x) => x.querySelector('.nk-ml').textContent === 'Wrap in frame')`);
+    await io.move(off.x, off.y); await sleep(150);
+    const dim = await look('Wrap in frame');
+    assert.deepEqual(dim, { bg: 'rgba(0, 0, 0, 0)', outline: 'none' }, `a dimmed item under the pointer: ${JSON.stringify(dim)}`);
+    await io.press(off.x, off.y); await sleep(50);
+    assert.equal((await look('Wrap in frame')).bg, 'rgba(0, 0, 0, 0)', 'no press state either');
+    await io.release(off.x, off.y);
+    const live = await centre(b, `[...document.querySelectorAll('#ctxmenu [role=menuitem]')].find((x) => x.querySelector('.nk-ml').textContent === 'Copy')`);
+    await io.move(live.x, live.y); await sleep(150);
+    assert.notEqual((await look('Copy')).bg, 'rgba(0, 0, 0, 0)', 'a live item under the pointer is filled');
+    // the keyboard ring on a live item: 2 px solid, outside the item
+    await io.key('ArrowDown'); await io.key('ArrowUp');
+    const ring = await j(b, `(() => { const s = getComputedStyle(document.activeElement); return [s.outlineWidth, s.outlineStyle, s.outlineOffset]; })()`);
+    assert.deepEqual(ring, ['2px', 'solid', '2px'], 'the focus ring: 2 px solid accent, 2 px outside');
+    await io.key('Escape');
+
+    // Ctrl+A on the canvas: every element at the selection's level (the menu and the key map say Ctrl A)
+    await b.eval(`napkin.select({ component: ${JSON.stringify(LANDING)}, node: ${JSON.stringify(h1)}, variant: {} }); document.activeElement?.blur()`);
+    await io.key('a', { ctrl: true });
+    assert.equal((await selection(b)).length, 3, 'the heading, the paragraph and the button');
   } finally { await close(); }
 });
 

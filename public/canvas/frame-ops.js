@@ -3,16 +3,14 @@
 //   nudge(dx, dy)          the arrows (1 px, Shift 10 px): POST /api/layout { undo: true }
 //   resize(id, box)        the eight handles (handles.js draws them): the body's width and height in the file and the frame's place,
 //                          one POST /api/edit { canvas }
-//   remove()               Delete / Backspace: DELETE /api/frames/<path> (undo writes the file back where it was)
-//   duplicate()            Ctrl/Cmd+D: POST /api/frames/duplicate, the next free frame-N.html to the right, selected
+// Delete and duplicate of a whole frame (its file) live in file-ops.js, the one path for the keys, the menus and the palette.
 // A frame counts as selected when the one selection is its card, its <html> or its <body> (what drawing a frame selects).
 // The keys reach these through the registry (actions.js): the arrows are the spatial-focus commands, which nudge a selected frame.
-//   initFrameOps(ctx) -> ctx.frames = { selected(), box(id), nudge, resize, remove, duplicate, MIN }
+//   initFrameOps(ctx) -> ctx.frames = { selected(), box(id), nudge, resize, MIN }
 import { plain } from './words.js';
 import { DOC_WIDTH } from './doc-frames.js';
 
 export const MIN = { w: 48, h: 32 };   // standards 3.6 (the server keeps the same floor: src/doc/folder.js FRAME_MIN)
-const GAP = 40;                          // a duplicate sits this far to the right of its original
 
 export function initFrameOps(ctx) {
   const call = async (path, method, body) => {
@@ -63,32 +61,6 @@ export function initFrameOps(ctx) {
     });
   }
 
-  async function remove() {
-    const fs = selected();
-    if (!fs) return null;
-    return queue(async () => {
-      const j = await call(`/api/frames/${encodeURIComponent(fs.c.path)}?revision=${encodeURIComponent(fs.c.revision ?? '')}`, 'DELETE');
-      if (!j.ok) { ctx.hint(`Could not delete the frame: ${plain(j.error)}`); return j; }
-      ctx.select(null);
-      ctx.hint(`Deleted ${fs.c.name}. Ctrl/Cmd+Z brings it back.`);
-      return j;
-    });
-  }
-
-  async function duplicate() {
-    const fs = selected();
-    if (!fs) return null;
-    const b = box(fs.id);
-    return queue(async () => {
-      const r = await call('/api/frames/duplicate', 'POST', { from: fs.c.path, x: b.x + b.w + GAP, y: b.y });
-      if (!r.ok) { ctx.hint(`Could not duplicate the frame: ${plain(r.error)}`); return r; }
-      const sec = await ctx.create.adopt(r);
-      const body = sec && ctx.create.bodyOf(sec.docFrame.tree());
-      if (body) ctx.select({ component: r.component, node: body.node, variant: {} });
-      return r;
-    });
-  }
-
   // an undo or a redo put a frame's place back (src/doc/folder.js putPlace): the card follows
   ctx.on('doc-layout', ({ frame: component, canvas }) => {
     const c = ctx.state.components.get(component), sec = ctx.stage.sections.get(component);
@@ -99,7 +71,7 @@ export function initFrameOps(ctx) {
     ctx.stage.refreshOverlays();
   });
 
-  const api = { selected, box, nudge, resize, remove, duplicate, MIN };
+  const api = { selected, box, nudge, resize, MIN };
   ctx.frames = api;
   return api;
 }

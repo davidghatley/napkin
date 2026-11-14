@@ -1,6 +1,8 @@
 // INS-01: the code strip. The component's TSX under the canvas, live: the selected node's lines are highlighted (its JSX element
 // and its style entries), clicking a line selects the node it belongs to, and every edit updates the text from the change frame
 // itself, without another request (target < 100 ms). Plain DOM, a small tokenizer for colour.
+// An HTML or React file the document engine draws shows its own whole text (GET /api/component/<id>/source), named by its
+// file, with the selected element's lines highlighted and scrolled to; it is read again when the file changes.
 import { h } from './drawer.js';
 import { variantGrid } from '/src/model.js';
 
@@ -82,7 +84,7 @@ export function nodeAt(nodes, line) {
 
 export function initCode(ctx, drawer) {
   let pane, body, head, nodes = {}, lines = [], source = '', rows = [];
-  const S = { component: null, revision: null, perf: { frame: 0, painted: 0, lines: 0 } };
+  const S = { component: null, revision: null, engine: null, cols: {}, perf: { frame: 0, painted: 0, lines: 0 } }; // engine: the element lines of an engine file
   const sources = new Map(); // component -> latest text, kept from change frames so nothing is fetched after an edit
 
   const currentId = () => ctx.state.selection?.component ?? S.component ?? ctx.state.components.keys().next().value ?? null;
@@ -94,7 +96,8 @@ export function initCode(ctx, drawer) {
 
   function paintAll(text, revision) {
     const t0 = performance.now();
-    source = text; lines = text.replace(/\n$/, '').split('\n'); nodes = mapNodes(text);
+    source = text; lines = text.replace(/\n$/, '').split('\n');
+    nodes = S.engine ? Object.fromEntries(Object.entries(S.engine).map(([id, r]) => [id, { jsx: r, styles: [] }])) : mapNodes(text);
     // rewrite only the lines that changed, so a one-line edit touches one row
     const frag = document.createDocumentFragment();
     while (rows.length > lines.length) rows.pop().el.remove();
@@ -104,7 +107,7 @@ export function initCode(ctx, drawer) {
       if (r.text !== l) { r.ct.innerHTML = paint(l) || '&nbsp;'; r.text = l; }
     });
     body.append(frag);
-    head.querySelector('.c-rev').textContent = revision === undefined ? '' : `r${revision}`;
+    head.querySelector('.c-rev').textContent = revision === undefined || revision === null ? '' : S.engine ? String(revision).slice(0, 7) : `r${revision}`;
     S.revision = revision;
     highlight(false);
     S.perf.painted = performance.now(); S.perf.lines = lines.length; S.perf.ms = performance.now() - t0;
@@ -114,19 +117,41 @@ export function initCode(ctx, drawer) {
   function highlight(scroll = true) {
     const sel = ctx.state.selection;
     for (const r of rows) r.el.classList.remove('hl', 'hl-style');
-    const n = sel && sel.component === S.component ? nodes[sel.node] : null;
+    const n = sel && sel.component === S.component && !sel.card ? nodes[sel.node] : null;
     body.dataset.node = n ? sel.node : '';
     if (!n) return;
     if (n.jsx) for (let l = n.jsx[0]; l <= n.jsx[1]; l++) rows[l - 1]?.el.classList.add('hl');
     for (const [a, b] of n.styles) for (let l = a; l <= b; l++) rows[l - 1]?.el.classList.add('hl-style');
     const first = n.jsx?.[0] ?? n.styles[0]?.[0];
-    if (scroll && first) { const el = rows[first - 1]?.el; if (el) { const top = el.offsetTop - body.offsetTop; if (top < body.scrollTop || top > body.scrollTop + body.clientHeight - 40) body.scrollTop = Math.max(0, top - 24); } }
+    if (scroll && first) {
+      const el = rows[first - 1]?.el;
+      if (el) {
+        const top = el.offsetTop - body.offsetTop; if (top < body.scrollTop || top > body.scrollTop + body.clientHeight - 40) body.scrollTop = Math.max(0, top - 24);
+        // an element that starts far along a long line (a one-line HTML file): scrolled across to it too
+        const col = S.engine ? S.cols[sel.node] : null, ct = rows[first - 1].ct;
+        if (col > 0 && ct.firstChild) {
+          const w = ct.getBoundingClientRect().width / Math.max(1, rows[first - 1].text.length), x = ct.offsetLeft + col * w;
+          if (x < body.scrollLeft || x > body.scrollLeft + body.clientWidth - 80) body.scrollLeft = Math.max(0, x - 48);
+        }
+      }
+    }
   }
 
+  const isEngine = (c) => c?.kind === 'html' && !c.doc && !c.item;
   async function show(id) {
     if (!id) return;
     S.component = id;
-    head.querySelector('.c-name').textContent = `${ctx.state.components.get(id)?.name ?? id}.tsx`;
+    const c = ctx.state.components.get(id);
+    head.querySelector('.c-name').textContent = c?.path ? c.path.split('/').pop() : `${c?.name ?? id}.tsx`;
+    if (isEngine(c)) {
+      const r = await fetch(`/api/component/${encodeURIComponent(id)}/source`).then((x) => x.json()).catch(() => null);
+      if (S.component !== id) return;
+      if (!r?.ok) { S.engine = {}; paintAll(`/* ${r?.error ?? 'napkin could not read this file'} */`, null); return; }
+      S.engine = r.lines || {}; S.cols = r.cols || {};
+      paintAll(r.source, r.revision);
+      return;
+    }
+    S.engine = null;
     if (sources.has(id)) paintAll(sources.get(id), ctx.state.components.get(id)?.revision);
     else {
       const r = await fetch(`/api/components/${encodeURIComponent(id)}`).then((x) => x.json()).catch(() => null);
@@ -144,12 +169,12 @@ export function initCode(ctx, drawer) {
       const c = ctx.state.components.get(S.component);
       const cur = ctx.state.selection;
       const variant = cur && cur.component === S.component ? cur.variant : (c?.doc ? variantGrid(c.doc)[0] : {});
-      ctx.select({ component: S.component, node: id, variant });
+      ctx.select({ component: S.component, node: id, variant: S.engine ? {} : variant });
     });
     pane.append(head, body);
   }
 
-  drawer.add('code', 'Code', { build, onOpen() { const id = currentId(); show(id); } });
+  drawer.add('code', 'Code', { build, onOpen() { const id = currentId(); show(id).then(() => highlight(true)); } }); // (opened on an element: its lines are scrolled to)
 
   // Sources come straight from the change frames (the server adds `source`), so the strip never waits for a fetch.
   ctx.on('change', (f) => {
@@ -158,10 +183,12 @@ export function initCode(ctx, drawer) {
     setSource(f.component, f.source, f.revision);
   });
   ctx.on('added', (f) => { if (typeof f.source === 'string') setSource(f.component, f.source, f.revision); });
+  // an engine file changed (an edit, an undo, a save in an editor): its text is read again
+  ctx.on('doc-change', (f) => { const c = ctx.state.components.get(S.component); if (S.engine && drawer.active === 'code' && c?.path === f.path) show(S.component).then(() => highlight(false)); });
   ctx.on('removed', ({ component }) => { sources.delete(component); if (S.component === component && drawer.active === 'code') show(currentId()); });
   ctx.on('select', (s) => {
     if (drawer.active !== 'code') return;
-    if (s && s.component !== S.component) show(s.component).then(() => highlight(true)); else highlight(true);
+    if (s && s.component !== S.component && !ctx.state.components.get(s.component)?.item) show(s.component).then(() => highlight(true)); else highlight(true);
   });
   ctx.code = { perf: S.perf, state: S, mapNodes, nodeAt };
 }
