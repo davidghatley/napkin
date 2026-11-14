@@ -220,3 +220,25 @@ test('basics pass 3: a card a grid sized keeps the width it had in the frame', {
   assert.ok(w > 100 && w < 600, `the frame draws the teaser in its grid column: ${w}`);
   assert.equal(t.root.w, w, 'the same width on its own');
 });
+
+// Where the new card is on screen, against the canvas (the area Layers and the right panel leave) and the message.
+const onScreen = (id) => json(`(() => { const s = document.querySelector('section.cmp[data-component=' + JSON.stringify(${JSON.stringify(id)}) + ']'); const st = document.getElementById('stage').getBoundingClientRect();
+  const r = s.getBoundingClientRect(), h = document.getElementById('hint'), hr = h.textContent && h.getClientRects().length ? h.getBoundingClientRect() : null;
+  const inside = r.left >= st.left && r.top >= st.top && r.right <= st.right && r.bottom <= st.bottom;
+  const covered = hr ? Math.max(0, Math.min(r.right, hr.right) - Math.max(r.left, hr.left)) * Math.max(0, Math.min(r.bottom, hr.bottom) - Math.max(r.top, hr.top)) : 0;
+  return { inside, covered, z: napkin.view.get().z, r: [r.left, r.top, r.right, r.bottom].map(Math.round), stage: [st.left, st.top, st.right, st.bottom].map(Math.round) }; })()`);
+
+test('basics pass 3: from a far, zoomed-out view the new card ends wholly on the canvas, readable, and the message does not cover it', { timeout: 90000 }, async () => {
+  // fit all, then far off to one side: the frame the selection is in is a speck
+  await q(`napkin.view.set({ x: -4000, y: -3000, z: 0.12 }); 0`);
+  await sleep(300);
+  await make('journey.html', 'banner');
+  const id = await madeAs('Banner');
+  await sleep(2500); // past its first draw, its measure and any move the layout makes
+  const at = await onScreen(id);
+  assert.ok(at.inside, `the card is inside the canvas: ${JSON.stringify(at)}`);
+  assert.equal(at.covered, 0, `the message covers none of it: ${JSON.stringify(at)}`);
+  assert.ok(at.z >= 0.99, `shown at 100%, since it fits: ${at.z}`);
+  await sleep(2500);
+  assert.ok((await onScreen(id)).inside, 'and it stays shown');
+});

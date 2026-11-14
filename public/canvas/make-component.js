@@ -2,7 +2,7 @@
 // command, and that element becomes a component of its own: a .tsx file beside the frame, on the canvas to its right.
 // No name is asked first: the name comes from what was selected (its class, id or tag) and can be changed afterwards.
 // The server does the work (POST /api/frames/component, src/doc/to-component.js); this file decides when the command
-// applies, says so plainly when it does not, and shows the result.
+// applies, says so plainly when it does not, and shows the result: revealed, readable and clear of the message.
 //   initMakeComponent(ctx) -> ctx.makeComponent = { can() -> { ok, why }, run() -> Promise<{ path, name } | null> }
 import { plain } from './words.js';
 
@@ -42,6 +42,43 @@ export function initMakeComponent(ctx) {
     }
   }
 
+  // Show the new card where a person can read it: wholly inside the canvas (which Layers and the right panel do not
+  // overlap), clear of the message at the bottom, at 100% or the largest zoom that fits it. Its frame draws, measures and
+  // may be moved by the layout after it appears, so this waits for its place and size to hold still, shows it, and shows
+  // it again if it moves within the next seconds, unless the person pans or zooms in the meantime.
+  const place = (id) => { const r = ctx.stage.componentRect?.(id); return r && Number.isFinite(r.x) && r.w > 0 && r.h > 0 ? r : null; };
+  function clearArea() {
+    const b = ctx.view.stageBox(), pad = 32, area = { left: pad, top: pad, right: b.width - pad, bottom: b.height - pad };
+    const h = document.getElementById('hint'), hr = h?.textContent && h.getClientRects().length ? h.getBoundingClientRect() : null;
+    if (hr) area.bottom = Math.min(area.bottom, hr.top - b.top - 16);
+    return area;
+  }
+  function revealView(r) {
+    const a = clearArea(), w = a.right - a.left, h = a.bottom - a.top, v = ctx.view.get();
+    const fitZ = Math.min(1, w / r.w, h / r.h);
+    const x0 = r.x * v.z + v.x, y0 = r.y * v.z + v.y, x1 = (r.x + r.w) * v.z + v.x, y1 = (r.y + r.h) * v.z + v.y;
+    if (x0 >= a.left && y0 >= a.top && x1 <= a.right && y1 <= a.bottom && v.z >= fitZ - 1e-6) return null; // already in view and readable
+    const z = Math.max(0.05, fitZ);
+    return { z, x: a.left + w / 2 - (r.x + r.w / 2) * z, y: a.top + h / 2 - (r.y + r.h / 2) * z };
+  }
+  async function revealWhenSettled(path) {
+    const idOf = () => { for (const [k, c] of ctx.state.components) if (c.path === path) return k; return null; };
+    const same = (a, b) => a && b && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1;
+    const near = (a, b) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5 && Math.abs(a.z - b.z) < 1e-4;
+    const t0 = performance.now(); let last = null, still = 0, shown = null, aim = null;
+    while (performance.now() - t0 < 8000) {
+      await new Promise((res) => setTimeout(res, 100));
+      const id = idOf(); if (id == null) continue;
+      const sec = ctx.stage.sections.get(id), r = place(id);
+      if (!r || sec?.el?.dataset.ready !== '1') { still = 0; last = r; continue; }
+      if (aim && !near(ctx.view.target?.() ?? ctx.view.get(), aim)) return; // the person moved the view: theirs now
+      still = same(r, last) ? still + 1 : 0; last = r;
+      if (still < 3 || same(r, shown)) { if (shown && performance.now() - t0 > 6000) return; continue; }
+      const next = revealView(r); shown = r;
+      if (next) { aim = next; ctx.view.set(next, { animate: true }); } else aim = ctx.view.get();
+    }
+  }
+
   // The width a grid or flex parent gave the element in its frame, in the element's own box-sizing (what `width:` means
   // for it); null when its width is its own. The component has no such parent, so it is given this width instead.
   function gridWidth(id, node) {
@@ -68,9 +105,9 @@ export function initMakeComponent(ctx) {
       // the new file joins the canvas on the folder's next scan; wait for its card, then show it
       // (a .tsx file's card is named for the file and its export: "Card.tsx#Card")
       const made = await until(() => { for (const [id, c] of ctx.state.components) if (c.path === r.path) { const s = ctx.stage.sections.get(id); if (s?.el?.isConnected) return { id, c }; } return null; });
-      if (made) { ctx.stage.reveal?.(made.id); selectWhenDrawn(r.path); }
       const left = r.dropped?.length ? ` Left behind: ${r.dropped.join('; ')}.` : '';
       ctx.hint(`${r.name} made from ${r.from}. It is ${r.path}; the frame is unchanged.${left}`);
+      if (made) { revealWhenSettled(r.path); selectWhenDrawn(r.path); }
       ctx.emit?.('component-made', { path: r.path, name: r.name, from: r.from });
       return { path: r.path, name: r.name, component: made?.id ?? null };
     } finally { busy = false; }
