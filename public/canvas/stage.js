@@ -860,14 +860,48 @@ export function createStage(ctx, root, world, view) {
   ctx.on('layout', () => queueCull());
 
   // ---------------------------------------------------------------------------------------------- pointer: hover, click, marquee, frame drag
+  // Figma's selection model in a document frame (standards section 5). The card is <body> (or <html>); its direct children are
+  // the top level. A click picks the element under the pointer at the level of the selection (the children of the selected
+  // element's parent, when that parent is inside the card), else at the top level; Ctrl/Cmd picks the deepest one.
+  const CARD = new Set(['html', 'head', 'body']);
+  function pathTo(id, node) { // the tree nodes from the root down to node, or null
+    const t = sections.get(id)?.docFrame?.tree()?.tree;
+    const walk = (list, up) => { for (const n of list || []) { const p = [...up, n]; if (n.node === node) return p; const r = walk(n.children, p); if (r) return r; } return null; };
+    return t ? walk(t, []) : null;
+  }
+  function pickNode(id, node, { deep = false } = {}) {
+    const path = !deep && pathTo(id, node);
+    if (!path) return node;
+    let card = -1; path.forEach((n, i) => { if (CARD.has(n.tag)) card = i; });
+    if (card === path.length - 1) return node; // the card itself (its empty part)
+    const s = ctx.state.selections.find((x) => x.component === id), sp = s && pathTo(id, s.node), parent = sp && sp.length > 1 ? sp[sp.length - 2] : null;
+    if (parent && !CARD.has(parent.tag)) { const i = path.indexOf(path.find((n) => n.node === parent.node)); if (i >= 0 && path[i + 1]) return path[i + 1].node; }
+    return path[card + 1].node;
+  }
+  // Double-click: one level in from the selection toward node (null when the selection is the deepest there, or not on its way)
+  function deeper(id, node) {
+    const s = ctx.state.selections.length === 1 && ctx.state.selection, path = s?.component === id && pathTo(id, node);
+    if (!path) return null;
+    const i = path.findIndex((n) => n.node === s.node);
+    return i >= 0 && path[i + 1] ? path[i + 1].node : null;
+  }
+  // Escape: the selection's parent, the card from the top level, null from the card (or outside a document frame)
+  function upOf(sel) {
+    const path = sel && sections.get(sel.component)?.docFrame && pathTo(sel.component, sel.node);
+    if (!path || path.length < 2 || CARD.has(path.at(-1).tag)) return null;
+    return path.at(-2).node;
+  }
   const hit = (target, ev) => {
     const el = target.closest?.('.mount [data-n]');
     const cell = el?.closest('.cell');
     if (!el && ev && !document.body.dataset.play) { // an HTML component's frame: hit-test the document inside it
       const dc = target.closest?.('.doc-cell');
       const id = dc?.closest('.cmp, .item-card')?.dataset.component;
-      const p = id && (sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY) || (ctx.state.components.get(id)?.item ? dc : null));
-      return p ? { el: p, id, variant: {} } : null;
+      const f = id && sections.get(id)?.docFrame;
+      let p = f?.pick(ev.clientX, ev.clientY);
+      if (p) { const n = pickNode(id, p.dataset.n, { deep: ev.ctrlKey || ev.metaKey }); if (n !== p.dataset.n) p = f.element(n) || p; }
+      p = p || (id && ctx.state.components.get(id)?.item ? dc : null);
+      return p ? { el: p, id, variant: {}, doc: !!f } : null;
     }
     return el && cell && { el, id: cell.closest('.cmp, .item-card').dataset.component, variant: JSON.parse(cell.dataset.variant) };
   };
@@ -898,7 +932,7 @@ export function createStage(ctx, root, world, view) {
     if (ev.target.closest?.('.cmp-head, .build-error, [data-nodrag]')) return; // handled by the frame drag (a click on a title selects the component's root)
     if (!h) { if (!ev.target.closest?.('#error')) ctx.select(null); return; }
     const sel = { component: h.id, node: h.el.dataset.n, variant: h.variant };
-    if (ev.shiftKey || ev.metaKey || ev.ctrlKey) ctx.toggle(sel); else ctx.select(sel);
+    if (ev.shiftKey || (!h.doc && (ev.metaKey || ev.ctrlKey))) ctx.toggle(sel); else ctx.select(sel); // in a document frame Ctrl/Cmd picks the deepest (hit), Shift adds
   }, true);
   window.addEventListener('resize', refreshOverlays);
 
@@ -1011,7 +1045,7 @@ export function createStage(ctx, root, world, view) {
   }
 
   return {
-    rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
+    pickNode, deeper, upOf, pathTo, rootNode: (id) => { const f = sections.get(id)?.docFrame, t = f?.tree()?.tree; if (!t) return null; const body = (function find(l) { for (const n of l) { if (n.tag === 'body') return n; const r = find(n.children); if (r) return r; } return null; })(t); const list = body ? body.children : t; const n = list.find((x) => !['script', 'style', 'template', 'link', 'meta'].includes(x.tag) && f.has(x.node)); return n?.node ?? null; }, rearrange, setEditNote, reveal, applyPreview, measureAll: (id) => { const sec = sections.get(id); if (sec) measure(sec); }, hoverNode, render, remove, header, refreshOverlays, layoutAll, placeNew, moveTo, putAt, ghostFrame, removeGhost, ghostRect, ghostKeys, reslotGhosts, cull: () => queueCull(),
     openingRect, componentRect, allRect, selectionRect, nodeRect, cellElement, selectedElement, live,
     sections, position: (id) => sections.get(id)?.pos ?? null,
   };

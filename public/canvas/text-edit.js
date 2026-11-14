@@ -101,13 +101,19 @@ export function initTextEdit(ctx) {
     return true;
   }
 
-  // Select tool: a double-click on text in an HTML frame edits it, the word under the pointer selected.
+  // Select tool, a double-click in an HTML frame (standards section 5 rule 2): on selected text it edits, the word under the
+  // pointer selected; otherwise it selects one level deeper toward the pointer. (The clicks before it picked the level.)
   stageEl.addEventListener('dblclick', (ev) => {
     if (ctx.state.tool !== 'select' || document.body.dataset.play || ev.target.closest?.('.cmp-head, [data-nodrag], input')) return;
     const id = ev.target.closest?.('.doc-cell')?.closest('section.cmp')?.dataset.component;
     const p = id && ctx.stage.sections.get(id)?.docFrame?.pick(ev.clientX, ev.clientY);
-    if (!p || !begin({ component: id, node: p.dataset.n, variant: {} }, { x: ev.clientX, y: ev.clientY })) return;
-    ev.preventDefault(); ev.stopPropagation();
+    if (!p) return;
+    const s = ctx.state.selections.length === 1 && ctx.state.selection?.component === id ? ctx.state.selection : null;
+    const point = { x: ev.clientX, y: ev.clientY };
+    if (s && target(s) && begin(s, point)) { ev.preventDefault(); ev.stopPropagation(); return; }
+    const next = ctx.stage.deeper?.(id, p.dataset.n);
+    if (next) { ctx.select({ component: id, node: next, variant: {} }); ev.preventDefault(); ev.stopPropagation(); return; }
+    if (begin({ component: id, node: p.dataset.n, variant: {} }, point)) { ev.preventDefault(); ev.stopPropagation(); }
   });
 
   // Enter and F2 (registered before nav.js, so Enter edits text rather than focusing the card; actions.js 'text-reedit').
