@@ -117,3 +117,45 @@ test('children: dragging the frame by its label still moves the frame, and its f
   await until(async () => { const p = await pos(); return p.x === from.x + 50 && p.y === from.y + 30; });
   assert.equal(src(), before);
 });
+
+// ---- frames inside a frame: the minimum size, the default on a click, and their content contained (standards 2.5, 3.6, 3.10)
+const divs = () => [...src().matchAll(/<div style="([^"]*)"/g)].map((m) => m[1]);
+const num = (style, prop) => { const m = new RegExp(`(?:^|;\\s*)${prop}: (-?\\d+)px`).exec(style); return m ? Number(m[1]) : null; };
+async function inBoard(x, y) { const p = await at('body'); return { x: p.l + x, y: p.t + y }; }
+
+test('nested frames: a tiny drag with the Frame tool still makes a frame of at least 48 × 32', { timeout: 60000 }, async () => {
+  await q(`napkin.select(null); document.activeElement?.blur?.(); 0`);
+  const n = divs().length, a = await inBoard(160, 220);
+  await io.key('f');
+  await io.drag(a.x, a.y, a.x + 10, a.y + 10);
+  await until(() => divs().length === n + 1);
+  const d = divs().at(-1);
+  assert.ok(num(d, 'width') >= 48 && num(d, 'height') >= 32, `the minimum size (${d})`);
+  await drawn();
+});
+
+test('nested frames: a click with the Frame tool makes one of the default size, and what it holds is clipped to it', { timeout: 60000 }, async () => {
+  await q(`napkin.select(null); document.activeElement?.blur?.(); 0`);
+  const n = divs().length, a = await inBoard(360, 170);
+  await io.key('f');
+  await io.click(a.x, a.y);
+  await until(() => divs().length === n + 1);
+  const d = divs().at(-1);
+  assert.equal(num(d, 'width'), 100); assert.equal(num(d, 'height'), 100);
+  assert.match(d, /overflow: hidden/, 'a frame clips what it holds');
+  await drawn();
+  // text that runs past its right edge is cut there, and a click past the edge does not pick it
+  const t = await inBoard(420, 200);
+  await io.key('t');
+  await io.click(t.x, t.y);
+  await until(async () => q(`!!document.activeElement?.classList.contains('nk-new-text')`));
+  await q(`document.execCommand('insertText', false, 'A long line that runs on')`);
+  await io.key('Escape');
+  await until(() => /A long line that runs on<\/p><\/div>/.test(src()));
+  await drawn();
+  const p = await at('div:last-of-type p'), box = await at('div:last-of-type');
+  assert.ok(p.l + p.w > box.l + box.w, 'the text is wider than its frame');
+  const past = await inBoard(470, 210);
+  await io.click(past.x, past.y, { ctrl: true }); await sleep(200);
+  assert.notEqual(await selTag(), 'p', 'the clipped part of the text cannot be clicked');
+});

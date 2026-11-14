@@ -197,8 +197,8 @@ export function initCreate(ctx) {
     const s = spot(t, box ? box.left : point.x, box ? box.top : point.y);
     if (!s) { ctx.hint('Nothing here can hold a new element.'); return null; }
     if (tool === 'frame') {
-      const [w, h] = box ? [Math.max(8, Math.round(box.w / z)), Math.max(8, Math.round(box.h / z))] : DEFAULT.nested;
-      return insert(t, s, `<div style="${placeCss(s, w, h)}background: ${FILL}"></div>`, 'Added a frame', box && holdBox(box));
+      const [w, h] = box ? [Math.max(MIN.w, Math.round(box.w / z)), Math.max(MIN.h, Math.round(box.h / z))] : DEFAULT.nested; // the same floor as a top-level frame (standards 2.5)
+      return insert(t, s, `<div style="${placeCss(s, w, h)}background: ${FILL}; overflow: hidden"></div>`, 'Added a frame', box && holdBox(box)); // a frame clips what it holds (standards 3.10)
     }
     if (tool === 'text') {
       const w = box ? Math.max(MIN.w, Math.round(box.w / z)) : null;

@@ -143,7 +143,7 @@ test('basics pass 2: a frame drawn inside an existing HTML frame inserts an elem
   assert.match(await q(`document.querySelector('#draw-size').textContent`), /^\d+ × \d+$/, 'the same readout');
   await io.release(x0 + 100, y0 + 60);
   // (main is a block in the flow: the new box joins it at the end, at the drawn size)
-  await until(async () => /<main[^>]*>[\s\S]*<div style="[^"]*width: \d+px; height: \d+px; background: #f4f4f5"><\/div><\/main>/.test(readFileSync(file('page.html'), 'utf8')));
+  await until(async () => /<main[^>]*>[\s\S]*<div style="[^"]*width: \d+px; height: \d+px; background: #f4f4f5; overflow: hidden"><\/div><\/main>/.test(readFileSync(file('page.html'), 'utf8')));
   await until(async () => (await q(`napkin.state.selection?.component`)) === 'page.html');
   assert.ok(!existsSync(file('frame-3.html')), 'no new file');
   assert.equal(await q('napkin.state.tool'), 'select');
