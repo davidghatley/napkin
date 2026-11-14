@@ -45,7 +45,7 @@ let currentCtx = null;
 // cursor they need Alt (Option) so typing is never swallowed.
 const wired = new WeakSet();
 const isText = (t) => t && 'value' in t && !['button', 'checkbox', 'radio', 'submit'].includes(t.type) && t.localName !== 'button';
-function wireKeys(el) {
+export function wireKeys(el) {
   if (wired.has(el)) return; wired.add(el);
   el.addEventListener('keydown', (ev) => {
     const t = ev.target;
@@ -68,7 +68,7 @@ function wireKeys(el) {
     if (ev.key !== 'Enter' || (ev.shiftKey && t.id === 'doc-text')) return;
     ev.preventDefault();
     if (t.id === 'doc-class-add' || t.closest('.decl.add')) t.dispatchEvent(new CustomEvent('doc-commit', { bubbles: true }));
-    else if (t.closest('.vrow')) { if (staged) currentCtx?.inspector?.apply(); } // nothing typed: the focus stays
+    else if (t.closest('.vrow') && !t.closest('.doc-multi')) { if (staged) currentCtx?.inspector?.apply(); } // nothing typed: the focus stays
     else t.blur(); // its change event applies it
   });
 }
@@ -309,7 +309,8 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     for (const pw of props) if (!taken.has(pw[0])) by.get(groupOf(pw[0])).push(valueRow(pw));
     if (texty) {
       const covered = new Set(props.map(([p]) => p));
-      for (const e of explain.inherited) if (TYPE_GROUP.test(e.prop)) { typeInherited.add(e); by.get('type').push(inheritedRow(e)); covered.add(e.prop); for (const x of e.sets || []) covered.add(x); }
+      // (an inherited shorthand such as `font: 24px sans-serif` is not shown: it is not what this element draws. The parts are, each its own field.)
+      for (const e of explain.inherited) if (TYPE_GROUP.test(e.prop)) { typeInherited.add(e); if (e.prop === 'font') continue; by.get('type').push(inheritedRow(e)); covered.add(e.prop); for (const x of e.sets || []) covered.add(x); }
       for (const p of ['font-family', 'font-size', 'font-weight', 'line-height', 'letter-spacing', 'color', 'text-align']) if (!covered.has(p)) by.get('type').push(valueRow([p, winOf(p)]));
     }
     const sideList = (names) => names.filter((p) => taken.has(p)).map(sidesBlock).join('');
@@ -616,14 +617,6 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const kind = chosen?.id === 'class' ? 'class' : chosen?.id === 'variable' ? 'variable' : 'element';
     ctx.stage?.setEditNote?.({ component: comp.component, chip: kind === 'element' ? 'this element' : `${kind} scope${reach ? ` · ${at ? `${at} of ` : ''}${reach}` : ''}`, title: kind === 'element' ? 'editing · this element only' : `editing · ${reach} place${reach === 1 ? '' : 's'} preview the change` });
   }
-  // the first keystroke brings what is being edited up to a size you can see it change at
-  function legible() {
-    const r = frame?.cell.getBoundingClientRect(), box = ctx.view.stageBox(), v = ctx.view.get();
-    if (!r || !target?.isConnected) return;
-    const inView = r.left < box.right && r.right > box.left && r.top < box.bottom && r.bottom > box.top;
-    if (v.z >= 0.6 && inView) return;
-    ctx.view.flyTo(ctx.view.rectToWorld(r), { pad: 72, max: 1 });
-  }
   function stage(prop, text, { typed = false } = {}) {
     const w = winners[prop];
     if (!w) return false;
@@ -632,7 +625,6 @@ export async function renderDocPanel(ctx, el, sel, comp) {
     const important = /\s*!\s*important\s*$/i.test(raw), t = raw.replace(/\s*!\s*important\s*$/i, '').trim(); // !important is written as the flag it is
     if (!important && (t === w.value || normalizeTyped(prop, t) === w.value || sameMeaning(prop, normalizeTyped(prop, t), w.value))) { staged = null; renderStaged(); ctx.hint(`No change: ${prop} is already ${w.value}`); return false; }
     const prev = staged?.prop === prop ? staged : null;
-    if (!staged) legible();
     const field = el.querySelector(`.vrow input[data-prop="${CSS.escape(prop)}"]`); // a variable bound from the strips shows in the field
     if (field && field.value !== text) field.value = text;
     let typed0 = normalizeTyped(prop, t);

@@ -67,7 +67,7 @@ test('hovering a rule row or a variable only outlines; it never moves the view o
   } finally { await a.close(); }
 });
 
-test('staging a value at fit-all brings the frame up to a legible size and says the scope on the canvas: "class scope · 1 of 3"', { timeout: 90000 }, async () => {
+test('staging a value at fit-all leaves the camera alone and says the scope on the canvas: "class scope · 1 of 3"', { timeout: 90000 }, async () => {
   const a = await open({ files: THREE });
   try {
     await a.q(`napkin.view.set({ x: 0, y: 0, z: 0.2 }, { animate: false })`); await sleep(200);
@@ -78,7 +78,8 @@ test('staging a value at fit-all brings the frame up to a legible size and says 
     await a.browser.waitFor(`/1 of 3/.test(document.querySelector('#overlay-select').dataset.label)`, 8000);
     assert.match(await a.q(`document.querySelector('#overlay-select').dataset.label`), /^span\.ss-note__tag class scope · 1 of 3$/);
     assert.match(await a.q(`[...document.querySelectorAll('.cmp-note')].find((n) => !n.hidden).textContent`), /editing · 3 places preview the change/);
-    await a.browser.waitFor(`napkin.view.get().z >= 0.5`, 4000);
+    await sleep(600);
+    assert.equal(await a.q(`napkin.view.get().z`), 0.2, 'typing does not move the camera');
     assert.equal(await a.q(`document.querySelector('#statusbar .hints').dataset.legend`), 'staged');
     await a.io.key('Escape');
     await a.browser.waitFor(`!document.querySelector('#doc-staged .scope')`);

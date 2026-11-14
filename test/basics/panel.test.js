@@ -748,3 +748,134 @@ test('at 280 px no label or choice is cut to an ellipsis (HTML, TSX, CSS, SVG, P
     for (const [kind, n] of Object.entries(seen)) assert.ok(n > 2, `${kind}: the panel drew its controls (${n})`);
   } finally { await close(); }
 });
+
+// An HTML element's node, clicked the way a person picks it (Ctrl+click is the deepest).
+const elOf = (tag) => `(() => { const c = napkin.find('landing').component, f = napkin.stage.sections.get(c).docFrame; return napkin.stage.cellElement(c, f.nodeOf(f.doc().querySelector(${JSON.stringify(tag)})), {}); })()`;
+
+test('several HTML elements selected: the panel shows shared values and Mixed where they differ; one edit sets every one; one Ctrl+Z puts all back', { timeout: 150000 }, async () => {
+  const { b, io, dir, close } = await boot();
+  const html = () => readFileSync(join(dir, 'landing.html'), 'utf8');
+  try {
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await b.eval(COUNT_UNDO);
+    const before = html();
+    await clickOn(b, io, elOf('h1'), { ctrl: true });
+    await clickOn(b, io, elOf('button'), { ctrl: true, shift: true });
+    await until(() => b.eval(`napkin.state.selections.length === 2 && !!document.querySelector('#inspector #pv-padding')`), 10000, 'two elements in the panel');
+    await sleep(500);
+    const P = `document.querySelector('#inspector #pv-padding')`;
+    const mixed = await jv(b, `({ value: ${P}.value, placeholder: ${P}.placeholder, mixed: ${P}.closest('[data-mixed]') !== null })`);
+    assert.deepEqual(mixed, { value: '', placeholder: 'Mixed', mixed: true }, 'the h1 has 0 padding and the button 8px 16px: Mixed');
+    // a value they share shows as that value
+    const dis = await jv(b, `document.querySelector('#inspector #pv-display')?.value ?? null`);
+    assert.ok(dis === null || typeof dis === 'string');
+    await clickOn(b, io, P);
+    await typed(b, '10px'); await io.key('Enter');
+    await until(() => (html().match(/padding: 10px/g) || []).length >= 2, 8000, 'padding written on both');
+    assert.equal((html().match(/padding: 10px/g) || []).length, 2, 'one edit reached both elements');
+    await sleep(500);
+    assert.equal(await b.eval(`${P}.value`), '10px', 'now shared: the value shows');
+    const n0 = await b.eval('window.__undos');
+    await io.key('Escape'); await sleep(200);
+    await io.key('z', { ctrl: true });
+    await until(() => html() === before, 8000, 'both put back by one undo');
+    assert.equal(await b.eval('window.__undos') - n0, 1, 'one Ctrl+Z, one undo request');
+  } finally { await close(); }
+});
+
+test('a long dropdown: clicking an option with the pointer chooses it, once, and the focus returns to the field', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    await clickRow(b, io, 'mark.svg');
+    await until(() => b.eval(`!!document.querySelector('#instruments [data-control="view:kind"] .d-choice-trigger')`), 10000, 'Open as');
+    const posts = () => b.eval(`performance.getEntriesByType('resource').filter((e) => /[/]api[/]control$/.test(new URL(e.name).pathname)).length`);
+    const p0 = await posts();
+    const T = `document.querySelector('#instruments [data-control="view:kind"] .d-choice-trigger')`;
+    const was = await b.eval(`${T}.textContent`);
+    await clickOn(b, io, T);
+    await until(() => b.eval(`!!document.querySelector('.d-choice-pop:not([hidden])')`), 5000, 'the list opens');
+    const pick = await jv(b, `[...document.querySelectorAll('.d-choice-pop [role=option]')].map((o) => o.textContent).find((t) => t !== ${JSON.stringify(was)})`);
+    await clickOn(b, io, `[...document.querySelectorAll('.d-choice-pop [role=option]')].find((o) => o.textContent === ${JSON.stringify(pick)})`);
+    await until(() => b.eval(`${T}.textContent === ${JSON.stringify(pick)}`), 8000, `the field shows ${pick}`);
+    assert.equal(await b.eval(`!!document.querySelector('.d-choice-pop')`), false, 'the list closes');
+    assert.equal(await posts() - p0, 1, 'one request');
+    assert.equal(await b.eval(`document.activeElement === ${T}`), true, 'the focus is back on the field');
+  } finally { await close(); }
+});
+
+test('typography: font, size, weight, line height, align and colour are separate effective fields; editing one leaves the others', { timeout: 150000 }, async () => {
+  const { b, io, dir, close } = await boot();
+  const html = () => readFileSync(join(dir, 'landing.html'), 'utf8');
+  try {
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await clickOn(b, io, elOf('h1'), { ctrl: true });
+    await until(() => b.eval(`!!document.querySelector('#inspector #pv-font-size')`), 10000, 'the h1 typography');
+    await sleep(400);
+    const show = (id) => b.eval(`(() => { const i = document.querySelector('#inspector #pv-${id}'); return i ? (i.value || i.placeholder).replace(/px$/, '') : null; })()`);
+    const px = (v) => v.replace(/px$/, '');
+    const computed = () => jv(b, `(() => { const c = napkin.find('landing').component, f = napkin.stage.sections.get(c).docFrame, cs = f.doc().defaultView.getComputedStyle(f.doc().querySelector('h1')); return { family: cs.fontFamily, size: cs.fontSize, weight: cs.fontWeight, lh: cs.lineHeight, align: cs.textAlign, color: cs.color }; })()`);
+    const c0 = await computed();
+    assert.equal(await b.eval(`!!document.querySelector('#inspector #pv-font')`), false, 'no inherited "font" shorthand standing in for the parts');
+    assert.equal(await show('font-size'), px(c0.size), 'size is what the browser draws');
+    assert.equal(await show('font-weight'), px(c0.weight), 'weight is what the browser draws');
+    assert.equal(await show('line-height'), px(c0.lh), 'line height is what the browser draws');
+    for (const id of ['font-family', 'text-align', 'color']) assert.ok(await show(id), `${id} has a field with a value`);
+    const P = `document.querySelector('#inspector #pv-font-size')`;
+    await clickOn(b, io, P);
+    await typed(b, '40px'); await io.key('Enter');
+    await until(() => html().includes('font-size: 40px'), 8000, 'font-size written');
+    await sleep(600);
+    const c1 = await computed();
+    assert.equal(c1.size, '40px');
+    assert.equal(c1.weight, px(c0.weight), 'weight is not reset');
+    assert.equal(c1.family, c0.family, 'family is not reset');
+    assert.doesNotMatch(html(), /font:/, 'no font shorthand written');
+  } finally { await close(); }
+});
+
+test('scrubbing an image control previews on the canvas while held; release stores one edit', { timeout: 120000 }, async () => {
+  const { b, io, close } = await boot([1440, 900], PICTURES);
+  try {
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(400);
+    await clickOn(b, io, card('a.png'));
+    await b.waitFor(`!!document.querySelector('#instruments [data-control="view:contrast"] input')`, 10000);
+    const filter = () => b.eval(`getComputedStyle(${card('a.png')}.querySelector('img')).filter`);
+    const stored = () => contrast(b, 'a.png');
+    const s0 = await stored(), f0 = await filter();
+    const lab = await centreOf(b, `document.querySelector('#instruments [data-control="view:contrast"] label, #instruments [data-control="view:contrast"] .d-label')`);
+    await io.move(lab.x, lab.y); await io.press(lab.x, lab.y);
+    for (const dx of [10, 20, 40, 80]) await io.move(lab.x + dx, lab.y, { buttons: 1 });
+    await sleep(300);
+    const held = Number(await b.eval(`document.querySelector('#instruments [data-control="view:contrast"] input').value`));
+    assert.notEqual(held, s0, 'the field moved while held');
+    assert.notEqual(await filter(), f0, 'the canvas shows it while held');
+    assert.match(await filter(), new RegExp(`contrast\\(${held}\\)`), 'the canvas shows the held value');
+    assert.equal(await stored(), s0, 'nothing is stored until release');
+    await io.release(lab.x + 80, lab.y);
+    await until(async () => (await stored()) === held, 8000, 'one edit stored on release');
+  } finally { await close(); }
+});
+
+test('typing in a panel field, valid or not, never moves the canvas camera', { timeout: 150000 }, async () => {
+  const { b, io, close } = await boot();
+  try {
+    await b.waitFor(`!!napkin.stage.sections.get(napkin.find('landing')?.component)?.docFrame?.tree()?.tree`, 15000);
+    await b.eval(`napkin.view.fitAll({ animate: false })`); await sleep(600);
+    await clickOn(b, io, elOf('h1'), { ctrl: true });
+    await until(() => b.eval(`!!document.querySelector('#inspector #pv-width')`), 10000, 'the h1 in the panel');
+    await sleep(500);
+    const view = () => jv(b, `napkin.view.get()`);
+    const v0 = await view();
+    const W = `document.querySelector('#inspector #pv-width')`;
+    await clickOn(b, io, W);
+    await typed(b, '650px'); await sleep(700);
+    assert.deepEqual(await view(), v0, 'typing a width leaves the camera alone');
+    await io.key('Enter'); await sleep(900);
+    assert.deepEqual(await view(), v0, 'committing it too');
+    await clickOn(b, io, W);
+    await typed(b, 'nonsense'); await sleep(500); await io.key('Enter'); await sleep(700);
+    assert.deepEqual(await view(), v0, 'an invalid value too');
+  } finally { await close(); }
+});

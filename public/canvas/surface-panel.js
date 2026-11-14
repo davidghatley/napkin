@@ -249,7 +249,18 @@ export function initInstruments(ctx) {
     const list = panel?.items || ids();
     if (list.length) await undoItem(list[0]);
   }
+  // A held scrub shows on the canvas at once and is taken away when it ends (the commit is what is stored, and it redraws from the file).
+  const PICTURE = ['view:exposure', 'view:contrast', 'view:fit'];
+  const imgsOf = (id) => [...document.querySelectorAll(`#world [data-item-id="${CSS.escape(id)}"] img`)];
+  function previewPicture(p, e) {
+    if (!PICTURE.includes(e.control)) return;
+    if (e.phase !== 'change') { for (const id of p.items) for (const img of imgsOf(id)) { img.style.removeProperty('filter'); img.style.removeProperty('object-fit'); } return; }
+    const v = (c) => { if (c === e.control) return e.value; try { return p.get(c); } catch { return undefined; } };
+    const filter = `brightness(${2 ** (Number(v('view:exposure')) || 0)}) contrast(${Number(v('view:contrast') ?? 1)})`;
+    for (const id of p.items) for (const img of imgsOf(id)) { img.style.filter = filter; if (v('view:fit') === 'cover' || v('view:fit') === 'contain') img.style.objectFit = v('view:fit'); }
+  }
   function wire(p) {
+    p.addEventListener('value', ({ detail: e }) => { if (['change', 'commit', 'cancel'].includes(e.phase)) previewPicture(p, e); });
     p.addEventListener('value', ({ detail: e }) => {
       if (e.phase !== 'commit' || (same(e.previous, e.value) && !e.wasMixed)) return;
       const step = [...p.items]; steps.push(step); if (steps.length > 200) steps.shift();

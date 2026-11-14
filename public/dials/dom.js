@@ -248,7 +248,7 @@ export function choiceBox(label, options, change, { none } = {}) {
       if (focus) trigger.focus();
     };
     const outside = (e) => {
-      if (!root.contains(e.target)) close(false);
+      if (!root.contains(e.target) && !pop.contains(e.target)) close(false); // a click on an option is the list's own
     };
     const open = () => {
       build();
