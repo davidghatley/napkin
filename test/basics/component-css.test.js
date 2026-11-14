@@ -137,3 +137,18 @@ test('a shape inside an inline <svg> is refused in one sentence and nothing is m
   assert.match(src, /<svg[^>]*viewBox="0 0 96 48"/);
   assert.match(src, /fill="url\(#sky\)"/);
 });
+
+test('an inline !important moves into the component\'s CSS, and follows the component when it is renamed', () => {
+  const { d, eng } = engine();
+  const node = find(eng, 'edge-cases.html', cls('cascade'));
+  const made = eng.componentFrom({ from: 'edge-cases.html', node: node.node, by: 'me' });
+  const src = readFileSync(join(d, made.path), 'utf8');
+  assert.doesNotMatch(src, /style=\{\{[^}]*important/);
+  assert.match(src, /\.cascade-imp-1\.cascade-imp-1\.cascade-imp-1 \{ color: #c24 !important; \}/);
+  assert.match(src, /className="cascade cascade-imp-1"/);
+  eng.renameMade({ path: made.path, to: 'Priority', by: 'me' });
+  const now = readFileSync(join(d, 'Priority.tsx'), 'utf8');
+  assert.match(now, /\.priority-imp-1\.priority-imp-1\.priority-imp-1 \{/);
+  assert.match(now, /className="cascade priority-imp-1"/);
+  assert.doesNotMatch(now, /cascade-imp/);
+});

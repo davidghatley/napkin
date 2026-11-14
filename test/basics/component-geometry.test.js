@@ -86,3 +86,17 @@ test('round 4: a table row and a shape inside an svg are refused with a sentence
   await sleep(500);
   assert.deepEqual(tsx(), n);
 });
+
+test('round 4: an inline !important still wins over the stylesheet in the made component', { timeout: 90000 }, async () => {
+  const color = (frame, sel) => json(`(() => { const d = ${frame === 'edge-cases.html' ? `document.querySelector('section.cmp[data-component="edge-cases.html"] iframe').contentDocument` : 'null'}; return getComputedStyle(d.querySelector(${JSON.stringify(sel)})).color; })()`);
+  const was = await color('edge-cases.html', '.cascade');
+  assert.equal(was, 'rgb(204, 34, 68)', 'the frame draws the inline !important colour');
+  const id = await (async () => { await make('edge-cases.html', byClass('cascade')); await until(() => existsSync(file('Cascade.tsx'))); await until(async () => (await q(`String([...napkin.state.components.values()].some((c) => c.path === 'Cascade.tsx'))`)) === 'true' || null); await until(async () => (await q(`!!document.querySelector('.nk-rename')`)) === true || null); await io.key('Escape'); return 'Cascade.tsx#Cascade'; })();
+  const is = await json(`(async () => {
+    const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;left:0;top:0;width:640px;height:600px;border:0;opacity:0';
+    await new Promise((res) => { f.addEventListener('load', res, { once: true }); f.src = '/view/' + encodeURIComponent(${JSON.stringify(id)}) + '?width=640'; document.body.append(f); });
+    const d = f.contentDocument; const t0 = performance.now();
+    while (!d.querySelector('.cascade') && performance.now() - t0 < 8000) await new Promise((x) => setTimeout(x, 50));
+    const c = getComputedStyle(d.querySelector('.cascade')).color; f.remove(); return c; })()`);
+  assert.equal(is, was);
+});

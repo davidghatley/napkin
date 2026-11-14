@@ -713,9 +713,9 @@ export function openFolder(rootIn, { stateDir = stateRoot() } = {}) {
     const dir = dirname(p);
     let taken = []; try { taken = readdirSync(abs(dir)).filter((n) => /\.(tsx|jsx)$/i.test(n)).map((n) => n.replace(/\.(tsx|jsx)$/i, '')).filter((n) => n !== old); } catch { /* gone */ }
     if (taken.some((x) => x.toLowerCase() === name.toLowerCase())) throw new DocError(`${name} already exists in this folder; napkin never overwrites a file. Next: choose another name`, 409);
-    const kebab = (n) => `${n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}-context`;
+    const kebab = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
     const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const text = st.text.replace(new RegExp(`export default function ${esc(old)}\\(`), `export default function ${name}(`).replace(new RegExp(`(?<![\\w-])${esc(kebab(old))}(?![\\w-])`, 'g'), kebab(name));
+    const text = st.text.replace(new RegExp(`export default function ${esc(old)}\\(`), `export default function ${name}(`).replace(new RegExp(`(?<![\\w-])${esc(kebab(old))}-(context(?![\\w-])|imp-\\d)`, 'g'), (_, tail) => `${kebab(name)}-${tail}`);
     const np = posix.join(dir, `${name}${extname(p)}`).replace(/^\.\//, '');
     const { place } = drop(p, st.text);
     try { put(np, text, place || st.place); } catch (e) { put(p, st.text, place || st.place); throw e; }
