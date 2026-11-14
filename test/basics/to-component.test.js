@@ -94,3 +94,20 @@ test('names: from the class, the id or the tag, never one that is taken; bad inp
   assert.throws(() => toComponent({ name: 'card', html: '<div></div>' }), /PascalCase/);
   assert.throws(() => toComponent({ name: 'Card', html: '<i>a</i><b>b</b>' }), /select one element/);
 });
+
+test('spaces at the edges of inline elements are kept, in one line and across lines', async () => {
+  const one = await shown(toComponent({ name: 'Salutation', html: '<p class="salutation">Hello<strong> David </strong>— your order is confirmed.</p>' }).source);
+  assert.equal(one, '<p class="salutation">Hello<strong> David </strong>— your order is confirmed.</p>');
+  const long = '<div class="box"><h2>Title</h2>\n  <span>Dear<em> reader </em>of a rather long line that will not fit on one row of the generated file at all</span>\n</div>';
+  const out = await shown(toComponent({ name: 'Box', html: long }).source);
+  assert.match(out, /<span>Dear<em> reader <\/em>of a rather long line/);
+});
+
+test('component CSS: selectors split into compounds, and urls rebased from the stylesheet that held them', async () => {
+  const { compounds, rebase } = await import('../../src/doc/component-css.js');
+  assert.deepEqual(compounds('.shell > .offer h2:not(.a > b)::before').map((c) => [c.comb, c.text]), [[null, '.shell'], ['>', '.offer'], [' ', 'h2:not(.a > b)::before']]);
+  assert.deepEqual(compounds('a+b ~ [data-x="1 2"]').map((c) => [c.comb, c.text]), [[null, 'a'], ['+', 'b'], ['~', '[data-x="1 2"]']]);
+  assert.equal(rebase(`.b { background: url('../assets/a.png'), url(/x.png), url("data:image/png;base64,AA"), url(#f); }`, 'styles/audit.css', '.'),
+    `.b { background: url('assets/a.png'), url(/x.png), url("data:image/png;base64,AA"), url(#f); }`);
+  assert.equal(rebase('a { b: url(i.png) }', 'pages/x.html', 'pages'), 'a { b: url(i.png) }');
+});
