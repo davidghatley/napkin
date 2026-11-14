@@ -208,7 +208,7 @@ test('round 2: arrows move the caret while editing, they do not move the card', 
 test('round 2: Enter on selected text edits all of it; F2 does the same; no dialog', { timeout: 60000 }, async () => {
   await show('page.html');
   const h = await wordAt('page.html', 'Plan');
-  await io.click(h.x, h.y);
+  await io.click(h.x, h.y, { ctrl: true }); // (a plain click picks the top-level <main>: selection.test.js)
   await until(async () => (await q(`(() => { const s = napkin.state.selection; return s?.component === 'page.html' && napkin.stage.sections.get('page.html').docFrame.element(s.node)?.el.localName; })()`)) === 'h1');
   await io.key('Enter');
   await until(async () => (await editState('page.html')).focused);
